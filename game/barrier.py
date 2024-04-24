@@ -2,7 +2,7 @@ from game.bimolecular import Bimolecular
 from game.well import Well
 from game.structure import Structure
 
-#gtest
+
 class Barrier(Well):
     """A barrier connect a well to
     a bimolecular prod, or another well"""
