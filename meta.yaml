@@ -1,0 +1,52 @@
+{% set name = "game" %}
+{% set version = "0.0.1" %}
+
+package:
+    name: {{ name|lower }}
+    version: {{ version }}
+
+source:
+    url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/game-{{ version }}.tar.gz
+    sha256: 75f9373fe7932d3da585ef5e889b048d35d1a84a0a5b05788f694b6bbf08c3c4
+
+build:
+    noarch: python
+    script: {{ PYTHON }} -m pip install . -vv
+    number: 0
+    entry_points:
+        - game = game.game:main
+
+requirements:
+    host:
+        - python >=3.10
+        - pip
+    run:
+        - python >=3.10
+
+test:
+  imports:
+    - game
+  commands:
+    - pip check
+  requires:
+    - pip
+
+about:
+    home: https://github.com/csoulie/Game
+    license: BSD-3-Clause
+    license_family: BSD
+    license_file: LICENSE
+    summary: Automated reaction pathway search for gas-phase molecules.
+
+    description: |
+        KinBot is an automated gas-phase kinetics workflow code that drives
+        electronic structure calculations on a chemical PES and characterizes
+        the chemically relevant stationary points to finally create a complete
+        master equation formulation of the chemical kinetic system.
+    doc_url: https://github.com/csoulie/GAME
+    dev_url: https://github.com/csoulie/GAME
+
+extra:
+    recipe-maintainers:
+        - csoulie
+        - juditzador
