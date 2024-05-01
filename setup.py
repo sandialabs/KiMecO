@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+import os
 
 VERSION = '0.0.1' 
 DESCRIPTION = 'GAME'
@@ -6,11 +7,12 @@ LONG_DESCRIPTION = 'Genetic Algorythm Master Equation'
 
 # Setting up
 setup(
-       # the name must match the folder name 'verysimplemodule'
         name="game", 
         version=VERSION,
         author="Clement Soulie",
         author_email="<csoulie@sandia.gov>",
+        maintainer="Clement Soulie",
+        maintainer_email="<csoulie@sandia.gov>",
         description=DESCRIPTION,
         long_description=LONG_DESCRIPTION,
         python_requires='>=3.10.14',

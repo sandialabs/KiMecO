@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0","ase>=3.22.1"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "game"
+version = "0.0.1"
+authors = [
+  { name="Clement Soulie", email="csoulie@sandia.gov" },
+]
+description = "GAME"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+

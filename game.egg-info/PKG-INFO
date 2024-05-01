@@ -3,15 +3,16 @@ Name: game
 Version: 0.0.1
 Summary: GAME
 Author: Clement Soulie
-Author-email: <csoulie@sandia.gov>
-Keywords: python,game,genetic algorythm,master equation,kinetics
-Classifier: Development Status :: 3 - Alpha
-Classifier: Intended Audience :: Research
+Author-email: Clement Soulie <csoulie@sandia.gov>
+Maintainer: Clement Soulie
+Maintainer-email: <csoulie@sandia.gov>
 Classifier: Programming Language :: Python :: 3
-Classifier: Operating System :: MacOS :: MacOS X
-Classifier: Operating System :: Microsoft :: Windows
-Classifier: Operating System :: Linux
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
 Requires-Python: >=3.10.14
-Requires-Dist: ase>=3.22.1
+Description-Content-Type: text/markdown
+License-File: LICENSE
 
-Genetic Algorythm Master Equation
+# Example Package
+
+This is a Genetic Algorythm Perturbation of Master Equation Quantum Chemical Parameters.
