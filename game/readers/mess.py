@@ -42,21 +42,21 @@ class MessReader:
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
                     self.SOP.add_new_well(name)
-                new_line: str = line.split()[0] + " {" + f"{name}" + "}\n"
+                new_line: str = line.split()[0] + " {" + f"{name}.r_name" + "}\n"
                 self.template.append(new_line)
             #BIMOLECULAR
             elif line.lstrip().casefold().startswith('bimolecular '):
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
                     self.SOP.add_new_bimol(name)
-                new_line: str = line.split()[0] + " {" + f"{name}" + "}\n"
+                new_line: str = line.split()[0] + " {" + f"{name}.r_name" + "}\n"
                 self.template.append(new_line)
             #BARRIER
             elif line.lstrip().casefold().startswith('barrier '):
                 name, lside, rside = line.split()[1:4]
                 if name not in self.SOP.items:
                     self.SOP.add_new_barrier(name, lside, rside)
-                new_line: str = line.split()[0] + " {" + f"{name}" + "}"
+                new_line: str = line.split()[0] + " {" + f"{name}.r_name" + "}"
                 new_line += " {" + f"{lside}" + "}"
                 new_line += " {" + f"{rside}" + "}\n"
                 self.template.append(new_line)
@@ -66,7 +66,7 @@ class MessReader:
                 if not isinstance(self.SOP.items[name], Barrier):
                     if fname not in self.SOP.items[name].frag_names():
                         self.SOP.items[name].add_new_frag(fname)
-                new_line: str = line.split()[0] + " {" + f"{fname}" + "}\n"
+                new_line: str = line.split()[0] + " {" + f"{fname}.r_name" + "}\n"
                 self.template.append(new_line)
 
             #
@@ -198,7 +198,7 @@ class MessReader:
                                    axis,
                                    symmetry,
                                    scan)
-                new_line: str = " {" + f"{name}" + ".r_scan" + f"{rot_num}" + "}\n"
+                new_line: str = " {" + f"{name}" + ".r_scan" + f"({rot_num})" + "}\n"
                 self.template.append(new_line)
                 self.template.append(line)
                 skip +=1

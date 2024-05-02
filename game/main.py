@@ -17,3 +17,5 @@ mw = MessWriter(init_SOP, copy.copy(mess_tpl))
 for line in mess_tpl:
     print(line[:-1])
 
+mw.write()
+
