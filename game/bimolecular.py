@@ -7,14 +7,23 @@ class Bimolecular:
         self.name: str = name
         self.fragments: list = []
 
-    def fragments(self, index) -> Well:
-        return self.fragments[index]
+    @property
+    def r_name(self) -> str:
+        return self.name
+    
+    @property
+    def energy(self) -> float:
+        e = 0.0
+        for frag in self.fragments:
+            e += frag.energy
+        return e
     
     def set_fragments(self, frags: list[Well]) -> None:
         self.fragments = frags
 
     def add_new_frag(self, name: str, *args) -> None:
-        self.fragments.append(Well(name, *args))
+        frag = Well(name, *args)
+        self.fragments.append(frag)
 
     def frag_names(self) -> list[str]:
         names: list = []

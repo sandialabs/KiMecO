@@ -15,7 +15,12 @@ class MessWriter:
                 while '{' in new_line:
                     name = new_line.split('{')[1].split('.')[0]
                     line_start = new_line.split('}')[0] + '}'
-                    line_end = new_line.split('}')[1]
+                    line_end = ''
+                    for arg in new_line.split('}')[1:]:
+                        if '{' in arg:
+                            line_end += arg + '}'
+                        else:
+                            line_end += arg
                     globv = {'ls': line_start,
                             'le': line_end,
                             'sop_name': self.SOP.items[name]}
@@ -27,5 +32,8 @@ class MessWriter:
                 lines.append(new_line)
             else:
                 lines.append(line)
+
+        with open('sop.out', 'w') as f:
+            f.writelines(lines)
                 
 

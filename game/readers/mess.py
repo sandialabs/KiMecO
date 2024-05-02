@@ -39,6 +39,7 @@ class MessReader:
 
             #WELL
             if line.lstrip().casefold().startswith('well '):
+                last_item = 'well'
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
                     self.SOP.add_new_well(name)
@@ -46,6 +47,7 @@ class MessReader:
                 self.template.append(new_line)
             #BIMOLECULAR
             elif line.lstrip().casefold().startswith('bimolecular '):
+                last_item = 'bimo'
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
                     self.SOP.add_new_bimol(name)
@@ -53,19 +55,24 @@ class MessReader:
                 self.template.append(new_line)
             #BARRIER
             elif line.lstrip().casefold().startswith('barrier '):
+                last_item = 'barr'
                 name, lside, rside = line.split()[1:4]
                 if name not in self.SOP.items:
                     self.SOP.add_new_barrier(name, lside, rside)
                 new_line: str = line.split()[0] + " {" + f"{name}.r_name" + "}"
-                new_line += " {" + f"{lside}" + "}"
-                new_line += " {" + f"{rside}" + "}\n"
+                new_line += " {" + f"{lside}.r_name" + "}"
+                new_line += " {" + f"{rside}.r_name" + "}\n"
                 self.template.append(new_line)
             #FRAGMENT
-            elif line.lstrip().casefold().startswith('fragment'):
+            elif line.lstrip().casefold().startswith('fragment')\
+                and not 'geom' in line.casefold():
+                last_item = 'frag'
                 fname: str = line.split()[1]
                 if not isinstance(self.SOP.items[name], Barrier):
                     if fname not in self.SOP.items[name].frag_names():
                         self.SOP.items[name].add_new_frag(fname)
+                        if fname not in self.SOP.items:
+                            self.SOP.items[fname] = self.SOP.items[name].fragments[-1]
                 new_line: str = line.split()[0] + " {" + f"{fname}.r_name" + "}\n"
                 self.template.append(new_line)
 
@@ -74,29 +81,48 @@ class MessReader:
             #
                     
             #GEOMETRY
-            elif line.lstrip().casefold().startswith('geometry'):
+            elif line.lstrip().casefold().startswith('geometry')\
+                and 'rotor' not in self.file[lnum-1].casefold():
                 natom = int(line.split()[1])
                 self.template.append(line)
-                self.save_geom(name, lnum, natom)
+                if last_item == 'frag':
+                    self.save_geom(fname, lnum, natom)
+                else:
+                    self.save_geom(name, lnum, natom)
+                # skip += natom
+            elif line.lstrip().casefold().startswith('fragmentgeometry'):
+                natom = int(line.split()[1])
+                self.template.append(line)
+                self.save_geom(fname, lnum, natom)
                 skip += natom
             
             #FREQUENCIES
             elif line.lstrip().casefold().startswith('frequencies'):
                 nfreq = int(line.split()[1])
                 self.template.append(line)
-                nlines: int = self.save_freq(name, lnum, nfreq)
+                if last_item == 'frag':
+                    nlines: int = self.save_freq(fname, lnum, nfreq)
+                else:
+                    nlines: int = self.save_freq(name, lnum, nfreq)
                 skip += nlines
 
             #HINDERED ROTOR
             elif line.lstrip().casefold().startswith('rotor') and\
                line.split()[1].casefold() == 'hindered':
                 self.template.append(line)
-                skip += self.save_rotor(name, lnum)
+                if last_item == 'frag':
+                    skip += self.save_rotor(fname, lnum)
+                else:
+                    skip += self.save_rotor(name, lnum)
             
             #ENERGY
             elif line.lstrip().casefold().startswith('zeroenergy'):
                 energy = float(line.split()[1])
-                self.save_energy(name, energy, lnum)
+                if last_item == 'frag':
+                    self.save_energy(fname, energy, lnum)
+                else:
+                    self.save_energy(name, energy, lnum)
+
 
             #TUNNELING
             elif line.lstrip().casefold().startswith('tunneling'):
@@ -220,8 +246,8 @@ class MessReader:
             geom.append([float(x), float(y), float(z)])
 
         self.SOP.set_structure(name, symbols, geom)
-        new_line: str = " {" + f"{name}" + ".r_struct}\n"
-        self.template.append(new_line)
+        # new_line: str = " {" + f"{name}" + ".r_struct}\n"
+        # self.template.append(new_line)
 
     def save_energy(self,
                     name: str,
@@ -243,6 +269,7 @@ class MessReader:
             if line.lstrip().casefold().startswith('imaginaryfrequency'):
                 ifreq = float(line.split()[1])
                 new_line: str = f"{line.split()[0]}" + " {" + f"{name}" + ".r_ifreq}\n"
+                self.SOP.items[name].set_ifreq(ifreq)
                 self.template.append(new_line)
                 skip += 1
             elif line.lstrip().casefold().startswith('cutoffenergy'):

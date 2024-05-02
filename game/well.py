@@ -1,3 +1,4 @@
+from typing import Any
 from game.structure import Structure
 from game.rotor import Rotor
 
@@ -10,23 +11,44 @@ class Well:
         self.frequencies: list[float] = []
         self.rotors: list[Rotor] = []
 
+    def __getattr__(self, name: str) -> Any:
+        if "r_scan" in name:
+            try:
+                idx = int(name.split('(')[1].split(')')[0])
+                return self.r_scan(idx)
+            except:
+                raise AttributeError(f'Well does not have the attribute {name}')
+        else:
+            self.__getattribute__(name)
+
     @property
-    def r_name(self):
+    def r_name(self) -> str:
         return self.name
     
     @property
-    def r_struct(self):
+    def r_energy(self) -> float:
+        return self.structure.energy
+    
+    @property
+    def energy(self) -> float:
+        return self.structure.energy
+    
+    def set_energy(self, value: float) -> None:
+        self.structure.energy = value
+
+    @property
+    def r_struct(self) -> str:
         struct = ''
         for idx in range(len(self.structure)):
-            atm = self.structure.symbols[idx]
-            x = self.structure.positions[idx][0]
-            y = self.structure.positions[idx][1]
-            z = self.structure.positions[idx][2]
+            atm: str = self.structure.symbols[idx]
+            x: float = self.structure.positions[idx][0]
+            y: float = self.structure.positions[idx][1]
+            z: float = self.structure.positions[idx][2]
             struct += f'{atm} {x} {y} {z}' + '\n'
         return struct
     
     @property
-    def r_freq(self):
+    def r_freq(self) -> str:
         freq = ''
         freq_in_line = 0
         for val in self.frequencies:
@@ -38,15 +60,13 @@ class Well:
         freq += '\n'
         return freq
     
-    def r_scan(self, rot_num):
+    def r_scan(self, rot_num) -> str:
         scan = ''
         for val in self.rotors[rot_num].scan:
             scan += f'{val: 7.3f}'
         scan += '\n'
         return scan
     
-    
-
     
     def set_structure(self,
                       symbols: str,

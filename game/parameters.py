@@ -70,8 +70,8 @@ class SOP:
                         lside: str,
                         rside: str) -> None:
         self.items[name] = Barrier(name,
-                                   copy.deepcopy(self.items[lside]),
-                                   copy.deepcopy(self.items[rside]))
+                                   self.items[lside],
+                                   self.items[rside])
         self.barriers.append(self.items[name])
 
     def set_freqs(self,
@@ -122,10 +122,7 @@ class SOP:
                    name: str,
                    energy: float):
         """Set the energy of the structure associated with name"""
-        if isinstance(self.items[name], Bimolecular):
-            self.items[name].fragments[-1].energy = energy
-        else:
-            self.items[name].energy = energy
+        self.items[name].set_energy(energy)
 
     def save_tunnelling(self, name, ifreq, coff, well_depth):
         pass
