@@ -21,14 +21,17 @@ class MessWriter:
                             line_end += arg + '}'
                         else:
                             line_end += arg
-                    globv = {'ls': line_start,
-                            'le': line_end,
-                            'sop_name': self.SOP.items[name]}
-                    locv = {}
-                    #Execute this code using variables defined in globv
-                    #Undefined variables are local and returned in locv
-                    exec(f"new_line = ls.format({name}=sop_name) + le", globv, locv)
-                    new_line = locv['new_line']
+                    if name == 'SOP':
+                        new_line = line_start.format(SOP=self.SOP) + line_end
+                    else:
+                        globv = {'ls': line_start,
+                                'le': line_end,
+                                'sop_name': self.SOP.items[name]}
+                        locv = {}
+                        #Execute this code using variables defined in globv
+                        #Undefined variables are local and returned in locv
+                        exec(f"new_line = ls.format({name}=sop_name) + le", globv, locv)
+                        new_line = locv['new_line']
                 lines.append(new_line)
             else:
                 lines.append(line)

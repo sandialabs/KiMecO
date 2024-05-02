@@ -15,14 +15,14 @@ MicroEnerStep[kcal/mol] 1.
 Model
   EnergyRelaxation
     Exponential
-      Factor[1/cm]                      200
-      Power                             0.85
+Factor[1/cm] 200.0
+Power 0.85
       ExponentCutoff                    15
     End
   CollisionFrequency
     LennardJones
-      Epsilons[1/cm]                    7.95 0.7
-      Sigmas[angstrom]                  2.715 1
+Epsilons[1/cm]  7.95  0.70
+Sigmas[angstrom]  2.71  1.00
       Masses[amu]                       4.0 61.0
     End
 ######################

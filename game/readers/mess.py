@@ -33,12 +33,35 @@ class MessReader:
             if skip:
                 skip -= 1
                 continue
+            
+            #General parameters
+
+            if line.lstrip().casefold().startswith('factor'):
+                self.SOP.factor = float(line.split()[1])
+                self.template.append(line.split()[0] + " {SOP.factor}\n")
+                continue
+            elif line.lstrip().casefold().startswith('power'):
+                self.SOP.power = float(line.split()[1])
+                self.template.append(line.split()[0] + " {SOP.power}\n")
+                continue
+            elif line.lstrip().casefold().startswith('epsilons'):
+                self.template.append(line.split()[0] + "{SOP.r_epsilons}")
+                for arg in line.split()[1:]:
+                    self.SOP.epsilons.append(float(arg))
+                continue
+            elif line.lstrip().casefold().startswith('sigmas'):
+                self.template.append(line.split()[0] + "{SOP.r_sigmas}")
+                for arg in line.split()[1:]:
+                    self.SOP.sigmas.append(float(arg))
+                continue
+
+
             #
             #Set the name of the current item
             #
 
             #WELL
-            if line.lstrip().casefold().startswith('well '):
+            elif line.lstrip().casefold().startswith('well '):
                 last_item = 'well'
                 name: str = line.split()[1]
                 if name not in self.SOP.items:

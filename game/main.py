@@ -8,7 +8,6 @@ if '/home/csoulie/GAME/game' in sys.path:
 
 from game.readers.mess import MessReader
 from game.writers.mess import MessWriter
-from game.parameters import SOP
 
 
 mr = MessReader('/home/csoulie/projects/ethylperoxy/me/mess_0000.inp')

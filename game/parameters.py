@@ -13,7 +13,25 @@ class SOP:
         self.set_barriers([])
         self.items: dict = {}
         self.id: int = copy.copy(SOP._id)
+        self.sigmas = []
+        self.epsilons = []
         SOP._id +=1
+
+    @property
+    def r_epsilons(self) -> str:
+        eps = ''
+        for ep in self.epsilons:
+            eps += f" {ep: 5.2f}"
+        eps += '\n'
+        return eps
+    
+    @property
+    def r_sigmas(self) -> str:
+        sigs = ''
+        for sig in self.sigmas:
+            sigs += f" {sig: 5.2f}"
+        sigs += '\n'
+        return sigs
 
     def wells(self) -> list[Well]:
         return self.wells
