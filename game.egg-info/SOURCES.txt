@@ -2,7 +2,17 @@ LICENSE
 README.md
 pyproject.toml
 setup.py
+game/barrier.py
+game/bimolecular.py
+game/main.py
+game/parameters.py
+game/rotor.py
+game/structure.py
+game/well.py
 game.egg-info/PKG-INFO
 game.egg-info/SOURCES.txt
 game.egg-info/dependency_links.txt
+game.egg-info/entry_points.txt
 game.egg-info/top_level.txt
+game/readers/mess.py
+game/writers/mess.py

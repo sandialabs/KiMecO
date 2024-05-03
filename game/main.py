@@ -9,12 +9,16 @@ if '/home/csoulie/GAME/game' in sys.path:
 from game.readers.mess import MessReader
 from game.writers.mess import MessWriter
 
+def main():
+    try:
+        input_file = sys.argv[1]
+    except IndexError:
+        print('To use game, supply one argument being the input file!')
+        sys.exit(-1)
+    
+    mr = MessReader(input_file)
+    [init_SOP, mess_tpl]= mr.read()
+    mw = MessWriter(init_SOP, copy.copy(mess_tpl))
 
-mr = MessReader('/home/csoulie/projects/ethylperoxy/me/mess_0000.inp')
-[init_SOP, mess_tpl]= mr.read()
-mw = MessWriter(init_SOP, copy.copy(mess_tpl))
-for line in mess_tpl:
-    print(line[:-1])
-
-mw.write()
+    mw.write()
 
