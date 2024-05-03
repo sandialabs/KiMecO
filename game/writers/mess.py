@@ -7,7 +7,7 @@ class MessWriter:
         self.SOP = SOP
         self.tpl = tpl
     
-    def write(self):
+    def write(self, filename):
         lines = []
         for line in self.tpl:
             if '{' in line:
@@ -36,7 +36,7 @@ class MessWriter:
             else:
                 lines.append(line)
 
-        with open('sop.out', 'w') as f:
+        with open(filename, 'w') as f:
             f.writelines(lines)
                 
 
