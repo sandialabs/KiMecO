@@ -117,7 +117,7 @@ class MessReader:
                 natom = int(line.split()[1])
                 self.template.append(line)
                 self.save_geom(fname, lnum, natom)
-                skip += natom
+                # skip += natom
             
             #FREQUENCIES
             elif line.lstrip().casefold().startswith('frequencies'):
@@ -145,7 +145,10 @@ class MessReader:
                     self.save_energy(fname, energy, lnum)
                 else:
                     self.save_energy(name, energy, lnum)
-
+            elif line.lstrip().casefold().startswith('groundenergy'):
+                #for bimolec
+                energy = float(line.split()[1])
+                self.save_energy(name, energy, lnum)
 
             #TUNNELING
             elif line.lstrip().casefold().startswith('tunneling'):

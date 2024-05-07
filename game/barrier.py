@@ -37,9 +37,9 @@ class Barrier(Well):
     
     @property
     def r_lenergy(self) -> float:
-        return self.connected[0].energy
+        return self.energy - self.connected[0].energy
     
     @property
     def r_renergy(self) -> float:
-        return self.connected[1].energy
+        return self.energy - self.connected[1].energy
     

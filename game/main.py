@@ -1,10 +1,8 @@
 import copy
 import sys
 
-
 from game.readers.mess import MessReader
-from game.writers.mess import MessWriter
-from game.templates import slurm_mess.tpl
+from game.kinetic_constants import KinCon
 
 def main():
     try:
@@ -14,10 +12,17 @@ def main():
         sys.exit(-1)
     
     mr = MessReader(input_file)
-    [init_SOP, mess_tpl]= mr.read()
-    mw = MessWriter(init_SOP, copy.copy(mess_tpl))
+    [init_SOP, input_tpl]= mr.read()
 
-    mw.write('initial_mess.inp')
+    init_KinCon = KinCon(init_SOP,
+                         software='mess',
+                         software_tpl=input_tpl,
+                         id='init')
+    
+    init_KinCon.calculate()
+    init_KinCon.recover_rslts()
+
+
 
 
 

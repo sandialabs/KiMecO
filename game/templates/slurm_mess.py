@@ -1,4 +1,4 @@
-#! /bin/bash -f
+tpl = """#! /bin/bash -f
   
 #SBATCH -N 1
 #SBATCH -c {nprocs}
@@ -11,4 +11,4 @@
 
 export OMP_NUM_THREADS={nprocs}
 echo $SLURM_JOB_NODELIST
-mess {filename}.inp
+mess {filename}.inp"""

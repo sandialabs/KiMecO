@@ -12,11 +12,11 @@ class Bimolecular:
         return self.name
     
     @property
-    def energy(self) -> float:
-        e = 0.0
-        for frag in self.fragments:
-            e += frag.energy
-        return e
+    def r_energy(self) -> float:
+        return self.energy
+
+    def set_energy(self, value: float) -> None:
+        self.energy = value
     
     def set_fragments(self, frags: list[Well]) -> None:
         self.fragments = frags
