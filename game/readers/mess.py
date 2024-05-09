@@ -239,7 +239,9 @@ class MessReader:
                 args: list[str] = line.split()
                 arg_n = 0
                 while arg_n < len(args) and\
-                      args[arg_n].replace(".", "").isnumeric():
+                      args[arg_n].replace(".", "")\
+                                 .replace("-", "")\
+                                 .isnumeric():
                     scan.append(float(args[arg_n]))
                     arg_n += 1
                 if lnum2 > npot:
@@ -297,7 +299,6 @@ class MessReader:
                 skip += 1
                 return skip
             else:
-                print(line)
                 raise Error(f'Incorrect termination of rotor for {name}')
 
     def save_geom(self,

@@ -42,7 +42,7 @@ class Barrier(Well):
 
     @property
     def r_coff(self) -> float:
-        return min(self.connected[0].energy, self.connected[1].energy)
+        return min(self.r_lenergy, self.r_renergy)
 
     @property
     def r_lenergy(self) -> float:
