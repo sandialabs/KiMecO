@@ -5,7 +5,7 @@ import os
 import getpass
 
 
-class KinCon:
+class RateCon:
     """Wrapper around different calculators
     for kinetic constants calculation.
     """
@@ -80,7 +80,7 @@ class KinCon:
         while not self.job_finished():
             pass
 
-        with open(self.output_name, 'r') as f:
+        with open(file=self.output_name, mode='r') as f:
             rslt_file: list[str] = f.readlines()
             print(rslt_file)
 
@@ -98,7 +98,7 @@ class KinCon:
         out = out.decode()
 
         for line in out:
-            if self.job_id == line.split()[0]:
+            if self.job_id in line:
                 return False
         if os.path.isfile(self.output_name):
             return True

@@ -11,18 +11,21 @@ import os
 class MessReader:
     """Class that read a mess file and transform it into
      an object with easily extractable data."""
-    def __init__(self, filename: str) -> None:
+    def __init__(self, settings: dict) -> None:
         """Save the file content as a string for further manipulation
 
         Args:
-            filename (str): the filename of the mess file
+            settings (dict): Content of the input file
+                             with additional default parameters
         """
 
-        self.filename: str = filename
-        self.SOP = SOP()  # Set of parameters
+        self.filename: str = settings["initial_mess"]
+        self.SOP: SOP = SOP()  # Set of parameters
+        self.SOP.rc_temp = settings["rc_temp"]
+        self.SOP.rc_pres = settings["rc_pres"]
 
-        if os.path.isfile(filename):
-            with open(filename, 'r') as f:
+        if os.path.isfile(path=self.filename):
+            with open(file=self.filename, mode='r') as f:
                 self.file: list[str] = f.readlines()
         self.template: list = []
 
@@ -44,7 +47,15 @@ class MessReader:
 
             # General parameters
 
-            if line.lstrip().casefold().startswith('factor'):
+            if line.lstrip().casefold().startswith('temperaturelist'):
+                self.save_temperatures(lnum=lnum)
+                self.template.append(line.split()[0] + " {SOP.r_rc_temp}\n")
+                continue
+            elif line.lstrip().casefold().startswith('pressurelist'):
+                self.save_pressures(lnum=lnum)
+                self.template.append(line.split()[0] + " {SOP.r_rc_pres}\n")
+                continue
+            elif line.lstrip().casefold().startswith('factor'):
                 self.SOP.factor = float(line.split()[1])
                 self.template.append(line.split()[0] + " {SOP.factor}\n")
                 continue
@@ -70,7 +81,7 @@ class MessReader:
                 last_item = 'well'
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
-                    self.SOP.add_new_well(name)
+                    self.SOP.add_new_well(name=name)
                 new_line: str = line.split()[0] \
                     + " {" \
                     + f"{name}.r_name" \
@@ -81,7 +92,7 @@ class MessReader:
                 last_item = 'bimo'
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
-                    self.SOP.add_new_bimol(name)
+                    self.SOP.add_new_bimol(name=name)
                 new_line: str = line.split()[0] \
                     + " {" \
                     + f"{name}.r_name" \
@@ -92,7 +103,9 @@ class MessReader:
                 last_item = 'barr'
                 name, lside, rside = line.split()[1:4]
                 if name not in self.SOP.items:
-                    self.SOP.add_new_barrier(name, lside, rside)
+                    self.SOP.add_new_barrier(name=name,
+                                             lside=lside,
+                                             rside=rside)
                 new_line: str = line.split()[0] + " {" + f"{name}.r_name" + "}"
                 new_line += " {" + f"{lside}.r_name" + "}"
                 new_line += " {" + f"{rside}.r_name" + "}\n"
@@ -135,9 +148,13 @@ class MessReader:
                 nfreq = int(line.split()[1])
                 self.template.append(line)
                 if last_item == 'frag':
-                    nlines: int = self.save_freq(fname, lnum, nfreq)
+                    nlines: int = self.save_freq(name=fname,
+                                                 lnum=lnum,
+                                                 nfreq=nfreq)
                 else:
-                    nlines: int = self.save_freq(name, lnum, nfreq)
+                    nlines: int = self.save_freq(name=name,
+                                                 lnum=lnum,
+                                                 nfreq=nfreq)
                 skip += nlines
 
             # HINDERED ROTOR
@@ -145,31 +162,79 @@ class MessReader:
                     line.split()[1].casefold() == 'hindered':
                 self.template.append(line)
                 if last_item == 'frag':
-                    skip += self.save_rotor(fname, lnum)
+                    skip += self.save_rotor(name=fname,
+                                            lnum=lnum)
                 else:
-                    skip += self.save_rotor(name, lnum)
+                    skip += self.save_rotor(name=name,
+                                            lnum=lnum)
 
             # ENERGY
             elif line.lstrip().casefold().startswith('zeroenergy'):
                 energy = float(line.split()[1])
                 if last_item == 'frag':
-                    self.save_energy(fname, energy, lnum)
+                    self.save_energy(name=fname,
+                                     energy=energy,
+                                     lnum=lnum)
                 else:
-                    self.save_energy(name, energy, lnum)
+                    self.save_energy(name=name,
+                                     energy=energy,
+                                     lnum=lnum)
             elif line.lstrip().casefold().startswith('groundenergy'):
                 # for bimolec
                 energy = float(line.split()[1])
-                self.save_energy(name, energy, lnum)
+                self.save_energy(name=name,
+                                 energy=energy,
+                                 lnum=lnum)
 
             # TUNNELING
             elif line.lstrip().casefold().startswith('tunneling'):
                 tun_type = str(line.split()[1])
                 self.template.append(line)
-                skip += self.save_tunneling(name, tun_type, lnum)
+                skip += self.save_tunneling(name=name,
+                                            tun_type=tun_type,
+                                            lnum=lnum)
             else:
                 self.template.append(line)
 
         return [self.SOP, self.template]
+
+    def save_temperatures(self, lnum: int) -> None:
+        """Save temperatures to be used for RC calculation,
+        if they are not provided by the user.
+
+        Args:
+            lnum (int): line number to read from in input file
+        """
+        if self.SOP.rc_temp == []:
+            args: list[str] = self.file[lnum].split()
+            temp_list: list = []
+            arg_n = 1
+            # There should be no negative numbers in the list
+            while arg_n < len(args) and\
+                    args[arg_n].replace(".", "")\
+                               .isnumeric():
+                temp_list.append(float(args[arg_n]))
+                arg_n += 1
+            self.SOP.rc_temp = temp_list
+
+    def save_pressures(self, lnum: int) -> None:
+        """Save pressures to be used for RC calculation,
+        if they are not provided by the user.
+
+        Args:
+            lnum (int): line number to read from in input file
+        """
+        if self.SOP.rc_pres == []:
+            args: list[str] = self.file[lnum].split()
+            pres_list: list = []
+            arg_n = 1
+            # There should be no negative numbers in the list
+            while arg_n < len(args) and\
+                    args[arg_n].replace(".", "")\
+                               .isnumeric():
+                pres_list.append(float(args[arg_n]))
+                arg_n += 1
+            self.SOP.rc_pres = pres_list
 
     def save_freq(self, name: str, lnum: int, nfreq: int) -> int:
         """Save the next frequencies encountered in Mess in

@@ -1,23 +1,26 @@
 import sys
 
 from game.readers.mess import MessReader
-from game.kinetic_constants import KinCon
+from game.rate_constants import RateCon
+from game.user_input import check_input
 
 
-def main():
+def main() -> None:
     try:
-        input_file = sys.argv[1]
+        input_file: str = sys.argv[1]
     except IndexError:
         print('To use GAME, supply one argument being the input file!')
-        sys.exit(-1)
+        sys.exit(__status=-1)
 
-    mr = MessReader(input_file)
+    settings: dict = check_input(input_file=input_file)
+
+    mr = MessReader(settings=settings)
     [init_SOP, input_tpl] = mr.read()
 
-    init_KinCon = KinCon(init_SOP,
-                         software='mess',
-                         software_tpl=input_tpl,
-                         id='init')
+    init_KinCon = RateCon(sop=init_SOP,
+                          software='mess',
+                          software_tpl=input_tpl,
+                          id='init')
 
     init_KinCon.calculate()
     init_KinCon.recover_rslts()

@@ -35,14 +35,21 @@ class SOP:
         sigs += '\n'
         return sigs
 
-    # def wells(self) -> list[Well]:
-    #     """List of all the wells in the SOP.
-    #     Also include fragments.
+    @property
+    def r_rc_temp(self) -> str:
+        temps = ""
+        for temp in self.rc_temp:
+            temps += f" {temp: 7.1f}"
+        temps += '\n'
+        return temps
 
-    #     Returns:
-    #         list[Well]: list of Wells objects
-    #     """
-    #     return self.wells
+    @property
+    def r_rc_pres(self) -> str:
+        press = ""
+        for pres in self.rc_pres:
+            press += f" {pres: 7.1f}"
+        press += '\n'
+        return press
 
     def set_wells(self,
                   values: list[Well]) -> None:
