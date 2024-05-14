@@ -32,7 +32,8 @@ def check_input(input_file: str) -> dict:
 
     # Has unknown keys?
     for key in json_file:
-        if key not in default_settings:
+        if key not in default_settings and\
+           key not in mandatory_keys:
             print(f"{key} is an unknown keyword and will be ignored.")
 
     # Set default values for all keys

@@ -8,8 +8,8 @@ from game.barrier import Barrier
 import os
 
 
-class MessReader:
-    """Class that read a mess file and transform it into
+class MessInputReader:
+    """Class that read a mess input file and transform it into
      an object with easily extractable data."""
     def __init__(self, settings: dict) -> None:
         """Save the file content as a string for further manipulation

@@ -1,5 +1,7 @@
+from typing import Any
 from game.parameters import SOP
 from game.writers.mess import MessWriter
+from game.readers.mess_output import MessOutputReader
 import subprocess
 import os
 import getpass
@@ -11,6 +13,7 @@ class RateCon:
     """
     def __init__(self,
                  sop: SOP,
+                 settings: dict,
                  software='',
                  software_tpl='',
                  id='') -> None:
@@ -19,6 +22,7 @@ class RateCon:
         self.software: str = software.casefold()
         self.software_tpl: str = software_tpl
         self.id: str = id
+        self.set: dict[str, Any] = settings
 
     @property
     def output_name(self) -> str:
@@ -46,8 +50,8 @@ class RateCon:
             NotImplementedError: Writter for this software doesn't exist yet
         """
         if self.software == 'mess':
-            mw = MessWriter(self.SOP, self.software_tpl)
-            mw.write(f'{self.id}.inp')
+            mw = MessWriter(SOP=self.SOP, tpl=self.software_tpl)
+            mw.write(filename=f'{self.id}.inp')
         else:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")
@@ -79,12 +83,14 @@ class RateCon:
         """
         while not self.job_finished():
             pass
+        if self.software == 'mess':
+            mor = MessOutputReader(filename=self.output_name,
+                                   settings=self.set,
+                                   sop=self.SOP)
+            mor.read()
+            print(mor.rc)
 
-        with open(file=self.output_name, mode='r') as f:
-            rslt_file: list[str] = f.readlines()
-            print(rslt_file)
-
-    def job_finished(self):
+    def job_finished(self) -> bool:
         if os.path.isfile(f"{self.id}.out"):
             return True
 
