@@ -19,7 +19,6 @@ def main() -> None:
 
     init_KinCon = RateCon(sop=init_SOP,
                           settings=settings,
-                          software='mess',
                           software_tpl=input_tpl,
                           id='init')
 

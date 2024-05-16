@@ -14,12 +14,11 @@ class RateCon:
     def __init__(self,
                  sop: SOP,
                  settings: dict,
-                 software='',
                  software_tpl='',
                  id='') -> None:
 
         self.SOP: SOP = sop
-        self.software: str = software.casefold()
+        self.software: str = settings['rc_software'].casefold()
         self.software_tpl: str = software_tpl
         self.id: str = id
         self.set: dict[str, Any] = settings
@@ -32,6 +31,8 @@ class RateCon:
             str: name of output file
         """
         if self.software == 'mess':
+            return f"{self.id}.out"
+        else:
             return f"{self.id}.out"
 
     def calculate(self) -> None:
