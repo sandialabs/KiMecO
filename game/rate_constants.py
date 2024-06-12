@@ -14,12 +14,12 @@ class RateCon:
     def __init__(self,
                  sop: SOP,
                  settings: dict,
-                 software_tpl='',
+                 software_tpl: list[str],
                  id='') -> None:
 
         self.SOP: SOP = sop
         self.software: str = settings['rc_software'].casefold()
-        self.software_tpl: str = software_tpl
+        self.software_tpl: list[str] = software_tpl
         self.id: str = id
         self.set: dict[str, Any] = settings
 

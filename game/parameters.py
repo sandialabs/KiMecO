@@ -15,8 +15,12 @@ class SOP:
         self.set_barriers([])
         self.items: dict = {}
         self.id: int = copy.copy(SOP._id)
-        self.sigmas = []
-        self.epsilons = []
+        self.factor: float
+        self.power: float
+        self.sigmas: list[float]
+        self.epsilons: list[float]
+        self.rc_temp: list[float]
+        self.rc_pres: list[float]
         SOP._id += 1
 
     @property

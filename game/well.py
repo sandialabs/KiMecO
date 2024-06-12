@@ -1,6 +1,7 @@
 from typing import Any
 from game.structure import Structure
 from game.rotor import Rotor
+from ase.symbols import Symbols
 
 
 class Well:
@@ -28,7 +29,8 @@ class Well:
                 idx = int(name.split('(')[1].split(')')[0])
                 return self.r_scan(idx)
             except AttributeError:
-                raise (f'Well does not have the attribute {name}')
+                raise AttributeError(
+                    f'Well does not have the attribute {name}')
         else:
             self.__getattribute__(name)
 
@@ -56,7 +58,7 @@ class Well:
     def r_struct(self) -> str:
         struct = ''
         for idx in range(len(self.structure)):
-            atm: str = self.structure.symbols[idx]
+            atm: Symbols | str = self.structure.symbols[idx]
             x: float = self.structure.positions[idx][0]
             y: float = self.structure.positions[idx][1]
             z: float = self.structure.positions[idx][2]

@@ -27,9 +27,9 @@ class MessInputReader:
         if os.path.isfile(path=self.filename):
             with open(file=self.filename, mode='r') as f:
                 self.file: list[str] = f.readlines()
-        self.template: list = []
+        self.template: list[str] = []
 
-    def read(self) -> list[SOP, list[str]]:
+    def read(self) -> tuple[SOP, list[str]]:
         """Reads a mess input file and transforms it into a
         SetOfParameter object and a mess_template file.
 
@@ -196,7 +196,7 @@ class MessInputReader:
             else:
                 self.template.append(line)
 
-        return [self.SOP, self.template]
+        return (self.SOP, self.template)
 
     def save_temperatures(self, lnum: int) -> None:
         """Save temperatures to be used for RC calculation,
@@ -255,8 +255,8 @@ class MessInputReader:
         for lnum2, line in enumerate(self.file[lnum+1:]):
             args: list[str] = line.split()
             arg_n = 0
-            while arg_n < len(args) and \
-                  args[arg_n].replace(".", "").isnumeric():
+            while arg_n < len(args) and args[arg_n].replace(".",
+                                                            "").isnumeric():
 
                 freqs.append(float(args[arg_n]))
                 arg_n += 1
@@ -292,6 +292,7 @@ class MessInputReader:
         scan = []
         npot = 0
         skip = 0
+        symmetry = 0
         # Read the file
         for lnum2, line in enumerate(self.file[lnum+1:]):
             # SCAN
@@ -303,10 +304,9 @@ class MessInputReader:
             elif npot != 0 and npot != len(scan):
                 args: list[str] = line.split()
                 arg_n = 0
-                while arg_n < len(args) and\
-                      args[arg_n].replace(".", "")\
-                                 .replace("-", "")\
-                                 .isnumeric():
+                while arg_n < len(args) and args[arg_n].replace(".", "")\
+                                                       .replace("-", "")\
+                                                       .isnumeric():
                     scan.append(float(args[arg_n]))
                     arg_n += 1
                 if lnum2 > npot:
@@ -342,7 +342,7 @@ class MessInputReader:
                 skip += 1
                 continue
             elif line.lstrip().casefold().startswith('symmetry'):
-                symmetry = float(line.split()[1])
+                symmetry = int(line.split()[1])
                 self.template.append(line)
                 skip += 1
                 continue
@@ -365,6 +365,7 @@ class MessInputReader:
                 return skip
             else:
                 raise Error(f'Incorrect termination of rotor for {name}')
+        return 0
 
     def save_geom(self,
                   name: str,

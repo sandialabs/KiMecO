@@ -14,12 +14,12 @@ def check_input(input_file: str) -> dict:
     # File exist?
     if not os.path.isfile(path=input_file):
         print(f'The input_file {input_file} was not found.')
-        sys.exit(__status=-1)
+        sys.exit(-1)
 
     # Is JSON file?
     if input_file[-5:].casefold() != '.json':
         print("The argument given to GAME should be a json file.")
-        sys.exit(__status=-1)
+        sys.exit(-1)
 
     with open(input_file, mode='r') as f:
         json_file: dict = json.load(fp=f)
@@ -28,7 +28,7 @@ def check_input(input_file: str) -> dict:
     for key in mandatory_keys:
         if key not in json_file:
             print(f"{key} is a mandatory keyword.")
-            sys.exit(__status=-1)
+            sys.exit(-1)
 
     # Has unknown keys?
     for key in json_file:
