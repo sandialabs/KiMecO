@@ -89,7 +89,6 @@ class RateCon:
                                    settings=self.set,
                                    sop=self.SOP)
             mor.read()
-            print(mor.rc)
 
     def job_finished(self) -> bool:
         if os.path.isfile(f"{self.id}.out"):

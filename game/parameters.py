@@ -17,8 +17,8 @@ class SOP:
         self.id: int = copy.copy(SOP._id)
         self.factor: float
         self.power: float
-        self.sigmas: list[float]
-        self.epsilons: list[float]
+        self.sigmas: list[float] = []
+        self.epsilons: list[float] = []
         self.rc_temp: list[float]
         self.rc_pres: list[float]
         SOP._id += 1

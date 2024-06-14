@@ -4,6 +4,7 @@ from game.readers.mess_input import MessInputReader
 from game.rate_constants import RateCon
 from game.user_input import check_input
 from game.parameters import SOP
+from game.simulation import SIM
 
 
 def main() -> None:
@@ -27,3 +28,9 @@ def main() -> None:
 
     init_KinCon.calculate()
     init_KinCon.recover_rslts()
+
+    sim: SIM = SIM(sop=init_SOP,
+                   kin=init_KinCon,
+                   ct_sim="/home/csoulie/projects/ethylperoxy/me/cant.yaml")
+
+    sim.show_info()
