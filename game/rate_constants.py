@@ -5,6 +5,7 @@ from game.readers.mess_output import MessOutputReader
 import subprocess
 import os
 import getpass
+import numpy as np
 
 
 class RateCon:
@@ -89,6 +90,9 @@ class RateCon:
                                    settings=self.set,
                                    sop=self.SOP)
             mor.read()
+        self.rc: np.ndarray = mor.rc
+        self.hp_rc: np.ndarray = mor.hp_rc
+        self.tbl_map: dict[str, int] = mor.tbl_map
 
     def job_finished(self) -> bool:
         if os.path.isfile(f"{self.id}.out"):

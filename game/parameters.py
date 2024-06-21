@@ -64,6 +64,7 @@ class SOP:
         """
         self.wells = values
 
+    @property
     def wells_names(self) -> list[str]:
         """Return the names of all the wells
 
@@ -102,6 +103,7 @@ class SOP:
         """
         self.bimolecular = values
 
+    @property
     def bimols_names(self) -> list[str]:
         """List of names of all the bimolecular objects
 
@@ -135,6 +137,7 @@ class SOP:
         """
         self.barriers = values
 
+    @property
     def barriers_names(self) -> list:
         """Returns the names of all barrier objects in the SOP
 

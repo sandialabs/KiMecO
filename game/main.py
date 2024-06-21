@@ -5,6 +5,7 @@ from game.rate_constants import RateCon
 from game.user_input import check_input
 from game.parameters import SOP
 from game.simulation import SIM
+from game.customrate import MessData, MessRate
 
 
 def main() -> None:
@@ -33,4 +34,4 @@ def main() -> None:
                    kin=init_KinCon,
                    ct_sim="/home/csoulie/projects/ethylperoxy/me/cant.yaml")
 
-    sim.show_info()
+   

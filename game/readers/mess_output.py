@@ -2,6 +2,7 @@ from typing import Any
 import numpy as np
 from game.parameters import SOP
 
+
 class MessOutputReader:
     """Class that read a mess output file and transforms it into
      a set of (T/P dependent) rate constants."""
@@ -13,21 +14,26 @@ class MessOutputReader:
         self.temp: list = settings["rc_temp"]
         self.pres: list = settings["rc_pres"]
 
-        self.species: list[str] = sop.wells_names()
-        self.species.extend(sop.bimols_names())
+        self.species: list[str] = sop.wells_names
+        self.species.extend(sop.bimols_names)
 
-        self.rc: Any = np.full(shape=(len(self.pres),
+        # T/P dependant rate constants
+        self.rc: np.ndarray = np.full(shape=(len(self.pres),
                                       len(self.temp),
                                       len(self.species),
                                       len(self.species)),
-                               fill_value=0.0)
+                                      fill_value=0.0)
 
-        self.hp_rc: Any = np.full(shape=(len(self.temp),
+        # High-pressure rate constants
+        self.hp_rc: np.ndarray = np.full(shape=(len(self.temp),
                                          len(self.species),
                                          len(self.species)),
-                                  fill_value=0.0)
+                                         fill_value=0.0)
+        
+        self.lnum: int = 0  # Line index of table. Save map for first table
+        self.tbl_map: dict[str, int] = {}  # Map linking indexes to species name
 
-    def read(self) -> None:    
+    def read(self) -> None:
         recording = False
 
         for lnum, line in enumerate(self.file):
@@ -41,7 +47,7 @@ class MessOutputReader:
 
                 # Set the pressure and temperature indexes
                 if 'temperature' in line.casefold() and\
-                    'pressure' in line.casefold():
+                      'pressure' in line.casefold():
                     temp = float(line.split()[2])
                     t_idx: int = self.temp.index(temp)
                     pres = float(line.split()[6])
@@ -69,21 +75,27 @@ class MessOutputReader:
             t_idx (int): temperaturte index
             p_idx (int): pressure index
         """
+        if self.lnum == 0 :
+            save_map = True
+            self.lnum = lnum
+        else:
+            save_map = False
 
         # Create the table
-        table = np.full(shape=(len(self.species),
-                               len(self.species)),
-                        fill_value=0.0)
+        table: np.ndarray = np.full(shape=(len(self.species),
+                                    len(self.species)),
+                                    fill_value=0.0)
 
         # Write the table
         for From, line in enumerate(self.file[lnum+1:]):
             if line == "\n":
                 break
             rates: list[str] = line.split()[1:]
+            if save_map:
+                self.tbl_map[line.split()[0]] = From
             for To, value in enumerate(rates):
                 if "*" in value:
                     continue
-                    # table[From, To] = value
                 else:
                     table[From, To] = float(value)
 

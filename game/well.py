@@ -78,6 +78,16 @@ class Well:
         freq += '\n'
         return freq
 
+    @property
+    def compo(self) -> dict[str, int]:
+        comp: dict[str, int] = {}
+        for atm in self.structure.symbols:
+            if atm not in comp:
+                comp[atm] = 1
+            else:
+                comp[atm] += 1
+        return comp
+
     def r_scan(self, rot_num: int) -> str:
         """Representation of the rotor's scan
 
