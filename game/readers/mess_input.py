@@ -381,7 +381,7 @@ class MessInputReader:
         """
         symbols: str = ''
         geom: list = []
-        for line in self.file[lnum+1:lnum+natom]:
+        for line in self.file[lnum+1:lnum+natom+1]:
             symbols += line.split()[0]
             x, y, z = line.split()[1:4]
             geom.append([float(x), float(y), float(z)])

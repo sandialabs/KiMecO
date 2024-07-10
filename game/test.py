@@ -58,7 +58,7 @@ class MessData(ct.ExtensibleRateData):
             update = True
         return update
 
-#@ct.extension(name="extensible-Arrhenius", data=ExtensibleArrheniusData)
+@ct.extension(name="extensible-Arrhenius", data=ExtensibleArrheniusData)
 #@ct.extension(name="extensible-Arrhenius", data=MessData)
 class ExtensibleArrhenius(ct.ExtensibleRate):
     __slots__ = ("A", "b", "Ea_R")
@@ -80,7 +80,7 @@ class ExtensibleArrhenius(ct.ExtensibleRate):
         return self.A * data.T**self.b * exp(-self.Ea_R/data.T)
 
 
-@ct.extension(name="extensible-Arrhenius", data=MessData)
+#@ct.extension(name="extensible-Arrhenius", data=MessData)
 class MessRate(ct.ExtensibleRate):
     __slots__ = ("rc", "Pgrid", "Tgrid")
 
@@ -110,22 +110,22 @@ class MessRate(ct.ExtensibleRate):
         Tindex: int = np.where(self.Tgrid == data.T)[0][0]
         return self.rc[Pindex, Tindex]
 
-extensible_yaml2 = """
-    equation: H2O2 + O <=> HO2 + OH
-    type: extensible-Arrhenius
-    units: {length: cm, quantity: mol, activation-energy: cal/mol}
-    rc:
-      - - 0.0
-        - 0.0
-      - - 0.0
-        - 0.0
-    Pgrid:
-      - 7.6
-      - 76
-    Tgrid:
-      - 300
-      - 400
-    """
+# extensible_yaml2 = """
+#     equation: H2O2 + O <=> HO2 + OH
+#     type: extensible-Arrhenius
+#     units: {length: cm, quantity: mol, activation-energy: cal/mol}
+#     rc:
+#       - - 0.0
+#         - 0.0
+#       - - 0.0
+#         - 0.0
+#     Pgrid:
+#       - 7.6
+#       - 76
+#     Tgrid:
+#       - 300
+#       - 400
+#     """
 
 extensible_yaml4 = """
     equation: H2O2 + O <=> HO2 + OH
@@ -137,7 +137,7 @@ extensible_yaml4 = """
     """
 
 extensible_reactions = gas0.reactions()
-extensible_reactions[2] = ct.Reaction.from_yaml(extensible_yaml2, gas0)
+# extensible_reactions[2] = ct.Reaction.from_yaml(extensible_yaml2, gas0)
 extensible_reactions[4] = ct.Reaction.from_yaml(extensible_yaml4, gas0)
 gas2 = ct.Solution(thermo="ideal-gas", kinetics="gas",
                    species=species, reactions=extensible_reactions)

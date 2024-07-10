@@ -27,26 +27,12 @@ class SIM:
         self.SOP: SOP = sop
         self.KIN: RateCon = kin
         self.initial_sim: ct.Solution = ct.Solution(ct_sim)
-        new_species = self.add_species()
-        new_reactions = self.add_reactions()
-        self.complete_sim(new_species, new_reactions)
-        self.init_sims()
         self.simulations: list[ct.Solution] = []
+        self.add_species()
+        self.add_reactions()
+        self.init_sims()
 
-    def complete_sim(self, new_species: list[ct.Species],
-                     new_reactions: list[ct.Reaction]
-                     ) -> None:
-        species: list[ct.Species] = [s for s in self.initial_sim.species()]
-        reactions: list[ct.Reaction] = [r for r in self.initial_sim.reactions()]
-        all_species: list[ct.Species] = species.extend(new_species)
-        all_reactions: list[ct.Reaction] = reactions.extend(reactions)
-        self.modified_sim: ct.Solution = ct.Solution(thermo='ideal-gas',
-                                                     kinetics='gas',
-                                                     species=all_species,
-                                                     reactions=all_reactions)
-
-
-    def add_species(self) -> list[ct.Species]:
+    def add_species(self) -> None:
         """Add the species from the SOP
         to the cantera Simulation.
         """
@@ -59,9 +45,9 @@ class SIM:
         for specie, obj in self.SOP.items.items():
             if isinstance(obj, Well) and not isinstance(obj, Barrier):
                 well: Well = self.SOP.items[specie]
-                new_specie = ct.Species(name=specie,
-                                             composition=well.compo,
-                                             )
+                new_specie: ct.Species = ct.Species(name=well.ct_name,
+                                                    composition=well.compo
+                                                    )
                 new_specie.thermo = thermo
                 new_species.append(new_specie)
         reactions: list[ct.Reaction] = [r for r in self.initial_sim.reactions()]
@@ -72,47 +58,80 @@ class SIM:
                                                     reactions=reactions)
 
     def add_reactions(self) -> list[ct.Reaction]:
-        reactions: list[ct.Reaction] = []
+        new_reactions: list[ct.Reaction] = []
         for reac in self.SOP.barriers_names:
             bar: Barrier = self.SOP.items[reac]
             equation: str = self.get_reaction_eq(bar=bar)
-            rates: list = self.get_reaction_rate(bar=bar).tolist()
+            rates_yaml: str = self.get_reaction_rate(bar=bar)
+            p_yaml: str = ''
+            for p in self.KIN.set["rc_pres"]:
+                p_yaml += f'      - {p} Pa' + '\n'
+            t_yaml: str = ''
+            for t in self.KIN.set["rc_temp"]:
+                t_yaml += f'      - {t} K' + '\n'
             reaction_yaml: str = f"""
     equation: {equation}
     type: Mess-data
-    units: {{length: cm, quantity: molec, pressure: Pa}}
-    rc: {rates}
-    Pgrid: {self.KIN.set["rc_pres"]}
-    Tgrid: {self.KIN.set["rc_temp"]}
-    """
-            reactions.append(ct.Reaction.from_yaml(reaction_yaml, self.initial_sim))
-        return reactions
+    rc:
+{rates_yaml[:-1]}
+    Pgrid:
+{p_yaml[:-1]}
+    Tgrid:
+{t_yaml[:-1]}
+"""
+            new_reactions.append(ct.Reaction.from_yaml(reaction_yaml, self.species_sim))
+        reactions: list[ct.Reaction] = [r for r in self.species_sim.reactions()]
+        reactions.extend(new_reactions)
+        species: list[ct.Species] = [s for s in self.species_sim.species()]
+        self.final_sim: ct.Solution = ct.Solution(thermo='ideal-gas',
+                                                  kinetics='gas',
+                                                  species=species,
+                                                  reactions=reactions)
 
     def get_reaction_eq(self, bar: Barrier) -> str:
         equation: str = ""
         for indx, side in enumerate(bar.connected):
             if isinstance(side, Well):
-                equation += side.name
+                equation += side.ct_name
             elif isinstance(side, Bimolecular):
-                equation += f'{side.fragments[0].name}'
+                equation += f'{side.fragments[0].ct_name}'
                 equation += ' + '
-                equation += f'{side.fragments[1].name}'
+                equation += f'{side.fragments[1].ct_name}'
 
             if indx == 0:
-                equation += ' <=> '
+                equation += ' => '
 
         return equation
 
-    def get_reaction_rate(self, bar: Barrier) -> np.ndarray:
+    def get_reaction_rate(self, bar: Barrier) -> str:
         From: int = self.KIN.tbl_map[bar.connected[0].name]
         To: int = self.KIN.tbl_map[bar.connected[1].name]
         rates: np.ndarray = self.KIN.rc[:, :, From, To]
-
-        return rates
+        rates_yaml: str = ''
+        for p in rates:
+            rates_yaml += '      - '
+            for idx, t in enumerate(p):
+                if idx == 0:
+                    rates_yaml += f'- {t} cm^3/molec/s' + '\n'
+                else:
+                    rates_yaml += f'        - {t} cm^3/molec/s' + '\n'
+        return rates_yaml
 
     def init_sims(self) -> None:
+        ctwriter = ct.YamlWriter()
+        reactions: list[ct.Reaction] = [r for r in self.final_sim.reactions()]
+        species: list[ct.Species] = [s for s in self.final_sim.species()]
+        simid = 0
         for p in self.SOP.rc_pres:
             for t in self.SOP.rc_temp:
-                new_sim: ct.Solution = deepcopy(self.modified_sim)
-                new_sim.PT = p, t
+                simid += 1
+                name: str = f'sim{simid}'
+                new_sim: ct.Solution = ct.Solution(name=name,
+                                                   thermo='ideal-gas',
+                                                   kinetics='gas',
+                                                   species=species,
+                                                   reactions=reactions)
+                new_sim.TP = t, p
                 self.simulations.append(new_sim)
+                new_sim.write_yaml(f"{name}.yaml")
+                ctwriter.add_solution(new_sim)

@@ -33,5 +33,3 @@ def main() -> None:
     sim: SIM = SIM(sop=init_SOP,
                    kin=init_KinCon,
                    ct_sim="/home/csoulie/projects/ethylperoxy/me/cant.yaml")
-
-   

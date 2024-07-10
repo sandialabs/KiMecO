@@ -37,6 +37,10 @@ class Well:
     @property
     def r_name(self) -> str:
         return self.name
+    @property
+    def ct_name(self) -> str:
+        return self.name
+        # return f"{self.name.replace('_', '')}ct"
 
     @property
     def r_energy(self) -> float:
