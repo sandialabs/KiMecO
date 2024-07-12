@@ -23,6 +23,7 @@ class MessInputReader:
         self.SOP: SOP = SOP()  # Set of parameters
         self.SOP.rc_temp = settings["rc_temp"]
         self.SOP.rc_pres = settings["rc_pres"]
+        self.SOP.ct_names = settings["ct_names"]
 
         if os.path.isfile(path=self.filename):
             with open(file=self.filename, mode='r') as f:
@@ -84,7 +85,7 @@ class MessInputReader:
                     self.SOP.add_new_well(name=name)
                 new_line: str = line.split()[0] \
                     + " {" \
-                    + f"{name}.r_name" \
+                    + f"{name}.name" \
                     + "}\n"
                 self.template.append(new_line)
             # BIMOLECULAR
@@ -95,7 +96,7 @@ class MessInputReader:
                     self.SOP.add_new_bimol(name=name)
                 new_line: str = line.split()[0] \
                     + " {" \
-                    + f"{name}.r_name" \
+                    + f"{name}.name" \
                     + "}\n"
                 self.template.append(new_line)
             # BARRIER
@@ -106,9 +107,9 @@ class MessInputReader:
                     self.SOP.add_new_barrier(name=name,
                                              lside=lside,
                                              rside=rside)
-                new_line: str = line.split()[0] + " {" + f"{name}.r_name" + "}"
-                new_line += " {" + f"{lside}.r_name" + "}"
-                new_line += " {" + f"{rside}.r_name" + "}\n"
+                new_line: str = line.split()[0] + " {" + f"{name}.name" + "}"
+                new_line += " {" + f"{lside}.name" + "}"
+                new_line += " {" + f"{rside}.name" + "}\n"
                 self.template.append(new_line)
             # FRAGMENT
             elif line.lstrip().casefold().startswith('fragment')\
@@ -123,7 +124,7 @@ class MessInputReader:
                                 self.SOP.items[name].fragments[-1]
                 new_line: str = line.split()[0] \
                     + " {" \
-                    + f"{fname}.r_name" \
+                    + f"{fname}.name" \
                     + "}\n"
                 self.template.append(new_line)
 

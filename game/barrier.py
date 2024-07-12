@@ -9,7 +9,7 @@ class Barrier(Well):
                  lside: Well | Bimolecular,
                  rside: Well | Bimolecular) -> None:
 
-        super().__init__(name)
+        super().__init__(name=name)
         self.connected: list[Well | Bimolecular] = [lside, rside]
 
     @property

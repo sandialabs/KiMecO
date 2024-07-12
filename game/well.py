@@ -5,14 +5,18 @@ from ase.symbols import Symbols
 
 
 class Well:
-    """The name is used as identifier.
+    """Well object. Has a name (id), and a ct_name used in cantera.
+       It also has a structure (ASE Atoms), and can have an energy.
     """
     def __init__(self,
-                 name: str) -> None:
+                 name: str,
+                 ct_name: str = ""
+                 ) -> None:
 
         self.name: str = name
         self.frequencies: list[float] = []
         self.rotors: list[Rotor] = []
+        self.ct_name: str = ct_name
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -33,14 +37,6 @@ class Well:
                     f'Well does not have the attribute {name}')
         else:
             self.__getattribute__(name)
-
-    @property
-    def r_name(self) -> str:
-        return self.name
-    @property
-    def ct_name(self) -> str:
-        return self.name
-        # return f"{self.name.replace('_', '')}ct"
 
     @property
     def r_energy(self) -> float:
@@ -116,7 +112,8 @@ class Well:
             symbols (str): Chemical elements
             positions (list[list]): 3D geometry
         """
-        self.structure = Structure(symbols, positions)
+        self.structure = Structure(elements=symbols,
+                                   geom=positions)
 
     def set_frequencies(self,
                         freqs: list[float]) -> None:
@@ -142,4 +139,8 @@ class Well:
             symmetry (int): symmetry
             scan (list[float]): scan
         """
-        self.rotors.append(Rotor(thermalpowermax, group, axis, symmetry, scan))
+        self.rotors.append(Rotor(ThermalPowerMax=thermalpowermax,
+                                 group=group,
+                                 axis=axis,
+                                 symmetry=symmetry,
+                                 scan=scan))

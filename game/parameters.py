@@ -13,14 +13,15 @@ class SOP:
         self.set_wells([])
         self.set_bimols([])
         self.set_barriers([])
-        self.items: dict = {}
         self.id: int = copy.copy(SOP._id)
-        self.factor: float
+        self.items: dict = {}
         self.power: float
+        self.factor: float
         self.sigmas: list[float] = []
-        self.epsilons: list[float] = []
         self.rc_temp: list[float]
         self.rc_pres: list[float]
+        self.ct_names: dict[str, str]
+        self.epsilons: list[float] = []
         SOP._id += 1
 
     @property
@@ -83,16 +84,14 @@ class SOP:
         Args:
             name (str): Well's name
         """
-        self.items[name] = Well(name)
+        if name in self.ct_names:
+            if self.ct_names[name] == "":
+                self.ct_names[name] = name
+        else:
+            self.ct_names[name] = name
+        ct_name: str = self.ct_names[name]
+        self.items[name] = Well(name=name, ct_name=ct_name)
         self.wells.append(self.items[name])
-
-    # def bimols(self) -> list[Bimolecular]:
-    #     """list of all Bimolecular objects in the SOP
-
-    #     Returns:
-    #         list[Bimolecular]: list of all Bimolecular objects in the SOP
-    #     """
-    #     return self.bimolecular
 
     def set_bimols(self,
                    values: list[Bimolecular]) -> None:
@@ -122,7 +121,7 @@ class SOP:
         Args:
             name (str): name of the bimolecular object
         """
-        self.items[name] = Bimolecular(name)
+        self.items[name] = Bimolecular(name, self.ct_names)
         self.bimolecular.append(self.items[name])
 
     # def barriers(self) -> list[Bimolecular]:

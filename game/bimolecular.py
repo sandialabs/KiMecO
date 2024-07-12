@@ -4,13 +4,14 @@ from game.well import Well
 class Bimolecular:
     """A well is a minima on the PES.
     It must have a name and an energy."""
-    def __init__(self, name: str) -> None:
+    def __init__(self,
+                 name: str,
+                 ct_names: dict[str, str],
+                 ) -> None:
+        
         self.name: str = name
         self.fragments: list = []
-
-    @property
-    def r_name(self) -> str:
-        return self.name
+        self.ct_names: dict[str, str] = ct_names
 
     @property
     def r_energy(self) -> float:
@@ -38,7 +39,14 @@ class Bimolecular:
         Args:
             name (str): fragment's name
         """
-        frag = Well(name, *args)
+        if name in self.ct_names:
+            if self.ct_names[name] == "":
+                ct_name: str = name
+            else:
+                ct_name: str = self.ct_names[name]
+        else:
+            ct_name: str = name
+        frag = Well(name=name, ct_name=ct_name, *args)
         self.fragments.append(frag)
 
     def frag_names(self) -> list[str]:

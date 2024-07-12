@@ -28,14 +28,21 @@ class MessRate(ct.ExtensibleRate):
     __slots__ = ("rc", "Pgrid", "Tgrid")
 
     def set_parameters(self, params, units) -> None:
-        self.rc: np.ndarray = np.array(params.convert("rc", 'cm^3/s/molec'))
-        self.Pgrid: np.ndarray = np.array(params.convert("Pgrid", 'Pa'))
-        self.Tgrid: np.ndarray = np.array(params.convert("Tgrid", 'K'))
+        self.Pgrid = params.convert("Pgrid", 'Pa')
+        self.Tgrid = params.convert("Tgrid", 'K')
+        self.rc = []
+        for pidx in range(len(self.Pgrid)):
+            self.rc.append([])
+            for tidx in range(len(self.Tgrid)):
+                self.rc[-1].append(params.convert(f"rc_{pidx}_{tidx}", 'cm^3/s/molec'))
 
     def get_parameters(self, params) -> None:
-        params["rc"] = params.set_quantity("rc", self.rc, 'cm^3/s/molec')
-        params["Pgrid"] = params.set_quantity("Pgrid", self.Pgrid, 'Pa')
-        params["Tgrid"] = params.set_quantity("Tgrid", self.Tgrid, 'K')
+        params.set_quantity("Pgrid", self.Pgrid, 'Pa')
+        params.set_quantity("Tgrid", self.Tgrid, 'K')
+        for pidx in range(len(self.Pgrid)):
+            for tidx in range(len(self.Tgrid)):
+                params.set_quantity(f"rc_{pidx}_{tidx}", self.rc[pidx][tidx], 'cm^3/s/molec')
+        print(params)
 
     def validate(self, equation, soln) -> None:
         # if soln.P not in self.Pgrid:
@@ -52,4 +59,4 @@ class MessRate(ct.ExtensibleRate):
     def eval(self, data) -> float:
         Pindex: int = np.where(self.Pgrid == data.P)[0][0]
         Tindex: int = np.where(self.Tgrid == data.T)[0][0]
-        return self.rc[Pindex, Tindex]
+        return self.rc[Pindex][Tindex]
