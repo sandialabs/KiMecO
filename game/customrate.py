@@ -25,24 +25,31 @@ class MessData(ct.ExtensibleRateData):
 
 @ct.extension(name="Mess-data", data=MessData)
 class MessRate(ct.ExtensibleRate):
-    __slots__ = ("rc", "Pgrid", "Tgrid")
+    __slots__ = ("rc",
+                 "Pgrid",
+                 "Tgrid",
+                 "unit")
 
     def set_parameters(self, params, units) -> None:
+        if '+' in params['equation']:
+            self.unit = 'cm^3/s/molec'
+        else:
+            self.unit = 's^-1'
         self.Pgrid = params.convert("Pgrid", 'Pa')
         self.Tgrid = params.convert("Tgrid", 'K')
         self.rc = []
         for pidx in range(len(self.Pgrid)):
             self.rc.append([])
             for tidx in range(len(self.Tgrid)):
-                self.rc[-1].append(params.convert(f"rc_{pidx}_{tidx}", 'cm^3/s/molec'))
+                self.rc[-1].append(params.convert(f"rc_{pidx}_{tidx}",
+                                                  self.unit))
 
     def get_parameters(self, params) -> None:
         params.set_quantity("Pgrid", self.Pgrid, 'Pa')
         params.set_quantity("Tgrid", self.Tgrid, 'K')
         for pidx in range(len(self.Pgrid)):
             for tidx in range(len(self.Tgrid)):
-                params.set_quantity(f"rc_{pidx}_{tidx}", self.rc[pidx][tidx], 'cm^3/s/molec')
-        print(params)
+                params.set_quantity(f"rc_{pidx}_{tidx}", self.rc[pidx][tidx], self.unit )
 
     def validate(self, equation, soln) -> None:
         # if soln.P not in self.Pgrid:

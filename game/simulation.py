@@ -8,6 +8,7 @@ from game.parameters import SOP
 from game.rate_constants import RateCon
 from game.well import Well
 from game.barrier import Barrier
+from game.tpl.ct_reaction_tpl import reaction_yaml
 
 
 class SIM:
@@ -82,36 +83,41 @@ class SIM:
                                                     species=species,
                                                     reactions=reactions)
         
-    def create_reaction(self, reac) -> ct.Reaction:
+    def create_reaction(self, reac) -> [ct.Reaction, ct.Reaction]:
         """Create a cantera Reaction object."""
         bar: Barrier = self.SOP.items[reac]
-        equation: str = self.get_reaction_eq(bar=bar)
-        rates_yaml: str = self.get_reaction_rate(bar=bar)
+        unit: str
+        equations: list[str]
+        unit, equations = self.get_reaction_eq(bar=bar)
+        rates_yaml: list[str] = self.get_reaction_rate(bar=bar,
+                                                       unit=unit)
         p_yaml: str = ''
         for p in self.KIN.set["rc_pres"]:
             p_yaml += f'      - {p} Pa' + '\n'
         t_yaml: str = ''
         for t in self.KIN.set["rc_temp"]:
             t_yaml += f'      - {t} K' + '\n'
-        reaction_yaml: str = f"""
-    equation: {equation}
-    type: Mess-data
-{rates_yaml[:-1]}
-    Pgrid:
-{p_yaml[:-1]}
-    Tgrid:
-{t_yaml[:-1]}
-"""
-        ct_reac = ct.Reaction.from_yaml(reaction_yaml, self.species_sim)
+        forward_yaml: str = reaction_yaml.format(equation=equations[0],
+                                                 rates_yaml=rates_yaml[0][:-1],
+                                                 p_yaml=p_yaml[:-1],
+                                                 t_yaml=t_yaml[:-1])
+        forward = ct.Reaction.from_yaml(forward_yaml, self.species_sim)
+        reverse_yaml: str = reaction_yaml.format(equation=equations[1],
+                                                 rates_yaml=rates_yaml[1][:-1],
+                                                 p_yaml=p_yaml[:-1],
+                                                 t_yaml=t_yaml[:-1])
+        reverse = ct.Reaction.from_yaml(reverse_yaml, self.species_sim)
 
-        return ct_reac
+        return [forward, reverse]
 
     def set_reactions(self) -> None:
         """Replace mechanism reactions by workflow reactions.
         """
         new_reactions: list[ct.Reaction] = []
         for reac in self.SOP.barriers_names:
-            new_reactions.append(self.create_reaction(reac=reac))
+            forward, reverse = self.create_reaction(reac=reac)
+            new_reactions.append(forward)
+            new_reactions.append(reverse)
         reactions: list[ct.Reaction] = [r for r in self.species_sim.reactions()]
         self.remove_redundant_reactions(reactions=reactions,
                                         new_reactions=new_reactions)
@@ -143,30 +149,50 @@ class SIM:
         for idx in reversed(self.reac_idx):
             reactions.pop(idx)
 
-    def get_reaction_eq(self, bar: Barrier) -> str:
-        equation: str = ""
+    def get_reaction_eq(self, bar: Barrier) -> tuple[str, list[str]]:
+        forwrd: str = ""
         for indx, side in enumerate(bar.connected):
             if isinstance(side, Well):
-                equation += side.ct_name
+                forwrd += side.ct_name
             elif isinstance(side, Bimolecular):
-                equation += f'{side.fragments[0].ct_name}'
-                equation += ' + '
-                equation += f'{side.fragments[1].ct_name}'
+                forwrd += f'{side.fragments[0].ct_name}'
+                forwrd += ' + '
+                forwrd += f'{side.fragments[1].ct_name}'
 
             if indx == 0:
-                equation += ' => '
+                forwrd += ' => '
 
-        return equation
+        reverse: str = ""
+        for indx, side in enumerate(reversed(bar.connected)):
+            if isinstance(side, Well):
+                reverse += side.ct_name
+            elif isinstance(side, Bimolecular):
+                reverse += f'{side.fragments[0].ct_name}'
+                reverse += ' + '
+                reverse += f'{side.fragments[1].ct_name}'
 
-    def get_reaction_rate(self, bar: Barrier) -> str:
+            if indx == 0:
+                reverse += ' => '
+
+            if '+' in forwrd:
+                unit = "cm^3/s/molec"
+            else:
+                unit = "s^-1"
+
+        return (unit, [forwrd, reverse])
+
+    def get_reaction_rate(self, bar: Barrier, unit) -> list[str]:
         From: int = self.KIN.tbl_map[bar.connected[0].name]
         To: int = self.KIN.tbl_map[bar.connected[1].name]
-        rates: np.ndarray = self.KIN.rc[:, :, From, To]
-        rates_yaml: str = ''
+        f_rates: np.ndarray = self.KIN.rc[:, :, From, To]
+        r_rates: np.ndarray = self.KIN.rc[:, :, To, From]
+        f_rates_yaml: str = ''
+        r_rates_yaml: str = ''
         for pindex, p in enumerate(self.KIN.set["rc_pres"]):
             for tindex, t in enumerate(self.KIN.set["rc_temp"]):
-                rates_yaml += f'    rc_{pindex}_{tindex}: {rates[pindex,tindex]} cm^3/molec/s' + '\n'
-        return rates_yaml
+                f_rates_yaml += f'    rc_{pindex}_{tindex}: {f_rates[pindex,tindex]} {unit}' + '\n'
+                r_rates_yaml += f'    rc_{pindex}_{tindex}: {r_rates[pindex,tindex]} {unit}' + '\n'
+        return [f_rates_yaml, r_rates_yaml]
 
     def init_sims(self) -> None:
         reactions: list[ct.Reaction] = [r for r in self.final_sim.reactions()]
