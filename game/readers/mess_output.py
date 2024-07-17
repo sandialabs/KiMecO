@@ -75,7 +75,7 @@ class MessOutputReader:
             t_idx (int): temperaturte index
             p_idx (int): pressure index
         """
-        if self.lnum == 0 :
+        if self.lnum == 0:
             save_map = True
             self.lnum = lnum
         else:

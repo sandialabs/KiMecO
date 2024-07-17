@@ -1,4 +1,5 @@
 from copy import deepcopy
+from re import A
 from typing import Any
 import cantera as ct
 from game.customrate import MessData, MessRate
@@ -8,7 +9,8 @@ from game.parameters import SOP
 from game.rate_constants import RateCon
 from game.well import Well
 from game.barrier import Barrier
-from game.tpl.ct_reaction_tpl import reaction_yaml
+from game.templates.ct_reaction_tpl import reaction_yaml
+from scipy.constants import Avogadro
 
 
 class SIM:
@@ -35,6 +37,7 @@ class SIM:
         self.reac_idx: list[int] | None = reac_idx
         self.simulations: list[ct.Solution] = []
         self.ct_names: dict[str, str] = {ct: mess for mess, ct in ct_names.items()}
+        self.ct_unitSystem: dict = ct.UnitSystem().units
         self.set_species()
         self.set_reactions()
         self.init_sims()
@@ -83,20 +86,21 @@ class SIM:
                                                     species=species,
                                                     reactions=reactions)
         
-    def create_reaction(self, reac) -> [ct.Reaction, ct.Reaction]:
+    def create_reaction(self,
+                        reac: str) -> [ct.Reaction, ct.Reaction]:
         """Create a cantera Reaction object."""
         bar: Barrier = self.SOP.items[reac]
-        unit: str
         equations: list[str]
-        unit, equations = self.get_reaction_eq(bar=bar)
+        units: list[str]
+        units, equations = self.get_reaction_eq(bar=bar)
         rates_yaml: list[str] = self.get_reaction_rate(bar=bar,
-                                                       unit=unit)
+                                                       units=units)
         p_yaml: str = ''
         for p in self.KIN.set["rc_pres"]:
-            p_yaml += f'      - {p} Pa' + '\n'
+            p_yaml += f'  - {p} torr' + '\n'
         t_yaml: str = ''
         for t in self.KIN.set["rc_temp"]:
-            t_yaml += f'      - {t} K' + '\n'
+            t_yaml += f'  - {t} K' + '\n'
         forward_yaml: str = reaction_yaml.format(equation=equations[0],
                                                  rates_yaml=rates_yaml[0][:-1],
                                                  p_yaml=p_yaml[:-1],
@@ -118,7 +122,8 @@ class SIM:
             forward, reverse = self.create_reaction(reac=reac)
             new_reactions.append(forward)
             new_reactions.append(reverse)
-        reactions: list[ct.Reaction] = [r for r in self.species_sim.reactions()]
+        reactions: list[ct.Reaction] = \
+            [r for r in self.species_sim.reactions()]
         self.remove_redundant_reactions(reactions=reactions,
                                         new_reactions=new_reactions)
         reactions.extend(new_reactions)
@@ -149,8 +154,9 @@ class SIM:
         for idx in reversed(self.reac_idx):
             reactions.pop(idx)
 
-    def get_reaction_eq(self, bar: Barrier) -> tuple[str, list[str]]:
+    def get_reaction_eq(self, bar: Barrier) -> tuple[list[str], list[str]]:
         forwrd: str = ""
+        units = []
         for indx, side in enumerate(bar.connected):
             if isinstance(side, Well):
                 forwrd += side.ct_name
@@ -160,6 +166,10 @@ class SIM:
                 forwrd += f'{side.fragments[1].ct_name}'
 
             if indx == 0:
+                if '+' in forwrd:
+                    units.append("m^3/s/kmol")
+                else:
+                    units.append("s^-1")
                 forwrd += ' => '
 
         reverse: str = ""
@@ -172,27 +182,72 @@ class SIM:
                 reverse += f'{side.fragments[1].ct_name}'
 
             if indx == 0:
+                if '+' in reverse:
+                    units.append("m^3 / s / kmol")
+                else:
+                    units.append("s^-1")
                 reverse += ' => '
 
-            if '+' in forwrd:
-                unit = "cm^3/s/molec"
-            else:
-                unit = "s^-1"
+        return (units, [forwrd, reverse])
 
-        return (unit, [forwrd, reverse])
-
-    def get_reaction_rate(self, bar: Barrier, unit) -> list[str]:
+    def get_reaction_rate(self,
+                          bar: Barrier,
+                          units) -> list[str]:
+    #     self.UnitSystem = ct.UnitSystem({
+    # "length": "cm", "mass": "kg", "time": "s",
+    # "quantity": "kmol", "pressure": "Pa", "energy": "J",
+    # "temperature": "K", "current": "A", "activation-energy": "J / kmol"})
         From: int = self.KIN.tbl_map[bar.connected[0].name]
         To: int = self.KIN.tbl_map[bar.connected[1].name]
-        f_rates: np.ndarray = self.KIN.rc[:, :, From, To]
-        r_rates: np.ndarray = self.KIN.rc[:, :, To, From]
+        f_rates: np.ndarray = deepcopy(self.KIN.rc[:, :, From, To])
+        r_rates: np.ndarray = deepcopy(self.KIN.rc[:, :, To, From])
+        if 'm^3' in units[0]:
+            f_rates *= Avogadro / 1000
+        if 'm^3' in units[1]:
+            r_rates *= Avogadro / 1000
         f_rates_yaml: str = ''
         r_rates_yaml: str = ''
+
         for pindex, p in enumerate(self.KIN.set["rc_pres"]):
             for tindex, t in enumerate(self.KIN.set["rc_temp"]):
-                f_rates_yaml += f'    rc_{pindex}_{tindex}: {f_rates[pindex,tindex]} {unit}' + '\n'
-                r_rates_yaml += f'    rc_{pindex}_{tindex}: {r_rates[pindex,tindex]} {unit}' + '\n'
+                # Convert the rate constants from the system of units of Mess
+                # to cantera's system of units
+                # f_rc_std_unit: str = self.get_std_unit(unit=units[0])
+                # r_rc_std_unit: str = self.get_std_unit(unit=units[1])
+                # f_rc_std = self.UnitSystem.convert_rate_coeff_to(
+                #     f'{f_rates[pindex,tindex]} {units[0]}',
+                #     ct.Units(f_rc_std_unit)
+                # )
+                # r_rc_std = self.UnitSystem.convert_rate_coeff_to(
+                #     f'{r_rates[pindex,tindex]} {units[1]}',
+                #     ct.Units(r_rc_std_unit)
+                # )
+                f_rates_yaml += f'rc_{pindex}_{tindex}: \
+                                {f_rates[pindex,tindex]}' + '\n'
+                r_rates_yaml += f'rc_{pindex}_{tindex}: \
+                                {r_rates[pindex,tindex]}' + '\n'
         return [f_rates_yaml, r_rates_yaml]
+
+    def get_std_unit(self,
+                     unit: str) -> str:
+        """Change any unit into Cantera standard system of units.
+
+        Args:
+            unit (str): any unit
+
+        Returns:
+            str: string of the standard unit
+        """
+        std_unit: str = ''
+        full_dim: dict = ct.Units(unit).dimensions
+        for dim, exp in full_dim.items():
+            if exp != 0.0:
+                std_unit += f' {self.ct_unitSystem[dim]}^{exp} *'
+        std_unit: str = std_unit[1:-2]
+
+        return std_unit
+
+
 
     def init_sims(self) -> None:
         reactions: list[ct.Reaction] = [r for r in self.final_sim.reactions()]
@@ -210,3 +265,6 @@ class SIM:
                 new_sim.TP = t, p
                 self.simulations.append(new_sim)
                 new_sim.write_yaml(f"{name}.yaml")
+
+    def run(self):
+        pass
