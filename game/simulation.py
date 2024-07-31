@@ -1,6 +1,4 @@
 from copy import deepcopy
-from re import A
-from typing import Any
 import cantera as ct
 from game.customrate import MessData, MessRate
 import numpy as np
@@ -88,7 +86,7 @@ class SIM:
         
     def create_reaction(self,
                         reac: str) -> [ct.Reaction, ct.Reaction]:
-        """Create a cantera Reaction object."""
+        """Create a custom cantera Reaction object."""
         bar: Barrier = self.SOP.items[reac]
         equations: list[str]
         units: list[str]
@@ -154,7 +152,18 @@ class SIM:
         for idx in reversed(self.reac_idx):
             reactions.pop(idx)
 
-    def get_reaction_eq(self, bar: Barrier) -> tuple[list[str], list[str]]:
+    def get_reaction_eq(self,
+                        bar: Barrier) -> tuple[list[str], list[str]]:
+        """Create the reation's equations (forward and reverse) and find
+        appropriate units for the rate coefficient.
+
+        Args:
+            bar (Barrier): Barrier object corresponding to the reaction.
+
+        Returns:
+            tuple[list[str], list[str]]: units[forward, reverse]
+                                         equations[f,r]
+        """
         forwrd: str = ""
         units = []
         for indx, side in enumerate(bar.connected):
@@ -193,10 +202,15 @@ class SIM:
     def get_reaction_rate(self,
                           bar: Barrier,
                           units) -> list[str]:
-    #     self.UnitSystem = ct.UnitSystem({
-    # "length": "cm", "mass": "kg", "time": "s",
-    # "quantity": "kmol", "pressure": "Pa", "energy": "J",
-    # "temperature": "K", "current": "A", "activation-energy": "J / kmol"})
+        """Adapt Mess reaction rate to cantera unit system.
+
+        Args:
+            bar (Barrier): barrier corresponding to the reactions
+            units (_type_): [forward, reverse]
+
+        Returns:
+            list[str]: reaction rates[forward, backward]
+        """
         From: int = self.KIN.tbl_map[bar.connected[0].name]
         To: int = self.KIN.tbl_map[bar.connected[1].name]
         f_rates: np.ndarray = deepcopy(self.KIN.rc[:, :, From, To])
@@ -208,20 +222,8 @@ class SIM:
         f_rates_yaml: str = ''
         r_rates_yaml: str = ''
 
-        for pindex, p in enumerate(self.KIN.set["rc_pres"]):
-            for tindex, t in enumerate(self.KIN.set["rc_temp"]):
-                # Convert the rate constants from the system of units of Mess
-                # to cantera's system of units
-                # f_rc_std_unit: str = self.get_std_unit(unit=units[0])
-                # r_rc_std_unit: str = self.get_std_unit(unit=units[1])
-                # f_rc_std = self.UnitSystem.convert_rate_coeff_to(
-                #     f'{f_rates[pindex,tindex]} {units[0]}',
-                #     ct.Units(f_rc_std_unit)
-                # )
-                # r_rc_std = self.UnitSystem.convert_rate_coeff_to(
-                #     f'{r_rates[pindex,tindex]} {units[1]}',
-                #     ct.Units(r_rc_std_unit)
-                # )
+        for pindex in range(len(self.KIN.set["rc_pres"])):
+            for tindex in range(len(self.KIN.set["rc_temp"])):
                 f_rates_yaml += f'rc_{pindex}_{tindex}: \
                                 {f_rates[pindex,tindex]}' + '\n'
                 r_rates_yaml += f'rc_{pindex}_{tindex}: \
@@ -247,8 +249,6 @@ class SIM:
 
         return std_unit
 
-
-
     def init_sims(self) -> None:
         reactions: list[ct.Reaction] = [r for r in self.final_sim.reactions()]
         species: list[ct.Species] = [s for s in self.final_sim.species()]
@@ -257,14 +257,15 @@ class SIM:
             for t in self.SOP.rc_temp:
                 simid += 1
                 name: str = f'sim{simid}'
-                new_sim: ct.Solution = ct.Solution(name=name,
-                                                   thermo='ideal-gas',
-                                                   kinetics='gas',
-                                                   species=species,
-                                                   reactions=reactions)
+                new_sim = ct.Solution(name=name,
+                                        thermo='ideal-gas',
+                                        kinetics='gas',
+                                        species=species,
+                                        reactions=reactions)
                 new_sim.TP = t, p
                 self.simulations.append(new_sim)
-                new_sim.write_yaml(f"{name}.yaml")
+                # new_sim.write_yaml(f"{name}.yaml")
 
-    def run(self):
-        pass
+    def run(self,
+            q_sys: QueueingSystem) -> None:
+        q_sys.add_to_queue(self.simulations)
