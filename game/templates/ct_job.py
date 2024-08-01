@@ -1,4 +1,4 @@
-import cantera as ct
+ct_tpl = """import cantera as ct
 from game.customrate import MessData, MessRate
 
 sim_id = {sim_id}
@@ -26,4 +26,4 @@ moleFrac[0] = gas.X
 for idx, i in enumerate(spec):
     if i.name == 'c2h5':
         print(gas.X[idx])
-        print(moleFrac[:,idx])
+        print(moleFrac[:,idx])"""

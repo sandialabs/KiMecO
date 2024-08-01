@@ -64,9 +64,8 @@ class RateCo:
                q_sys: QueueingSystem) -> None:
         """Submit kinetic constant calculation on Slurm queing system
         """
-        filename = f'{self.id}.slurm'
+        filename: str = f'{self.id}.slurm'
         if self.software == 'mess':
-            from game.templates.mess import tpl
             submitscript = tpl.format(nprocs=8,
                                       filename=self.id,
                                       sub_queue='week-long-cpu',
@@ -80,8 +79,8 @@ class RateCo:
                                        stdin=subprocess.PIPE,
                                        stderr=subprocess.PIPE)
             out, err = process.communicate()
-            out = out.decode()
-            self.job_id = out.split()[-1]
+            outstr: str = out.decode()
+            self.job_id: int = int(outstr.split()[-1])
 
     def recover_rslts(self) -> None:
         """Wait for the results of the Kinetic constants calculations
