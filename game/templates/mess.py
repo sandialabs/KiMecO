@@ -1,0 +1,2 @@
+messtpl = """
+mess {filename}.inp"""

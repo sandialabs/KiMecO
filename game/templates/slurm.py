@@ -1,5 +1,5 @@
-tpl = """#! /bin/bash -f
-  
+slurmtpl = """#! /bin/bash -f
+
 #SBATCH -N 1
 #SBATCH -c {nprocs}
 #SBATCH -q medium
@@ -10,5 +10,4 @@ tpl = """#! /bin/bash -f
 #SBATCH --mem={mem_mb}
 
 export OMP_NUM_THREADS={nprocs}
-echo $SLURM_JOB_NODELIST
-python {filename}.py"""
+echo $SLURM_JOB_NODELIST"""

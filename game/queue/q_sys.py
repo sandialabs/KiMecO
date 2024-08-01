@@ -1,7 +1,6 @@
-from game.templates.slurm_pyjob import tpl
+from game.templates.pyjob import pytpl
 from subprocess import Popen, PIPE
 import pickle
-from game import game_path
 import cantera as ct
 
 

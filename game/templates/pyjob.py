@@ -1,0 +1,2 @@
+pytpl = """
+python {filename}.py"""

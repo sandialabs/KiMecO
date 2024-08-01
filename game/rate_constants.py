@@ -1,5 +1,6 @@
 from typing import Any
 from game.parameters import SOP
+from game.queue.q_sys import QueueingSystem
 from game.writers.mess import MessWriter
 from game.readers.mess_output import MessOutputReader
 import subprocess
@@ -36,14 +37,15 @@ class RateCo:
         else:
             return f"{self.id}.out"
 
-    def calculate(self) -> None:
+    def calculate(self,
+                  q_sys: QueueingSystem) -> None:
         """Generate and submit a Kinetic
         Constants calculation
         """
         if not os.path.isfile(self.output_name) or\
            os.path.getsize(self.output_name) == 0:
             self.create_input()
-            self.submit()
+            self.submit(q_sys)
 
     def create_input(self) -> None:
         """Create an input for the selected solftware.
@@ -58,12 +60,13 @@ class RateCo:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")
 
-    def submit(self) -> None:
+    def submit(self,
+               q_sys: QueueingSystem) -> None:
         """Submit kinetic constant calculation on Slurm queing system
         """
         filename = f'{self.id}.slurm'
         if self.software == 'mess':
-            from game.templates.slurm_mess import tpl
+            from game.templates.mess import tpl
             submitscript = tpl.format(nprocs=8,
                                       filename=self.id,
                                       sub_queue='week-long-cpu',

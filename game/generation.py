@@ -4,10 +4,12 @@ from game.parameters import SOP
 from game.perturbator import Perturbator
 import numpy as np
 import numpy.typing as npt
-from numpy import bool_, ndarray
+from numpy import bool_
 
+from game.queue.q_sys import QueueingSystem
 from game.rate_constants import RateCo
 from game.simulation import SIM
+
 
 class Generation:
     __id = 0
@@ -52,7 +54,8 @@ class Generation:
         while len(self.elements) < n:
             self.elements.append(Element(sop=self.pert.perturb(sop=self.sop)))
 
-    def run(self) -> None:
+    def run(self,
+            q_sys: QueueingSystem) -> None:
         finished: npt.NDArray[bool_] = np.full(shape=(len(self.elements), 1),
                                                fill_value=False)
         while not all(finished):
@@ -63,7 +66,7 @@ class Generation:
                                          settings=self.settings,
                                          software_tpl=self.rc_tpl,
                                          id=f'G{self.id}E{el.id}')
-                    el.rateCoef.calculate()
+                    el.rateCoef.calculate(q_sys)
                     el.status = 1
                 # Recover rate coefficients
                 elif el.status == 1:
@@ -76,4 +79,4 @@ class Generation:
                                  kin=el.rateCoef,
                                  ct_sim=self.settings['ct_yaml'],
                                  ct_names=self.settings['ct_names'])
-                    el.sim.run()
+                    el.sim.run(q_sys=q_sys)
