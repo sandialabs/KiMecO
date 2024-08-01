@@ -8,7 +8,7 @@ import getpass
 import numpy as np
 
 
-class RateCon:
+class RateCo:
     """Wrapper around different calculators
     for kinetic constants calculation.
     """
@@ -68,7 +68,7 @@ class RateCon:
                                       filename=self.id,
                                       sub_queue='week-long-cpu',
                                       mem_mb=10000)
-            with open(filename, 'w')as f:
+            with open(filename, 'w') as f:
                 f.write(submitscript)
             command = ['sbatch', filename]
             process = subprocess.Popen(command,
@@ -83,8 +83,7 @@ class RateCon:
     def recover_rslts(self) -> None:
         """Wait for the results of the Kinetic constants calculations
         """
-        while not self.job_finished():
-            pass
+ 
         if self.software == 'mess':
             mor = MessOutputReader(filename=self.output_name,
                                    settings=self.set,
@@ -94,12 +93,13 @@ class RateCon:
         self.hp_rc: np.ndarray = mor.hp_rc
         self.tbl_map: dict[str, int] = mor.tbl_map
 
+    @property
     def job_finished(self) -> bool:
         if os.path.isfile(f"{self.id}.out"):
             return True
 
         command = ['squeue', '-u', f'{getpass.getuser()}']
-        process = subprocess.Popen(command,
+        process = subprocess.Popen(args=command,
                                    shell=False,
                                    stdout=subprocess.PIPE,
                                    stdin=subprocess.PIPE,

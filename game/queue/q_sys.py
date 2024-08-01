@@ -4,6 +4,7 @@ import pickle
 from game import game_path
 import cantera as ct
 
+
 class QueueingSystem:
     def __init__(self,
                  max_jobs: int,
@@ -13,7 +14,7 @@ class QueueingSystem:
                  mem_job: float = 500.0,
                  location: str | None = None
                  ) -> None:
-        
+
         self.queue: list = []
         self.max_jobs: int = max_jobs
         self.max_cpu: int = max_cpu
@@ -29,11 +30,11 @@ class QueueingSystem:
                sim: ct.Solution,
                id: str
                ) -> None:
-        self.serialize_sim(sim)
+        self.serialize_sim(sim=sim,
+                           name=f'sim_{id}')
 
     def serialize_sim(self,
-                      sim: ct.Solution
-                  ) -> None:
+                      sim: ct.Solution,
+                      name: str) -> None:
         with open(f'{self.location}/{name}.pkl', 'wb') as pkl_file:
             pickle.dump([sim], pkl_file)
-

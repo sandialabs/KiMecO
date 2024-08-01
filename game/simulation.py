@@ -4,7 +4,7 @@ from game.customrate import MessData, MessRate
 import numpy as np
 from game.bimolecular import Bimolecular
 from game.parameters import SOP
-from game.rate_constants import RateCon
+from game.rate_constants import RateCo
 from game.well import Well
 from game.barrier import Barrier
 from game.templates.ct_reaction_tpl import reaction_yaml
@@ -14,7 +14,7 @@ from scipy.constants import Avogadro
 class SIM:
     def __init__(self,
                  sop: SOP,
-                 kin: RateCon,
+                 kin: RateCo,
                  ct_sim: str,
                  ct_names: dict[str, str],
                  species_sim: None | ct.Solution = None,
@@ -25,11 +25,11 @@ class SIM:
 
         Args:
             sop (SOP): Set Of Parameters objects
-            kin (RateCon): Rate Constants object
+            kin (RateCo): Rate Constants object
             ct_sim (str): Path to the YAML file provided by the user
         """
         self.SOP: SOP = sop
-        self.KIN: RateCon = kin
+        self.KIN: RateCo = kin
         self.initial_sim: ct.Solution = ct.Solution(ct_sim)
         self.species_sim: None | ct.Solution = species_sim
         self.reac_idx: list[int] | None = reac_idx
