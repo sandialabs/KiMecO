@@ -1,14 +1,17 @@
 from copy import deepcopy
 import cantera as ct
-from game.customrate import MessData, MessRate
+from game.cantera.customrate import MessData, MessRate
 import numpy as np
 from game.bimolecular import Bimolecular
 from game.parameters import SOP
+from game.queue.q_sys import QueueingSystem
 from game.rate_constants import RateCo
 from game.well import Well
 from game.barrier import Barrier
 from game.templates.ct_reaction_tpl import reaction_yaml
 from scipy.constants import Avogadro
+import pickle
+
 
 
 class SIM:
@@ -17,6 +20,8 @@ class SIM:
                  kin: RateCo,
                  ct_sim: str,
                  ct_names: dict[str, str],
+                 id: str,
+                 loc: str,
                  species_sim: None | ct.Solution = None,
                  reac_idx: None | list[int] = None) -> None:
         """Cantera simulation object.
@@ -27,6 +32,16 @@ class SIM:
             sop (SOP): Set Of Parameters objects
             kin (RateCo): Rate Constants object
             ct_sim (str): Path to the YAML file provided by the user
+            ct_names (dict[str, str]): Key is name of species in worflow.
+                                       Value is name of species in mechanism file.
+            id (str): Base of each simulation's name
+            loc (str): In which folder to create the files.
+            species_sim (None | ct.Solution, optional):
+                Cantera solution object containing the mechanism + workflow species.
+                Defaults to None.
+            reac_idx (None | list[int], optional): 
+                List of indexes of reactions to replace in the mechanism.
+                Defaults to None.
         """
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
@@ -39,15 +54,17 @@ class SIM:
         self.set_species()
         self.set_reactions()
         self.init_sims()
+        self.id: str = id
+        self.loc: str = loc
 
     def set_species(self) -> None:
         """Create the simulation with all the species,
            including the ones from the workflow.
         """
         if self.species_sim is not None:
-            pass
+            return
         workflow2mech: list[str] = []
-        workflow_species: list[Well] = []
+        workflow_species: list[str] = []
         mech_species: list[str] = [s.name for s in self.initial_sim.species()]
         for specie, obj in self.SOP.items.items():
             if isinstance(obj, Well) and not isinstance(obj, Barrier):
@@ -250,6 +267,9 @@ class SIM:
         return std_unit
 
     def init_sims(self) -> None:
+        """A simulation is created for each PT combination.
+        Loops through P first and then T to create sim index.
+        """
         reactions: list[ct.Reaction] = [r for r in self.final_sim.reactions()]
         species: list[ct.Species] = [s for s in self.final_sim.species()]
         simid = 0
@@ -264,8 +284,22 @@ class SIM:
                                         reactions=reactions)
                 new_sim.TP = t, p
                 self.simulations.append(new_sim)
-                # new_sim.write_yaml(f"{name}.yaml")
 
-    def run(self,
+    def q_up(self,
             q_sys: QueueingSystem) -> None:
-        q_sys.add_to_queue(self.simulations)
+
+        cpu: int = 1
+        mem: int = 500
+        for i, sim in enumerate(self.simulations):
+            self.serialize(sim=sim,
+                           name=self.id+f'S{i}')
+            q_sys.add_to_q(id=self.id+f'S{i}',
+                           location=self.loc,
+                           jtype='sim',
+                           ressources=(cpu, mem))
+
+    def serialize(self,
+                  sim: ct.Solution,
+                  name: str) -> None:
+        with open(f'{self.loc}/{name}.pkl', 'wb') as pkl_file:
+            pickle.dump([sim], pkl_file)

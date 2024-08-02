@@ -1,4 +1,3 @@
-from operator import index
 import os
 from game.queue.job import Job
 from game.templates.pyjob import pytpl
@@ -93,6 +92,11 @@ class QueueingSystem:
     def create_sub_file(self,
                         job: Job
                         ) -> None:
+        """Create the submission script for the job.
+
+        Args:
+            job (Job): Can be a simulation or kinetic job
+        """
         sub_cmd: str = self.subtpl.format(nprocs=job.cpu,
                                           filename=job.name,
                                           sub_queue=self.q_name,
@@ -107,6 +111,18 @@ class QueueingSystem:
 
         with open(f'{job.loc}/{job.name}.{self.ext}', 'w') as f:
             f.write(sub_file)
+
+    def pickUp(self,
+               id: str) -> None:
+        """Tag a job as ready to be removed from the queue.
+
+        Args:
+            id (str): id of the job.
+        """
+        for job in self.queue:
+            if job.name == id:
+                job.status = 'pickedUp'
+                return
 
     def submit(self,
                job: Job) -> None:
@@ -206,13 +222,13 @@ class QueueingSystem:
         for i, j in enumerate(jobs):
             slurm_ids[i] = int(j.split()[0])
         return slurm_ids
-    
+
     def status(self,
                id: str) -> str:
         for job in self.queue:
             if job.name == id:
                 return job.status
-        raise KeyError(f'Job {id} is not present in the queue anymore.')
+        return 'notInQueue'
 
     # def submit(self,
     #            sim: ct.Solution,

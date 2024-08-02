@@ -1,5 +1,5 @@
 import cantera as ct
-from game.customrate import MessData, MessRate
+from game.cantera.customrate import MessData, MessRate
 import os
 import numpy as np
 

@@ -18,7 +18,8 @@ class RateCo:
                  settings: dict,
                  software_tpl: list[str],
                  id: str,
-                 loc: str
+                 loc: str,
+                 q_sys: QueueingSystem
                  ) -> None:
 
         self.SOP: SOP = sop
@@ -27,27 +28,30 @@ class RateCo:
         self.id: str = id
         self.set: dict[str, Any] = settings
         self.loc: str = loc
+        self.q_sys: QueueingSystem = q_sys
         if self.software == 'mess':
             self.output_name: str = f"{self.loc}/{self.id}.out"
         else:
             self.output_name = f"{self.loc}/{self.id}.out"
 
-    def calculate(self,
-                  q_sys: QueueingSystem,
-                  loc: str) -> None:
+    def set_status(self) -> None:
+        self.status: str = self.q_sys.status(self.id)
+
+    def q_up(self) -> None:
         """Generate and submit a Kinetic
         Constants calculation
         """
-        if not os.path.isfile(self.output_name) or\
-           q_sys.status(self.id) != 'finished':
+        self.set_status()
+        if not os.path.isfile(self.output_name) and\
+           self.status == 'notInQueue':
             cpu = 4
             mem = 10000
             self.create_input()
-            q_sys.add_to_q(id=self.id,
-                           location=loc,
-                           jtype='kin',
-                           ressources=(cpu, mem)
-                           )
+            self.q_sys.add_to_q(id=self.id,
+                                location=self.loc,
+                                jtype='kin',
+                                ressources=(cpu, mem)
+                                )
 
     def create_input(self) -> None:
         """Create an input for the selected solftware.
@@ -73,3 +77,4 @@ class RateCo:
         self.rc: np.ndarray = mor.rc
         self.hp_rc: np.ndarray = mor.hp_rc
         self.tbl_map: dict[str, int] = mor.tbl_map
+        self.q_sys.pickUp(id=self.id)

@@ -80,12 +80,15 @@ class Generation:
                     el.rateCoef = RateCo(sop=el.sop,
                                          settings=self.settings,
                                          software_tpl=self.rc_tpl,
-                                         id=f'G{self.id}E{el.id}')
-                    el.rateCoef.calculate(q_sys)
+                                         id=f'G{self.id}E{el.id}',
+                                         loc=f'{self.loc}/G{self.id}',
+                                         q_sys=q_sys)
+                    el.rateCoef.q_up()
                     el.status = 1
                 # Recover rate coefficients
                 elif el.status == 1:
-                    if el.rateCoef.job_finished:
+                    el.rateCoef.set_status()
+                    if el.rateCoef.status == 'finished':
                         el.rateCoef.recover_rslts()
                         el.status = 2
                 # Calculate SIMs
@@ -93,6 +96,9 @@ class Generation:
                     el.sim = SIM(sop=el.sop,
                                  kin=el.rateCoef,
                                  ct_sim=self.settings['ct_yaml'],
-                                 ct_names=self.settings['ct_names'])
-                    el.sim.run(q_sys=q_sys)
+                                 ct_names=self.settings['ct_names'],
+                                 id=f'G{self.id}E{el.id}',
+                                 loc=f'{self.loc}/G{self.id}',
+                                 q_sys=q_sys)
+                    el.sim.q_up()
             q_sys.run()
