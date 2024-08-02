@@ -25,8 +25,8 @@ def main() -> None:
                            max_cpu=settings['max_cpu'],
                            max_mem=settings['max_mem'],
                            cpu_job=settings['cpu_jop'],
-                           mem_job=settings['mem_job'],
-                           location=os.getcwd())
+                           mem_job=settings['mem_job']
+                           )
 
     mr = MessInputReader(settings=settings)
     init_SOP: SOP
@@ -34,11 +34,13 @@ def main() -> None:
     (init_SOP, input_tpl) = mr.read()
 
     pert = Perturbator(ptype='standard')
+    location: str = os.getcwd()
 
     first_gen = Generation(sop=init_SOP,
                            n=1,
                            pert=pert,
                            set=settings,
-                           rc_tpl=input_tpl)
+                           rc_tpl=input_tpl,
+                           loc=location)
 
     first_gen.run(q_sys=q_sys)

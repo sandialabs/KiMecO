@@ -81,7 +81,7 @@ class QueueingSystem:
         cpu: int
         mem: int  # In Mb
         (cpu, mem) = ressources
-        job = Job(id=id,
+        job = Job(name=id,
                   location=location,
                   cpu=cpu,
                   mem=mem,
@@ -206,6 +206,13 @@ class QueueingSystem:
         for i, j in enumerate(jobs):
             slurm_ids[i] = int(j.split()[0])
         return slurm_ids
+    
+    def status(self,
+               id: str) -> str:
+        for job in self.queue:
+            if job.name == id:
+                return job.status
+        raise KeyError(f'Job {id} is not present in the queue anymore.')
 
     # def submit(self,
     #            sim: ct.Solution,

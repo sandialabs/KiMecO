@@ -17,35 +17,37 @@ class RateCo:
                  sop: SOP,
                  settings: dict,
                  software_tpl: list[str],
-                 id='') -> None:
+                 id: str,
+                 loc: str
+                 ) -> None:
 
         self.SOP: SOP = sop
         self.software: str = settings['rc_software'].casefold()
         self.software_tpl: list[str] = software_tpl
         self.id: str = id
         self.set: dict[str, Any] = settings
-
-    @property
-    def output_name(self) -> str:
-        """Find name of output file depending on the software
-
-        Returns:
-            str: name of output file
-        """
+        self.loc: str = loc
         if self.software == 'mess':
-            return f"{self.id}.out"
+            self.output_name: str = f"{self.loc}/{self.id}.out"
         else:
-            return f"{self.id}.out"
+            self.output_name = f"{self.loc}/{self.id}.out"
 
     def calculate(self,
-                  q_sys: QueueingSystem) -> None:
+                  q_sys: QueueingSystem,
+                  loc: str) -> None:
         """Generate and submit a Kinetic
         Constants calculation
         """
         if not os.path.isfile(self.output_name) or\
-           os.path.getsize(self.output_name) == 0:
+           q_sys.status(self.id) != 'finished':
+            cpu = 4
+            mem = 10000
             self.create_input()
-            self.submit(q_sys)
+            q_sys.add_to_q(id=self.id,
+                           location=loc,
+                           jtype='kin',
+                           ressources=(cpu, mem)
+                           )
 
     def create_input(self) -> None:
         """Create an input for the selected solftware.
@@ -60,32 +62,9 @@ class RateCo:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")
 
-    def submit(self,
-               q_sys: QueueingSystem) -> None:
-        """Submit kinetic constant calculation on Slurm queing system
-        """
-        filename: str = f'{self.id}.slurm'
-        if self.software == 'mess':
-            submitscript = tpl.format(nprocs=8,
-                                      filename=self.id,
-                                      sub_queue='week-long-cpu',
-                                      mem_mb=10000)
-            with open(filename, 'w') as f:
-                f.write(submitscript)
-            command = ['sbatch', filename]
-            process = subprocess.Popen(command,
-                                       shell=False,
-                                       stdout=subprocess.PIPE,
-                                       stdin=subprocess.PIPE,
-                                       stderr=subprocess.PIPE)
-            out, err = process.communicate()
-            outstr: str = out.decode()
-            self.job_id: int = int(outstr.split()[-1])
-
     def recover_rslts(self) -> None:
         """Wait for the results of the Kinetic constants calculations
         """
- 
         if self.software == 'mess':
             mor = MessOutputReader(filename=self.output_name,
                                    settings=self.set,
@@ -94,25 +73,3 @@ class RateCo:
         self.rc: np.ndarray = mor.rc
         self.hp_rc: np.ndarray = mor.hp_rc
         self.tbl_map: dict[str, int] = mor.tbl_map
-
-    @property
-    def job_finished(self) -> bool:
-        if os.path.isfile(f"{self.id}.out"):
-            return True
-
-        command = ['squeue', '-u', f'{getpass.getuser()}']
-        process = subprocess.Popen(args=command,
-                                   shell=False,
-                                   stdout=subprocess.PIPE,
-                                   stdin=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
-        out, err = process.communicate()
-        out = out.decode()
-
-        for line in out:
-            if self.job_id in line:
-                return False
-        if os.path.isfile(self.output_name):
-            return True
-        else:
-            return False

@@ -1,3 +1,4 @@
+import os
 from typing import Any
 from game.element import Element
 from game.parameters import SOP
@@ -19,7 +20,8 @@ class Generation:
                  n: int,
                  pert: Perturbator,
                  set: dict[str, Any],
-                 rc_tpl: list[str]
+                 rc_tpl: list[str],
+                 loc: str
                  ) -> None:
         """Generation object manages the worflow of
         a given set of elements, going from creating them
@@ -31,6 +33,9 @@ class Generation:
             n (int): number of elements in the generation
             pert (Perturbator): Perturbator object used to perturb the SOP
                                 of this generation
+            set (dict): Settings.
+            rc_tpl: Template for rate constant calculation.
+            loc: Location. Absolute path of where the generation folder should be.
         """
         self.sop: SOP = sop
         self.id: int = Generation.__id
@@ -39,6 +44,9 @@ class Generation:
         self.elements: list[Element] = []
         self.settings: dict[str, Any] = set
         self.rc_tpl: list[str] = rc_tpl
+        self.loc: str = loc
+        if not os.path.isdir(f'{self.loc}/G{self.id}'):
+            os.mkdir(f'{self.loc}/G{self.id}')
         self.generate(n=n)
 
     def generate(self,
@@ -56,6 +64,13 @@ class Generation:
 
     def run(self,
             q_sys: QueueingSystem) -> None:
+        """Run a generation until all of its elements are scored.
+
+        Args:
+            q_sys (QueueingSystem): Queueing system in charge of managing
+                                    the ressources and running as many jobs
+                                    in parallel as possible.
+        """
         finished: npt.NDArray[bool_] = np.full(shape=(len(self.elements), 1),
                                                fill_value=False)
         while not all(finished):
@@ -80,3 +95,4 @@ class Generation:
                                  ct_sim=self.settings['ct_yaml'],
                                  ct_names=self.settings['ct_names'])
                     el.sim.run(q_sys=q_sys)
+            q_sys.run()
