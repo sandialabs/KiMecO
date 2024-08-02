@@ -1,11 +1,17 @@
-ct_tpl = """import cantera as ct
+ctjobtpl = """import cantera as ct
 from game.customrate import MessData, MessRate
 
-sim_id = {sim_id}
-gas = ct.Solution('{sim_id}.yaml')
-
-gas.X = {compo}
-gas.TP = {T}, {P}
+#Wait for the creation of the pickle file
+while not os.path.isfile(os.path.join(here, '{sim_id}.pkl')):
+    time.sleep(5)
+    i += 1
+    if i > 3:
+        exit()
+try:
+    with open(os.path.join(here, '{sim_id}.pkl'), 'rb') as pkl_file:
+        gas = pickle.load(pkl_file)
+except EOFError:
+    raise KeyError('Unsuccesful opening of {sim_id}.pkl'.pkl, retrying...')
 
 reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
 net = ct.ReactorNet([reactor])

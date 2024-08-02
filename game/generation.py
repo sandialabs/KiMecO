@@ -35,7 +35,7 @@ class Generation:
                                 of this generation
             set (dict): Settings.
             rc_tpl: Template for rate constant calculation.
-            loc: Location. Absolute path of where the generation folder should be.
+            loc: Location. Absolute path of where the gen folder should be.
         """
         self.sop: SOP = sop
         self.id: int = Generation.__id
@@ -99,6 +99,7 @@ class Generation:
                                  ct_names=self.settings['ct_names'],
                                  id=f'G{self.id}E{el.id}',
                                  loc=f'{self.loc}/G{self.id}',
-                                 q_sys=q_sys)
+                                 q_sys=q_sys,
+                                 set=self.settings)
                     el.sim.q_up()
             q_sys.run()

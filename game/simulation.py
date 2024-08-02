@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Any
 import cantera as ct
 from game.cantera.customrate import MessData, MessRate
 import numpy as np
@@ -9,9 +10,9 @@ from game.rate_constants import RateCo
 from game.well import Well
 from game.barrier import Barrier
 from game.templates.ct_reaction_tpl import reaction_yaml
+from game.templates.ct_job import ctjobtpl
 from scipy.constants import Avogadro
 import pickle
-
 
 
 class SIM:
@@ -22,8 +23,10 @@ class SIM:
                  ct_names: dict[str, str],
                  id: str,
                  loc: str,
-                 species_sim: None | ct.Solution = None,
-                 reac_idx: None | list[int] = None) -> None:
+                 q_sys: QueueingSystem,
+                 set: dict[str, Any],
+                 reac_idx:  list[int] | None = None,
+                 species_sim: None | ct.Solution = None) -> None:
         """Cantera simulation object.
         Modify the cantera simulation provided by the user
         depending on the set of parameters and the rate coefficiecients.
@@ -56,6 +59,9 @@ class SIM:
         self.init_sims()
         self.id: str = id
         self.loc: str = loc
+        self.q_sys: QueueingSystem = q_sys
+        self.ctjobtpl: str = ctjobtpl
+        self.set: dict[str, Any] =set
 
     def set_species(self) -> None:
         """Create the simulation with all the species,
@@ -285,21 +291,25 @@ class SIM:
                 new_sim.TP = t, p
                 self.simulations.append(new_sim)
 
-    def q_up(self,
-            q_sys: QueueingSystem) -> None:
+    def q_up(self) -> None:
 
         cpu: int = 1
         mem: int = 500
         for i, sim in enumerate(self.simulations):
             self.serialize(sim=sim,
                            name=self.id+f'S{i}')
-            q_sys.add_to_q(id=self.id+f'S{i}',
-                           location=self.loc,
-                           jtype='sim',
-                           ressources=(cpu, mem))
+            self.q_sys.add_to_q(id=self.id+f'S{i}',
+                                location=self.loc,
+                                jtype='sim',
+                                ressources=(cpu, mem))
 
     def serialize(self,
                   sim: ct.Solution,
                   name: str) -> None:
+        ct_job: str = self.ctjobtpl.format(sim_id=name,
+                                           sim_time=self.set['ct_time'],
+                                           tstep=self.set['ct_tstep'])
+        with open(f'{self.loc}/{name}.py', 'w') as f:
+            f.write(ct_job)
         with open(f'{self.loc}/{name}.pkl', 'wb') as pkl_file:
             pickle.dump([sim], pkl_file)
