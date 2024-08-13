@@ -3,7 +3,6 @@ import os
 
 from game.generation import Generation
 from game.perturbator import Perturbator
-from game.queue.q_sys import QueueingSystem
 from game.readers.mess_input import MessInputReader
 # from game.rate_constants import RateCo
 from game.user_input import check_input
@@ -21,13 +20,6 @@ def main() -> None:
 
     settings: dict = check_input(input_file=input_file)
 
-    q_sys = QueueingSystem(max_jobs=settings['max_jobs'],
-                           max_cpu=settings['max_cpu'],
-                           max_mem=settings['max_mem'],
-                           cpu_job=settings['cpu_jop'],
-                           mem_job=settings['mem_job']
-                           )
-
     mr = MessInputReader(settings=settings)
     init_SOP: SOP
     input_tpl: list[str]
@@ -43,4 +35,4 @@ def main() -> None:
                            rc_tpl=input_tpl,
                            loc=location)
 
-    first_gen.run(q_sys=q_sys)
+    first_gen.run()

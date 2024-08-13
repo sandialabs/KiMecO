@@ -5,7 +5,7 @@ from game.cantera.customrate import MessData, MessRate
 import numpy as np
 from game.bimolecular import Bimolecular
 from game.parameters import SOP
-from game.queue.q_sys import QueueingSystem
+from game.q_sys import QueueingSystem
 from game.rate_constants import RateCo
 from game.well import Well
 from game.barrier import Barrier
@@ -21,7 +21,8 @@ class SIM:
                  kin: RateCo,
                  ct_sim: str,
                  ct_names: dict[str, str],
-                 id: str,
+                 name: str,
+                 id: int,
                  loc: str,
                  q_sys: QueueingSystem,
                  set: dict[str, Any],
@@ -36,13 +37,13 @@ class SIM:
             kin (RateCo): Rate Constants object
             ct_sim (str): Path to the YAML file provided by the user
             ct_names (dict[str, str]): Key is name of species in worflow.
-                                       Value is name of species in mechanism file.
+                                       Value is name of species in mech file.
             id (str): Base of each simulation's name
             loc (str): In which folder to create the files.
             species_sim (None | ct.Solution, optional):
-                Cantera solution object containing the mechanism + workflow species.
+                Cantera solution object containing the mechanism + WF species.
                 Defaults to None.
-            reac_idx (None | list[int], optional): 
+            reac_idx (None | list[int], optional):
                 List of indexes of reactions to replace in the mechanism.
                 Defaults to None.
         """
@@ -52,16 +53,17 @@ class SIM:
         self.species_sim: None | ct.Solution = species_sim
         self.reac_idx: list[int] | None = reac_idx
         self.simulations: list[ct.Solution] = []
-        self.ct_names: dict[str, str] = {ct: mess for mess, ct in ct_names.items()}
+        self.ct_names: dict[str, str] = {ct: wf for wf, ct in ct_names.items()}
         self.ct_unitSystem: dict = ct.UnitSystem().units
         self.set_species()
         self.set_reactions()
         self.init_sims()
-        self.id: str = id
+        self.id: int = id
+        self.name: str = name
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
-        self.set: dict[str, Any] =set
+        self.set: dict[str, Any] = set
 
     def set_species(self) -> None:
         """Create the simulation with all the species,
@@ -99,16 +101,16 @@ class SIM:
                                                 )
             new_specie.thermo = thermo
             new_species.append(new_specie)
-        reactions: list[ct.Reaction] = [r for r in 
+        reactions: list[ct.Reaction] = [r for r in
                                         self.initial_sim.reactions()]
         species.extend(new_species)
-        self.species_sim: ct.Solution = ct.Solution(thermo="ideal-gas",
-                                                    kinetics="gas",
-                                                    species=species,
-                                                    reactions=reactions)
-        
+        self.species_sim = ct.Solution(thermo="ideal-gas",
+                                       kinetics="gas",
+                                       species=species,
+                                       reactions=reactions)
+
     def create_reaction(self,
-                        reac: str) -> [ct.Reaction, ct.Reaction]:
+                        reac: str) -> list[ct.Reaction]:
         """Create a custom cantera Reaction object."""
         bar: Barrier = self.SOP.items[reac]
         equations: list[str]
@@ -293,12 +295,13 @@ class SIM:
 
     def q_up(self) -> None:
 
-        cpu: int = 1
-        mem: int = 500
+        cpu: int = self.set['cpu_sim']
+        mem: int = self.set['mem_sim']
         for i, sim in enumerate(self.simulations):
             self.serialize(sim=sim,
-                           name=self.id+f'S{i}')
-            self.q_sys.add_to_q(id=self.id+f'S{i}',
+                           name=self.name+f'S{i}')
+            self.q_sys.add_to_q(name=self.name+f'S{i}',
+                                idx=self.id*len(self.simulations)+i,
                                 location=self.loc,
                                 jtype='sim',
                                 ressources=(cpu, mem))

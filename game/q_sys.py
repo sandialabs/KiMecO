@@ -1,12 +1,12 @@
 import os
-from game.queue.job import Job
 from game.templates.pyjob import pytpl
 from game.templates.messjob import messtpl
 from game.templates.slurm import slurmtpl
 from subprocess import Popen, PIPE
 import numpy as np
 from numpy.typing import NDArray
-from numpy import int64
+from numpy import float32, int16, int32
+from typing import Any
 import getpass
 
 
@@ -15,8 +15,12 @@ class QueueingSystem:
                  max_jobs: int,
                  max_cpu: int,
                  max_mem: int,
-                 cpu_job: int = 1,
-                 mem_job: float = 500.0,
+                 nkin: int,
+                 nsim: int,
+                 cpu_kin: int = 1,
+                 cpu_sim: int = 1,
+                 mem_kin: float = 500.0,
+                 mem_sim: float = 500.0,
                  q_type: str = 'slurm',
                  q_name: str = 'day-long-cpu'
                  ) -> None:
@@ -36,8 +40,10 @@ class QueueingSystem:
             max_mem (int): Max quantity of memory (Mb) to be used by the WF
             cpu_job (int, optional): Number of cpu used for each job.
                                      Defaults to 1.
-            mem_job (float, optional): Quantity of memory (Mb) used
-                                       for each job. Defaults to 500.0.
+            mem_kin (float, optional): Quantity of memory (Mb) used
+                                       for each kin job. Defaults to 500.0.
+            mem_sim (float, optional): Quantity of memory (Mb) used
+                                       for each sim job. Defaults to 500.0.
             location (str, optional): Where jobs should be submitted from.
                                       Defaults to local.
         """
@@ -45,8 +51,10 @@ class QueueingSystem:
         self.av_jobs: int = max_jobs
         self.av_cpu: int = max_cpu
         self.av_mem: int = max_mem
-        self.cpu_job: int = cpu_job
-        self.mem_job: float = mem_job
+        self.cpu_kin: int = cpu_kin
+        self.cpu_sim: int = cpu_sim
+        self.mem_kin: float = mem_kin
+        self.mem_sim: float = mem_sim
         if q_type.casefold() == 'slurm':
             self.subtpl: str = slurmtpl
             self.ext: str = 'slurm'
@@ -55,14 +63,40 @@ class QueueingSystem:
         self.pytpl: str = pytpl
         self.messtpl: str = messtpl
         self.q_name: str = q_name
-        self.queue: list[Job] = []
-        self.to_rmv: list[int] = []
+        # define a dtype object to create a structured numpy array.
+        self.jobdata = np.dtype(dtype=[
+            ('sub_id', int32, 1),
+            ('name', np.unicode_, 20),
+            ('loc', np.unicode_, 150),
+            ('status', np.unicode_, 10),
+            ('cpu', int16, 1),
+            ('mem', float32, 1),
+            ('type', np.unicode_, 3)])
+
+        self.kin_q: NDArray[Any] = np.full(shape=nkin,
+                                           fill_value=(
+                                               'dummy',
+                                               '.',
+                                               self.cpu_kin,
+                                               self.mem_kin,
+                                               'kin'),
+                                           dtype=self.jobdata)
+
+        self.sim_q: NDArray[Any] = np.full(shape=nsim,
+                                           fill_value=(
+                                               'dummy',
+                                               '.',
+                                               self.cpu_kin,
+                                               self.mem_kin,
+                                               'kin'),
+                                           dtype=self.jobdata)
         self.submitted: int = 0
         self.running: int = 0
         self.n_ready: int = 0
 
     def add_to_q(self,
-                 id: str,
+                 name: str,
+                 idx: int,
                  location: str,
                  jtype: str,
                  ressources: tuple[int, int]
@@ -73,71 +107,83 @@ class QueueingSystem:
 
         Args:
             location (str): Absolute path to the folder
-            filename (str): filename without extension
+            name (str): filename without extension
+            idx (int): position in the queue of type jtype
             jtype (str): <kin> (for kinetic) or <sim> (simulation)
             ressources (tuple[int, int]): number of CPU and memory (Mb)
         """
         cpu: int
         mem: int  # In Mb
         (cpu, mem) = ressources
-        job = Job(name=id,
-                  location=location,
-                  cpu=cpu,
-                  mem=mem,
-                  jtype=jtype)
+        job: NDArray[Any] = np.array([
+            (0,
+             name,
+             location,
+             'ready',
+             cpu,
+             mem,
+             jtype)], dtype=self.jobdata)
         self.create_sub_file(job=job)
-        self.queue.append(job)
+        if jtype == 'kin':
+            self.kin_q[idx] = job[0]
+        elif jtype == 'sim':
+            self.sim_q[idx] = job[0]
         self.n_ready += 1
 
     def create_sub_file(self,
-                        job: Job
+                        job: NDArray[Any]
                         ) -> None:
         """Create the submission script for the job.
 
         Args:
-            job (Job): Can be a simulation or kinetic job
+            job (Job): Numpy structured array. dtype = jobdata
         """
-        sub_cmd: str = self.subtpl.format(nprocs=job.cpu,
-                                          filename=job.name,
+        sub_cmd: str = self.subtpl.format(nprocs=job['cpu'],
+                                          filename=job['name'],
                                           sub_queue=self.q_name,
-                                          mem_mb=job.mem
+                                          mem_mb=job['mem']
                                           )
-        if job.type == 'kin':
-            job_cmd: str = self.messtpl.format(filename=job.name)
-        elif job.type == 'sim':
-            job_cmd: str = self.pytpl.format(filename=job.name)
+        if job['type'] == 'kin':
+            job_cmd: str = self.messtpl.format(filename=job['name'])
+        elif job['type'] == 'sim':
+            job_cmd: str = self.pytpl.format(filename=job['name'])
 
         sub_file: str = sub_cmd + job_cmd
 
-        with open(f'{job.loc}/{job.name}.{self.ext}', 'w') as f:
+        with open(f"{job['loc']}/{job['name']}.{self.ext}", 'w') as f:
             f.write(sub_file)
 
     def pickUp(self,
-               id: str) -> None:
+               id: int,
+               jtype: str) -> None:
         """Tag a job as ready to be removed from the queue.
 
         Args:
             id (str): id of the job.
         """
-        for job in self.queue:
-            if job.name == id:
-                job.status = 'pickedUp'
-                return
+        job: NDArray[Any]
+        if jtype == 'kin':
+            job = self.kin_q[id]
+        elif jtype == 'sim':
+            job = self.sim_q[id]
+        job['status'] = 'pickedUp'
+        self.av_cpu += int(job['cpu'])
+        self.av_mem += int(job['mem'])
+        self.av_jobs += 1
 
     def submit(self,
-               job: Job) -> None:
+               job) -> None:
         """Go in the submission directory,
         submit the job, and return the slurm's job id.
         Set the Job's status to <running>.
 
         Args:
-            job contains:
-            location (str): Submission directory. Absolute path.
-            filename (str): Submission script name, without extension.
+            job: Numpy structured array. dtype = jobdata
 
         """
-        os.chdir(job.loc)
-        command: list[str] = ['sbatch', job.name+'.'+self.ext]
+        here: str = os.getcwd()
+        os.chdir(job['loc'])
+        command: list[str] = ['sbatch', job['name'] + '.' + self.ext]
         process = Popen(args=command,
                         shell=False,
                         stdout=PIPE,
@@ -146,44 +192,42 @@ class QueueingSystem:
         out, err = process.communicate()
         outstr: str = out.decode()
         slurm_id: int = int(outstr.split()[-1])
-        job.sub_id = slurm_id
-        job.status = 'running'
-        self.av_cpu -= job.cpu
-        self.av_mem -= job.mem
+        job['sub_id'] = np.int32(slurm_id)
+        job['status'] = 'running'
+        self.av_cpu -= int(job['cpu'])
+        self.av_mem -= int(job['mem'])
         self.av_jobs -= 1
         self.n_ready -= 1
+        os.chdir(here)
 
     def run(self) -> None:
         """Run all jobs of the workflow in parallel
         as long as ressources are available.
         """
-        for job in self.queue:
-            if job.status == 'ready':
+        for idx, job in enumerate(self.kin_q):
+            if job['status'] == 'ready' and job['name'] != 'dummy':
                 if self.enough_ressources_for(job):
-                    self.submit(job)
+                    self.submit(job=job)
                 else:
                     self.actualize()
-                    self.clean()
                     break
         if self.n_ready < self.av_jobs:
             self.actualize()
-            self.clean()
-
-    def clean(self) -> None:
-        """Costly opration!
-        Remove pickedUp jobs from the queue,
-        which displaces all elements in the queue.
-        """
-        for i in reversed(self.to_rmv):
-            self.queue.pop(i)
-
-        self.to_rmv = []
 
     def enough_ressources_for(self,
-                              job: Job) -> bool:
+                              job) -> bool:
+        """Check remaining ressources are enough
+        to send the job.
+
+        Args:
+            job (_type_): Numpy structured array. dtype = jobdata
+
+        Returns:
+            bool: True is enough ressources.
+        """
         if self.av_jobs > 0 \
-         and self.av_cpu > job.cpu\
-         and self.av_mem > job.mem:
+           and self.av_cpu > job['cpu']\
+           and self.av_mem > job['mem']:
             return True
         else:
             return False
@@ -192,19 +236,17 @@ class QueueingSystem:
         """Remove picked up jobs from queuing system.
         Change status of newly finished jobs.
         """
-        slurm_ids: NDArray[int64] = self.get_all_running()
-        for i, job in enumerate(self.queue):
+        slurm_ids: NDArray[int32] = self.get_all_running()
+        for i, job in enumerate(self.kin_q):
             if job.status == 'ready':
                 continue
-            elif job.status == 'pickedUp':
-                self.to_rmv.append(i)
             elif job.status == 'running' and not any(slurm_ids == job.sub_id):
                 job.status = 'finished'
-                self.av_cpu += job.cpu
-                self.av_mem += job.mem
+                self.av_cpu += int(job.cpu)
+                self.av_mem += int(job.mem)
                 self.av_jobs += 1
 
-    def get_all_running(self) -> NDArray[int64]:
+    def get_all_running(self) -> NDArray[int32]:
         """Create numpy array of job ids for fast comparaison
         with job ids in running list
 
@@ -218,27 +260,16 @@ class QueueingSystem:
                         stderr=PIPE)
         out, err = process.communicate()
         jobs: list[str] = out.decode().split('\n')[1:]
-        slurm_ids: NDArray[int64] = np.zeros(len(jobs), dtype=np.int64)
+        slurm_ids: NDArray[int32] = np.zeros(len(jobs), dtype=np.int32)
         for i, j in enumerate(jobs):
-            slurm_ids[i] = int(j.split()[0])
+            slurm_ids[i] = int32(j.split()[0])
         return slurm_ids
 
     def status(self,
-               id: str) -> str:
-        for job in self.queue:
-            if job.name == id:
-                return job.status
+               id: int,
+               jtype) -> str:
+        if jtype == 'kin':
+            return self.kin_q[id].status[0]
+        elif jtype == 'sim':
+            return self.sim_q[id].status[0]
         return 'notInQueue'
-
-    # def submit(self,
-    #            sim: ct.Solution,
-    #            id: str
-    #            ) -> None:
-    #     self.serialize_sim(sim=sim,
-    #                        name=f'sim_{id}')
-
-    # def serialize_sim(self,
-    #                   sim: ct.Solution,
-    #                   name: str) -> None:
-    #     with open(f'{self.location}/{name}.pkl', 'wb') as pkl_file:
-    #         pickle.dump([sim], pkl_file)

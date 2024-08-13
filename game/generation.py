@@ -1,5 +1,6 @@
 import os
 from typing import Any
+
 from game.element import Element
 from game.parameters import SOP
 from game.perturbator import Perturbator
@@ -7,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 from numpy import bool_
 
-from game.queue.q_sys import QueueingSystem
+from game.q_sys import QueueingSystem
 from game.rate_constants import RateCo
 from game.simulation import SIM
 
@@ -48,6 +49,18 @@ class Generation:
         if not os.path.isdir(f'{self.loc}/G{self.id}'):
             os.mkdir(f'{self.loc}/G{self.id}')
         self.generate(n=n)
+        self.qs = QueueingSystem(max_jobs=self.settings['max_jobs'],
+                                 max_cpu=self.settings['max_cpu'],
+                                 max_mem=self.settings['max_mem'],
+                                 cpu_kin=self.settings['cpu_kin'],
+                                 mem_kin=self.settings['mem_kin'],
+                                 cpu_sim=self.settings['cpu_sim'],
+                                 mem_sim=self.settings['mem_sim'],
+                                 nkin=len(self.elements),
+                                 nsim=len(self.elements) *
+                                 len(self.settings['rc_temp']) *
+                                 len(self.settings['rc_pres'])
+                                 )
 
     def generate(self,
                  n: int) -> None:
@@ -62,8 +75,7 @@ class Generation:
         while len(self.elements) < n:
             self.elements.append(Element(sop=self.pert.perturb(sop=self.sop)))
 
-    def run(self,
-            q_sys: QueueingSystem) -> None:
+    def run(self) -> None:
         """Run a generation until all of its elements are scored.
 
         Args:
@@ -80,9 +92,10 @@ class Generation:
                     el.rateCoef = RateCo(sop=el.sop,
                                          settings=self.settings,
                                          software_tpl=self.rc_tpl,
-                                         id=f'G{self.id}E{el.id}',
+                                         id=el.id,
+                                         name=f'G{self.id}E{el.id}',
                                          loc=f'{self.loc}/G{self.id}',
-                                         q_sys=q_sys)
+                                         q_sys=self.qs)
                     el.rateCoef.q_up()
                     el.status = 1
                 # Recover rate coefficients
@@ -97,9 +110,10 @@ class Generation:
                                  kin=el.rateCoef,
                                  ct_sim=self.settings['ct_yaml'],
                                  ct_names=self.settings['ct_names'],
-                                 id=f'G{self.id}E{el.id}',
+                                 id=el.id,
+                                 name=f'G{self.id}E{el.id}',
                                  loc=f'{self.loc}/G{self.id}',
-                                 q_sys=q_sys,
+                                 q_sys=self.qs,
                                  set=self.settings)
                     el.sim.q_up()
-            q_sys.run()
+            self.qs.run()

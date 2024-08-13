@@ -10,5 +10,12 @@ default_settings: dict[str, Any] = {
     "rc_nproc": 1,
     "rc_temp": [],
     "rc_pres": [],
-    "ct_names": {}
+    "ct_names": {},
+    "cpu_kin": 4,
+    "mem_kin": 10000,
+    "cpu_sim": 1,
+    "mem_sim": 500,
+    "max_mem": 1000000,
+    "max_cpu": 1000,
+    "max_jobs": 2000,
 }
