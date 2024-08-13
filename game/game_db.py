@@ -2,21 +2,23 @@ from sqlalchemy import create_engine, Engine
 from sqlalchemy_utils import database_exists, create_database
 import getpass
 import pandas as pd
+from pandas import DataFrame
 
 
 class Game_db:
     def __init__(self,
                  name: str,
-                 db_path: str) -> None:
+                 db_path: str,
+                 host_name: str) -> None:
         """Class managing the information storage of GAME database.
         """
         self.name: str = name
         self.path: str = db_path
+        self.host: str = host_name
         self.create()
 
     def remote_engine(self,
                       user: str = getpass.getuser(),
-                      host: str = '127.0.0.1',
                       port: str = '3306'
                       ) -> Engine:
         """Return a sqlalchemy Engine object to connect to the DB.
@@ -32,7 +34,7 @@ class Game_db:
         """
         database: str = self.path
         eng: Engine = create_engine("mysql://{0}@{1}:{2}/{3}?charset=utf8"
-                                    .format(user, host, port, database))
+                                    .format(user, self.host, port, database))
         return eng
 
     def create(self) -> None:
@@ -43,7 +45,7 @@ class Game_db:
             create_database(engine.url)
 
     def save_data(self,
-                  id: int,
+                  name: str,
                   df: pd.DataFrame) -> None:
         """Create a new table for the sim results.
 
@@ -53,7 +55,7 @@ class Game_db:
                 pd.DataFrame(data=moleFrac, index=times, columns=spec)
         """
         try:
-            df.to_sql(name=f'sim_{id}',
+            df.to_sql(name=name,
                       con=self.remote_engine(),
                       if_exists='fail'
                       )
@@ -61,9 +63,9 @@ class Game_db:
             pass
 
     def get_data(self,
-                 id: int,
-                 data: str = '*'):
-        df: pd.DataFrame = pd.read_sql(sql=f'SELECT {data} FROM sim_{id}',
+                 name: str,
+                 data: str = '*') -> DataFrame:
+        df: pd.DataFrame = pd.read_sql(sql=f'SELECT {data} FROM {name}',
                                        con=self.remote_engine()
                                        )
         return df

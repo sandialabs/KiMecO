@@ -10,6 +10,7 @@ def check_input(input_file: str) -> dict:
     Args:
         input_file (str): path to input file
     """
+    cancel_run = False
 
     # File exist?
     if not os.path.isfile(path=input_file):
@@ -25,10 +26,13 @@ def check_input(input_file: str) -> dict:
         json_file: dict = json.load(fp=f)
 
     # Has mandatory keys?
-    for key in mandatory_keys:
+    for key, value in mandatory_keys.items():
         if key not in json_file:
             print(f"{key} is a mandatory keyword.")
-            sys.exit(-1)
+            cancel_run = True
+        elif not isinstance(json_file[key], type(value)):
+            print(f"{key} has incorrect type.")
+            cancel_run = True
 
     # Has unknown keys?
     for key in json_file:
@@ -40,5 +44,11 @@ def check_input(input_file: str) -> dict:
     for key, value in default_settings.items():
         if key not in json_file:
             json_file[key] = value
+        elif not isinstance(json_file[key], type(value)):
+            print(f"{key} has incorrect type.")
+            cancel_run = True
+
+    if cancel_run:
+        sys.exit(-1)
 
     return json_file

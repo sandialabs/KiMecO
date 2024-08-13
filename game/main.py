@@ -1,6 +1,5 @@
 import sys
 import os
-
 from game.generation import Generation
 from game.perturbator import Perturbator
 from game.readers.mess_input import MessInputReader
@@ -26,6 +25,10 @@ def main() -> None:
     (init_SOP, input_tpl) = mr.read()
 
     pert = Perturbator(ptype='standard')
+
+    if not os.path.isdir(settings['project_name']):
+        os.mkdir(settings['project_name'])
+    os.chdir(settings['project_name'])
     location: str = os.getcwd()
 
     first_gen = Generation(sop=init_SOP,
