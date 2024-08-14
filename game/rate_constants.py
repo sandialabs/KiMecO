@@ -1,10 +1,14 @@
 from typing import Any
+
+import pandas as pd
+from game.game_db import Game_db
 from game.parameters import SOP
 from game.q_sys import QueueingSystem
 from game.writers.mess import MessWriter
 from game.readers.mess_output import MessOutputReader
 import os
 import numpy as np
+from numpy.typing import NDArray
 
 
 class RateCo:
@@ -18,7 +22,8 @@ class RateCo:
                  id: int,
                  name: str,
                  loc: str,
-                 q_sys: QueueingSystem
+                 q_sys: QueueingSystem,
+                 db: Game_db
                  ) -> None:
 
         self.id: int = id
@@ -29,6 +34,7 @@ class RateCo:
         self.set: dict[str, Any] = settings
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
+        self.db: Game_db = db
         # Modulable if something else than mess is used.
         if self.software == 'mess':
             self.output_name: str = f"{self.loc}/{self.name}.out"
@@ -46,8 +52,8 @@ class RateCo:
         self.set_status()
         if not os.path.isfile(self.output_name) and\
            self.status == 'notInQueue':
-            cpu = self.set['cpu_kin']
-            mem = self.set['mem_kin']
+            cpu: int = self.set['cpu_kin']
+            mem: int = self.set['mem_kin']
             self.create_input()
             self.q_sys.add_to_q(name=self.name,
                                 idx=self.id,
@@ -80,4 +86,14 @@ class RateCo:
         self.rc: np.ndarray = mor.rc
         self.hp_rc: np.ndarray = mor.hp_rc
         self.tbl_map: dict[str, int] = mor.tbl_map
-        self.q_sys.pickUp(id=self.name)
+        names: NDArray[Any] = np.full(shape=(len(self.tbl_map)),
+                                      fill_value='',
+                                      dtype='<U5')
+        self.q_sys.pickUp(id=self.id,
+                          jtype='kin')
+        for k, v in self.tbl_map.items():
+            names[v] = k
+        self.db.save_data(name=self.name,
+                          df=pd.DataFrame(data=self.rc,
+                                          index=names,
+                                          columns=names))

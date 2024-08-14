@@ -4,6 +4,7 @@ import cantera as ct
 from game.cantera.customrate import MessData, MessRate
 import numpy as np
 from game.bimolecular import Bimolecular
+from game.game_db import Game_db
 from game.parameters import SOP
 from game.q_sys import QueueingSystem
 from game.rate_constants import RateCo
@@ -23,6 +24,7 @@ class SIM:
                  ct_names: dict[str, str],
                  name: str,
                  id: int,
+                 db: Game_db,
                  loc: str,
                  q_sys: QueueingSystem,
                  set: dict[str, Any],
@@ -64,6 +66,7 @@ class SIM:
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
         self.set: dict[str, Any] = set
+        self.db: Game_db = db
 
     def set_species(self) -> None:
         """Create the simulation with all the species,
@@ -309,7 +312,10 @@ class SIM:
     def serialize(self,
                   sim: ct.Solution,
                   name: str) -> None:
-        ct_job: str = self.ctjobtpl.format(sim_id=name,
+        ct_job: str = self.ctjobtpl.format(db_name=self.db.name,
+                                           db_path=self.db.path,
+                                           host_name=self.db.host,
+                                           sim_id=name,
                                            sim_time=self.set['ct_time'],
                                            tstep=self.set['ct_tstep'])
         with open(f'{self.loc}/{name}.py', 'w') as f:

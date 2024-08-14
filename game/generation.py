@@ -42,6 +42,7 @@ class Generation:
         self.sop: SOP = sop
         self.id: int = Generation.__id
         Generation.__id += 1
+        Element.__id = 0
         self.pert: Perturbator = pert
         self.elements: list[Element] = []
         self.settings: dict[str, Any] = set
@@ -100,7 +101,8 @@ class Generation:
                                          id=el.id,
                                          name=f'G{self.id}E{el.id}',
                                          loc=f'{self.loc}/G{self.id}',
-                                         q_sys=self.qs)
+                                         q_sys=self.qs,
+                                         db=self.db)
                     el.rateCoef.q_up()
                     el.status = 1
                 # Recover rate coefficients
@@ -116,6 +118,7 @@ class Generation:
                                  ct_sim=self.settings['ct_yaml'],
                                  ct_names=self.settings['ct_names'],
                                  id=el.id,
+                                 db=self.db,
                                  name=f'G{self.id}E{el.id}',
                                  loc=f'{self.loc}/G{self.id}',
                                  q_sys=self.qs,

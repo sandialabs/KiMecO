@@ -1,5 +1,10 @@
 ctjobtpl = """import cantera as ct
 from game.customrate import MessData, MessRate
+from game.game_db import Game_db
+
+db = Game_db(db_name={db_name},
+             db_path={db_path},
+             host_name={host_name})
 
 #Wait for the creation of the pickle file
 while not os.path.isfile(os.path.join(here, '{sim_id}.pkl')):
