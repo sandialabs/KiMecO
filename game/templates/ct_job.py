@@ -1,6 +1,8 @@
 ctjobtpl = """import cantera as ct
 from game.customrate import MessData, MessRate
 from game.game_db import Game_db
+import numpy as np
+import pandas as pd
 
 db = Game_db(db_name={db_name},
              db_path={db_path},
@@ -26,15 +28,35 @@ tot_time = {sim_time} #in seconds
 mystep = {tstep} #in seconds
 tot_steps = int((tot_time - time)/mystep)
 
-spec = gas.species()
+to_watch = ['c2h5', 'o2', 'c2h6']
+
+traces = {{}}
+
+names = []
 
 # Arrays to hold the datas
+spec = gas.species()
+for idx, i in enumerate(spec):
+    if i.name in to_watch:
+        traces[i.name] = np.full(tot_steps, gas.X[idx])
+        names.append(i.name)
+
 times = np.zeros(tot_steps)
 moleFrac = np.ndarray((tot_steps+1, gas.X.size))
 moleFrac[0] = gas.X
 
-# Arrays to hold the datas
-for idx, i in enumerate(spec):
-    if i.name == 'c2h5':
-        print(gas.X[idx])
-        print(moleFrac[:,idx])"""
+for n in range(tot_steps):
+    time += mystep
+    net.advance(time)
+    times[n+1] = time
+    for idx, i in enumerate(spec):
+        if i.name in to_watch:
+            traces[i.name][n+1] = gas.X[idx]
+
+df = pd.DataFrame.from_dict(traces)
+df.index = times
+
+db.save_data(name={sim_id},
+             df=df)
+
+"""

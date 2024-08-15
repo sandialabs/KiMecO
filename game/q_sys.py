@@ -5,7 +5,7 @@ from game.templates.slurm import slurmtpl
 from subprocess import Popen, PIPE
 import numpy as np
 from numpy.typing import NDArray
-from numpy import float32, int16, int32
+from numpy import float32, int16, int32, unicode_
 from typing import Any
 import getpass
 
@@ -65,31 +65,19 @@ class QueueingSystem:
         self.q_name: str = q_name
         # define a dtype object to create a structured numpy array.
         self.jobdata = np.dtype(dtype=[
-            ('sub_id', int32, 1),
-            ('name', np.unicode_, 20),
-            ('loc', np.unicode_, 150),
-            ('status', np.unicode_, 10),
-            ('cpu', int16, 1),
-            ('mem', float32, 1),
-            ('type', np.unicode_, 3)])
+            ('sub_id', int32),
+            ('name', unicode_, (20)),
+            ('loc', unicode_, (150)),
+            ('status', unicode_, (10)),
+            ('cpu', int16),
+            ('mem', float32),
+            ('type', unicode_, (3))])
 
-        self.kin_q: NDArray[Any] = np.full(shape=nkin,
-                                           fill_value=(
-                                               'dummy',
-                                               '.',
-                                               self.cpu_kin,
-                                               self.mem_kin,
-                                               'kin'),
-                                           dtype=self.jobdata)
+        self.kin_q: NDArray[Any] = np.empty(shape=(nkin),
+                                            dtype=self.jobdata)
 
-        self.sim_q: NDArray[Any] = np.full(shape=nsim,
-                                           fill_value=(
-                                               'dummy',
-                                               '.',
-                                               self.cpu_kin,
-                                               self.mem_kin,
-                                               'kin'),
-                                           dtype=self.jobdata)
+        self.sim_q: NDArray[Any] = np.empty(shape=(nsim),
+                                            dtype=self.jobdata)
         self.submitted: int = 0
         self.running: int = 0
         self.n_ready: int = 0

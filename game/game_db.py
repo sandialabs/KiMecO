@@ -1,8 +1,9 @@
-from sqlalchemy import create_engine, Engine
+from sqlalchemy import URL, create_engine, Engine
 from sqlalchemy_utils import database_exists, create_database
 import getpass
 import pandas as pd
 from pandas import DataFrame
+
 
 
 class Game_db:
@@ -19,7 +20,7 @@ class Game_db:
 
     def remote_engine(self,
                       user: str = getpass.getuser(),
-                      port: str = '3306'
+                      port: int = 3306
                       ) -> Engine:
         """Return a sqlalchemy Engine object to connect to the DB.
 
@@ -32,9 +33,15 @@ class Game_db:
         Returns:
             Engine: _description_
         """
-        database: str = self.path
-        eng: Engine = create_engine("mysql://{0}@{1}:{2}/{3}?charset=utf8"
-                                    .format(user, self.host, port, database))
+        database: str = f'{self.path}/GAME.db'
+        url_object: URL = URL.create(drivername="postgresql+pg8000",
+                                     username=user,
+                                     password=None,
+                                     host=self.host,
+                                     port=port,
+                                     database=database)
+        
+        eng: Engine = create_engine(url_object, pool_size=10, max_overflow=20)
         return eng
 
     def create(self) -> None:
