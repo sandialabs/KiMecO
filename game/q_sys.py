@@ -192,8 +192,15 @@ class QueueingSystem:
         """Run all jobs of the workflow in parallel
         as long as ressources are available.
         """
-        for idx, job in enumerate(self.kin_q):
-            if job['status'] == 'ready' and job['name'] != 'dummy':
+        for job in self.kin_q:
+            if job['status'] == 'ready':
+                if self.enough_ressources_for(job):
+                    self.submit(job=job)
+                else:
+                    self.actualize()
+                    break
+        for job in self.sim_q:
+            if job['status'] == 'ready':
                 if self.enough_ressources_for(job):
                     self.submit(job=job)
                 else:
@@ -225,13 +232,23 @@ class QueueingSystem:
         Change status of newly finished jobs.
         """
         slurm_ids: NDArray[int32] = self.get_all_running()
-        for i, job in enumerate(self.kin_q):
-            if job.status == 'ready':
+        for job in self.kin_q:
+            if job['status'] == 'ready':
                 continue
-            elif job.status == 'running' and not any(slurm_ids == job.sub_id):
-                job.status = 'finished'
-                self.av_cpu += int(job.cpu)
-                self.av_mem += int(job.mem)
+            elif job['status'] == 'running' \
+               and not any(slurm_ids == job['sub_id']):
+                job['status'] = 'finished'
+                self.av_cpu += int(job['cpu'])
+                self.av_mem += int(job['mem'])
+                self.av_jobs += 1
+        for job in self.sim_q:
+            if job['status'] == 'ready':
+                continue
+            elif job['status'] == 'running' \
+               and not any(slurm_ids == job['sub_id']):
+                job['status'] = 'finished'
+                self.av_cpu += int(job['cpu'])
+                self.av_mem += int(job['mem'])
                 self.av_jobs += 1
 
     def get_all_running(self) -> NDArray[int32]:
@@ -239,7 +256,7 @@ class QueueingSystem:
         with job ids in running list
 
         Returns:
-            NDArray[int64]: job ids in return of command squeue -u user
+            NDArray[int32]: job ids in return of command squeue -u user
         """
         process = Popen(args=['squeue', '-u', f'{getpass.getuser()}'],
                         shell=False,
