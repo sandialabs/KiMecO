@@ -18,5 +18,5 @@ default_settings: dict[str, Any] = {
     "max_mem": 1000000,
     "max_cpu": 1000,
     "max_jobs": 2000,
-    "remote_host": "127.0.0.1"
+    "db_host": "127.0.0.1"
 }
