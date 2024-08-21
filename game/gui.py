@@ -43,5 +43,6 @@ def update_graph(col_chosen):
 
 PORT = '8000'
 ADDRESS = '127.0.0.1'
-if __name__ == '__main__': 
-    app.run( port=PORT, host=ADDRESS)
+if __name__ == '__main__':
+    app.run(port=PORT, host=ADDRESS)
+    

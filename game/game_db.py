@@ -40,7 +40,7 @@ class Game_db:
                                      host=self.host,
                                      port=port,
                                      database=database)
-        
+
         eng: Engine = create_engine(url_object, pool_size=10, max_overflow=20)
         return eng
 
