@@ -1,3 +1,4 @@
+from typing import Any
 from game.well import Well
 
 
@@ -8,7 +9,7 @@ class Bimolecular:
                  name: str,
                  ct_names: dict[str, str],
                  ) -> None:
-        
+
         self.name: str = name
         self.fragments: list = []
         self.ct_names: dict[str, str] = ct_names
@@ -23,7 +24,7 @@ class Bimolecular:
         Args:
             value (float): energy of the object (kcal/mol)
         """
-        self.energy = value
+        self.energy: float = value
 
     def set_fragments(self, frags: list[Well]) -> None:
         """Save a pair of fragments.
@@ -59,3 +60,10 @@ class Bimolecular:
         for frag in self.fragments:
             names.append(frag.name)
         return names
+
+    @property
+    def db_dict(self) -> dict[str, Any]:
+        db_dict = {
+            f"{self.name}_e": self.energy
+        }
+        return db_dict

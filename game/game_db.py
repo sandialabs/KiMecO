@@ -20,7 +20,7 @@ class Game_db:
 
     def remote_engine(self,
                       user: str = getpass.getuser(),
-                      port: int = 3306
+                      port: int = 5432
                       ) -> Engine:
         """Return a sqlalchemy Engine object to connect to the DB.
 
@@ -34,14 +34,13 @@ class Game_db:
             Engine: _description_
         """
         database: str = f'{self.path}/GAME.db'
-        url_object: URL = URL.create(drivername="postgresql+pg8000",
+        url_object: URL = URL.create(drivername="postgresql",
                                      username=user,
-                                     password=None,
                                      host=self.host,
                                      port=port,
                                      database=database)
 
-        eng: Engine = create_engine(url_object, pool_size=10, max_overflow=20)
+        eng: Engine = create_engine(url_object, pool_size=32, max_overflow=32)
         return eng
 
     def create(self) -> None:
@@ -64,7 +63,7 @@ class Game_db:
         try:
             df.to_sql(name=name,
                       con=self.remote_engine(),
-                      if_exists='fail'
+                      if_exists='append'
                       )
         except ValueError:
             pass
@@ -73,6 +72,6 @@ class Game_db:
                  name: str,
                  data: str = '*') -> DataFrame:
         df: pd.DataFrame = pd.read_sql(sql=f'SELECT {data} FROM {name}',
-                                       con=self.remote_engine()
+                                       con=self.remote_engine().connect()
                                        )
         return df

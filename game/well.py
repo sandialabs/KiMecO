@@ -38,6 +38,7 @@ class Well:
         else:
             self.__getattribute__(name)
 
+    # Necessary for coherence with barrier and bimolecular
     @property
     def r_energy(self) -> float:
         return self.structure.energy
@@ -144,3 +145,10 @@ class Well:
                                  axis=axis,
                                  symmetry=symmetry,
                                  scan=scan))
+
+    @property
+    def db_dict(self) -> dict[str, Any]:
+        db_dict = {
+            f"{self.name}_e": self.energy
+        }
+        return db_dict

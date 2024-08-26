@@ -421,12 +421,12 @@ class MessInputReader:
         Returns:
             int: number of line to skip readinding in the read method.
         """
-        well_depth: list[float] = [np.inf, np.inf]
+        # well_depth: list[float] = [np.inf, np.inf]
         well_idx = 0
         skip = 0
         for line in self.file[lnum:]:
             if line.lstrip().casefold().startswith('imaginaryfrequency'):
-                ifreq = float(line.split()[1])
+                # ifreq = float(line.split()[1])
                 new_line: str = f"{line.split()[0]}" \
                     + " {" \
                     + f"{name}" \
@@ -435,7 +435,7 @@ class MessInputReader:
                 self.template.append(new_line)
                 skip += 1
             elif line.lstrip().casefold().startswith('cutoffenergy'):
-                coff = float(line.split()[1])
+                # coff = float(line.split()[1])
                 new_line: str = f"{line.split()[0]}" \
                     + " {" \
                     + f"{name}" \
@@ -443,7 +443,7 @@ class MessInputReader:
                 self.template.append(new_line)
                 skip += 1
             elif line.lstrip().casefold().startswith('welldepth'):
-                well_depth[well_idx] = float(line.split()[1])
+                # well_depth[well_idx] = float(line.split()[1])
                 if well_idx == 0:
                     new_line: str = f"{line.split()[0]}" \
                         + " {" \
@@ -459,5 +459,5 @@ class MessInputReader:
                 skip += 1
             elif line.lstrip().casefold().startswith('end'):
                 break
-        self.SOP.save_tunnelling(name, ifreq, coff, well_depth)
+        # self.SOP.save_tunnelling(name, ifreq, coff, well_depth)
         return skip

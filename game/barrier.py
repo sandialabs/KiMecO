@@ -1,3 +1,4 @@
+from typing import Any
 from game.bimolecular import Bimolecular
 from game.well import Well
 
@@ -34,7 +35,7 @@ class Barrier(Well):
         Args:
             value (float): imaginary frequency (cm-1)
         """
-        self.ifreq = value
+        self.ifreq: float = value
 
     @property
     def r_ifreq(self) -> float:
@@ -51,3 +52,11 @@ class Barrier(Well):
     @property
     def r_renergy(self) -> float:
         return self.energy - self.connected[1].energy
+    
+    @property
+    def db_dict(self) -> dict[str, Any]:
+        db_dict = {
+            f"{self.name}_e": self.energy,
+            f"{self.name}_if": self.ifreq
+        }
+        return db_dict

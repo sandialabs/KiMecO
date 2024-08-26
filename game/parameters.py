@@ -1,4 +1,5 @@
 import copy
+from game.game_db import Game_db
 from game.well import Well
 from game.bimolecular import Bimolecular
 from game.barrier import Barrier
@@ -10,9 +11,9 @@ class SOP:
     _id = 0
 
     def __init__(self) -> None:
-        self.set_wells([])
-        self.set_bimols([])
-        self.set_barriers([])
+        self.wells: list[Well] = []
+        self.bimolecular: list[Bimolecular] = []
+        self.barriers: list[Barrier] = []
         self.id: int = copy.copy(SOP._id)
         self.items: dict = {}
         self.power: float
@@ -28,7 +29,7 @@ class SOP:
     def r_epsilons(self) -> str:
         eps = ''
         for ep in self.epsilons:
-            eps += f" {ep: 5.2f}"
+            eps += f" {ep: 7.4f}"
         eps += '\n'
         return eps
 
@@ -36,7 +37,7 @@ class SOP:
     def r_sigmas(self) -> str:
         sigs = ''
         for sig in self.sigmas:
-            sigs += f" {sig: 5.2f}"
+            sigs += f" {sig: 7.4f}"
         sigs += '\n'
         return sigs
 
@@ -44,7 +45,7 @@ class SOP:
     def r_rc_temp(self) -> str:
         temps = ""
         for temp in self.rc_temp:
-            temps += f" {temp: 7.1f}"
+            temps += f" {temp: 8.2f}"
         temps += '\n'
         return temps
 
@@ -52,18 +53,9 @@ class SOP:
     def r_rc_pres(self) -> str:
         press = ""
         for pres in self.rc_pres:
-            press += f" {pres: 7.1f}"
+            press += f" {pres: 8.2f}"
         press += '\n'
         return press
-
-    def set_wells(self,
-                  values: list[Well]) -> None:
-        """Save a list of wells object for the SOP
-
-        Args:
-            values (list[Well]): list of wells object
-        """
-        self.wells = values
 
     @property
     def wells_names(self) -> list[str]:
@@ -93,15 +85,6 @@ class SOP:
         self.items[name] = Well(name=name, ct_name=ct_name)
         self.wells.append(self.items[name])
 
-    def set_bimols(self,
-                   values: list[Bimolecular]) -> None:
-        """Save a list of Bimolecular objects in the SOP
-
-        Args:
-            values (list[Bimolecular]): list of Bimolecular objects
-        """
-        self.bimolecular = values
-
     @property
     def bimols_names(self) -> list[str]:
         """List of names of all the bimolecular objects
@@ -123,18 +106,6 @@ class SOP:
         """
         self.items[name] = Bimolecular(name, self.ct_names)
         self.bimolecular.append(self.items[name])
-
-    # def barriers(self) -> list[Bimolecular]:
-    #     return self.barriers
-
-    def set_barriers(self,
-                     values: list[Barrier]) -> None:
-        """Set the list of Barrier objects of the SOP
-
-        Args:
-            values (list[Barrier]): list of barrier objects
-        """
-        self.barriers = values
 
     @property
     def barriers_names(self) -> list:
@@ -243,5 +214,15 @@ class SOP:
         """
         self.items[name].set_energy(energy)
 
-    def save_tunnelling(self, name, ifreq, coff, well_depth):
-        pass
+    # def save_tunnelling(self, name, ifreq, coff, well_depth):
+    #     pass
+
+    def save_in_db(self,
+                   db: Game_db):
+        db_table = {}
+        for well in self.wells:
+            db_table.update(well.db_dict)
+        for bar in self.barriers:
+            db_table.update(bar.db_dict)
+        for bim in self.bimolecular:
+            db_table.update(bim.db_dict)
