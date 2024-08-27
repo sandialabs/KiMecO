@@ -426,12 +426,12 @@ class MessInputReader:
         skip = 0
         for line in self.file[lnum:]:
             if line.lstrip().casefold().startswith('imaginaryfrequency'):
-                # ifreq = float(line.split()[1])
+                ifreq = float(line.split()[1])
                 new_line: str = f"{line.split()[0]}" \
                     + " {" \
                     + f"{name}" \
-                    + ".r_ifreq}\n"
-                self.SOP.items[name].set_ifreq(ifreq)
+                    + ".ifreq}\n"
+                self.SOP.items[name].ifreq = ifreq
                 self.template.append(new_line)
                 skip += 1
             elif line.lstrip().casefold().startswith('cutoffenergy'):

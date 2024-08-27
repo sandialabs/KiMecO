@@ -39,7 +39,7 @@ default_settings: dict[str, Any] = {
     "pert_b": 1.0,
     # Absolute percentage perturbation for wells
     # and bimolecular vibrations
-    "pert_v": 0.05,
+    "pert_f": 0.05,
     # Absolute percentage perturbation for hindered rotors
     "pert_hr": 0.2,
     # Absolute percentage perturbation for imaginary frequencies

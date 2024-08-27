@@ -13,18 +13,7 @@ class Barrier(Well):
         super().__init__(name=name)
         self.connected: list[Well | Bimolecular] = [lside, rside]
         self.energy: float
-
-    def set_ifreq(self, value: float) -> None:
-        """Set the imaginary frequency of this barrier
-
-        Args:
-            value (float): imaginary frequency (cm-1)
-        """
-        self.ifreq: float = value
-
-    @property
-    def r_ifreq(self) -> float:
-        return self.ifreq
+        self.ifreq: float
 
     @property
     def r_coff(self) -> float:

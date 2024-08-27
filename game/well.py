@@ -3,6 +3,8 @@ from typing import Any
 from ase import Atoms
 from game.rotor import Rotor
 from ase.symbols import Symbols
+import numpy as np
+from numpy.typing import NDArray
 
 
 class Well:
@@ -15,7 +17,7 @@ class Well:
                  ) -> None:
 
         self.name: str = name
-        self.frequencies: list[float] = []
+        self.frequencies: NDArray
         self.rotors: list[Rotor] = []
         self.ct_name: str = ct_name
         self.energy: float
@@ -76,7 +78,7 @@ class Well:
         return comp
 
     def r_scan(self, rot_num: int) -> str:
-        """Representation of the rotor's scan
+        """Representation of the rotor's scan.
 
         Args:
             rot_num (int): index of the rotor
@@ -93,7 +95,7 @@ class Well:
     def set_structure(self,
                       symbols: str,
                       positions: list[list]) -> None:
-        """Set the structure (atoms + geom) of the well
+        """Set the structure (atoms + geom) of the well.
 
         Args:
             symbols (str): Chemical elements
@@ -104,12 +106,12 @@ class Well:
 
     def set_frequencies(self,
                         freqs: list[float]) -> None:
-        """Save a list of frequencies
+        """Save a list of frequencies.
 
         Args:
             freqs (list[float]): list of frequencies
         """
-        self.frequencies = freqs
+        self.frequencies = np.array(freqs)
 
     def add_rotor(self,
                   thermalpowermax: float,
@@ -134,7 +136,7 @@ class Well:
 
     @property
     def db_dict(self) -> dict[str, Any]:
-        db_dict = {
+        db_dict: dict = {
             f"{self.name}_e": self.energy
         }
         return db_dict
