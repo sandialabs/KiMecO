@@ -401,10 +401,10 @@ class MessInputReader:
             energy (float): Energy of the object in (kcal/mol)
             lnum (int): Line number in input file
         """
-        self.SOP.set_energy(name, energy)
+        self.SOP.items[name].energy = energy
         new_line: str = f"{self.file[lnum].split()[0]}" \
                         + " {" + f"{name}" \
-                        + ".r_energy}\n"
+                        + ".energy}\n"
         self.template.append(new_line)
 
     def save_tunneling(self,

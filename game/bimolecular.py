@@ -13,18 +13,7 @@ class Bimolecular:
         self.name: str = name
         self.fragments: list = []
         self.ct_names: dict[str, str] = ct_names
-
-    @property
-    def r_energy(self) -> float:
-        return self.energy
-
-    def set_energy(self, value: float) -> None:
-        """Simple function to be coherent with other objects
-
-        Args:
-            value (float): energy of the object (kcal/mol)
-        """
-        self.energy: float = value
+        self.energy: float
 
     def set_fragments(self, frags: list[Well]) -> None:
         """Save a pair of fragments.

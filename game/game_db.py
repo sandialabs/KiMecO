@@ -40,7 +40,9 @@ class Game_db:
                                      port=port,
                                      database=database)
 
-        eng: Engine = create_engine(url_object, pool_size=32, max_overflow=32)
+        eng: Engine = create_engine(url_object,
+                                    pool_size=32,
+                                    max_overflow=32)
         return eng
 
     def create(self) -> None:

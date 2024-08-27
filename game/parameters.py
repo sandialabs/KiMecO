@@ -130,14 +130,14 @@ class SOP:
             lside (str): name of the reactant
             rside (str): name of the product
         """
-        self.items[name] = Barrier(name,
-                                   self.items[lside],
-                                   self.items[rside])
+        self.items[name] = Barrier(name=name,
+                                   lside=self.items[lside],
+                                   rside=self.items[rside])
         self.barriers.append(self.items[name])
 
     def set_freqs(self,
                   name: str,
-                  freqs: list[float]):
+                  freqs: list[float]) -> None:
         """Set the frequencies for the item name.
 
         Args:
@@ -202,17 +202,6 @@ class SOP:
         else:
             self.items[name].set_structure(symbols,
                                            geom)
-
-    def set_energy(self,
-                   name: str,
-                   energy: float):
-        """Call the set energy method of the relevant object
-
-        Args:
-            name (str): name of the object
-            energy (float): energy (kcal/mol)
-        """
-        self.items[name].set_energy(energy)
 
     # def save_tunnelling(self, name, ifreq, coff, well_depth):
     #     pass

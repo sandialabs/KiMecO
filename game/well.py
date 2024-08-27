@@ -1,5 +1,6 @@
 from typing import Any
-from game.structure import Structure
+
+from ase import Atoms
 from game.rotor import Rotor
 from ase.symbols import Symbols
 
@@ -17,6 +18,8 @@ class Well:
         self.frequencies: list[float] = []
         self.rotors: list[Rotor] = []
         self.ct_name: str = ct_name
+        self.energy: float
+        self.structure: Atoms
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -37,23 +40,6 @@ class Well:
                     f'Well does not have the attribute {name}')
         else:
             self.__getattribute__(name)
-
-    # Necessary for coherence with barrier and bimolecular
-    @property
-    def r_energy(self) -> float:
-        return self.structure.energy
-
-    @property
-    def energy(self) -> float:
-        return self.structure.energy
-
-    def set_energy(self, value: float) -> None:
-        """Set the energy of the structure object
-
-        Args:
-            value (float): energy (kcal/mol)
-        """
-        self.structure.energy = value
 
     @property
     def r_struct(self) -> str:
@@ -113,8 +99,8 @@ class Well:
             symbols (str): Chemical elements
             positions (list[list]): 3D geometry
         """
-        self.structure = Structure(elements=symbols,
-                                   geom=positions)
+        self.structure = Atoms(symbols=symbols,
+                               positions=positions)
 
     def set_frequencies(self,
                         freqs: list[float]) -> None:
