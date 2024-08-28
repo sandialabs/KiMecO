@@ -36,7 +36,25 @@ class Perturbator:
 
     def perturb(self,
                 sop: SOP) -> SOP:
+        """Perturb a set of parameters
+
+        Args:
+            sop (SOP): SOP object
+
+        Returns:
+            SOP: Perturbed SOP
+        """
         p_sop: SOP = deepcopy(sop)
+
+        p_sop.factor *= 1 + random.normal(loc=0,
+                                          scale=self.settings['pert_etf'])
+        p_sop.power *= 1 + random.normal(loc=0,
+                                         scale=self.settings['pert_ete'])
+        p_sop.sigmas *= 1 + random.normal(loc=0,
+                                          scale=self.settings['pert_sigma'])
+        p_sop.epsilons *= 1 + random.normal(loc=0,
+                                            scale=self.settings['pert_epsi'])
+
         for well in p_sop.wells:
             self.perturb_well(well)
         for bar in p_sop.barriers:

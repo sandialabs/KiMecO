@@ -5,7 +5,6 @@ import pandas as pd
 from pandas import DataFrame
 
 
-
 class Game_db:
     def __init__(self,
                  name: str,

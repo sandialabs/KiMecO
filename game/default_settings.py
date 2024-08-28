@@ -44,5 +44,12 @@ default_settings: dict[str, Any] = {
     "pert_hr": 0.2,
     # Absolute percentage perturbation for imaginary frequencies
     "pert_if": 0.2,
-
+    # Energy transfer probability, factor, percentage
+    "pert_etf": 0.5,
+    # Energy transfer probability, exponent, percentage
+    "pert_ete": 0.15,
+    # Lennard Jones, epsilon, percentage
+    "pert_epsi": 0.2,
+    # Lennard Jones, sigma, percentage
+    "pert_sigma": 0.2
 }
