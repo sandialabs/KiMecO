@@ -145,10 +145,10 @@ class Perturbator:
 
         match self.pf:
             case 'uniform':
-                perturbation += random.uniform(-self.settings['pert_f'],
-                                               self.settings['pert_f'])
+                perturbation += random.uniform(-self.settings['pert_if'],
+                                               self.settings['pert_if'])
             case 'normal':
                 perturbation += random.normal(loc=0,
-                                              scale=self.settings['pert_f'])
+                                              scale=self.settings['pert_if'])
 
         bar.ifreq *= perturbation
