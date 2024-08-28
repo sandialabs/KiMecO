@@ -24,7 +24,7 @@ def main() -> None:
     input_tpl: list[str]
     (init_SOP, input_tpl) = mr.read()
 
-    pert = Perturbator(ptype='default',
+    pert = Perturbator(ptype='nominal',
                        settings=settings)
 
     if not os.path.isdir(settings['project_name']):

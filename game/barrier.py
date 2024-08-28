@@ -14,6 +14,7 @@ class Barrier(Well):
         self.connected: list[Well | Bimolecular] = [lside, rside]
         self.energy: float
         self.ifreq: float
+        self.barrierless: bool = False
 
     @property
     def r_coff(self) -> float:

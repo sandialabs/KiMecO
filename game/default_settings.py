@@ -51,5 +51,7 @@ default_settings: dict[str, Any] = {
     # Lennard Jones, epsilon, percentage
     "pert_epsi": 0.2,
     # Lennard Jones, sigma, percentage
-    "pert_sigma": 0.2
+    "pert_sigma": 0.2,
+    # Multiplicating/dividing factor for barrierless reactions
+    "pert_sf": 2.0
 }

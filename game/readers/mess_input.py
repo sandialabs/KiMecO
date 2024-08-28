@@ -111,6 +111,10 @@ class MessInputReader:
                 new_line += " {" + f"{lside}.name" + "}"
                 new_line += " {" + f"{rside}.name" + "}\n"
                 self.template.append(new_line)
+            # Set barrierless to save symmetry factor
+            elif line.lstrip().casefold().startswith('core phasespacetheory'):
+                self.SOP.items[name].barrierless = True
+                self.template.append(line)
             # FRAGMENT
             elif line.lstrip().casefold().startswith('fragment')\
                     and 'geom' not in line.casefold():
@@ -194,6 +198,16 @@ class MessInputReader:
                 skip += self.save_tunneling(name=name,
                                             tun_type=tun_type,
                                             lnum=lnum)
+
+            # SYMMETRY FACTOR
+            elif line.lstrip().casefold().startswith('symmetryfactor') \
+            and isinstance(self.SOP.items[name], Barrier) \
+            and self.SOP.items[name].barrierless:
+                sf = float(line.split()[1])
+                self.save_symmetry_factor(name=name,
+                                          symFact=sf,
+                                          lnum=lnum)
+            # All other lines
             else:
                 self.template.append(line)
 
@@ -461,3 +475,21 @@ class MessInputReader:
                 break
         # self.SOP.save_tunnelling(name, ifreq, coff, well_depth)
         return skip
+
+    def save_symmetry_factor(self,
+                             name: str,
+                             symFact: float,
+                             lnum: int) -> None:
+        """Save the symmetry factor of the object 'name'
+        in the SOP object.
+
+        Args:
+            name (str): Object's (well, bimol, barrier) name
+            symFact (float): Symmetry factor of the object in (kcal/mol)
+            lnum (int): Line number in input file
+        """
+        self.SOP.items[name].symFact = symFact
+        new_line: str = f"{self.file[lnum].split()[0]}" \
+                        + " {" + f"{name}" \
+                        + ".symFact}\n"
+        self.template.append(new_line)
