@@ -17,10 +17,10 @@ class QueueingSystem:
                  max_mem: int,
                  nkin: int,
                  nsim: int,
-                 cpu_kin: int = 1,
-                 cpu_sim: int = 1,
-                 mem_kin: float = 500.0,
-                 mem_sim: float = 500.0,
+                 cpu_kin: int,
+                 cpu_sim: int,
+                 mem_kin: int,
+                 mem_sim: int,
                  q_type: str = 'slurm',
                  q_name: str = 'day-long-cpu'
                  ) -> None:
@@ -53,8 +53,8 @@ class QueueingSystem:
         self.av_mem: int = max_mem
         self.cpu_kin: int = cpu_kin
         self.cpu_sim: int = cpu_sim
-        self.mem_kin: float = mem_kin
-        self.mem_sim: float = mem_sim
+        self.mem_kin: int = mem_kin
+        self.mem_sim: int = mem_sim
         if q_type.casefold() == 'slurm':
             self.subtpl: str = slurmtpl
             self.ext: str = 'slurm'
@@ -70,7 +70,7 @@ class QueueingSystem:
             ('loc', unicode_, (150)),
             ('status', unicode_, (10)),
             ('cpu', int16),
-            ('mem', float32),
+            ('mem', int32),
             ('type', unicode_, (3))])
 
         self.kin_q: NDArray[Any] = np.empty(shape=(nkin),
@@ -126,19 +126,19 @@ class QueueingSystem:
         Args:
             job (Job): Numpy structured array. dtype = jobdata
         """
-        sub_cmd: str = self.subtpl.format(nprocs=job['cpu'],
-                                          filename=job['name'],
+        sub_cmd: str = self.subtpl.format(nprocs=job['cpu'][0],
+                                          filename=str(job['name'][0]),
                                           sub_queue=self.q_name,
-                                          mem_mb=job['mem']
+                                          mem_mb=job['mem'][0]
                                           )
         if job['type'] == 'kin':
-            job_cmd: str = self.messtpl.format(filename=job['name'])
+            job_cmd: str = self.messtpl.format(filename=str(job['name'][0]))
         elif job['type'] == 'sim':
-            job_cmd: str = self.pytpl.format(filename=job['name'])
+            job_cmd: str = self.pytpl.format(filename=str(job['name'][0]))
 
         sub_file: str = sub_cmd + job_cmd
 
-        with open(f"{job['loc']}/{job['name']}.{self.ext}", 'w') as f:
+        with open(f"{job['loc'][0]}/{job['name'][0]}.{self.ext}", 'w') as f:
             f.write(sub_file)
 
     def pickUp(self,
@@ -155,8 +155,8 @@ class QueueingSystem:
         elif jtype == 'sim':
             job = self.sim_q[id]
         job['status'] = 'pickedUp'
-        self.av_cpu += int(job['cpu'])
-        self.av_mem += int(job['mem'])
+        self.av_cpu += job['cpu']
+        self.av_mem += job['mem']
         self.av_jobs += 1
 
     def submit(self,
@@ -169,9 +169,8 @@ class QueueingSystem:
             job: Numpy structured array. dtype = jobdata
 
         """
-        here: str = os.getcwd()
-        os.chdir(job['loc'])
-        command: list[str] = ['sbatch', job['name'] + '.' + self.ext]
+
+        command: list[str] = ['sbatch', str(job['name']) + '.' + self.ext]
         process = Popen(args=command,
                         shell=False,
                         stdout=PIPE,
@@ -182,11 +181,10 @@ class QueueingSystem:
         slurm_id: int = int(outstr.split()[-1])
         job['sub_id'] = np.int32(slurm_id)
         job['status'] = 'running'
-        self.av_cpu -= int(job['cpu'])
-        self.av_mem -= int(job['mem'])
+        self.av_cpu -= job['cpu']
+        self.av_mem -= job['mem']
         self.av_jobs -= 1
         self.n_ready -= 1
-        os.chdir(here)
 
     def run(self) -> None:
         """Run all jobs of the workflow in parallel
@@ -238,8 +236,8 @@ class QueueingSystem:
             elif job['status'] == 'running' \
                and not any(slurm_ids == job['sub_id']):
                 job['status'] = 'finished'
-                self.av_cpu += int(job['cpu'])
-                self.av_mem += int(job['mem'])
+                self.av_cpu += job['cpu']
+                self.av_mem += job['mem']
                 self.av_jobs += 1
         for job in self.sim_q:
             if job['status'] == 'ready':
@@ -247,8 +245,8 @@ class QueueingSystem:
             elif job['status'] == 'running' \
                and not any(slurm_ids == job['sub_id']):
                 job['status'] = 'finished'
-                self.av_cpu += int(job['cpu'])
-                self.av_mem += int(job['mem'])
+                self.av_cpu += job['cpu']
+                self.av_mem += job['mem']
                 self.av_jobs += 1
 
     def get_all_running(self) -> NDArray[int32]:
@@ -266,7 +264,7 @@ class QueueingSystem:
         out, err = process.communicate()
         jobs: list[str] = out.decode().split('\n')[1:]
         slurm_ids: NDArray[int32] = np.zeros(len(jobs), dtype=np.int32)
-        for i, j in enumerate(jobs):
+        for i, j in enumerate(jobs[:-1]):
             slurm_ids[i] = int32(j.split()[0])
         return slurm_ids
 
@@ -274,7 +272,14 @@ class QueueingSystem:
                id: int,
                jtype) -> str:
         if jtype == 'kin':
-            return self.kin_q[id].status[0]
-        elif jtype == 'sim':
-            return self.sim_q[id].status[0]
-        return 'notInQueue'
+            # Any checks if the array has a content.
+            # Return false if empty.
+            if any(self.kin_q[id]):
+                return self.kin_q[id]['status']
+            else:
+                return 'notInQueue'
+        else:  # jtype == 'sim':
+            if any(self.sim_q[id]):
+                return self.sim_q[id]['status']
+            else:
+                return 'notInQueue'

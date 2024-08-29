@@ -65,8 +65,9 @@ class Generation:
                                  len(self.settings['rc_pres'])
                                  )
         self.db = Game_db(name=f'G{self.id}',
-                               db_path=os.getcwd(),
-                               host_name=self.settings['db_host'])
+                          db_path=os.getcwd(),
+                          user=self.settings['db_user'],
+                          host_name=self.settings['db_host'])
 
     def generate(self,
                  n: int) -> None:

@@ -1,6 +1,5 @@
 from sqlalchemy import URL, create_engine, Engine
 from sqlalchemy_utils import database_exists, create_database
-import getpass
 import pandas as pd
 from pandas import DataFrame
 
@@ -9,16 +8,17 @@ class Game_db:
     def __init__(self,
                  name: str,
                  db_path: str,
+                 user: str,
                  host_name: str) -> None:
         """Class managing the information storage of GAME database.
         """
         self.name: str = name
         self.path: str = db_path
+        self.user: str = user
         self.host: str = host_name
         self.create()
 
     def remote_engine(self,
-                      user: str = getpass.getuser(),
                       port: int = 5432
                       ) -> Engine:
         """Return a sqlalchemy Engine object to connect to the DB.
@@ -32,9 +32,9 @@ class Game_db:
         Returns:
             Engine: _description_
         """
-        database: str = f'{self.path}/GAME.db'
+        database: str = f'{self.path}/{self.name}'
         url_object: URL = URL.create(drivername="postgresql",
-                                     username=user,
+                                     username=self.user,
                                      host=self.host,
                                      port=port,
                                      database=database)
@@ -62,7 +62,7 @@ class Game_db:
                 pd.DataFrame(data=moleFrac, index=times, columns=spec)
         """
         try:
-            df.to_sql(name=name,
+            df.to_sql(name=self.name,
                       con=self.remote_engine(),
                       if_exists='append'
                       )

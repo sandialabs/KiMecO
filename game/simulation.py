@@ -51,7 +51,7 @@ class SIM:
         """
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
-        self.initial_sim: ct.Solution = ct.Solution(ct_sim)
+        self.initial_sim: ct.Solution = ct.Solution(f"../../{ct_sim}")
         self.species_sim: None | ct.Solution = species_sim
         self.reac_idx: list[int] | None = reac_idx
         self.simulations: list[ct.Solution] = []
@@ -334,8 +334,8 @@ class SIM:
                                            db_path=self.db.path,
                                            host_name=self.db.host,
                                            sim_id=name,
-                                           sim_time=self.set['ct_time'],
-                                           tstep=self.set['ct_tstep'])
+                                           sim_time=self.set['sim_time'],
+                                           tstep=self.set['sim_tstep'])
         with open(f'{self.loc}/{name}.py', 'w') as f:
             f.write(ct_job)
         with open(f'{self.loc}/{name}.pkl', 'wb') as pkl_file:

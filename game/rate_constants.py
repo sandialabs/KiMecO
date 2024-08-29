@@ -1,3 +1,4 @@
+from genericpath import isfile
 from typing import Any
 
 import pandas as pd
@@ -42,8 +43,15 @@ class RateCo:
             self.output_name = f"{self.loc}/{self.name}.out"
 
     def set_status(self) -> None:
-        self.status: str = self.q_sys.status(id=self.id,
-                                             jtype='kin')
+        status: str = self.q_sys.status(id=self.id,
+                                        jtype='kin')
+        if status == 'notInQueue':
+            if os.path.isfile(self.output_name):
+                self.status = 'finished'
+            else:
+                self.status = status
+        else:
+            self.status = status
 
     def q_up(self) -> None:
         """Generate and submit a Kinetic
@@ -84,7 +92,7 @@ class RateCo:
                                    sop=self.SOP)
             mor.read()
         self.rc: np.ndarray = mor.rc
-        self.rc[self.rc < 1.e-7] = 0.0
+        self.rc[self.rc < 1.e-14] = 0.0
         self.hp_rc: np.ndarray = mor.hp_rc  # Not used for now
         self.tbl_map: dict[str, int] = mor.tbl_map
         names: NDArray[Any] = np.full(shape=(len(self.tbl_map)),
@@ -94,7 +102,20 @@ class RateCo:
                           jtype='kin')
         for k, v in self.tbl_map.items():
             names[v] = k
-        self.db.save_data(name=self.name,
-                          df=pd.DataFrame(data=self.rc,
-                                          index=names,
+        indexes = pd.MultiIndex.from_product([
+            self.set['rc_pres'],
+            self.set['rc_temp'],
+            [self.name],
+            names])
+        db_data = np.reshape(
+            a=self.rc,
+            newshape=(
+                len(self.set['rc_pres']) *
+                len(self.set['rc_temp']) *
+                len(names),
+                len(names))
+                   )
+        self.db.save_data(name='kin',
+                          df=pd.DataFrame(data=db_data,
+                                          index=indexes,
                                           columns=names))

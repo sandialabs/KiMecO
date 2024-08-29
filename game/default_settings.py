@@ -1,4 +1,5 @@
 from typing import Any
+import getpass
 
 
 mandatory_keys: dict[str, str] = {"initial_mess": "",
@@ -16,6 +17,10 @@ default_settings: dict[str, Any] = {
     # Keys: name of species in the initial mess file
     # Values: name of the species in the mechanism file
     "ct_names": {},
+    # Time of a simulation in seconds
+    "sim_time": 0.1,
+    # Timestep length during the simulation
+    "sim_tstep": 0.0005,
     # CPU used per master equation job
     "cpu_kin": 4,
     # Memory (Mb) used per master equation job
@@ -30,6 +35,8 @@ default_settings: dict[str, Any] = {
     "max_cpu": 1000,
     # Maximum number of jobs submitted per generation
     "max_jobs": 2000,
+    # Username for the server hosting the db
+    "db_user": getpass.getuser(),
     # IP address of the database host. Should have a postgreSQL server
     "db_host": "127.0.0.1",
     # Absolute value of energy (kcal/mol) perturbation for wells
