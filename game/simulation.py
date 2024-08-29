@@ -77,8 +77,13 @@ class SIM:
         workflow2mech: list[str] = []
         workflow_species: list[str] = []
         mech_species: list[str] = [s.name for s in self.initial_sim.species()]
+        # SOP.items is a dictionary.
+        # key = name of species (str)
+        # Value = The associated object. Can be a Well, Bimolecular or Barrier
         for specie, obj in self.SOP.items.items():
             if isinstance(obj, Well) and not isinstance(obj, Barrier):
+                # ct_name is a property returning the name of the species
+                # as in the mechanism file
                 workflow_species.append(self.SOP.items[specie].ct_name)
         for specie in workflow_species:
             if specie not in mech_species:
@@ -113,13 +118,16 @@ class SIM:
                                        reactions=reactions)
 
     def create_reaction(self,
-                        reac: str) -> list[ct.Reaction]:
+                        reactant: Well | Bimolecular,
+                        product: Well | Bimolecular) -> list[ct.Reaction]:
         """Create a custom cantera Reaction object."""
-        bar: Barrier = self.SOP.items[reac]
+
         equations: list[str]
         units: list[str]
-        units, equations = self.get_reaction_eq(bar=bar)
-        rates_yaml: list[str] = self.get_reaction_rate(bar=bar,
+        units, equations = self.get_reaction_eq(reactant=reactant,
+                                                product=product)
+        rates_yaml: list[str] = self.get_reaction_rate(reactant=reactant,
+                                                       product=product,
                                                        units=units)
         p_yaml: str = ''
         for p in self.KIN.set["rc_pres"]:
@@ -144,10 +152,18 @@ class SIM:
         """Replace mechanism reactions by workflow reactions.
         """
         new_reactions: list[ct.Reaction] = []
-        for reac in self.SOP.barriers_names:
-            forward, reverse = self.create_reaction(reac=reac)
-            new_reactions.append(forward)
-            new_reactions.append(reverse)
+        for idx, reactant in enumerate(self.SOP.wells[:-1]):
+            for product in self.SOP.wells[idx+1:]:
+                forward, reverse = self.create_reaction(reactant=reactant,
+                                                        product=product)
+                new_reactions.append(forward)
+                new_reactions.append(reverse)
+        for reactant in self.SOP.wells:
+            for product in self.SOP.bimolecular:
+                forward, reverse = self.create_reaction(reactant=reactant,
+                                                        product=product)
+                new_reactions.append(forward)
+                new_reactions.append(reverse)
         reactions: list[ct.Reaction] = \
             [r for r in self.species_sim.reactions()]
         self.remove_redundant_reactions(reactions=reactions,
@@ -181,7 +197,8 @@ class SIM:
             reactions.pop(idx)
 
     def get_reaction_eq(self,
-                        bar: Barrier) -> tuple[list[str], list[str]]:
+                        reactant: Well | Bimolecular,
+                        product: Well | Bimolecular) -> tuple[list[str], list[str]]:
         """Create the reation's equations (forward and reverse) and find
         appropriate units for the rate coefficient.
 
@@ -194,7 +211,7 @@ class SIM:
         """
         forwrd: str = ""
         units = []
-        for indx, side in enumerate(bar.connected):
+        for indx, side in enumerate([reactant, product]):
             if isinstance(side, Well):
                 forwrd += side.ct_name
             elif isinstance(side, Bimolecular):
@@ -210,7 +227,7 @@ class SIM:
                 forwrd += ' => '
 
         reverse: str = ""
-        for indx, side in enumerate(reversed(bar.connected)):
+        for indx, side in enumerate([product, reactant]):
             if isinstance(side, Well):
                 reverse += side.ct_name
             elif isinstance(side, Bimolecular):
@@ -228,7 +245,8 @@ class SIM:
         return (units, [forwrd, reverse])
 
     def get_reaction_rate(self,
-                          bar: Barrier,
+                          reactant: Well | Bimolecular,
+                          product: Well | Bimolecular,
                           units) -> list[str]:
         """Adapt Mess reaction rate to cantera unit system.
 
@@ -239,8 +257,8 @@ class SIM:
         Returns:
             list[str]: reaction rates[forward, backward]
         """
-        From: int = self.KIN.tbl_map[bar.connected[0].name]
-        To: int = self.KIN.tbl_map[bar.connected[1].name]
+        From: int = self.KIN.tbl_map[reactant.name]
+        To: int = self.KIN.tbl_map[product.name]
         f_rates: np.ndarray = deepcopy(self.KIN.rc[:, :, From, To])
         r_rates: np.ndarray = deepcopy(self.KIN.rc[:, :, To, From])
         if 'm^3' in units[0]:

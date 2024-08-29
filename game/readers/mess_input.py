@@ -1,7 +1,6 @@
 from curses.ascii import isdigit
 from uu import Error
 
-import numpy as np
 from game.parameters import SOP
 from game.barrier import Barrier
 

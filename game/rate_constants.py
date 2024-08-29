@@ -84,7 +84,8 @@ class RateCo:
                                    sop=self.SOP)
             mor.read()
         self.rc: np.ndarray = mor.rc
-        self.hp_rc: np.ndarray = mor.hp_rc
+        self.rc[self.rc < 1.e-7] = 0.0
+        self.hp_rc: np.ndarray = mor.hp_rc  # Not used for now
         self.tbl_map: dict[str, int] = mor.tbl_map
         names: NDArray[Any] = np.full(shape=(len(self.tbl_map)),
                                       fill_value='',
