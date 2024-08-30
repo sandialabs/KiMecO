@@ -3,6 +3,7 @@ from game.game_db import Game_db
 from game.well import Well
 from game.bimolecular import Bimolecular
 from game.barrier import Barrier
+from pandas import DataFrame
 
 
 class SOP:
@@ -203,11 +204,9 @@ class SOP:
             self.items[name].set_structure(symbols,
                                            geom)
 
-    # def save_tunnelling(self, name, ifreq, coff, well_depth):
-    #     pass
-
     def save_in_db(self,
-                   db: Game_db):
+                   name: str,
+                   db: Game_db) -> None:
         db_table = {}
         for well in self.wells:
             db_table.update(well.db_dict)
@@ -215,3 +214,8 @@ class SOP:
             db_table.update(bar.db_dict)
         for bim in self.bimolecular:
             db_table.update(bim.db_dict)
+
+        df: DataFrame = DataFrame.from_dict(data=db_table)
+        df.set_index([name])
+        db.save_data(name='sop',
+                     df=df)

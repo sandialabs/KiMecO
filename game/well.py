@@ -22,6 +22,7 @@ class Well:
         self.ct_name: str = ct_name
         self.energy: float
         self.structure: Atoms
+        self.rotors_pert: list[float] = []
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -137,6 +138,8 @@ class Well:
     @property
     def db_dict(self) -> dict[str, Any]:
         db_dict: dict = {
-            f"{self.name}_e": self.energy
+            f"{self.name}_e": self.energy,
+            f"{self.name}_f": np.array(self.frequencies, dtype=np.float32),
+            f"{self.name}_r": np.array(self.rotors_pert, dtype=np.float16),
         }
         return db_dict

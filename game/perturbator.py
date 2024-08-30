@@ -104,8 +104,8 @@ class Perturbator:
     def perturb_barrier(self,
                         bar: Barrier) -> None:
         self.perturb_energy(item=bar)
-        self.perturb_hindered_rotors(well=bar)
         self.perturb_vibrations(well=bar)
+        self.perturb_hindered_rotors(well=bar)
         self.perturb_ifreq(bar=bar)
         if bar.barrierless:
             self.perturb_symmetry_factor(bar=bar)
@@ -185,6 +185,7 @@ class Perturbator:
                                       scale=self.settings['pert_hr'])
 
             rot.scan *= perturbation
+            well.rotors_pert.append(perturbation)
 
     def perturb_ifreq(self,
                       bar: Barrier) -> None:

@@ -1,3 +1,4 @@
+from game.game_db import Game_db
 from game.parameters import SOP
 from game.rate_constants import RateCo
 from game.simulation import SIM
@@ -30,3 +31,8 @@ class Element:
         Element.__id += 1
         self.rateCoef: RateCo
         self.sim: SIM
+
+    def save_sop(self,
+                 db: Game_db) -> None:
+        self.sop.save_in_db(name=f"E{self.id}",
+                            db=db)

@@ -80,7 +80,9 @@ class Generation:
         # Reset the element id for each generation
         Element.__id = 0
         while len(self.elements) < n:
+            # Creates an Element from a perturbed SOP and save it in the db
             self.elements.append(Element(sop=self.pert.perturb(sop=self.sop)))
+            self.elements[-1].save_sop(db=self.db)
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.

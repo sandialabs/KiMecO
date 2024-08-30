@@ -1,5 +1,6 @@
 from typing import Any
 from game.well import Well
+import numpy as np
 
 
 class Bimolecular:
@@ -11,7 +12,7 @@ class Bimolecular:
                  ) -> None:
 
         self.name: str = name
-        self.fragments: list = []
+        self.fragments: list[Well] = []
         self.ct_names: dict[str, str] = ct_names
         self.energy: float
 
@@ -53,6 +54,11 @@ class Bimolecular:
     @property
     def db_dict(self) -> dict[str, Any]:
         db_dict = {
-            f"{self.name}_e": self.energy
+            f"{self.name}_e": self.energy,
+            f"{self.fragments[0].name}_f": np.array(self.fragments[0].frequencies, dtype=np.float32),
+            f"{self.fragments[0].name}_r": np.array(self.fragments[0].rotors_pert, dtype=np.float16),
+            f"{self.fragments[1].name}_f": np.array(self.fragments[1].frequencies, dtype=np.float32),
+            f"{self.fragments[1].name}_r": np.array(self.fragments[1].rotors_pert, dtype=np.float16),
         }
+
         return db_dict

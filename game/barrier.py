@@ -1,6 +1,7 @@
 from typing import Any
 from game.bimolecular import Bimolecular
 from game.well import Well
+import numpy as np
 
 
 class Barrier(Well):
@@ -30,8 +31,10 @@ class Barrier(Well):
 
     @property
     def db_dict(self) -> dict[str, Any]:
-        db_dict = {
+        db_dict: dict = {
             f"{self.name}_e": self.energy,
+            f"{self.name}_f": np.array(self.frequencies, dtype=np.float32),
+            f"{self.name}_r": np.array(self.rotors_pert, dtype=np.float16),
             f"{self.name}_if": self.ifreq
         }
         return db_dict
