@@ -31,10 +31,8 @@ class Barrier(Well):
 
     @property
     def db_dict(self) -> dict[str, Any]:
-        db_dict: dict = {
-            f"{self.name}_e": self.energy,
-            f"{self.name}_f": np.array(self.frequencies, dtype=np.float32),
-            f"{self.name}_r": np.array(self.rotors_pert, dtype=np.float16),
-            f"{self.name}_if": self.ifreq
-        }
+        db_dict: dict = super(Barrier, self).db_dict
+        # Not true for barrierless reactions
+        if hasattr(self, 'ifreq'):
+            db_dict.update({f"{self.name}_if": self.ifreq})
         return db_dict

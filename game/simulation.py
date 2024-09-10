@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 from typing import Any
 import cantera as ct
@@ -49,6 +50,8 @@ class SIM:
                 List of indexes of reactions to replace in the mechanism.
                 Defaults to None.
         """
+
+        self.status: list[str] = []
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
         self.initial_sim: ct.Solution = ct.Solution(f"../../{ct_sim}")
@@ -315,10 +318,11 @@ class SIM:
                 self.simulations.append(new_sim)
 
     def q_up(self) -> None:
-
+        
         cpu: int = self.set['cpu_sim']
         mem: int = self.set['mem_sim']
         for i, sim in enumerate(self.simulations):
+            self.set_status(i)
             self.serialize(sim=sim,
                            name=self.name+f'S{i}')
             self.q_sys.add_to_q(name=self.name+f'S{i}',
@@ -340,3 +344,24 @@ class SIM:
             f.write(ct_job)
         with open(f'{self.loc}/{name}.pkl', 'wb') as pkl_file:
             pickle.dump([sim], pkl_file)
+
+    def set_status(self,
+                   sim: int) -> None:
+
+        if len(self.status) < sim + 1:
+            self.status.append('notInQueue')
+
+        status: str = self.q_sys.status(
+            id=self.id*len(self.simulations)+sim,
+            jtype='sim')
+        if status == 'notInQueue':
+            if self.data_in_db(sim):
+                self.status[sim] = 'finished'
+            else:
+                self.status[sim] = status
+        else:
+            self.status[sim] = status
+
+    def recover_results(self,
+                        sim: int):
+        pass

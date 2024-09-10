@@ -51,6 +51,10 @@ class Generation:
         if not os.path.isdir(f'{self.loc}/G{self.id}'):
             os.mkdir(f'{self.loc}/G{self.id}')
         os.chdir(f'{self.loc}/G{self.id}')
+        self.db = Game_db(name=f'G{self.id}',
+                          db_path=os.getcwd(),
+                          user=self.settings['db_user'],
+                          host_name=self.settings['db_host'])
         self.generate(n=n)
         self.qs = QueueingSystem(max_jobs=self.settings['max_jobs'],
                                  max_cpu=self.settings['max_cpu'],
@@ -64,10 +68,6 @@ class Generation:
                                  len(self.settings['rc_temp']) *
                                  len(self.settings['rc_pres'])
                                  )
-        self.db = Game_db(name=f'G{self.id}',
-                          db_path=os.getcwd(),
-                          user=self.settings['db_user'],
-                          host_name=self.settings['db_host'])
 
     def generate(self,
                  n: int) -> None:
@@ -127,4 +127,19 @@ class Generation:
                                  q_sys=self.qs,
                                  set=self.settings)
                     el.sim.q_up()
+                    el.status = 3
+                # Recover simulations data
+                elif el.status == 3:
+                    all_finished = True
+                    for sim in range(len(el.sim.simulations)):
+                        el.sim.set_status(sim)
+                        if el.sim.status[sim] == 'finished':
+                            el.sim.recover_results(sim)
+                        else:
+                            all_finished = False
+                    if all_finished:
+                        el.status = 4
+                # Scoring
+                elif el.status == 4:
+                    pass
             self.qs.run()

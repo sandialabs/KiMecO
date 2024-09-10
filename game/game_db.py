@@ -57,12 +57,12 @@ class Game_db:
         """Create a new table for the sim results.
 
         Args:
-            id (int): Simulation ID
+            name (str): sop, kin or sim
             df (pd.DataFrame):
                 pd.DataFrame(data=moleFrac, index=times, columns=spec)
         """
         try:
-            df.to_sql(name=self.name,
+            df.to_sql(name=name,
                       con=self.remote_engine(),
                       if_exists='append'
                       )

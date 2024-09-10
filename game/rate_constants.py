@@ -1,4 +1,3 @@
-from genericpath import isfile
 from typing import Any
 
 import pandas as pd
@@ -27,6 +26,7 @@ class RateCo:
                  db: Game_db
                  ) -> None:
 
+        self.status: str
         self.id: int = id
         self.SOP: SOP = sop
         self.software: str = settings['rc_software'].casefold()
@@ -102,7 +102,7 @@ class RateCo:
                           jtype='kin')
         for k, v in self.tbl_map.items():
             names[v] = k
-        indexes = pd.MultiIndex.from_product([
+        indexes: pd.MultiIndex = pd.MultiIndex.from_product([
             self.set['rc_pres'],
             self.set['rc_temp'],
             [self.name],

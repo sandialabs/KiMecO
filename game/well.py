@@ -136,10 +136,47 @@ class Well:
                                  scan=scan))
 
     @property
-    def db_dict(self) -> dict[str, Any]:
+    def db_dict(self) -> dict[str, float]:
+        """Return a dictionary of all the pertubable parameters.
+
+        Returns:
+            dict[str, float]:
+                key (str): parameter name
+                value (float): parameter value
+        """
         db_dict: dict = {
-            f"{self.name}_e": self.energy,
-            f"{self.name}_f": np.array(self.frequencies, dtype=np.float32),
-            f"{self.name}_r": np.array(self.rotors_pert, dtype=np.float16),
-        }
+                f"{self.name}_e": self.energy
+            }
+        if len(self.frequencies) != 0:
+            db_dict.update(self.freq_dict)
+        if len(self.rotors_pert) > 0:
+            db_dict.update(self.rotors_dict)
         return db_dict
+    
+    @property
+    def freq_dict(self) -> dict[str, float]:
+        """Return the frequencies in a dictionary format.
+        fd: frequencies dictionary
+        f:  frequency
+        Returns:
+            dict[str, float]: dictionary of frequencies.
+        """
+        fd: dict[str, float] = {}
+        for num, f in enumerate(self.frequencies):
+            fd[f"{self.name}_f{num}"] = f
+
+        return fd
+    
+    @property
+    def rotors_dict(self) -> dict[str, float]:
+        """Return the rotors perturbations in a dictionary format.
+        rd: rotor dictionary
+        rp: rotor perturbation
+        Returns:
+            dict[str, float]: dictionary of perturbation intensities.
+        """
+        rd: dict[str, float] = {}
+        for num, rp in enumerate(self.rotors_pert):
+            rd[f"{self.name}_r{num}"] = rp
+        
+        return rd

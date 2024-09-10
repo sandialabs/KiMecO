@@ -196,6 +196,9 @@ class Perturbator:
         """
         perturbation = 1.0
 
+        #Doesn't perturb the frequency of barrierless barrier
+        if 'nobar' in bar.name:
+            return
         match self.pf:
             case 'uniform':
                 perturbation += random.uniform(-self.settings['pert_if'],
