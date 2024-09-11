@@ -52,7 +52,7 @@ class Game_db:
             create_database(engine.url)
 
     def save_data(self,
-                  name: str,
+                  tablename: str,
                   df: pd.DataFrame) -> None:
         """Create a new table for the sim results.
 
@@ -62,17 +62,17 @@ class Game_db:
                 pd.DataFrame(data=moleFrac, index=times, columns=spec)
         """
         try:
-            df.to_sql(name=name,
+            df.to_sql(name=tablename,
                       con=self.remote_engine(),
-                      if_exists='append'
+                      if_exists='replace'
                       )
         except ValueError:
             pass
 
     def get_data(self,
-                 name: str,
-                 data: str = '*') -> DataFrame:
-        df: pd.DataFrame = pd.read_sql(sql=f'SELECT {data} FROM {name}',
+                 tablename: str,
+                 index: str = '*') -> DataFrame:
+        df: pd.DataFrame = pd.read_sql(sql=f'SELECT {index} FROM {tablename}',
                                        con=self.remote_engine().connect()
                                        )
         return df

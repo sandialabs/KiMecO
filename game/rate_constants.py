@@ -115,7 +115,7 @@ class RateCo:
                 len(names),
                 len(names))
                    )
-        self.db.save_data(name='kin',
+        self.db.save_data(tablename='kin',
                           df=pd.DataFrame(data=db_data,
                                           index=indexes,
                                           columns=names))

@@ -225,5 +225,5 @@ class SOP:
 
         df: DataFrame = DataFrame(data=db_table, index=[self.id])
 
-        db.save_data(name='sop',
+        db.save_data(tablename='sop',
                      df=df)

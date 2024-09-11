@@ -2,6 +2,7 @@ import os
 from copy import deepcopy
 from typing import Any
 import cantera as ct
+from pandas import DataFrame
 from game.cantera.customrate import MessData, MessRate
 import numpy as np
 from game.bimolecular import Bimolecular
@@ -60,6 +61,13 @@ class SIM:
         self.simulations: list[ct.Solution] = []
         self.ct_names: dict[str, str] = {ct: wf for wf, ct in ct_names.items()}
         self.ct_unitSystem: dict = ct.UnitSystem().units
+        # SOP.items is a dictionary.
+        # key = name of species (str)
+        # Value = The associated object. Can be a Well, Bimolecular or Barrier
+        self.species = [
+            self.SOP.items[specie].ct_name
+            for specie, obj in self.SOP.items.items()
+            if isinstance(obj, Well) and not isinstance(obj, Barrier)]
         self.set_species()
         self.set_reactions()
         self.init_sims()
@@ -70,6 +78,7 @@ class SIM:
         self.ctjobtpl: str = ctjobtpl
         self.set: dict[str, Any] = set
         self.db: Game_db = db
+        self.profiles: list[DataFrame] = []
 
     def set_species(self) -> None:
         """Create the simulation with all the species,
@@ -78,20 +87,10 @@ class SIM:
         if self.species_sim is not None:
             return
         workflow2mech: list[str] = []
-        workflow_species: list[str] = []
         mech_species: list[str] = [s.name for s in self.initial_sim.species()]
-        # SOP.items is a dictionary.
-        # key = name of species (str)
-        # Value = The associated object. Can be a Well, Bimolecular or Barrier
-        for specie, obj in self.SOP.items.items():
-            if isinstance(obj, Well) and not isinstance(obj, Barrier):
-                # ct_name is a property returning the name of the species
-                # as in the mechanism file
-                workflow_species.append(self.SOP.items[specie].ct_name)
-        for specie in workflow_species:
+        for specie in self.species:
             if specie not in mech_species:
                 workflow2mech.append(specie)
-
         self.add_species(workflow2mech=workflow2mech)
 
     def add_species(self,
@@ -338,6 +337,7 @@ class SIM:
                                            db_path=self.db.path,
                                            host_name=self.db.host,
                                            sim_id=name,
+                                           to_watch=self.species,
                                            sim_time=self.set['sim_time'],
                                            tstep=self.set['sim_tstep'])
         with open(f'{self.loc}/{name}.py', 'w') as f:
@@ -355,7 +355,7 @@ class SIM:
             id=self.id*len(self.simulations)+sim,
             jtype='sim')
         if status == 'notInQueue':
-            if self.data_in_db(sim):
+            if False:  # self.data_in_db(sim):
                 self.status[sim] = 'finished'
             else:
                 self.status[sim] = status
@@ -363,5 +363,11 @@ class SIM:
             self.status[sim] = status
 
     def recover_results(self,
-                        sim: int):
-        pass
+                        sim: int) -> None:
+        for sim in range(len(self.simulations)):
+            name = self.name+f'S{sim}'
+            self.profiles.append(
+                self.db.get_data(tablename='sim',
+                                 index=name)
+            )
+        print(self.profiles)
