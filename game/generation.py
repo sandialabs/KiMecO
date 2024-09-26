@@ -4,7 +4,7 @@ from typing import Any
 from game.element import Element
 from game.parameters import SOP
 from game.perturbator import Perturbator
-from game.game_db import Game_db
+from game.database.game_db import Game_db
 import numpy as np
 import numpy.typing as npt
 from numpy import bool_
@@ -51,10 +51,7 @@ class Generation:
         if not os.path.isdir(f'{self.loc}/G{self.id}'):
             os.mkdir(f'{self.loc}/G{self.id}')
         os.chdir(f'{self.loc}/G{self.id}')
-        self.db = Game_db(name=f'G{self.id}',
-                          db_path=os.getcwd(),
-                          user=self.settings['db_user'],
-                          host_name=self.settings['db_host'])
+        self.db = Game_db(name=f'G{self.id}')
         self.generate(n=n)
         self.qs = QueueingSystem(max_jobs=self.settings['max_jobs'],
                                  max_cpu=self.settings['max_cpu'],

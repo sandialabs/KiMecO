@@ -1,7 +1,9 @@
 import copy
+from typing import Any
 
 from numpy import float16
-from game.game_db import Game_db
+from sqlalchemy import Column
+from game.database.game_db import Game_db
 from game.well import Well
 from game.bimolecular import Bimolecular
 from game.barrier import Barrier
@@ -121,6 +123,18 @@ class SOP:
         for bar in self.barriers:
             names.append(bar.name)
         return names
+    
+    @property
+    def parameters_names(self) -> dict[str, Any]:
+        pn: dict[str, Any] = {}
+        for well in self.wells:
+            pn.update(well.db_dict)
+        for bar in self.barriers:
+            pn.update(bar.db_dict)
+        for bim in self.bimolecular:
+            pn.update(bim.db_dict)
+        
+        return pn
 
     def add_new_barrier(self,
                         name: str,
@@ -207,23 +221,11 @@ class SOP:
                                            geom)
 
     def save_in_db(self,
-                   name: str,
                    db: Game_db) -> None:
-        db_table = {}
-        for well in self.wells:
-            db_table.update(well.db_dict)
-        for bar in self.barriers:
-            db_table.update(bar.db_dict)
-        for bim in self.bimolecular:
-            db_table.update(bim.db_dict)
-
-        columns: list[str] = []
-        index_dict: dict[str, list[float]] = {f'{self.id}': []}
-        for key, value in db_table.items():
-            columns.append(key)
-            index_dict[f'{self.id}'].append(key)
+        db_table: dict[str, Any] = {'sop_id': self.id}
+        db_table.update(self.parameters_names)
 
         df: DataFrame = DataFrame(data=db_table, index=[self.id])
 
-        db.save_data(tablename='sop',
+        db.save_data(table='sop',
                      df=df)

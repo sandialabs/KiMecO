@@ -1,6 +1,4 @@
-from re import T
 import cantera as ct
-import numpy as np
 import cantera.with_units as ctu
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity

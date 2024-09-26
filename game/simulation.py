@@ -6,7 +6,7 @@ from pandas import DataFrame
 from game.cantera.customrate import MessData, MessRate
 import numpy as np
 from game.bimolecular import Bimolecular
-from game.game_db import Game_db
+from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.q_sys import QueueingSystem
 from game.rate_constants import RateCo
@@ -334,8 +334,6 @@ class SIM:
                   sim: ct.Solution,
                   name: str) -> None:
         ct_job: str = self.ctjobtpl.format(db_name=self.db.name,
-                                           db_path=self.db.path,
-                                           host_name=self.db.host,
                                            sim_id=name,
                                            to_watch=self.species,
                                            sim_time=self.set['sim_time'],
@@ -343,7 +341,7 @@ class SIM:
         with open(f'{self.loc}/{name}.py', 'w') as f:
             f.write(ct_job)
         with open(f'{self.loc}/{name}.pkl', 'wb') as pkl_file:
-            pickle.dump([sim], pkl_file)
+            pickle.dump(sim, pkl_file)
 
     def set_status(self,
                    sim: int) -> None:
@@ -367,7 +365,6 @@ class SIM:
         for sim in range(len(self.simulations)):
             name = self.name+f'S{sim}'
             self.profiles.append(
-                self.db.get_data(tablename='sim',
-                                 index=name)
+                self.db.get_sim_data(index=name)
             )
         print(self.profiles)

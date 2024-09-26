@@ -1,11 +1,10 @@
-import os
 from game.templates.pyjob import pytpl
 from game.templates.messjob import messtpl
 from game.templates.slurm import slurmtpl
 from subprocess import Popen, PIPE
 import numpy as np
 from numpy.typing import NDArray
-from numpy import float32, int16, int32, unicode_
+from numpy import int16, int32, unicode_
 from typing import Any
 import getpass
 
@@ -25,8 +24,8 @@ class QueueingSystem:
                  q_name: str = 'day-long-cpu'
                  ) -> None:
         """The queueing system is only meant to manage the number of jobs
-        and the ressources used by the workflow. The run() method should only submit jobs
-        to use a maximum of ressources. But it should not:
+        and the ressources used by the workflow. The run() method should
+        only submit jobs to use a maximum of ressources. But it should not:
         - Do science
         - Write files
 
@@ -155,8 +154,8 @@ class QueueingSystem:
         elif jtype == 'sim':
             job = self.sim_q[id]
         job['status'] = 'pickedUp'
-        self.av_cpu += job['cpu']
-        self.av_mem += job['mem']
+        self.av_cpu += int(job['cpu'])
+        self.av_mem += int(job['mem'])
         self.av_jobs += 1
 
     def submit(self,

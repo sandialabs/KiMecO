@@ -3,7 +3,9 @@ requires = ["setuptools>=61.0",
             "ase>=3.22.1",
             "cantera>=3.0.0",
             "numpy>=1.22.4",
-            "pandas>=2.2"]
+            "pandas>=2.2",
+            "sqlalchemy",
+            "postgresql"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
