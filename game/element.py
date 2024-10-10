@@ -1,7 +1,9 @@
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.rate_coef import RateCo
+from game.scoring_f.weighteddif import WeightedDif
 from game.simulation import SIM
+from typing import Any
 
 
 class Element:
@@ -32,7 +34,22 @@ class Element:
         Element.__id += 1
         self.rateCoef: RateCo
         self.sim: SIM
+        self.score: float
 
     def save_sop(self,
                  db: Game_db) -> None:
         self.sop.save_in_db(db=db)
+    
+    def calc_score(self,
+                   settings:dict[str, Any]) -> None:
+        """Calculate the score of the element
+        using the user requested function.
+
+        Args:
+            settings (dict[str, Any]): User input + default settings
+        """
+        if settings['scoring_func'].casefold() == 'weighteddif':
+            sf = WeightedDif(settings=settings)
+        self.score = sf.score(sim=self.sim,
+                              exp_profiles=settings['exp_profiles'])
+

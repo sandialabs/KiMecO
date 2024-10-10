@@ -69,6 +69,8 @@ def check_input(input_file: str) -> dict:
         cancel_run = True
         pass
 
+
+
     # Has unknown keys?
     for key in json_file:
         if key not in default_settings and\
@@ -80,8 +82,19 @@ def check_input(input_file: str) -> dict:
         if key not in json_file:
             json_file[key] = value
         elif not isinstance(json_file[key], type(value)):
-            print(f"{key} has incorrect type.")
+            print(f"{key} has incorrect type. It should be {type(value)}")
             cancel_run = True
+
+    # Specific cases with interdependent settings
+    # SETTING w_exp
+    n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
+    # default
+    if len(json_file['w_exp']) == 0:
+        json_file['w_exp'] = [1.0 for i in range(n_exp)]
+    # Error in input
+    elif len(json_file['w_exp']) != n_exp:
+        print("The number of weights in w_exp should be {n_exp}")
+        cancel_run = True
 
     if cancel_run:
         sys.exit(-1)

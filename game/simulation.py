@@ -1,4 +1,4 @@
-import os
+import sys
 from copy import deepcopy
 from typing import Any
 import cantera as ct
@@ -79,6 +79,7 @@ class SIM:
         self.species_sim: None | ct.Solution = species_sim
         self.reac_idx: list[int] | None = reac_idx
         self.simulations: list[ct.Solution] = []
+        # ct is the name in cantera and wf is name in worflow
         self.ct_names: dict[str, str] = {ct: wf for wf, ct in set['ct_names'].items()}
         self.ct_unitSystem: dict = ct.UnitSystem().units
         # SOP.items is a dictionary.
@@ -88,6 +89,8 @@ class SIM:
             self.SOP.items[specie].ct_name
             for specie, obj in self.SOP.items.items()
             if isinstance(obj, Well) and not isinstance(obj, Barrier)]
+        if self.gen_id == 0:
+            self.check_species_weights()
         self.set_species()
         self.set_reactions()
         self.init_sims()
@@ -97,9 +100,35 @@ class SIM:
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
-        self.set: dict[str, Any] = set
+        self.settings: dict[str, Any] = set
         self.db: Game_db = db
         self.profiles: list[DataFrame] = []
+
+    def check_species_weights(self):
+        if len(self.settings['w_species']) == 0:
+            for specie in self.species:
+                self.settings['w_species'][specie] = 1.0
+        else:
+            cancel_run = False
+            for specie in self.settings['w_species']:
+                if specie not in self.species:
+                    print(
+                        f"""A weight was given for specie {specie},
+                        but it doesn't exist.
+                        Use same names as in mechanism file.""")
+                    cancel_run = True
+            if cancel_run:
+                sys.exit(-1)
+
+            tot_w: float = 0.0
+            for specie in self.species:
+                if specie not in self.settings['w_species']:
+                    self.settings['w_species'][specie] = 1.0
+                tot_w += self.settings['w_species'][specie]
+            if tot_w != len(self.species):
+                for specie in self.species:
+                    self.settings['w_species'][specie] *= (len(self.species) /
+                                                           tot_w)
 
     def set_species(self) -> None:
         """Create the simulation with all the species,
@@ -339,8 +368,8 @@ class SIM:
 
     def q_up(self) -> None:
         
-        cpu: int = self.set['cpu_sim']
-        mem: int = self.set['mem_sim']
+        cpu: int = self.settings['cpu_sim']
+        mem: int = self.settings['mem_sim']
         for i, sim in enumerate(self.simulations):
             sim_id: int = i + self.id * len(self.simulations)
             self.set_status(i)
@@ -362,9 +391,9 @@ class SIM:
                                            sim_id=sim_id,
                                            gen=self.gen_id,
                                            to_watch=self.species,
-                                           initial_X=self.set['initial_X'],
-                                           sim_time=self.set['sim_time'],
-                                           tstep=self.set['sim_tstep'])
+                                           initial_X=self.settings['initial_X'],
+                                           sim_time=self.settings['sim_time'],
+                                           tstep=self.settings['sim_tstep'])
         with open(f'{self.loc}/{name}.py', 'w') as f:
             f.write(ct_job)
         with open(f'{self.loc}/{name}.pkl', 'wb') as pkl_file:
@@ -376,16 +405,9 @@ class SIM:
         if len(self.status) < sim + 1:
             self.status.append('notInQueue')
 
-        status: str = self.q_sys.status(
+        self.status[sim] = self.q_sys.status(
             id=self.id*len(self.simulations)+sim,
             jtype='sim')
-        if status == 'notInQueue':
-            if False:  # self.data_in_db(sim):
-                self.status[sim] = 'finished'
-            else:
-                self.status[sim] = status
-        else:
-            self.status[sim] = status
 
     def recover_results(self,
                         sim: int) -> None:

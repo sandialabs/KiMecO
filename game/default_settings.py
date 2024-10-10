@@ -12,7 +12,11 @@ mandatory_keys: dict[str, Any] = {
     # Note: One specie concentration can be 'base', meaning 1-the rest.
     # If no 'base' specie is given, N2 is assumed to be the base.
     # (most likely with air composition).
-    "initial_X": {}
+    "initial_X": {},
+    # CSV files for the experimental reaction profiles
+    # list of str correspondint to the path of the profiles
+    # order is P1T1, P1T2, ..., P2T1, P2T2,...
+    "exp_profiles": []
                                   }
 
 default_settings: dict[str, Any] = {
@@ -69,5 +73,14 @@ default_settings: dict[str, Any] = {
     # Lennard Jones, sigma, percentage
     "pert_sigma": 0.2,
     # Multiplicating/dividing factor for barrierless reactions
-    "pert_sf": 2.0
+    "pert_sf": 2.0,
+    # Name of the scoring function class to use
+    "scoring_func": "basic",
+    # list of weights for specific PT.
+    # Order is P1T1, P1T2, ..., P2T1, P2T2,...
+    "w_exp": [],
+    # Weights of the species in the scoring function
+    # Type should be dict[str, float]
+    # It is normalized so that the sum of the weights = number of species
+    "w_species": {}
 }

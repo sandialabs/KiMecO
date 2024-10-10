@@ -1,4 +1,5 @@
 import os
+import sys
 from typing import Any
 
 from game.element import Element
@@ -141,5 +142,7 @@ class Generation:
                         el.status = 4
                 # Scoring
                 elif el.status == 4:
-                    pass
+                    el.calc_score(settings=self.settings)
             self.qs.run()
+
+
