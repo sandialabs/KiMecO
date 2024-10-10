@@ -31,8 +31,43 @@ def check_input(input_file: str) -> dict:
             print(f"{key} is a mandatory keyword.")
             cancel_run = True
         elif not isinstance(json_file[key], type(value)):
-            print(f"{key} has incorrect type.")
+            print(f"{key} has incorrect type. Type should be {type(value)}")
             cancel_run = True
+    
+    # Check if initial concentrations are correct:
+    # May fail if mandatory key is missing
+    try:
+        sum = 0.0
+        base_key = 'n2'
+        base_given = False
+        for key, value in json_file['initial_X'].items():
+            if not isinstance(key, str):
+                print('initial_X keys should be ct species names.')
+                cancel_run = True
+                break
+            if isinstance(value, str) and value.casefold() == 'base' and\
+               not base_given:
+                base_key: str = key
+                base_given = True
+            elif isinstance(value, float):
+                sum += value
+                if sum > 1.0:
+                    print(
+                        f"The sum of initial X exeeds 1 from specie {key}.")
+                    cancel_run = True
+            else:
+                if base_given:
+                    print('More than 1 base given in initial_X.')
+                else:
+                    print('Values of initial_X should be floats.')
+                cancel_run = True
+                break
+        json_file['initial_X'][base_key] = 1 - sum
+    except ValueError:
+        # Occurs when initial_X was not given.
+        print('Missing mandatory key initial_X in json file.')
+        cancel_run = True
+        pass
 
     # Has unknown keys?
     for key in json_file:

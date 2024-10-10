@@ -1,3 +1,4 @@
+import os
 from sqlalchemy import create_engine, Engine
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
@@ -6,11 +7,16 @@ from pandas import DataFrame
 
 class Game_db:
     def __init__(self,
-                 name: str) -> None:
+                 name: str,
+                 path: str = '') -> None:
         """Class managing the information storage of GAME database.
         """
         self.name: str = name
-        self.eng: Engine = create_engine(f'sqlite:///{name}.db',
+        if path == '':
+            self.path = os.getcwd()
+        else:
+            self.path: str = path
+        self.eng: Engine = create_engine(f'sqlite:///{self.path}/{name}.db',
                                          pool_size=32,
                                          max_overflow=32)
         if not database_exists(self.eng.url):
@@ -29,7 +35,7 @@ class Game_db:
         with self.eng.begin() as connection:
             df.to_sql(name=table,
                       con=connection,
-                      if_exists='replace',
+                      if_exists='append',
                       index=False
                       )
 
@@ -77,10 +83,18 @@ class Game_db:
                       )
 
     def get_sim_data(self,
-                     index: str = '*') -> DataFrame:
+                     species: list[str],
+                     sim_id: int,
+                     gen: int) -> DataFrame:
 
         with self.eng.begin() as connection:
             df: DataFrame = pd.read_sql(
-                sql=f'SELECT * FROM sim WHERE sop_id={index}',
+                sql="""SELECT *
+                FROM sim
+                WHERE sim_id={} AND gen={}""".format(
+                    #','.join(species),
+                    sim_id,
+                    gen
+                ),
                 con=connection)
         return df

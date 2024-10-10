@@ -2,8 +2,17 @@ from typing import Any
 import getpass
 
 
-mandatory_keys: dict[str, str] = {"initial_mess": "",
-                                  "ct_yaml": ""
+mandatory_keys: dict[str, Any] = {
+    # MESS input file containing the nominal parameters
+    "initial_mess": "",
+    # path to Cantera mechanism file
+    "ct_yaml": "",
+    # Dictionary {'ct_name': float} of initial molecular percentage.
+    # (see X in Cantera)
+    # Note: One specie concentration can be 'base', meaning 1-the rest.
+    # If no 'base' specie is given, N2 is assumed to be the base.
+    # (most likely with air composition).
+    "initial_X": {}
                                   }
 
 default_settings: dict[str, Any] = {
@@ -20,7 +29,7 @@ default_settings: dict[str, Any] = {
     # Time of a simulation in seconds
     "sim_time": 0.1,
     # Timestep length during the simulation
-    "sim_tstep": 0.0005,
+    "sim_tstep": 0.0001,
     # CPU used per master equation job
     "cpu_kin": 4,
     # Memory (Mb) used per master equation job

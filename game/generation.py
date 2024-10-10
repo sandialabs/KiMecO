@@ -10,7 +10,7 @@ import numpy.typing as npt
 from numpy import bool_
 
 from game.q_sys import QueueingSystem
-from game.rate_constants import RateCo
+from game.rate_coef import RateCo
 from game.simulation import SIM
 
 
@@ -23,7 +23,10 @@ class Generation:
                  pert: Perturbator,
                  set: dict[str, Any],
                  rc_tpl: list[str],
-                 loc: str
+                 loc: str,
+                 sop_db: Game_db,
+                 kin_db: Game_db,
+                 sim_db: Game_db
                  ) -> None:
         """Generation object manages the worflow of
         a given set of elements, going from creating them
@@ -51,7 +54,9 @@ class Generation:
         if not os.path.isdir(f'{self.loc}/G{self.id}'):
             os.mkdir(f'{self.loc}/G{self.id}')
         os.chdir(f'{self.loc}/G{self.id}')
-        self.db = Game_db(name=f'G{self.id}')
+        self.sop_db: Game_db = sop_db
+        self.kin_db: Game_db = kin_db
+        self.sim_db: Game_db = sim_db
         self.generate(n=n)
         self.qs = QueueingSystem(max_jobs=self.settings['max_jobs'],
                                  max_cpu=self.settings['max_cpu'],
@@ -79,7 +84,7 @@ class Generation:
         while len(self.elements) < n:
             # Creates an Element from a perturbed SOP and save it in the db
             self.elements.append(Element(sop=self.pert.perturb(sop=self.sop)))
-            self.elements[-1].save_sop(db=self.db)
+            self.elements[-1].save_sop(db=self.sop_db)
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
@@ -102,7 +107,7 @@ class Generation:
                                          name=f'G{self.id}E{el.id}',
                                          loc=f'{self.loc}/G{self.id}',
                                          q_sys=self.qs,
-                                         db=self.db)
+                                         db=self.kin_db)
                     el.rateCoef.q_up()
                     el.status = 1
                 # Recover rate coefficients
@@ -115,11 +120,9 @@ class Generation:
                 elif el.status == 2:
                     el.sim = SIM(sop=el.sop,
                                  kin=el.rateCoef,
-                                 ct_sim=self.settings['ct_yaml'],
-                                 ct_names=self.settings['ct_names'],
                                  id=el.id,
-                                 db=self.db,
-                                 name=f'G{self.id}E{el.id}',
+                                 db=self.sim_db,
+                                 gen_id=self.id,
                                  loc=f'{self.loc}/G{self.id}',
                                  q_sys=self.qs,
                                  set=self.settings)

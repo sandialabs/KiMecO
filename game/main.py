@@ -3,11 +3,9 @@ import os
 from game.generation import Generation
 from game.perturbator import Perturbator
 from game.readers.mess_input import MessInputReader
-# from game.rate_constants import RateCo
+from game.database.game_db import Game_db
 from game.user_input import check_input
 from game.parameters import SOP
-# from game.simulation import SIM
-# from game.customrate import MessData, MessRate
 
 
 def main() -> None:
@@ -27,16 +25,24 @@ def main() -> None:
     pert = Perturbator(ptype='nominal',
                        settings=settings)
 
+
     if not os.path.isdir(settings['project_name']):
         os.mkdir(settings['project_name'])
     os.chdir(settings['project_name'])
     location: str = os.getcwd()
+
+    sop_db = Game_db(name=f'GAME_DB_SOP')
+    kin_db = Game_db(name=f'GAME_DB_KIN')
+    sim_db = Game_db(name=f'GAME_DB_SIM')
 
     first_gen = Generation(sop=init_SOP,
                            n=1,
                            pert=pert,
                            set=settings,
                            rc_tpl=input_tpl,
-                           loc=location)
+                           loc=location,
+                           sop_db=sop_db,
+                           kin_db=kin_db,
+                           sim_db=sim_db,)
 
     first_gen.run()

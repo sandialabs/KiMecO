@@ -1,6 +1,6 @@
 from game.database.game_db import Game_db
 from game.parameters import SOP
-from game.rate_constants import RateCo
+from game.rate_coef import RateCo
 from game.simulation import SIM
 
 
@@ -11,10 +11,11 @@ class Element:
                  sop: SOP) -> None:
         """An element is part of a generation and has
         different attributes, such as an id and a status.
+        It is mainly a container object.
 
         Args:
             sop (SOP): perturbed set of parameters
-        
+
         Attributes:
             status (int): Status of the element
                 0 - initialized

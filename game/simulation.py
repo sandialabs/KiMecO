@@ -9,7 +9,7 @@ from game.bimolecular import Bimolecular
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.q_sys import QueueingSystem
-from game.rate_constants import RateCo
+from game.rate_coef import RateCo
 from game.well import Well
 from game.barrier import Barrier
 from game.templates.ct_reaction_tpl import reaction_yaml
@@ -22,10 +22,8 @@ class SIM:
     def __init__(self,
                  sop: SOP,
                  kin: RateCo,
-                 ct_sim: str,
-                 ct_names: dict[str, str],
-                 name: str,
                  id: int,
+                 gen_id: int,
                  db: Game_db,
                  loc: str,
                  q_sys: QueueingSystem,
@@ -50,21 +48,43 @@ class SIM:
             reac_idx (None | list[int], optional):
                 List of indexes of reactions to replace in the mechanism.
                 Defaults to None.
+
+        Args:
+            sop (SOP): Set Of Parameters objects
+            kin (RateCo): Rate Constants object
+            ct_sim (str): Path to the YAML file provided by the user
+            ct_names (dict[str, str]): Key is name of species in worflow.
+                                       Value is name of species in mech file.
+            name (str): name of the simulation object
+            id (int):
+                Identifier of the simulation object.
+                Used to calculate the identifier of individual sim(P,T).
+            db (Game_db): Game SIM DB
+            loc (str): Where the files will be generated
+            q_sys (QueueingSystem): Game Queuing system.
+            set (dict[str, Any]): Settings (JSON input file)
+            reac_idx (list[int] | None, optional):
+                Indexes of the reactions to change in the mechanism file.
+                Defaults to None.
+            species_sim (None | ct.Solution, optional):
+                Cantera object where the worflow species and
+                mechanism species are already combined.
+                Defaults to None.
         """
 
         self.status: list[str] = []
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
-        self.initial_sim: ct.Solution = ct.Solution(f"../../{ct_sim}")
+        self.initial_sim: ct.Solution = ct.Solution(f"../../{set['ct_yaml']}")
         self.species_sim: None | ct.Solution = species_sim
         self.reac_idx: list[int] | None = reac_idx
         self.simulations: list[ct.Solution] = []
-        self.ct_names: dict[str, str] = {ct: wf for wf, ct in ct_names.items()}
+        self.ct_names: dict[str, str] = {ct: wf for wf, ct in set['ct_names'].items()}
         self.ct_unitSystem: dict = ct.UnitSystem().units
         # SOP.items is a dictionary.
         # key = name of species (str)
         # Value = The associated object. Can be a Well, Bimolecular or Barrier
-        self.species = [
+        self.species: list[str] = [
             self.SOP.items[specie].ct_name
             for specie, obj in self.SOP.items.items()
             if isinstance(obj, Well) and not isinstance(obj, Barrier)]
@@ -72,7 +92,8 @@ class SIM:
         self.set_reactions()
         self.init_sims()
         self.id: int = id
-        self.name: str = name
+        self.gen_id: int = gen_id
+        self.name: str = f'G{gen_id}E{id}'
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
@@ -321,21 +342,27 @@ class SIM:
         cpu: int = self.set['cpu_sim']
         mem: int = self.set['mem_sim']
         for i, sim in enumerate(self.simulations):
+            sim_id: int = i + self.id * len(self.simulations)
             self.set_status(i)
             self.serialize(sim=sim,
-                           name=self.name+f'S{i}')
+                           name=self.name+f'S{i}',
+                           sim_id=sim_id)
             self.q_sys.add_to_q(name=self.name+f'S{i}',
-                                idx=self.id*len(self.simulations)+i,
+                                idx=sim_id,
                                 location=self.loc,
                                 jtype='sim',
                                 ressources=(cpu, mem))
 
     def serialize(self,
                   sim: ct.Solution,
-                  name: str) -> None:
-        ct_job: str = self.ctjobtpl.format(db_name=self.db.name,
-                                           sim_id=name,
+                  name: str,
+                  sim_id: int) -> None:
+        ct_job: str = self.ctjobtpl.format(db=self.db,
+                                           sim_name=name,
+                                           sim_id=sim_id,
+                                           gen=self.gen_id,
                                            to_watch=self.species,
+                                           initial_X=self.set['initial_X'],
                                            sim_time=self.set['sim_time'],
                                            tstep=self.set['sim_tstep'])
         with open(f'{self.loc}/{name}.py', 'w') as f:
@@ -363,8 +390,8 @@ class SIM:
     def recover_results(self,
                         sim: int) -> None:
         for sim in range(len(self.simulations)):
-            name = self.name+f'S{sim}'
             self.profiles.append(
-                self.db.get_sim_data(index=name)
+                self.db.get_sim_data(species=self.species,
+                                     gen=self.gen_id,
+                                     sim_id=self.id*len(self.simulations)+sim)
             )
-        print(self.profiles)

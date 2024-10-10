@@ -1,6 +1,6 @@
 from typing import Any
 
-import pandas as pd
+from pandas import MultiIndex, DataFrame
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.q_sys import QueueingSystem
@@ -102,13 +102,13 @@ class RateCo:
                           jtype='kin')
         for k, v in self.tbl_map.items():
             names[v] = k
-        mult_i_col = ['P', 'T', 'kin_id', 'specie']
-        indexes: pd.MultiIndex = pd.MultiIndex.from_product([
+
+        indexes: MultiIndex = MultiIndex.from_product([
             self.set['rc_pres'],
             self.set['rc_temp'],
             [self.name],
             names,],
-            names=mult_i_col)
+            names=['P', 'T', 'kin_id', 'specie'])
         db_data = np.reshape(
             a=self.rc,
             newshape=(
@@ -117,9 +117,9 @@ class RateCo:
                 len(names),
                 len(names))
                    )
-        df = pd.DataFrame(data=db_data,
-                          index=indexes,
-                          columns=names)
-        df = df.reset_index()
+        df = DataFrame(data=db_data,
+                       index=indexes,
+                       columns=names)
+        df: DataFrame = df.reset_index()
         self.db.save_data(table='kin',
                           df=df)
