@@ -1,13 +1,9 @@
 import copy
 from typing import Any
 
-from numpy import float16
-from sqlalchemy import Column
-from game.database.game_db import Game_db
 from game.well import Well
 from game.bimolecular import Bimolecular
 from game.barrier import Barrier
-from pandas import DataFrame
 
 
 class SOP:
@@ -29,6 +25,12 @@ class SOP:
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
         SOP._id += 1
+
+    def __repr__(self) -> str:
+        table_repr: str = "<SOP("
+        for v in self.parameters_names.values():
+            table_repr += f"'{v}',"
+        return table_repr[:-1] + ")>"
 
     @property
     def r_epsilons(self) -> str:
@@ -123,7 +125,7 @@ class SOP:
         for bar in self.barriers:
             names.append(bar.name)
         return names
-    
+
     @property
     def parameters_names(self) -> dict[str, Any]:
         pn: dict[str, Any] = {}
@@ -133,7 +135,7 @@ class SOP:
             pn.update(bar.db_dict)
         for bim in self.bimolecular:
             pn.update(bim.db_dict)
-        
+
         return pn
 
     def add_new_barrier(self,
@@ -220,12 +222,38 @@ class SOP:
             self.items[name].set_structure(symbols,
                                            geom)
 
-    def save_in_db(self,
-                   db: Game_db) -> None:
-        db_table: dict[str, Any] = {'sop_id': self.id}
-        db_table.update(self.parameters_names)
+    def update(self,
+               key: str,
+               value: float) -> None:
+        """Update the parameter key (name as in db)
+        by the value from the db.
 
-        df: DataFrame = DataFrame(data=db_table, index=[self.id])
+        Args:
+            key (str): parameter name
+            value (float): value in db
+        """
+        item_name: str = '_'.join(key.split('_')[:-1])
+        param_name: str = key.split('_')[-1]
+        # Energies
+        if param_name == 'e':
+            self.items[item_name].energy = value
+        # Frequencies
+        elif 'f' in param_name:
+            idx = int(param_name.split('f')[-1])
+            self.items[item_name].frequencies[idx] = value
+        # Imaginary frequencies
+        elif 'if' in param_name:
+            self.items[item_name].ifreq = value
+        elif 'r' in param_name:
+            idx = int(param_name.split('r')[-1])
+            # Reset the rotor's scan
+            self.items[item_name].rotors[idx].scan /= \
+                self.items[item_name].rotors_pert[idx]
+            # Change the perturbation's value
+            self.items[item_name].rotors_pert[idx] = value
+            # Reperturb the rotor
+            self.items[item_name].rotors[idx].scan *= \
+                self.items[item_name].rotors_pert[idx]
+        else:
+            raise KeyError('Trying to restore unknown parameter.')
 
-        db.save_data(table='sop',
-                     df=df)

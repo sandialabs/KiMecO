@@ -1,6 +1,5 @@
 from typing import Any
 from game.well import Well
-import numpy as np
 
 
 class Bimolecular:
@@ -54,7 +53,7 @@ class Bimolecular:
     @property
     def db_dict(self) -> dict[str, Any]:
         db_dict = {
-            f"{self.name}_e": self.energy}
+            f"{self.name}_e": float(self.energy)}
         for frag in self.fragments:
             db_dict.update(frag.db_dict)
 

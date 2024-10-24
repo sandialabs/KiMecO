@@ -1,6 +1,6 @@
 from typing import Any
 
-from pandas import MultiIndex, DataFrame
+from pandas import MultiIndex, DataFrame, RangeIndex
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.q_sys import QueueingSystem
@@ -83,7 +83,7 @@ class RateCo:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")
 
-    def recover_rslts(self) -> None:
+    def recover_rslts(self) -> DataFrame:
         """Wait for the results of the Kinetic constants calculations
         """
         if self.software == 'mess':
@@ -103,6 +103,20 @@ class RateCo:
         for k, v in self.tbl_map.items():
             names[v] = k
 
+        row_ids: list[int] = [i for i in RangeIndex(
+            start=(self.id *
+                   len(self.set['rc_pres']) *
+                   len(self.set['rc_temp']) *
+                   len(names)),
+            stop=(self.id *
+                  len(self.set['rc_pres']) *
+                  len(self.set['rc_temp']) *
+                  len(names) +
+                  len(self.set['rc_pres']) *
+                  len(self.set['rc_temp']) *
+                  len(names)),
+            step=1)]
+        
         indexes: MultiIndex = MultiIndex.from_product([
             self.set['rc_pres'],
             self.set['rc_temp'],
@@ -121,5 +135,7 @@ class RateCo:
                        index=indexes,
                        columns=names)
         df: DataFrame = df.reset_index()
-        self.db.save_data(table='kin',
-                          df=df)
+        df.index = row_ids
+        df.index.name = 'id'
+        
+        return df

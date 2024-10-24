@@ -134,6 +134,7 @@ class Well:
                                  axis=axis,
                                  symmetry=symmetry,
                                  scan=scan))
+        self.rotors_pert.append(1.0)
 
     @property
     def db_dict(self) -> dict[str, float]:
@@ -145,11 +146,11 @@ class Well:
                 value (float): parameter value
         """
         db_dict: dict = {
-                f"{self.name}_e": self.energy
+                f"{self.name}_e": float(self.energy)
             }
         if len(self.frequencies) != 0:
             db_dict.update(self.freq_dict)
-        if len(self.rotors_pert) > 0:
+        if len(self.rotors) > 0:
             db_dict.update(self.rotors_dict)
         return db_dict
     
@@ -163,10 +164,10 @@ class Well:
         """
         fd: dict[str, float] = {}
         for num, f in enumerate(self.frequencies):
-            fd[f"{self.name}_f{num}"] = f
+            fd[f"{self.name}_f{num}"] = float(f)
 
         return fd
-    
+
     @property
     def rotors_dict(self) -> dict[str, float]:
         """Return the rotors perturbations in a dictionary format.
@@ -176,7 +177,7 @@ class Well:
             dict[str, float]: dictionary of perturbation intensities.
         """
         rd: dict[str, float] = {}
-        for num, rp in enumerate(self.rotors_pert):
-            rd[f"{self.name}_r{num}"] = rp
-        
+        for rot in range(len(self.rotors)):
+            rd[f"{self.name}_r{rot}"] = float(self.rotors_pert[rot])
+
         return rd

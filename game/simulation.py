@@ -24,6 +24,7 @@ class SIM:
                  kin: RateCo,
                  id: int,
                  gen_id: int,
+                 species: list[str],
                  db: Game_db,
                  loc: str,
                  q_sys: QueueingSystem,
@@ -72,6 +73,7 @@ class SIM:
                 Defaults to None.
         """
 
+
         self.status: list[str] = []
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
@@ -85,10 +87,9 @@ class SIM:
         # SOP.items is a dictionary.
         # key = name of species (str)
         # Value = The associated object. Can be a Well, Bimolecular or Barrier
-        self.species: list[str] = [
-            self.SOP.items[specie].ct_name
-            for specie, obj in self.SOP.items.items()
-            if isinstance(obj, Well) and not isinstance(obj, Barrier)]
+        self.gen_id = gen_id
+        self.settings: dict[str, Any] = set
+        self.species: list[str] = species
         if self.gen_id == 0:
             self.check_species_weights()
         self.set_species()
@@ -100,11 +101,10 @@ class SIM:
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
-        self.settings: dict[str, Any] = set
         self.db: Game_db = db
         self.profiles: list[DataFrame] = []
 
-    def check_species_weights(self):
+    def check_species_weights(self) -> None:
         if len(self.settings['w_species']) == 0:
             for specie in self.species:
                 self.settings['w_species'][specie] = 1.0
@@ -413,7 +413,6 @@ class SIM:
                         sim: int) -> None:
         for sim in range(len(self.simulations)):
             self.profiles.append(
-                self.db.get_sim_data(species=self.species,
-                                     gen=self.gen_id,
+                self.db.get_sim_data(gen=self.gen_id,
                                      sim_id=self.id*len(self.simulations)+sim)
             )

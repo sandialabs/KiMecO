@@ -75,12 +75,14 @@ default_settings: dict[str, Any] = {
     # Multiplicating/dividing factor for barrierless reactions
     "pert_sf": 2.0,
     # Name of the scoring function class to use
-    "scoring_func": "basic",
+    "scoring_func": "weighteddif",
     # list of weights for specific PT.
     # Order is P1T1, P1T2, ..., P2T1, P2T2,...
     "w_exp": [],
     # Weights of the species in the scoring function
     # Type should be dict[str, float]
     # It is normalized so that the sum of the weights = number of species
-    "w_species": {}
+    "w_species": {},
+    # Restart modes, and treatment of existing tables/db
+    "restart": 'default'
 }

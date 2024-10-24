@@ -1,9 +1,12 @@
+from copy import deepcopy
+from matplotlib.backend_tools import default_toolbar_tools
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.rate_coef import RateCo
 from game.scoring_f.weighteddif import WeightedDif
 from game.simulation import SIM
-from typing import Any
+from typing import Any, Literal
+from pandas import DataFrame
 
 
 class Element:
@@ -37,19 +40,83 @@ class Element:
         self.score: float
 
     def save_sop(self,
-                 db: Game_db) -> None:
-        self.sop.save_in_db(db=db)
-    
+                 db: Game_db,
+                 table: str,
+                 mode: Literal['default',
+                               'scratch']) -> None:
+        """Save the SOP in the database in the table
+        of the generation
+
+        Args:
+            db (Game_db): SOP Game database
+            table (str): Table name (GX)
+            mode (Literal):
+                'default': Make the SOP in the worflow equal to the db entry
+                'scratch': Update the db with new SOP values.
+        """
+        db_table: dict[str, Any] = {}
+        db_table.update(self.sop.parameters_names)
+
+        df: DataFrame = DataFrame(data=db_table, index=[self.id])
+        df.index.name = 'id'
+
+        if db.entry_exist(table=table,
+                          id=self.id):
+            if mode == 'scratch':
+                db.update_entry(table=table,
+                                id=self.id,
+                                values=db_table)
+            elif mode == 'default':
+                sop_param: list[str] = \
+                    [key for key in self.sop.parameters_names.keys()]
+                db_param: list[str] = \
+                    [key for key in db.tables[table].columns.keys()]
+                if sop_param != db_param[1:]:
+                    raise KeyError(
+                        "The db and workflow parameters are different.")
+
+                row: list[float] = db.get_sop_row(table=table,
+                                                  id=self.id)
+                pos = 1
+                for key, val in self.sop.parameters_names.items():
+                    if val != row[pos]:
+                        self.sop.update(key=key,
+                                        value=val)
+                    pos += 1
+        else:
+            db.save_data(table=table,
+                         df=df,
+                         mode='append')
+
+    def save_kin(self,
+                 db: Game_db,
+                 table: str) -> None:
+        """Save the RateCoef in the database in the table
+        of the generation
+
+        Args:
+            db (Game_db): KIN Game database
+            table (str): Table name (GX)
+        """
+        df: DataFrame = self.rateCoef.recover_rslts()
+        db.save_data(table=table,
+                     df=df,
+                     mode='append')
+
     def calc_score(self,
-                   settings:dict[str, Any]) -> None:
+                   settings: dict[str, Any]) -> None:
         """Calculate the score of the element
         using the user requested function.
+        If the elif statement for a new scoring function
+        is missing, also add the chosen string to
+        the implemented_sf list in default_settings.py.
 
         Args:
             settings (dict[str, Any]): User input + default settings
         """
         if settings['scoring_func'].casefold() == 'weighteddif':
             sf = WeightedDif(settings=settings)
+
         self.score = sf.score(sim=self.sim,
                               exp_profiles=settings['exp_profiles'])
 

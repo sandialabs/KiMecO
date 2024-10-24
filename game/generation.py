@@ -1,11 +1,16 @@
 import os
 import sys
+from tkinter.font import names
 from typing import Any
+
+from more_itertools import value_chain
 
 from game.element import Element
 from game.parameters import SOP
 from game.perturbator import Perturbator
 from game.database.game_db import Game_db
+from game.well import Well
+from game.barrier import Barrier
 import numpy as np
 import numpy.typing as npt
 from numpy import bool_
@@ -47,6 +52,10 @@ class Generation:
         self.id: int = Generation.__id
         Generation.__id += 1
         Element.__id = 0
+        self.species: list[str] = [
+            self.sop.items[specie].ct_name
+            for specie, obj in self.sop.items.items()
+            if isinstance(obj, Well) and not isinstance(obj, Barrier)]
         self.pert: Perturbator = pert
         self.elements: list[Element] = []
         self.settings: dict[str, Any] = set
@@ -58,6 +67,7 @@ class Generation:
         self.sop_db: Game_db = sop_db
         self.kin_db: Game_db = kin_db
         self.sim_db: Game_db = sim_db
+        self.create_tables()
         self.generate(n=n)
         self.qs = QueueingSystem(max_jobs=self.settings['max_jobs'],
                                  max_cpu=self.settings['max_cpu'],
@@ -72,6 +82,37 @@ class Generation:
                                  len(self.settings['rc_pres'])
                                  )
 
+    def create_tables(self) -> None:
+        """Create the tables in all databases
+        """
+        # Create table for gen in SOP, KIN and SIM
+        # SOP
+        self.sop_db.create_table(
+            name=f'G{self.id}',
+            columns=[key for key in self.sop.parameters_names.keys()],
+            types=[type(val) for val in self.sop.parameters_names.values()]
+            )
+        # KIN
+        kin_col: list[str] = ['P', 'T', 'kin_id', 'specie']
+        kin_col.extend(self.species)
+        kin_types = [int, float, float, str, str]
+        kin_types.extend([float for i in range(len(self.species))])
+        self.kin_db.create_table(
+            name=f'G{self.id}',
+            columns=kin_col,
+            types=kin_types
+            )
+        # SIM
+        sim_col: list[str] = ['P', 'T', 'sim_id', 'time']
+        sim_col.extend(self.species)
+        sim_types = [int, float, float, int, float]
+        sim_types.extend([float for i in range(len(self.species))])
+        self.sim_db.create_table(
+            name=f'G{self.id}',
+            columns=sim_col,
+            types=sim_types
+            )
+
     def generate(self,
                  n: int) -> None:
         """Generate all the perturbed set of parameters
@@ -85,7 +126,9 @@ class Generation:
         while len(self.elements) < n:
             # Creates an Element from a perturbed SOP and save it in the db
             self.elements.append(Element(sop=self.pert.perturb(sop=self.sop)))
-            self.elements[-1].save_sop(db=self.sop_db)
+            self.elements[-1].save_sop(db=self.sop_db,
+                                       table=f'G{0}',
+                                       mode=self.settings['restart'])
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
@@ -115,7 +158,8 @@ class Generation:
                 elif el.status == 1:
                     el.rateCoef.set_status()
                     if el.rateCoef.status == 'finished':
-                        el.rateCoef.recover_rslts()
+                        el.save_kin(db=self.kin_db,
+                                    table=f'G{self.id}')
                         el.status = 2
                 # Calculate SIMs
                 elif el.status == 2:
@@ -124,6 +168,7 @@ class Generation:
                                  id=el.id,
                                  db=self.sim_db,
                                  gen_id=self.id,
+                                 species=self.species,
                                  loc=f'{self.loc}/G{self.id}',
                                  q_sys=self.qs,
                                  set=self.settings)
@@ -144,5 +189,3 @@ class Generation:
                 elif el.status == 4:
                     el.calc_score(settings=self.settings)
             self.qs.run()
-
-

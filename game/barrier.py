@@ -34,5 +34,5 @@ class Barrier(Well):
         db_dict: dict = super(Barrier, self).db_dict
         # Not true for barrierless reactions
         if hasattr(self, 'ifreq'):
-            db_dict.update({f"{self.name}_if": self.ifreq})
+            db_dict.update({f"{self.name}_if": float(self.ifreq)})
         return db_dict

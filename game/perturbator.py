@@ -171,7 +171,7 @@ class Perturbator:
             well (Well) : Well object
         """
 
-        for rot in well.rotors:
+        for num, rot in enumerate(well.rotors):
             perturbation = 1.0
 
             match self.pf:
@@ -185,7 +185,7 @@ class Perturbator:
                                       scale=self.settings['pert_hr'])
 
             rot.scan *= perturbation
-            well.rotors_pert.append(perturbation)
+            well.rotors_pert[num] = perturbation
 
     def perturb_ifreq(self,
                       bar: Barrier) -> None:

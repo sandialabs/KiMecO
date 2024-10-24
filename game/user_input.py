@@ -1,3 +1,4 @@
+import csv
 import os
 import sys
 import json
@@ -6,6 +7,9 @@ from game.default_settings import default_settings, mandatory_keys
 
 def check_input(input_file: str) -> dict:
     """Method that checks if the argument given by the user is valid.
+    All checks on user inputs should be performed here.
+    Avoid using 'raise' a maximum during the code.
+    If a user input error can be detected here, check it here.
 
     Args:
         input_file (str): path to input file
@@ -33,10 +37,10 @@ def check_input(input_file: str) -> dict:
         elif not isinstance(json_file[key], type(value)):
             print(f"{key} has incorrect type. Type should be {type(value)}")
             cancel_run = True
-    
+
     # Check if initial concentrations are correct:
     # May fail if mandatory key is missing
-    try:
+    if 'initial_X' in json_file:
         sum = 0.0
         base_key = 'n2'
         base_given = False
@@ -63,13 +67,6 @@ def check_input(input_file: str) -> dict:
                 cancel_run = True
                 break
         json_file['initial_X'][base_key] = 1 - sum
-    except ValueError:
-        # Occurs when initial_X was not given.
-        print('Missing mandatory key initial_X in json file.')
-        cancel_run = True
-        pass
-
-
 
     # Has unknown keys?
     for key in json_file:
@@ -85,9 +82,57 @@ def check_input(input_file: str) -> dict:
             print(f"{key} has incorrect type. It should be {type(value)}")
             cancel_run = True
 
-    # Specific cases with interdependent settings
-    # SETTING w_exp
+    # READ CSVs
+    clean_profiles = []
     n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
+    if len(json_file['exp_profiles']) != n_exp:
+        print(f"There should be one csv profile file for each TP condition.")
+        cancel_run = True
+    else:
+        for p in range(len(json_file['rc_pres'])):
+            for t in range(len(json_file['rc_temp'])):
+                idx: int = p*len(json_file['rc_temp']) + t
+                file: str = json_file['exp_profiles'][idx]
+                clean_profiles.append({})
+                if not os.path.isfile(file):
+                    print(f'Could not find file {file}.')
+                    cancel_run = True
+                else:
+                    with open(file, 'r') as f:
+                        csv_DictReader = csv.DictReader(f)
+                        ln = 0
+                        for line in csv_DictReader:
+                            if 'time' not in line:
+                                print(f"A column should be 'time' column in file {file}.")
+                                cancel_run = True
+                            else:
+                                for header in line:
+                                    if ln == 0:
+                                        clean_profiles[-1][header] = []
+                                    try:
+                                        clean_profiles[-1][header].append(float(line[header]))
+                                    except TypeError:
+                                        print(f'Incorrect value detected line {ln} in file {file} column {header}')
+                                        cancel_run = True
+                            ln += 1
+                # check the created profiles:
+                nstep: int = len(clean_profiles[-1]['time'])
+                for header, profile in clean_profiles[-1].items():
+                    if len(profile) != nstep:
+                        print(f'Not enough values in profile {header} in file {file}')
+    json_file['exp_profiles'] = clean_profiles
+
+    # Specific cases with interdependent non-mandatory settings
+    #Checking the scoring function:
+    implemented_sf: list[str] = ['weighteddif']
+    if json_file['scoring_func'].casefold() not in implemented_sf:
+        print('Unknown scoring function. Check the spelling?')
+        cancel_run = True
+    implemented_restart: list[str] = ['default', 'scratch']
+    if json_file['restart'].casefold() not in implemented_restart:
+        print('Unknown restart mode. Check the spelling?')
+        cancel_run = True
+    # SETTING w_exp
     # default
     if len(json_file['w_exp']) == 0:
         json_file['w_exp'] = [1.0 for i in range(n_exp)]
@@ -95,6 +140,12 @@ def check_input(input_file: str) -> dict:
     elif len(json_file['w_exp']) != n_exp:
         print("The number of weights in w_exp should be {n_exp}")
         cancel_run = True
+    else:
+        sum = 0.0
+        for val in json_file['w_exp']:
+            sum += val
+        # Normalize the weights
+        json_file['w_exp'] = [val*n_exp/sum for val in json_file['w_exp']]
 
     if cancel_run:
         sys.exit(-1)
