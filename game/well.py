@@ -22,7 +22,6 @@ class Well:
         self.ct_name: str = ct_name
         self.energy: float
         self.structure: Atoms
-        self.rotors_pert: list[float] = []
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -134,7 +133,6 @@ class Well:
                                  axis=axis,
                                  symmetry=symmetry,
                                  scan=scan))
-        self.rotors_pert.append(1.0)
 
     @property
     def db_dict(self) -> dict[str, float]:
@@ -153,7 +151,7 @@ class Well:
         if len(self.rotors) > 0:
             db_dict.update(self.rotors_dict)
         return db_dict
-    
+
     @property
     def freq_dict(self) -> dict[str, float]:
         """Return the frequencies in a dictionary format.
@@ -177,7 +175,7 @@ class Well:
             dict[str, float]: dictionary of perturbation intensities.
         """
         rd: dict[str, float] = {}
-        for rot in range(len(self.rotors)):
-            rd[f"{self.name}_r{rot}"] = float(self.rotors_pert[rot])
+        for idx, rot in enumerate(self.rotors):
+            rd[f"{self.name}_r{idx}"] = float(rot.pert)
 
         return rd

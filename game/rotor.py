@@ -16,4 +16,9 @@ class Rotor:
         self.group: list[int] = group
         self.axis: list[int] = axis
         self.symmetry: int = symmetry
-        self.scan: NDArray = np.array(scan)
+        self._scan: NDArray = np.array(scan, dtype=np.float32)
+        self.pert = 1.0
+
+    @property
+    def scan(self) -> NDArray[np.float32]:
+        return self._scan * self.pert

@@ -119,4 +119,3 @@ class Element:
 
         self.score = sf.score(sim=self.sim,
                               exp_profiles=settings['exp_profiles'])
-

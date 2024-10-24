@@ -28,7 +28,7 @@ class RateCo:
 
         self.status: str
         self.id: int = id
-        self.SOP: SOP = sop
+        self.sop: SOP = sop
         self.software: str = settings['rc_software'].casefold()
         self.software_tpl: list[str] = software_tpl
         self.name: str = name
@@ -77,7 +77,7 @@ class RateCo:
             NotImplementedError: Writter for this software doesn't exist yet
         """
         if self.software == 'mess':
-            mw = MessWriter(SOP=self.SOP, tpl=self.software_tpl)
+            mw = MessWriter(SOP=self.sop, tpl=self.software_tpl)
             mw.write(filename=f'{self.name}.inp')
         else:
             raise NotImplementedError(
@@ -89,7 +89,7 @@ class RateCo:
         if self.software == 'mess':
             mor = MessOutputReader(filename=self.output_name,
                                    settings=self.set,
-                                   sop=self.SOP)
+                                   sop=self.sop)
             mor.read()
         self.rc: np.ndarray = mor.rc
         self.rc[self.rc < 1.e-14] = 0.0
@@ -101,7 +101,7 @@ class RateCo:
         self.q_sys.pickUp(id=self.id,
                           jtype='kin')
         for k, v in self.tbl_map.items():
-            names[v] = k
+            names[v] = self.sop.items[k].ct_name
 
         row_ids: list[int] = [i for i in RangeIndex(
             start=(self.id *

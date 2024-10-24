@@ -14,6 +14,8 @@ class Bimolecular:
         self.fragments: list[Well] = []
         self.ct_names: dict[str, str] = ct_names
         self.energy: float
+        # Not actualy used in cantera, but for data storage in db
+        self.ct_name: str = name
 
     def set_fragments(self, frags: list[Well]) -> None:
         """Save a pair of fragments.

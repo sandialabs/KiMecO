@@ -247,13 +247,7 @@ class SOP:
         elif 'r' in param_name:
             idx = int(param_name.split('r')[-1])
             # Reset the rotor's scan
-            self.items[item_name].rotors[idx].scan /= \
-                self.items[item_name].rotors_pert[idx]
-            # Change the perturbation's value
-            self.items[item_name].rotors_pert[idx] = value
-            # Reperturb the rotor
-            self.items[item_name].rotors[idx].scan *= \
-                self.items[item_name].rotors_pert[idx]
+            self.items[item_name].rotors[idx].pert = value
         else:
             raise KeyError('Trying to restore unknown parameter.')
 

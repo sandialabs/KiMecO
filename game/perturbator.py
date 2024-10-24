@@ -184,8 +184,7 @@ class Perturbator:
                         random.normal(loc=0,
                                       scale=self.settings['pert_hr'])
 
-            rot.scan *= perturbation
-            well.rotors_pert[num] = perturbation
+            well.rotors[num].pert = perturbation
 
     def perturb_ifreq(self,
                       bar: Barrier) -> None:
