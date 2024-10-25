@@ -178,14 +178,12 @@ class Generation:
                     el.status = 3
                 # Recover simulations data
                 elif el.status == 3:
-                    all_finished = True
                     for sim in range(len(el.sim.simulations)):
-                        el.sim.set_status(sim)
-                        if el.sim.status[sim] == 'finished':
-                            el.sim.recover_results(sim)
-                        else:
-                            all_finished = False
-                    if all_finished:
+                        el.sim.set_status(sim=sim)
+                    if all([True if status == 'finished' else False
+                            for status in el.sim.status ]):
+                        el.recover_sim_profiles(db=self.sim_db,
+                                                table=f'G{self.id}')
                         el.status = 4
                 # Scoring
                 elif el.status == 4:

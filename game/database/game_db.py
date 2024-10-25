@@ -132,16 +132,16 @@ class Game_db:
         return list(db_rslt[0][1:])
 
     def get_sim_data(self,
-                     sim_id: int,
-                     gen: int) -> DataFrame:
+                     table: str,
+                     sim_id: int) -> DataFrame:
 
         with self.eng.begin() as connection:
             df: DataFrame = pd.read_sql(
                 sql="""SELECT *
-                FROM sim
-                WHERE sim_id={} AND gen={}""".format(
-                    sim_id,
-                    gen
+                FROM {}
+                WHERE sim_id={}""".format(
+                    table,
+                    sim_id
                 ),
                 con=connection)
         return df

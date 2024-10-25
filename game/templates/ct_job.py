@@ -65,9 +65,6 @@ for n in range(tot_steps-1):
         if i.name in to_watch:
             traces[i.name][n+1] = gas.X[idx]
 
-row_ids = [i for i in RangeIndex(start={sim_id}*len(df),
-                                 stop={sim_id}*len(df)+len(df),
-                                 step=1)]
 indexes: MultiIndex = MultiIndex.from_product([
     [{sim_id}],
     [gas.P],
@@ -80,6 +77,9 @@ df = DataFrame(traces,
                )
 
 df: DataFrame = df.reset_index()
+row_ids = [i for i in RangeIndex(start={sim_id}*len(df),
+                                 stop={sim_id}*len(df)+len(df),
+                                 step=1)]
 df.index = row_ids
 df.index.name = 'id'
 db.save_data(table='G{gen}',

@@ -112,6 +112,15 @@ class Element:
                          df=df,
                          mode='append')
 
+    def recover_sim_profiles(self,
+                             db: Game_db,
+                             table) -> None:
+        for sim in range(len(self.sim.simulations)):
+            self.sim.profiles.append(
+                db.get_sim_data(table=table,
+                                sim_id=self.id*len(self.sim.simulations)+sim)
+            )
+
     def calc_score(self,
                    settings: dict[str, Any]) -> None:
         """Calculate the score of the element

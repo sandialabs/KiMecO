@@ -408,11 +408,3 @@ class SIM:
         self.status[sim] = self.q_sys.status(
             id=self.id*len(self.simulations)+sim,
             jtype='sim')
-
-    def recover_results(self,
-                        sim: int) -> None:
-        for sim in range(len(self.simulations)):
-            self.profiles.append(
-                self.db.get_sim_data(gen=self.gen_id,
-                                     sim_id=self.id*len(self.simulations)+sim)
-            )
