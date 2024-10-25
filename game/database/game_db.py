@@ -71,7 +71,7 @@ class Game_db:
         Returns:
             bool: is in db or not
         """
-        query: TextClause = text(f"SELECT id FROM {table} WHERE id={id}")
+        query: TextClause = text(f"SELECT id FROM {table} WHERE id={id+1}")
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         if len(db_rslt) == 0:
@@ -109,7 +109,8 @@ class Game_db:
             df.to_sql(name=table,
                       con=connection,
                       if_exists=mode,
-                      index=False
+                      index=False,
+                      method="multi"
                       )
 
     def get_sop_row(self,
@@ -125,7 +126,7 @@ class Game_db:
         Returns:
             list[Any]: List of values in the row
         """
-        query: TextClause = text(f"SELECT * FROM {table} WHERE id={id}")
+        query: TextClause = text(f"SELECT * FROM {table} WHERE id={id+1}")
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt[0][1:])

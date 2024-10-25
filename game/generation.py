@@ -94,9 +94,11 @@ class Generation:
             )
         # KIN
         kin_col: list[str] = ['P', 'T', 'kin_id', 'specie']
-        kin_col.extend(self.species)
-        kin_types = [int, float, float, str, str]
-        kin_types.extend([float for i in range(len(self.species))])
+        kin_col.extend(self.sop.wells_names)
+        kin_col.extend(self.sop.bimols_names)
+        kin_types: list = [float, float, str, str]
+        kin_types.extend([float for i in range(len(self.sop.wells_names) +
+                                               len(self.sop.bimols_names))])
         self.kin_db.create_table(
             name=f'G{self.id}',
             columns=kin_col,

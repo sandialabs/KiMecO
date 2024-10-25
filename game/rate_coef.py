@@ -1,6 +1,6 @@
 from typing import Any
 
-from pandas import MultiIndex, DataFrame, RangeIndex
+from pandas import Index, MultiIndex, DataFrame, RangeIndex
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.q_sys import QueueingSystem
@@ -93,7 +93,7 @@ class RateCo:
             mor.read()
         self.rc: np.ndarray = mor.rc
         self.rc[self.rc < 1.e-14] = 0.0
-        self.hp_rc: np.ndarray = mor.hp_rc  # Not used for now
+        # self.hp_rc: np.ndarray = mor.hp_rc  # Not used for now
         self.tbl_map: dict[str, int] = mor.tbl_map
         names: NDArray[Any] = np.full(shape=(len(self.tbl_map)),
                                       fill_value='',
@@ -101,7 +101,7 @@ class RateCo:
         self.q_sys.pickUp(id=self.id,
                           jtype='kin')
         for k, v in self.tbl_map.items():
-            names[v] = self.sop.items[k].ct_name
+            names[v] = k
 
         row_ids: list[int] = [i for i in RangeIndex(
             start=(self.id *
@@ -134,8 +134,8 @@ class RateCo:
         df = DataFrame(data=db_data,
                        index=indexes,
                        columns=names)
-        df: DataFrame = df.reset_index()
-        df.index = row_ids
+        df.reset_index(inplace=True)
+        df.index = Index(row_ids)
         df.index.name = 'id'
         
         return df

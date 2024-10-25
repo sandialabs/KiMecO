@@ -1,13 +1,13 @@
 
 class MessWriter:
     """Object that writes a set of parameters into
-    a Mess file.
+    a Mess file input.
     """
-    def __init__(self, SOP, tpl):
+    def __init__(self, SOP, tpl) -> None:
         self.SOP = SOP
         self.tpl = tpl
 
-    def write(self, filename):
+    def write(self, filename) -> None:
         lines = []
         for line in self.tpl:
             if '{' in line:

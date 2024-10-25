@@ -77,7 +77,7 @@ class Element:
 
                 row: list[float] = db.get_sop_row(table=table,
                                                   id=self.id)
-                pos = 1
+                pos = 0
                 for key, val in self.sop.parameters_names.items():
                     if val != row[pos]:
                         self.sop.update(key=key,
@@ -99,9 +99,18 @@ class Element:
             table (str): Table name (GX)
         """
         df: DataFrame = self.rateCoef.recover_rslts()
-        db.save_data(table=table,
-                     df=df,
-                     mode='append')
+        if db.entry_exist(table=table,
+                          id=df.index[0]):
+            # Make sure the data in db are always consistent witgh the run
+            for id in df.index:
+                db_table: dict[str, Any] = df.loc[id].to_dict()
+                db.update_entry(table=table,
+                                id=id,
+                                values=db_table)
+        else:
+            db.save_data(table=table,
+                         df=df,
+                         mode='append')
 
     def calc_score(self,
                    settings: dict[str, Any]) -> None:
