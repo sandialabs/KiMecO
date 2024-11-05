@@ -145,7 +145,7 @@ class Generation:
         while not all(finished):
             for el in self.elements:
                 # Calculate rate coefficients
-                if el.status == 0:
+                if el.status == 'sop':
                     el.rateCoef = RateCo(sop=el.sop,
                                          settings=self.settings,
                                          software_tpl=self.rc_tpl,
@@ -155,16 +155,16 @@ class Generation:
                                          q_sys=self.qs,
                                          db=self.kin_db)
                     el.rateCoef.q_up()
-                    el.status = 1
+                    el.status = 'kin'
                 # Recover rate coefficients
-                elif el.status == 1:
+                elif el.status == 'kin':
                     el.rateCoef.set_status()
                     if el.rateCoef.status == 'finished':
                         el.save_kin(db=self.kin_db,
                                     table=f'G{self.id}')
-                        el.status = 2
+                        el.status = 'kin2sim'
                 # Calculate SIMs
-                elif el.status == 2:
+                elif el.status == 'kin2sim':
                     el.sim = SIM(sop=el.sop,
                                  kin=el.rateCoef,
                                  id=el.id,
@@ -175,17 +175,18 @@ class Generation:
                                  q_sys=self.qs,
                                  set=self.settings)
                     el.sim.q_up()
-                    el.status = 3
+                    el.status = 'sim'
                 # Recover simulations data
-                elif el.status == 3:
+                elif el.status == 'sim':
                     for sim in range(len(el.sim.simulations)):
                         el.sim.set_status(sim=sim)
                     if all([True if status == 'finished' else False
                             for status in el.sim.status ]):
                         el.recover_sim_profiles(db=self.sim_db,
                                                 table=f'G{self.id}')
-                        el.status = 4
+                        el.status = 'scoring'
                 # Scoring
-                elif el.status == 4:
+                elif el.status == 'scoring':
                     el.calc_score(settings=self.settings)
+                    el.status == 'DONE'
             self.qs.run()

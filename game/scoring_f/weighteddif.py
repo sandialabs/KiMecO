@@ -8,6 +8,16 @@ class WeightedDif(Scoring):
     def score(self,
               sim: SIM,
               exp_profiles: dict[str, list[float]]) -> float:
+        """Calculate the score of a sim as the cumulated difference.
+        Weights can be given to 
+
+        Args:
+            sim (SIM): _description_
+            exp_profiles (dict[str, list[float]]): _description_
+
+        Returns:
+            float: _description_
+        """
         n_exp: int = len(self.settings['rc_temp']) *\
                      len(self.settings['rc_pres'])
         w_exp: list[float] = self.settings['w_exp']

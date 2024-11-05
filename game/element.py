@@ -32,7 +32,7 @@ class Element:
             id (int): ID of the element.
         """
         self.sop: SOP = sop
-        self.status: int = 0
+        self.status: str = 'init'
         self.id: int = Element.__id
         Element.__id += 1
         self.rateCoef: RateCo
