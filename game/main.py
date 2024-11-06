@@ -1,5 +1,9 @@
 import sys
 import os
+from telnetlib import EL
+from game.GeneticAlgo.ga import GeneticAlgorythm
+from game.GeneticAlgo.tournament import Tournament
+from game.element import Element
 from game.generation import Generation
 from game.perturbator import Perturbator
 from game.readers.mess_input import MessInputReader
@@ -22,8 +26,7 @@ def main() -> None:
     input_tpl: list[str]
     (init_SOP, input_tpl) = mr.read()
 
-    pert = Perturbator(ptype='nominal',
-                       settings=settings)
+    pert = Perturbator(settings=settings)
 
 
     if not os.path.isdir(settings['project_name']):
@@ -31,18 +34,37 @@ def main() -> None:
     os.chdir(settings['project_name'])
     location: str = os.getcwd()
 
-    sop_db = Game_db(name=f'GAME_DB_SOP')
-    kin_db = Game_db(name=f'GAME_DB_KIN')
-    sim_db = Game_db(name=f'GAME_DB_SIM')
+    sop_db = Game_db(name='GAME_DB_SOP')
+    kin_db = Game_db(name='GAME_DB_KIN')
+    sim_db = Game_db(name='GAME_DB_SIM')
 
-    first_gen = Generation(sop=init_SOP,
-                           n=1,
-                           pert=pert,
+    first_gen = Generation(elements=[Element(sop=init_SOP, id=0)],
                            set=settings,
                            rc_tpl=input_tpl,
                            loc=location,
                            sop_db=sop_db,
                            kin_db=kin_db,
-                           sim_db=sim_db,)
+                           sim_db=sim_db)
 
     first_gen.run()
+
+    converged = False
+
+    new_elements: list[Element] = [
+        Element(sop=pert.perturb(sop=init_SOP), id=id)
+        for id in range(settings['n_elem'])]
+
+    ga = Tournament(settings=settings)
+
+    while not converged:
+        new_gen = Generation(elements=new_elements,
+                             set=settings,
+                             rc_tpl=input_tpl,
+                             loc=location,
+                             sop_db=sop_db,
+                             kin_db=kin_db,
+                             sim_db=sim_db)
+        new_gen.run()
+        if not ga.converged(gen=new_gen):
+            new_elements = ga.next_gen(gen=new_gen)
+    print(f'Run Sucessful. Termination at generation {new_gen.id}')

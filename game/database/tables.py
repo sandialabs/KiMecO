@@ -6,6 +6,8 @@ from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 
+# This file is not used but is an attempt
+# at OMR declarative style for database tables.
 
 class Base(DeclarativeBase):
     pass

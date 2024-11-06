@@ -1,5 +1,3 @@
-from copy import deepcopy
-from matplotlib.backend_tools import default_toolbar_tools
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.rate_coef import RateCo
@@ -10,10 +8,10 @@ from pandas import DataFrame
 
 
 class Element:
-    __id = 0
 
     def __init__(self,
-                 sop: SOP) -> None:
+                 sop: SOP,
+                 id: int) -> None:
         """An element is part of a generation and has
         different attributes, such as an id and a status.
         It is mainly a container object.
@@ -33,8 +31,7 @@ class Element:
         """
         self.sop: SOP = sop
         self.status: str = 'init'
-        self.id: int = Element.__id
-        Element.__id += 1
+        self.id: int = id
         self.rateCoef: RateCo
         self.sim: SIM
         self.score: float

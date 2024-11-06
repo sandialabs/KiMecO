@@ -9,10 +9,15 @@ from numpy import random
 
 class Perturbator:
     def __init__(self,
-                 ptype: str,
-                 settings: dict[str, Any]
+                 settings: dict[str, Any],
+                 ptype: str = 'normal'
                  ) -> None:
+        """_summary_
 
+        Args:
+            ptype (str): _description_
+            settings (dict[str, Any]): _description_
+        """
         self.settings: dict[str, Any] = settings
         # Distribution for energy transfert parameters
         self.et: str
@@ -46,7 +51,7 @@ class Perturbator:
             self.pif = 'init'
             self.phr = 'init'
             self.pbl = 'init'
-        else:
+        elif ptype == 'normal':
             self.et = 'normal'
             self.lj = 'normal'
             self.pe = 'normal'

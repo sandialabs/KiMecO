@@ -84,5 +84,9 @@ default_settings: dict[str, Any] = {
     # It is normalized so that the sum of the weights = number of species
     "w_species": {},
     # Restart modes, and treatment of existing tables/db
-    "restart": 'default'
+    "restart": 'default',
+    # Number of elements per generation
+    "n_elem": 500,
+    # Value of score under which a generation has converged
+    "score_conv": 0.01
 }

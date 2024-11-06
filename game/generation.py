@@ -1,13 +1,8 @@
 import os
-import sys
-from tkinter.font import names
 from typing import Any
-
-from more_itertools import value_chain
 
 from game.element import Element
 from game.parameters import SOP
-from game.perturbator import Perturbator
 from game.database.game_db import Game_db
 from game.well import Well
 from game.barrier import Barrier
@@ -24,9 +19,7 @@ class Generation:
     __id = 0
 
     def __init__(self,
-                 sop: SOP,
-                 n: int,
-                 pert: Perturbator,
+                 elements: list[Element],
                  set: dict[str, Any],
                  rc_tpl: list[str],
                  loc: str,
@@ -48,19 +41,19 @@ class Generation:
             rc_tpl: Template for rate constant calculation.
             loc: Location. Absolute path of where the gen folder should be.
         """
-        self.sop: SOP = sop
+        self.elements: list[Element] = elements
         self.id: int = Generation.__id
         Generation.__id += 1
         Element.__id = 0
         self.species: list[str] = [
-            self.sop.items[specie].ct_name
-            for specie, obj in self.sop.items.items()
+            self.elements[0].sop.items[specie].ct_name
+            for specie, obj in self.elements[0].sop.items.items()
             if isinstance(obj, Well) and not isinstance(obj, Barrier)]
-        self.pert: Perturbator = pert
         self.elements: list[Element] = []
         self.settings: dict[str, Any] = set
         self.rc_tpl: list[str] = rc_tpl
         self.loc: str = loc
+        self.best_score: float = np.inf
         if not os.path.isdir(f'{self.loc}/G{self.id}'):
             os.mkdir(f'{self.loc}/G{self.id}')
         os.chdir(f'{self.loc}/G{self.id}')
@@ -68,7 +61,7 @@ class Generation:
         self.kin_db: Game_db = kin_db
         self.sim_db: Game_db = sim_db
         self.create_tables()
-        self.generate(n=n)
+        self.save_sops()
         self.qs = QueueingSystem(max_jobs=self.settings['max_jobs'],
                                  max_cpu=self.settings['max_cpu'],
                                  max_mem=self.settings['max_mem'],
@@ -89,16 +82,19 @@ class Generation:
         # SOP
         self.sop_db.create_table(
             name=f'G{self.id}',
-            columns=[key for key in self.sop.parameters_names.keys()],
-            types=[type(val) for val in self.sop.parameters_names.values()]
+            columns=[key for key in 
+                     self.elements[0].sop.parameters_names.keys()],
+            types=[type(val) for val in 
+                   self.elements[0].sop.parameters_names.values()]
             )
         # KIN
         kin_col: list[str] = ['P', 'T', 'kin_id', 'specie']
-        kin_col.extend(self.sop.wells_names)
-        kin_col.extend(self.sop.bimols_names)
+        kin_col.extend(self.elements[0].sop.wells_names)
+        kin_col.extend(self.elements[0].sop.bimols_names)
         kin_types: list = [float, float, str, str]
-        kin_types.extend([float for i in range(len(self.sop.wells_names) +
-                                               len(self.sop.bimols_names))])
+        kin_types.extend([float for i in range(
+            len(self.elements[0].sop.wells_names) +
+            len(self.elements[0].sop.bimols_names))])
         self.kin_db.create_table(
             name=f'G{self.id}',
             columns=kin_col,
@@ -115,22 +111,14 @@ class Generation:
             types=sim_types
             )
 
-    def generate(self,
-                 n: int) -> None:
-        """Generate all the perturbed set of parameters
-        and store then in the self elements array.
-
-        Args:
-            n (int): _description_
+    def save_sops(self) -> None:
+        """Save all the SOPs of all elements in the db.
         """
-        # Reset the element id for each generation
-        Element.__id = 0
-        while len(self.elements) < n:
+        for el in self.elements:
             # Creates an Element from a perturbed SOP and save it in the db
-            self.elements.append(Element(sop=self.pert.perturb(sop=self.sop)))
-            self.elements[-1].save_sop(db=self.sop_db,
-                                       table=f'G{0}',
-                                       mode=self.settings['restart'])
+            el.save_sop(db=self.sop_db,
+                        table=f'G{self.id}',
+                        mode=self.settings['restart'])
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
@@ -143,7 +131,10 @@ class Generation:
         finished: npt.NDArray[bool_] = np.full(shape=(len(self.elements), 1),
                                                fill_value=False)
         while not all(finished):
-            for el in self.elements:
+            for idx, el in enumerate(self.elements):
+                # Skip finished elements
+                if finished[idx]:
+                    continue
                 # Calculate rate coefficients
                 if el.status == 'sop':
                     el.rateCoef = RateCo(sop=el.sop,
@@ -181,7 +172,7 @@ class Generation:
                     for sim in range(len(el.sim.simulations)):
                         el.sim.set_status(sim=sim)
                     if all([True if status == 'finished' else False
-                            for status in el.sim.status ]):
+                            for status in el.sim.status]):
                         el.recover_sim_profiles(db=self.sim_db,
                                                 table=f'G{self.id}')
                         el.status = 'scoring'
@@ -189,4 +180,8 @@ class Generation:
                 elif el.status == 'scoring':
                     el.calc_score(settings=self.settings)
                     el.status == 'DONE'
+                elif el.status == 'DONE':
+                    finished[idx] = True
+                    if el.score < self.best_score:
+                        self.best_score: float = el.score
             self.qs.run()
