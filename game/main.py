@@ -56,7 +56,7 @@ def main() -> None:
 
     ga = Tournament(settings=settings)
 
-    while not converged:
+    while not converged or Generation.__id < settings['max_gen']:
         new_gen = Generation(elements=new_elements,
                              set=settings,
                              rc_tpl=input_tpl,

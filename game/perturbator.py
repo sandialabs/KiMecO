@@ -76,19 +76,32 @@ class Perturbator:
         if self.et == 'init':
             pass
         else:
-            p_sop.factor *= 1 + random.normal(loc=0,
+            try_fact = -1
+            # Truncate distribution at 0 to have positive factor
+            while try_fact < 0:
+                try_fact: float = p_sop.factor
+                try_fact *= 1 + random.normal(loc=0,
                                               scale=self.settings['pert_etf'])
-            p_sop.power *= 1 + random.normal(loc=0,
+            p_sop.factor = try_fact
+            try_pow = -1
+            # Truncate distribution at 0 to have positive factor
+            while try_pow < 0:
+                try_pow: float = p_sop.power
+                try_pow *= 1 + random.normal(loc=0,
                                              scale=self.settings['pert_ete'])
+            p_sop.power = try_pow
+
         if self.lj == 'init':
             pass
         else:
-            p_sop.sigmas *= 1 + random.normal(
+            p_sop.sigmas = [p_sop.sigmas[i] * (1 + random.normal(
                 loc=0,
-                scale=self.settings['pert_sigma'])
-            p_sop.epsilons *= 1 + random.normal(
+                scale=self.settings['pert_sigma']))
+                for i in range(len(p_sop.sigmas))]
+            p_sop.epsilons = [p_sop.epsilons[i] * (1 + random.normal(
                 loc=0,
-                scale=self.settings['pert_epsi'])
+                scale=self.settings['pert_epsi']))
+                for i in range(len(p_sop.epsilons))]
 
         if self.ptype != 'nominal':
             for well in p_sop.wells:

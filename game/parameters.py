@@ -237,13 +237,13 @@ class SOP:
         # Energies
         if param_name == 'e':
             self.items[item_name].energy = value
+        # Imaginary frequencies
+        elif 'if' in param_name:
+            self.items[item_name].ifreq = value
         # Frequencies
         elif 'f' in param_name:
             idx = int(param_name.split('f')[-1])
             self.items[item_name].frequencies[idx] = value
-        # Imaginary frequencies
-        elif 'if' in param_name:
-            self.items[item_name].ifreq = value
         elif 'r' in param_name:
             idx = int(param_name.split('r')[-1])
             # Reset the rotor's scan

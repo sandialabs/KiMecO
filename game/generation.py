@@ -44,12 +44,10 @@ class Generation:
         self.elements: list[Element] = elements
         self.id: int = Generation.__id
         Generation.__id += 1
-        Element.__id = 0
         self.species: list[str] = [
             self.elements[0].sop.items[specie].ct_name
             for specie, obj in self.elements[0].sop.items.items()
             if isinstance(obj, Well) and not isinstance(obj, Barrier)]
-        self.elements: list[Element] = []
         self.settings: dict[str, Any] = set
         self.rc_tpl: list[str] = rc_tpl
         self.loc: str = loc
@@ -179,7 +177,7 @@ class Generation:
                 # Scoring
                 elif el.status == 'scoring':
                     el.calc_score(settings=self.settings)
-                    el.status == 'DONE'
+                    el.status = 'DONE'
                 elif el.status == 'DONE':
                     finished[idx] = True
                     if el.score < self.best_score:

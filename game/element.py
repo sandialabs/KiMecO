@@ -30,7 +30,7 @@ class Element:
             id (int): ID of the element.
         """
         self.sop: SOP = sop
-        self.status: str = 'init'
+        self.status: str = 'sop'
         self.id: int = id
         self.rateCoef: RateCo
         self.sim: SIM

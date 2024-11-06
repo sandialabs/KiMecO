@@ -88,5 +88,7 @@ default_settings: dict[str, Any] = {
     # Number of elements per generation
     "n_elem": 500,
     # Value of score under which a generation has converged
-    "score_conv": 0.01
+    "score_conv": 0.01,
+    # Maximum number of generations
+    "max_gen": 10
 }
