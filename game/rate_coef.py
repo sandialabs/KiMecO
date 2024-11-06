@@ -102,6 +102,12 @@ class RateCo:
                           jtype='kin')
         for k, v in self.tbl_map.items():
             names[v] = k
+        
+        # Happens with convergence issues in Mess calculation
+        if self.tbl_map == {}:
+            data = []
+            df = DataFrame(data)
+            return df
 
         row_ids: list[int] = [i for i in RangeIndex(
             start=(self.id *
@@ -116,7 +122,7 @@ class RateCo:
                   len(self.set['rc_temp']) *
                   len(names)),
             step=1)]
-        
+
         indexes: MultiIndex = MultiIndex.from_product([
             self.set['rc_pres'],
             self.set['rc_temp'],

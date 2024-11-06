@@ -1,6 +1,6 @@
-from typing import Any
 import numpy as np
 from game.parameters import SOP
+import re
 
 
 class MessOutputReader:
@@ -97,7 +97,17 @@ class MessOutputReader:
                 if "*" in value:
                     continue
                 else:
-                    table[From, To] = float(value)
+                    try:
+                        table[From, To] = float(value)
+                    except ValueError:
+                        # Happens when no space between two columns
+                        # no space when the right value is very small
+                        # and start with a minus sign
+                        table[From, To] = float(
+                            re.sub(r'-\d+.\d+e-\d\d\d',
+                                   ' 0.0 ',
+                                   value).strip().split()[0])
+                        table[From, To+1] = 0.0
 
         # Save the table
         if p_idx == len(self.pres):

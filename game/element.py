@@ -96,6 +96,10 @@ class Element:
             table (str): Table name (GX)
         """
         df: DataFrame = self.rateCoef.recover_rslts()
+        # Happens if the ME calculation didn't converge
+        if len(df) == 0:
+            self.status = 'reset'
+            return
         if db.entry_exist(table=table,
                           id=df.index[0]):
             # Make sure the data in db are always consistent witgh the run
@@ -108,6 +112,7 @@ class Element:
             db.save_data(table=table,
                          df=df,
                          mode='append')
+        self.status = 'kin2sim'
 
     def recover_sim_profiles(self,
                              db: Game_db,

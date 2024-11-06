@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from typing import Any
 from game.element import Element
 from game.generation import Generation
-from game.parameters import SOP
 from game.perturbator import Perturbator
 
 
@@ -41,7 +40,7 @@ class GeneticAlgorythm(ABC):
     @abstractmethod
     def next_gen(self,
                  gen: Generation
-                 ) -> list[Element]:
+                 ) -> tuple[dict[int, Element], list[Element]]:
         """Return the list of elements of the next generation.
         Important: reset the Element.__id before creating
         the elements.
@@ -52,4 +51,4 @@ class GeneticAlgorythm(ABC):
         Returns:
             list[Element]: Elements for the next generation
         """
-        return self.__next_gen
+        pass

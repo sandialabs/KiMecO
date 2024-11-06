@@ -2,7 +2,6 @@ import os
 from typing import Any
 
 from game.element import Element
-from game.parameters import SOP
 from game.database.game_db import Game_db
 from game.well import Well
 from game.barrier import Barrier
@@ -13,6 +12,7 @@ from numpy import bool_
 from game.q_sys import QueueingSystem
 from game.rate_coef import RateCo
 from game.simulation import SIM
+from game.perturbator import Perturbator
 
 
 class Generation:
@@ -25,7 +25,8 @@ class Generation:
                  loc: str,
                  sop_db: Game_db,
                  kin_db: Game_db,
-                 sim_db: Game_db
+                 sim_db: Game_db,
+                 previous_el: dict[int, Element]= {}
                  ) -> None:
         """Generation object manages the worflow of
         a given set of elements, going from creating them
@@ -42,8 +43,10 @@ class Generation:
             loc: Location. Absolute path of where the gen folder should be.
         """
         self.elements: list[Element] = elements
+        self.previous_el: dict[int, Element] = previous_el
         self.id: int = Generation.__id
         Generation.__id += 1
+        self.pert = Perturbator(settings=set)
         self.species: list[str] = [
             self.elements[0].sop.items[specie].ct_name
             for specie, obj in self.elements[0].sop.items.items()
@@ -133,6 +136,11 @@ class Generation:
                 # Skip finished elements
                 if finished[idx]:
                     continue
+                # Reset failed caluclations
+                if el.status == 'reset':
+                    self.elements[el.id] = Element(
+                        sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
+                        id=el.id)
                 # Calculate rate coefficients
                 if el.status == 'sop':
                     el.rateCoef = RateCo(sop=el.sop,
@@ -149,9 +157,9 @@ class Generation:
                 elif el.status == 'kin':
                     el.rateCoef.set_status()
                     if el.rateCoef.status == 'finished':
+                        # Next status is set in this function as it can fail.
                         el.save_kin(db=self.kin_db,
                                     table=f'G{self.id}')
-                        el.status = 'kin2sim'
                 # Calculate SIMs
                 elif el.status == 'kin2sim':
                     el.sim = SIM(sop=el.sop,
