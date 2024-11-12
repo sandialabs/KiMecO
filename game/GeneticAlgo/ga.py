@@ -35,7 +35,7 @@ class GeneticAlgorythm(ABC):
         Returns:
             bool: whether is converged
         """
-        return False
+        pass
 
     @abstractmethod
     def next_gen(self,

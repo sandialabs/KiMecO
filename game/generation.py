@@ -26,7 +26,7 @@ class Generation:
                  sop_db: Game_db,
                  kin_db: Game_db,
                  sim_db: Game_db,
-                 previous_el: dict[int, Element]= {}
+                 previous_el: dict[int, Element] = {}
                  ) -> None:
         """Generation object manages the worflow of
         a given set of elements, going from creating them
@@ -120,6 +120,7 @@ class Generation:
             el.save_sop(db=self.sop_db,
                         table=f'G{self.id}',
                         mode=self.settings['restart'])
+        #self.sop_db.batch_save()
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
@@ -155,7 +156,7 @@ class Generation:
                     el.status = 'kin'
                 # Recover rate coefficients
                 elif el.status == 'kin':
-                    el.rateCoef.set_status()
+                    el.check_rc_status()
                     if el.rateCoef.status == 'finished':
                         # Next status is set in this function as it can fail.
                         el.save_kin(db=self.kin_db,

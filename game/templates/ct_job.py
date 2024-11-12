@@ -2,7 +2,6 @@ ctjobtpl = """import cantera as ct
 from game.cantera.customrate import MessData, MessRate
 from game.database.game_db import Game_db
 import numpy as np
-import sqlalchemy
 from numpy import float32
 from pandas import MultiIndex, DataFrame, RangeIndex
 import pickle
@@ -66,9 +65,9 @@ for n in range(tot_steps-1):
             traces[i.name][n+1] = gas.X[idx]
 
 indexes: MultiIndex = MultiIndex.from_product([
-    [{sim_id}],
     [gas.P],
     [gas.T],
+    [{sim_id}],
     traces['time']],
     names=['P', 'T', 'sim_id', 'time'])
 del traces['time']
@@ -76,7 +75,7 @@ df = DataFrame(traces,
                index=indexes,
                )
 
-df: DataFrame = df.reset_index()
+df.reset_index(inplace=True)
 row_ids = [i for i in RangeIndex(start={sim_id}*len(df),
                                  stop={sim_id}*len(df)+len(df),
                                  step=1)]

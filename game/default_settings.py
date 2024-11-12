@@ -37,15 +37,15 @@ default_settings: dict[str, Any] = {
     # CPU used per master equation job
     "cpu_kin": 4,
     # Memory (Mb) used per master equation job
-    "mem_kin": 10000,
+    "mem_kin": 1500,
     # CPU used per simulation job
     "cpu_sim": 1,
     # Memory (Mb) used per simulation job
-    "mem_sim": 500,
+    "mem_sim": 100,
     # Maximum number of memory (Mb) used per generation
     "max_mem": 1000000,
     # Maximum number of cpu used per generation
-    "max_cpu": 1000,
+    "max_cpu": 2000,
     # Maximum number of jobs submitted per generation
     "max_jobs": 2000,
     # Username for the server hosting the db

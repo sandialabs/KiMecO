@@ -29,7 +29,9 @@ class WeightedDif(Scoring):
                 w_exp_i: float = w_exp[sim_index]
                 for specie in sim.species:
                     w_specie: float = self.settings['w_species'][specie]
-                    for timestep in range(len(sim.profiles[sim_index]['time'])):
+                    for timestep in range(
+                        len(sim.profiles[sim_index]['time'])):
+
                         score += (w_exp_i * w_specie *
                                   sim.profiles[sim_index][specie][timestep] -
                                   exp_profiles[sim_index][specie][timestep])

@@ -1,7 +1,8 @@
 import os
 from typing import Literal, Sequence
-from sqlalchemy import create_engine, Engine, Table, Column, Integer, String
+from sqlalchemy import Insert, create_engine, Engine, Table, Column, Integer, String
 from sqlalchemy import MetaData, Float, text, TextClause, update, Update
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
 from pandas import DataFrame
@@ -91,6 +92,33 @@ class Game_db:
         with self.eng.begin() as connection:
             connection.execute(query)
 
+    def upsert_entries(self,
+                       table: str,
+                       ids: list[int],
+                       values: dict[str, list[Any]]) -> None:
+        """Multiple upsert statement at once.
+        Used to store the concentration profiles.
+
+        Args:
+            table (str): Table name
+            ids (list[int]): list of row ids to update
+            values (dict[str, list[Any]]):
+                keys are column names.
+                values are list of values to update,
+                    given in same order as ids
+        """
+        values['id'] = ids
+        query: Insert = (
+            insert(table=self.tables[table]).
+            values(**values).
+            on_conflict_do_update(
+                index_elements=[key for key in values.keys()],
+                index_where=self.tables[table].c.id.in_(ids)
+            )
+            )
+        with self.eng.begin() as connection:
+            connection.execute(query)
+
     def save_data(self,
                   table: str,
                   df: pd.DataFrame,
@@ -114,8 +142,8 @@ class Game_db:
                       )
 
     def get_sop_row(self,
-                    table,
-                    id) -> list[Any]:
+                    table: str,
+                    id: int) -> list[Any]:
         """Return the values in the row uniquely identified by id
         in the table.
 
@@ -130,6 +158,23 @@ class Game_db:
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt[0][1:])
+
+    def get_sops_table(self,
+                       table: str) -> list[Any]:
+        """Return the values in the row uniquely identified by id
+        in the table.
+
+        Args:
+            table (_type_): table name in db
+            id (_type_): row id
+
+        Returns:
+            list[Any]: List of values in the row
+        """
+        query: TextClause = text(f"SELECT * FROM {table}")
+        with self.eng.begin() as connection:
+            db_rslt: Sequence = connection.execute(query).fetchall()
+        return db_rslt
 
     def get_sim_data(self,
                      table: str,

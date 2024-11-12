@@ -59,7 +59,8 @@ class RateCo:
         """
         self.set_status()
         if not os.path.isfile(self.output_name) and\
-           self.status == 'notInQueue':
+           self.status == 'notInQueue' or\
+           self.status == 'reset':
             cpu: int = self.set['cpu_kin']
             mem: int = self.set['mem_kin']
             self.create_input()

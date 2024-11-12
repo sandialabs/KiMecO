@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 from numpy import int16, int32, unicode_
 from typing import Any
 import getpass
+import os
 
 
 class QueueingSystem:
@@ -153,10 +154,32 @@ class QueueingSystem:
             job = self.kin_q[id]
         elif jtype == 'sim':
             job = self.sim_q[id]
-        job['status'] = 'pickedUp'
+        # If the error file is not empty, a problem occured.
+        # Could be convergence of ME -> Reset the job
+        if os.path.exists(
+           path=f"{job['loc']}/{job['name']}.err"
+           ) and os.stat(
+           path=f"{job['loc']}/{job['name']}.err"
+           ).st_size == 0:
+            job['status'] = 'pickedUp'
+        else:
+            job['status'] = 'reset'
+        self.clean_files(job)
         self.av_cpu += int(job['cpu'])
         self.av_mem += int(job['mem'])
         self.av_jobs += 1
+
+    def clean_files(self,
+                    job: NDArray[Any]) -> None:
+        """Erase all files except the output
+        if the job finished without error.
+
+        Args:
+            job (NDArray[Any]): Array of the job with custom datatype.
+        """
+        for ext in ['log', 'err', 'inp', 'stdout', 'aux', 'slurm', 'pkl']:
+            if os.path.exists(f"{job['loc']}/{job['name']}.{ext}"):
+                os.remove(f"{job['loc']}/{job['name']}.{ext}")
 
     def submit(self,
                job) -> None:

@@ -1,7 +1,6 @@
 from game.GeneticAlgo.ga import GeneticAlgorythm
 from game.element import Element
 from game.generation import Generation
-from game.parameters import SOP
 import random
 
 
@@ -16,7 +15,7 @@ class Tournament(GeneticAlgorythm):
 
     def next_gen(self,
                  gen: Generation
-                 ) -> tuple[dict[int,Element],list[Element]]:
+                 ) -> tuple[dict[int, Element], list[Element]]:
         """Pair all elements, keep the one with the best score,
         and create a new element from the loser.
 
@@ -27,22 +26,20 @@ class Tournament(GeneticAlgorythm):
             list[Element]: list of elements of the new generation.
         """
         next_gen: list[Element] = []
-        prev_gen: dict[int,Element] = {}
+        prev_gen: dict[int, Element] = {}
         random.shuffle(gen.elements)
         for idx, el1 in enumerate(gen.elements[1::2]):
             el2: Element = gen.elements[idx*2]
             if el1.score < el2.score:
                 winner: Element = el1
-                loser: Element = el2
             else:
                 winner: Element = el2
-                loser: Element = el1
             # The winner has nothing to calculate
             # But its id must be changed so that each id is unique
             next_gen.append(winner)
             winner.id = idx*2
-            prev_gen[idx*2+1] = loser
+            prev_gen[idx*2+1] = winner
             next_gen.append(
-                Element(sop=self.pert.perturb(sop=loser.sop),
+                Element(sop=self.pert.perturb(sop=winner.sop),
                         id=idx*2+1))
         return prev_gen, next_gen

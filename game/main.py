@@ -54,8 +54,8 @@ def main() -> None:
         Element(sop=pert.perturb(sop=init_SOP), id=id)
         for id in range(settings['n_elem'])]
 
-    ga = Tournament(settings=settings)\
-    
+    ga = Tournament(settings=settings)
+
     # Passed to new generations in the loop
     # in case an element fails and needs to be reset.
     prev_gen: dict[int, Element] = {}
@@ -74,4 +74,6 @@ def main() -> None:
         new_gen.run()
         if not ga.converged(gen=new_gen):
             prev_gen, new_elements = ga.next_gen(gen=new_gen)
+        else:
+            converged = True
     print(f'Run Sucessful. Termination at generation {new_gen.id}')

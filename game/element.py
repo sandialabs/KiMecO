@@ -113,6 +113,11 @@ class Element:
                          df=df,
                          mode='append')
         self.status = 'kin2sim'
+    
+    def check_rc_status(self) -> None:
+        self.rateCoef.set_status()
+        if self.rateCoef.status == 'reset':
+            self.status = 'reset'
 
     def recover_sim_profiles(self,
                              db: Game_db,
