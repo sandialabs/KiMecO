@@ -5,7 +5,7 @@ from game.generation import Generation
 from game.perturbator import Perturbator
 
 
-class GeneticAlgorythm(ABC):
+class GeneticAlgorithm(ABC):
     """This class cannot be instanciated directly,
     unless all abstract methods are overwritten.
     It is the receipe for a GA object that

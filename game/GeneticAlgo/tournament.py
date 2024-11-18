@@ -1,10 +1,10 @@
-from game.GeneticAlgo.ga import GeneticAlgorythm
+from game.GeneticAlgo.ga import GeneticAlgorithm
 from game.element import Element
 from game.generation import Generation
 import random
 
 
-class Tournament(GeneticAlgorythm):
+class Tournament(GeneticAlgorithm):
     def converged(self,
                   gen: Generation
                   ) -> bool:

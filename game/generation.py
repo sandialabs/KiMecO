@@ -83,9 +83,9 @@ class Generation:
         # SOP
         self.sop_db.create_table(
             name=f'G{self.id}',
-            columns=[key for key in 
+            columns=[key for key in
                      self.elements[0].sop.parameters_names.keys()],
-            types=[type(val) for val in 
+            types=[type(val) for val in
                    self.elements[0].sop.parameters_names.values()]
             )
         # KIN
@@ -120,7 +120,7 @@ class Generation:
             el.save_sop(db=self.sop_db,
                         table=f'G{self.id}',
                         mode=self.settings['restart'])
-        #self.sop_db.batch_save()
+        # self.sop_db.batch_save()
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
