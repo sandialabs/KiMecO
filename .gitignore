@@ -4,3 +4,4 @@ Untitled.ipynb
 sqlalchemy.ipynb
 Quick tests.ipynb
 *.ipynb
+*.pyc
