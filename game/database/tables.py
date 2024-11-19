@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import List
 from sqlalchemy import String, Integer, Float
 from sqlalchemy.types import PickleType
 from sqlalchemy.orm import DeclarativeBase
@@ -8,6 +8,7 @@ from sqlalchemy.orm import relationship
 
 # This file is not used but is an attempt
 # at OMR declarative style for database tables.
+
 
 class Base(DeclarativeBase):
     pass
@@ -65,7 +66,7 @@ class SopTable(Base):
     __tablename__: str = "sop"
     sop_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     kin: Mapped["KinTable"] = relationship(back_populates="sop")
-    headers: list[tuple[str, Mapped[Float]]] =  mapped_column(Float(32))
+    headers: list[tuple[str, Mapped[Float]]] = mapped_column(Float(32))
 
     def __repr__(self) -> str:
         rpr: str = f"sop(sop_id={self.sop_id!r}"
@@ -73,4 +74,3 @@ class SopTable(Base):
             rpr += f', {col}={self.headers[col]!r}'
         rpr += ')'
         return rpr
-    

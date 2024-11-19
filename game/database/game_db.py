@@ -97,7 +97,7 @@ class Game_db:
     def upsert_entries(self,
                        table: str,
                        ids: list[int],
-                       values: list[dict[str,Any]]) -> None:
+                       values: list[dict[str, Any]]) -> None:
         """Multiple upsert statement at once.
         Used to store the concentration profiles.
 
@@ -139,6 +139,8 @@ class Game_db:
         self._upsert[table][id] = values
 
     def batch_upsert(self) -> None:
+        if len(self._upsert) == 0:
+            return
         for table in self._upsert:
             ids: list[int] = []
             values: list[dict] = []

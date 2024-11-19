@@ -1,4 +1,4 @@
-from copy import copy, deepcopy
+from copy import deepcopy
 from typing import Any
 
 from game.well import Well
@@ -23,7 +23,7 @@ class SOP:
         self.rc_pres: list[float]
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
-        self.score = 1e999
+        self.score = 999999.9
 
     @classmethod
     def from_db_row(cls,

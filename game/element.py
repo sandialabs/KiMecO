@@ -1,8 +1,7 @@
-from sqlalchemy import values
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.rate_coef import RateCo
-from game.scoring_f.weighteddif import WeightedDif
+from game.scoring_f.scoring import Scoring
 from game.simulation import SIM
 from typing import Any, Literal
 from pandas import DataFrame
@@ -12,7 +11,8 @@ class Element:
 
     def __init__(self,
                  sop: SOP,
-                 id: int) -> None:
+                 id: int,
+                 sf: Scoring) -> None:
         """An element is part of a generation and has
         different attributes, such as an id and a status.
         It is mainly a container object.
@@ -36,7 +36,7 @@ class Element:
         self.sop.id = self.id
         self.rateCoef: RateCo
         self.sim: SIM
-        self.score: float
+        self.sf: Scoring = sf
 
     def save_sop(self,
                  db: Game_db,
@@ -141,11 +141,13 @@ class Element:
         Args:
             settings (dict[str, Any]): User input + default settings
         """
-        if settings['scoring_func'].casefold() == 'weighteddif':
-            sf = WeightedDif(settings=settings)
 
-        self.score = sf.score(sim=self.sim,
-                              exp_profiles=settings['exp_profiles'])
+        self.sop.score = self.sf.score(sim=self.sim,
+                                       exp_profiles=settings['exp_profiles'])
+
+    @property
+    def score(self) -> float:
+        return self.sop.score
 
     def prepare_upsert(self,
                        db: Game_db,

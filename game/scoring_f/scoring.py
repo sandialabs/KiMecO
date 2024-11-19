@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 from numpy.typing import NDArray
+from game.simulation import SIM
 
 
 class Scoring(ABC):
@@ -19,9 +20,15 @@ class Scoring(ABC):
         self.settings: dict[str, Any] = settings
         self.kwargs: dict[str, Any] = kwargs
 
+    @property
+    @abstractmethod
+    def default_score(self) -> None:
+        """Default score used to initialize sops
+        """
+        pass
 
     @abstractmethod
     def score(self,
-              sim: NDArray,
-              exp: NDArray) -> float:
+              sim: SIM,
+              exp_profiles: NDArray) -> float:
         return 0.0

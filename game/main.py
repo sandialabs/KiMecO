@@ -8,6 +8,7 @@ from game.readers.mess_input import MessInputReader
 from game.database.game_db import Game_db
 from game.user_input import check_input
 from game.parameters import SOP
+from game.scoring_f.weighteddif import WeightedDif
 
 
 def main() -> None:
@@ -33,13 +34,21 @@ def main() -> None:
     kin_db = Game_db(name='GAME_DB_KIN')
     sim_db = Game_db(name='GAME_DB_SIM')
 
-    first_gen = Generation(elements=[Element(sop=init_SOP, id=0)],
+    # Define which scoring function to use
+    if settings['scoring_func'].casefold() == 'weighteddif':
+        sf = WeightedDif(settings=settings)
+    else:
+        # Default scoring function
+        sf = WeightedDif(settings=settings)
+
+    first_gen = Generation(elements=[Element(sop=init_SOP, id=0, sf=sf)],
                            set=settings,
                            rc_tpl=input_tpl,
                            loc=location,
                            sop_db=sop_db,
                            kin_db=kin_db,
-                           sim_db=sim_db)
+                           sim_db=sim_db,
+                           sf=sf)
     first_gen.run()
 
     converged = False
@@ -47,10 +56,10 @@ def main() -> None:
     pert = Perturbator(settings=settings)
 
     new_elements: list[Element] = [
-        Element(sop=pert.perturb(sop=init_SOP), id=id)
+        Element(sop=pert.perturb(sop=init_SOP), id=id, sf=sf)
         for id in range(settings['n_elem'])]
 
-    ga = Tournament(settings=settings)
+    ga = Tournament(settings=settings, sf=sf)
 
     # Passed to new generations in the loop
     # in case an element fails and needs to be reset.
@@ -66,6 +75,7 @@ def main() -> None:
                              sop_db=sop_db,
                              kin_db=kin_db,
                              sim_db=sim_db,
+                             sf=sf
                              previous_el=prev_gen)
         new_gen.run()
         if not ga.converged(gen=new_gen):

@@ -1,9 +1,9 @@
-from hmac import new
 import os
 from typing import Any
 
 from game.element import Element
 from game.database.game_db import Game_db
+from game.scoring_f.scoring import Scoring
 from game.well import Well
 from game.barrier import Barrier
 from game.parameters import SOP
@@ -38,6 +38,7 @@ class Generation:
                  sop_db: Game_db,
                  kin_db: Game_db,
                  sim_db: Game_db,
+                 sf: Scoring,
                  previous_el: dict[int, Element] = {}
                  ) -> None:
         """Generation object manages the worflow of
@@ -60,12 +61,16 @@ class Generation:
         Generation.__id += 1
         self.pert = Perturbator(settings=set)
         self.settings: dict[str, Any] = set
+        # List of species names used by cantera
         self.species: list[str] = [
             self.elements[0].sop.items[specie].ct_name
             for specie, obj in self.elements[0].sop.items.items()
             if isinstance(obj, Well) and not isinstance(obj, Barrier)]
+        # Rate coefficients template
         self.rc_tpl: list[str] = rc_tpl
+        # where the generation is running
         self.loc: str = loc
+        self.sf: Scoring = sf
         self.best_score: float = np.inf
         if not os.path.isdir(f'{self.loc}/G{self.id}'):
             os.mkdir(f'{self.loc}/G{self.id}')
@@ -145,9 +150,11 @@ class Generation:
                 if el.status == 'reset':
                     self.elements[el.id] = Element(
                         sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
-                        id=el.id)
+                        id=el.id,
+                        sf=self.sf)
                 # Calculate rate coefficients
                 if el.status == 'sop':
+                    el.sf = self.sf
                     el.rateCoef = RateCo(sop=el.sop,
                                          settings=self.settings,
                                          software_tpl=self.rc_tpl,

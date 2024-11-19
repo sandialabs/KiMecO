@@ -41,5 +41,6 @@ class Tournament(GeneticAlgorithm):
             prev_gen[idx*2+1] = winner
             next_gen.append(
                 Element(sop=self.pert.perturb(sop=winner.sop),
-                        id=idx*2+1))
+                        id=idx*2+1,
+                        sf=self.sf))
         return prev_gen, next_gen

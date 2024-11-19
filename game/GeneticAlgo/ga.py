@@ -3,6 +3,7 @@ from typing import Any
 from game.element import Element
 from game.generation import Generation
 from game.perturbator import Perturbator
+from game.scoring_f.scoring import Scoring
 
 
 class GeneticAlgorithm(ABC):
@@ -16,11 +17,13 @@ class GeneticAlgorithm(ABC):
     """
     def __init__(self,
                  settings: dict[str, Any],
+                 sf: Scoring,
                  **kwargs
                  ) -> None:
         self.settings: dict[str, Any] = settings
         self.kwargs: dict[str, Any] = kwargs
         self.pert = Perturbator(settings=settings)
+        self.sf: Scoring = sf
 
     @abstractmethod
     def converged(self,
