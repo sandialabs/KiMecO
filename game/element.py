@@ -1,3 +1,4 @@
+from sqlalchemy import values
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from game.rate_coef import RateCo
@@ -32,6 +33,7 @@ class Element:
         self.sop: SOP = sop
         self.status: str = 'sop'
         self.id: int = id
+        self.sop.id = self.id
         self.rateCoef: RateCo
         self.sim: SIM
         self.score: float
@@ -113,7 +115,7 @@ class Element:
                          df=df,
                          mode='append')
         self.status = 'kin2sim'
-    
+
     def check_rc_status(self) -> None:
         self.rateCoef.set_status()
         if self.rateCoef.status == 'reset':
@@ -144,3 +146,10 @@ class Element:
 
         self.score = sf.score(sim=self.sim,
                               exp_profiles=settings['exp_profiles'])
+
+    def prepare_upsert(self,
+                       db: Game_db,
+                       table: str) -> None:
+        db.prepare_batch_upsert(table=table,
+                                id=self.id,
+                                values=self.sop.parameters_names)

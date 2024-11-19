@@ -1,3 +1,4 @@
+from hmac import new
 import os
 from typing import Any
 
@@ -5,6 +6,7 @@ from game.element import Element
 from game.database.game_db import Game_db
 from game.well import Well
 from game.barrier import Barrier
+from game.parameters import SOP
 import numpy as np
 import numpy.typing as npt
 from numpy import bool_
@@ -17,6 +19,16 @@ from game.perturbator import Perturbator
 
 class Generation:
     __id = 0
+
+    @classmethod
+    def total(cls) -> int:
+        """Number of generations instanciated.
+        Used outside of the class to access __id.
+
+        Returns:
+            int: Total number of Generations instanciated.
+        """
+        return cls.__id
 
     def __init__(self,
                  elements: list[Element],
@@ -47,11 +59,11 @@ class Generation:
         self.id: int = Generation.__id
         Generation.__id += 1
         self.pert = Perturbator(settings=set)
+        self.settings: dict[str, Any] = set
         self.species: list[str] = [
             self.elements[0].sop.items[specie].ct_name
             for specie, obj in self.elements[0].sop.items.items()
             if isinstance(obj, Well) and not isinstance(obj, Barrier)]
-        self.settings: dict[str, Any] = set
         self.rc_tpl: list[str] = rc_tpl
         self.loc: str = loc
         self.best_score: float = np.inf
@@ -62,7 +74,8 @@ class Generation:
         self.kin_db: Game_db = kin_db
         self.sim_db: Game_db = sim_db
         self.create_tables()
-        self.save_sops()
+        if set['restart'] == 'default':
+            self.restore_gen_from_db()
         self.qs = QueueingSystem(max_jobs=self.settings['max_jobs'],
                                  max_cpu=self.settings['max_cpu'],
                                  max_mem=self.settings['max_mem'],
@@ -112,16 +125,6 @@ class Generation:
             types=sim_types
             )
 
-    def save_sops(self) -> None:
-        """Save all the SOPs of all elements in the db.
-        """
-        for el in self.elements:
-            # Creates an Element from a perturbed SOP and save it in the db
-            el.save_sop(db=self.sop_db,
-                        table=f'G{self.id}',
-                        mode=self.settings['restart'])
-        # self.sop_db.batch_save()
-
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
 
@@ -132,6 +135,7 @@ class Generation:
         """
         finished: npt.NDArray[bool_] = np.full(shape=(len(self.elements), 1),
                                                fill_value=False)
+
         while not all(finished):
             for idx, el in enumerate(self.elements):
                 # Skip finished elements
@@ -185,10 +189,47 @@ class Generation:
                         el.status = 'scoring'
                 # Scoring
                 elif el.status == 'scoring':
+                    # el.save_sop(db=self.sop_db,
+                    #             table=f"G{self.id}",
+                    #             mode=self.settings['restart'])
                     el.calc_score(settings=self.settings)
                     el.status = 'DONE'
                 elif el.status == 'DONE':
+                    el.prepare_upsert(db=self.sop_db,
+                                      table=f'G{self.id}')
                     finished[idx] = True
                     if el.score < self.best_score:
                         self.best_score: float = el.score
+            self.sop_db.batch_upsert()
             self.qs.run()
+
+    def restore_gen_from_db(self) -> None:
+        """Create a complete list of elements from the data in the database.
+        """
+        # Read the data from the db
+        rows = self.sop_db.get_table(table=f'G{self.id}')
+        # Create the list of elements from the db
+        new_gen: list[Element] = [Element(
+            sop=SOP.from_db_row(sop_tpl=self.elements[0].sop,
+                                row=row[1:]),
+            id=row[0])
+            for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
+        for el in new_gen:
+            if el.score != 1e999:
+                el.status = 'DONE'
+        # Complete the generation if elements are missing
+        # if len(new_gen) < self.settings['n_elem']:
+        #     missing_ids = [i for i in range(self.settings['n_elem'])]
+        #     for el in new_gen:
+        #         if el.id in missing_ids:
+        #             missing_ids.pop(missing_ids.index(el.id))
+        #     for i in range(self.settings['n_elem'] - len(new_gen)):
+        #         new_gen.append(Element(
+        #             sop=self.pert.perturb(
+        #                 sop=self.previous_el[missing_ids[i]].sop),
+        #             id=missing_ids[i]))
+        for db_el in new_gen:
+            for idx, gen_el in enumerate(self.elements):
+                if db_el.id == gen_el.id:
+                    self.elements[idx] = db_el
+                    break

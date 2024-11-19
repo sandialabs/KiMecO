@@ -1,7 +1,5 @@
 import sys
 import os
-from telnetlib import EL
-from game.GeneticAlgo.ga import GeneticAlgorythm
 from game.GeneticAlgo.tournament import Tournament
 from game.element import Element
 from game.generation import Generation
@@ -16,7 +14,7 @@ def main() -> None:
     try:
         input_file: str = sys.argv[1]
     except IndexError:
-        print('To use GAME, supply one argument being the input file!')
+        print('To use GAME, supply the input file as argument.')
         sys.exit(-1)
 
     settings: dict = check_input(input_file=input_file)
@@ -25,9 +23,6 @@ def main() -> None:
     init_SOP: SOP
     input_tpl: list[str]
     (init_SOP, input_tpl) = mr.read()
-
-    pert = Perturbator(settings=settings)
-
 
     if not os.path.isdir(settings['project_name']):
         os.mkdir(settings['project_name'])
@@ -45,10 +40,11 @@ def main() -> None:
                            sop_db=sop_db,
                            kin_db=kin_db,
                            sim_db=sim_db)
-
     first_gen.run()
 
     converged = False
+
+    pert = Perturbator(settings=settings)
 
     new_elements: list[Element] = [
         Element(sop=pert.perturb(sop=init_SOP), id=id)
@@ -62,7 +58,7 @@ def main() -> None:
     for id in range(settings['n_elem']):
         prev_gen[id] = first_gen.elements[0]
 
-    while not converged or Generation.__id < settings['max_gen']:
+    while not converged and Generation.total() < settings['max_gen']:
         new_gen = Generation(elements=new_elements,
                              set=settings,
                              rc_tpl=input_tpl,
@@ -76,4 +72,5 @@ def main() -> None:
             prev_gen, new_elements = ga.next_gen(gen=new_gen)
         else:
             converged = True
+
     print(f'Run Sucessful. Termination at generation {new_gen.id}')

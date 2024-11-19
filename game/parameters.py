@@ -1,4 +1,4 @@
-import copy
+from copy import copy, deepcopy
 from typing import Any
 
 from game.well import Well
@@ -9,13 +9,12 @@ from game.barrier import Barrier
 class SOP:
     """Set Of Parameters.
     Main object of the GAME code, to be perturbed and optimized."""
-    _id = 0
 
     def __init__(self) -> None:
         self.wells: list[Well] = []
         self.bimolecular: list[Bimolecular] = []
         self.barriers: list[Barrier] = []
-        self.id: int = copy.copy(SOP._id)
+        self.id: int
         self.items: dict = {}
         self.power: float
         self.factor: float
@@ -24,7 +23,21 @@ class SOP:
         self.rc_pres: list[float]
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
-        SOP._id += 1
+        self.score = 1e999
+
+    @classmethod
+    def from_db_row(cls,
+                    sop_tpl,
+                    row: list[Any]):
+        self = cls()
+        self = deepcopy(sop_tpl)
+        pos = 0
+        for key, val in self.parameters_names.items():
+            if val != row[pos]:
+                self.update(key=key,
+                            value=row[pos])
+            pos += 1
+        return self
 
     def __repr__(self) -> str:
         table_repr: str = "<SOP("
@@ -128,7 +141,11 @@ class SOP:
 
     @property
     def parameters_names(self) -> dict[str, Any]:
-        pn: dict[str, Any] = {}
+        pn: dict[str, Any] = {'score': self.score}
+        for idx, ep in enumerate(self.epsilons):
+            pn[f'epsi_{idx}'] = ep
+        for idx, sig in enumerate(self.sigmas):
+            pn[f'sigmas_{idx}'] = sig
         for well in self.wells:
             pn.update(well.db_dict)
         for bar in self.barriers:
@@ -232,6 +249,17 @@ class SOP:
             key (str): parameter name
             value (float): value in db
         """
+        self.epsilons = []
+        self.sigmas = []
+        if key == 'score':
+            self.score: float = value
+            return
+        elif 'epsi' in key:
+            self.epsilons.append(value)
+            return
+        elif 'sigmas' in key:
+            self.sigmas.append(value)
+            return
         item_name: str = '_'.join(key.split('_')[:-1])
         param_name: str = key.split('_')[-1]
         # Energies
@@ -250,4 +278,3 @@ class SOP:
             self.items[item_name].rotors[idx].pert = value
         else:
             raise KeyError('Trying to restore unknown parameter.')
-

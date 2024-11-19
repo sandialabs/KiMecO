@@ -1,7 +1,8 @@
 import os
 from typing import Literal, Sequence
-from sqlalchemy import Insert, create_engine, Engine, Table, Column, Integer, String
-from sqlalchemy import MetaData, Float, text, TextClause, update, Update
+from sqlalchemy import MetaData, Table, Column
+from sqlalchemy import create_engine, Engine, Insert, update, Update
+from sqlalchemy import Float, Integer, String, text, TextClause
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
@@ -36,6 +37,7 @@ class Game_db:
             # dict: JSON,
             # list: ARRAY
         }
+        self._upsert = {}
 
     def table_exists(self,
                      name: str) -> bool:
@@ -95,7 +97,7 @@ class Game_db:
     def upsert_entries(self,
                        table: str,
                        ids: list[int],
-                       values: dict[str, list[Any]]) -> None:
+                       values: list[dict[str,Any]]) -> None:
         """Multiple upsert statement at once.
         Used to store the concentration profiles.
 
@@ -107,17 +109,46 @@ class Game_db:
                 values are list of values to update,
                     given in same order as ids
         """
-        values['id'] = ids
-        query: Insert = (
+        for i in range(len(values)):
+            values[i]['id'] = ids[i]
+        g_insert: Insert = (
             insert(table=self.tables[table]).
-            values(**values).
-            on_conflict_do_update(
-                index_elements=[key for key in values.keys()],
-                index_where=self.tables[table].c.id.in_(ids)
+            values(values))
+
+        g_upsert: Insert = g_insert.on_conflict_do_update(
+                index_elements=[self.tables[table].c.id],
+                set_=g_insert.excluded
             )
-            )
+
         with self.eng.begin() as connection:
-            connection.execute(query)
+            connection.execute(g_upsert)
+
+    def prepare_batch_upsert(self,
+                             table: str,
+                             id: int,
+                             values: dict[str, Any]) -> None:
+        """Actualize the upsert variable to prepare a batch upsert.
+
+        Args:
+            table (str): name of table
+            id (int): id of the element
+            values (dict[str, Any]): dictionary of param name - value
+        """
+        if table not in self._upsert:
+            self._upsert[table] = {}
+        self._upsert[table][id] = values
+
+    def batch_upsert(self) -> None:
+        for table in self._upsert:
+            ids: list[int] = []
+            values: list[dict] = []
+            for id in self._upsert[table]:
+                ids.append(id)
+                values.append(self._upsert[table][id])
+            self.upsert_entries(table=table,
+                                ids=ids,
+                                values=values)
+        self._upsert = {}
 
     def save_data(self,
                   table: str,
@@ -159,14 +190,13 @@ class Game_db:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt[0][1:])
 
-    def get_sops_table(self,
-                       table: str) -> list[Any]:
+    def get_table(self,
+                  table: str) -> Sequence:
         """Return the values in the row uniquely identified by id
         in the table.
 
         Args:
-            table (_type_): table name in db
-            id (_type_): row id
+            table (str): table name in db
 
         Returns:
             list[Any]: List of values in the row
