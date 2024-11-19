@@ -220,10 +220,11 @@ class Generation:
         new_gen: list[Element] = [Element(
             sop=SOP.from_db_row(sop_tpl=self.elements[0].sop,
                                 row=row[1:]),
-            id=row[0])
+            id=row[0],
+            sf=self.sf)
             for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
         for el in new_gen:
-            if el.score != 1e999:
+            if el.score != self.sf.default_score:
                 el.status = 'DONE'
         # Complete the generation if elements are missing
         # if len(new_gen) < self.settings['n_elem']:

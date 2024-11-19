@@ -23,7 +23,7 @@ class SOP:
         self.rc_pres: list[float]
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
-        self.score = 999999.9
+        self.score = 9999.9
 
     @classmethod
     def from_db_row(cls,
@@ -141,11 +141,11 @@ class SOP:
 
     @property
     def parameters_names(self) -> dict[str, Any]:
-        pn: dict[str, Any] = {'score': self.score}
+        pn: dict[str, Any] = {'score': float(self.score)}
         for idx, ep in enumerate(self.epsilons):
-            pn[f'epsi_{idx}'] = ep
+            pn[f'epsi_{idx}'] = float(ep)
         for idx, sig in enumerate(self.sigmas):
-            pn[f'sigmas_{idx}'] = sig
+            pn[f'sigmas_{idx}'] = float(sig)
         for well in self.wells:
             pn.update(well.db_dict)
         for bar in self.barriers:

@@ -5,3 +5,4 @@ sqlalchemy.ipynb
 Quick tests.ipynb
 *.ipynb
 *.pyc
+game/*/*.pyc
