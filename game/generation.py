@@ -138,6 +138,7 @@ class Generation:
                                     the ressources and running as many jobs
                                     in parallel as possible.
         """
+        print(f'Running generation {self.id} ...')
         finished: npt.NDArray[bool_] = np.full(shape=(len(self.elements), 1),
                                                fill_value=False)
 

@@ -75,12 +75,14 @@ def main() -> None:
                              sop_db=sop_db,
                              kin_db=kin_db,
                              sim_db=sim_db,
-                             sf=sf
+                             sf=sf,
                              previous_el=prev_gen)
         new_gen.run()
         if not ga.converged(gen=new_gen):
+            print(f'Generation {new_gen.id} finished.')
+            print(f'Best score: {new_gen.best_score}')
             prev_gen, new_elements = ga.next_gen(gen=new_gen)
         else:
             converged = True
 
-    print(f'Run Sucessful. Termination at generation {new_gen.id}')
+    print(f'Run Sucessful. Termination at generation {new_gen.id} with score {new_gen.best_score}')
