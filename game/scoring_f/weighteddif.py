@@ -1,5 +1,8 @@
 from game.scoring_f.scoring import Scoring
 from game.simulation import SIM
+import numpy as np
+from numpy import float64
+from numpy.typing import NDArray
 
 
 class WeightedDif(Scoring):
@@ -23,18 +26,21 @@ class WeightedDif(Scoring):
         """
         n_exp: int = len(self.settings['rc_temp']) *\
             len(self.settings['rc_pres'])
-        w_exp: list[float] = self.settings['w_exp']
 
         score = 0.0
+        sp_weight: NDArray[float64] = np.array(
+            [self.settings['w_species'][sp] for sp in sim.species])
         for p in range(len(self.settings['rc_pres'])):
             for t in range(len(self.settings['rc_temp'])):
                 sim_index: int = p*len(self.settings['rc_temp']) + t
-                w_exp_i: float = w_exp[sim_index]
-                for specie in sim.species:
-                    w_specie: float = self.settings['w_species'][specie]
-                    for timestep in range(len(sim.profiles[sim_index]['time'])):
-
-                        score += (w_exp_i * w_specie *
-                                  sim.profiles[sim_index][specie][timestep] -
-                                  exp_profiles[sim_index][specie][timestep])
+                w_exp_i = self.settings['w_exp'][sim_index]
+                ordered_profiles: NDArray[float64] = np.zeros((
+                    len(sim.species),
+                    len(exp_profiles[sim_index][sim.species[0]])))
+                cur_sim_profile = np.array()
+                for idx, specie in enumerate(sim.species):
+                    ordered_profiles[idx] = exp_profiles[sim_index][specie]
+                score += (w_exp_i * sp_weight *
+                          np.sum(sim.profiles[sim_index][:, 4:] -
+                          ordered_profiles)/n_exp)
         return score

@@ -1,7 +1,8 @@
 import os
 from typing import Literal, Sequence
-from sqlalchemy import MetaData, Table, Column
-from sqlalchemy import create_engine, Engine, Insert, update, Update
+from pyparsing import col
+from sqlalchemy import create_engine, MetaData, Table, Column, Row
+from sqlalchemy import Engine, Insert, update, Update, select
 from sqlalchemy import Float, Integer, String, text, TextClause
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
@@ -123,6 +124,34 @@ class Game_db:
         with self.eng.begin() as connection:
             connection.execute(g_upsert)
 
+    def manual_upsert_entries(self,
+                              table: str,
+                              ids: list[int],
+                              values: list[dict[str, Any]]) -> None:
+        column_names: str = 'id'
+        vals: str = ''
+
+        txt0: str = f"INSERT INTO '{table}' ("
+        txt1: str = ") VALUES "
+
+        for ridx in range(len(ids)):
+            vals += f'({ids[ridx]}'
+            for cidx in values[0].keys():
+                if ridx == 0:
+                    column_names += f",'{cidx}'"
+                vals += f",'{values[ridx][cidx]}'"
+            vals += '),'
+        vals = vals[:-1]
+        insert_txt: str = txt0 + column_names + txt1 + vals  # + ';'
+
+        upsert_txt: str = ' ON CONFLICT (id) DO UPDATE SET'
+        for c in values[0].keys():
+            upsert_txt += f" '{c}' = excluded.'{c}',"
+        upsert_txt = upsert_txt[:-1]
+        query: TextClause = text(insert_txt + upsert_txt)
+        with self.eng.begin() as connection:
+            connection.execute(query)
+
     def prepare_batch_upsert(self,
                              table: str,
                              id: int,
@@ -138,7 +167,8 @@ class Game_db:
             self._upsert[table] = {}
         self._upsert[table][id] = values
 
-    def batch_upsert(self) -> None:
+    def batch_upsert(self,
+                     mode: str = 'sqlalchemy') -> None:
         if len(self._upsert) == 0:
             return
         for table in self._upsert:
@@ -147,9 +177,14 @@ class Game_db:
             for id in self._upsert[table]:
                 ids.append(id)
                 values.append(self._upsert[table][id])
-            self.upsert_entries(table=table,
-                                ids=ids,
-                                values=values)
+            if mode == 'manual':
+                self.manual_upsert_entries(table=table,
+                                           ids=ids,
+                                           values=values)
+            else:
+                self.upsert_entries(table=table,
+                                    ids=ids,
+                                    values=values)
         self._upsert = {}
 
     def save_data(self,
@@ -187,7 +222,7 @@ class Game_db:
         Returns:
             list[Any]: List of values in the row
         """
-        query: TextClause = text(f"SELECT * FROM {table} WHERE id={id+1}")
+        query: TextClause = text(f"SELECT * FROM {table} WHERE id={id}")
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt[0][1:])
@@ -208,17 +243,20 @@ class Game_db:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return db_rslt
 
-    def get_sim_data(self,
-                     table: str,
-                     sim_id: int) -> DataFrame:
+    def get_data(self,
+                 table: str,
+                 ids: list[int]) -> Sequence[Row[Any]]:
+        """Query all rows having the listed ids.
 
+        Args:
+            table (str): table name
+            ids (list[int]): list of rows ids
+
+        Returns:
+            _type_: list of rows data
+        """
+        query = select(
+            self.tables[table]).where(self.tables[table].c.id.in_(ids))
         with self.eng.begin() as connection:
-            df: DataFrame = pd.read_sql(
-                sql="""SELECT *
-                FROM {}
-                WHERE sim_id={}""".format(
-                    table,
-                    sim_id
-                ),
-                con=connection)
-        return df
+            rslt: Sequence[Row[Any]] = connection.execute(query).fetchall()
+        return rslt

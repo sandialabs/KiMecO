@@ -167,14 +167,14 @@ class Generation:
                     el.rateCoef.q_up()
                     el.status = 'kin'
                 # Recover rate coefficients
-                elif el.status == 'kin':
+                if el.status == 'kin':
                     el.check_rc_status()
                     if el.rateCoef.status == 'finished':
                         # Next status is set in this function as it can fail.
                         el.save_kin(db=self.kin_db,
                                     table=f'G{self.id}')
                 # Calculate SIMs
-                elif el.status == 'kin2sim':
+                if el.status == 'kin2sim':
                     el.sim = SIM(sop=el.sop,
                                  kin=el.rateCoef,
                                  id=el.id,
@@ -187,7 +187,7 @@ class Generation:
                     el.sim.q_up()
                     el.status = 'sim'
                 # Recover simulations data
-                elif el.status == 'sim':
+                if el.status == 'sim':
                     for sim in range(len(el.sim.simulations)):
                         el.sim.set_status(sim=sim)
                     if all([True if status == 'finished' else False
@@ -196,13 +196,13 @@ class Generation:
                                                 table=f'G{self.id}')
                         el.status = 'scoring'
                 # Scoring
-                elif el.status == 'scoring':
+                if el.status == 'scoring':
                     # el.save_sop(db=self.sop_db,
                     #             table=f"G{self.id}",
                     #             mode=self.settings['restart'])
                     el.calc_score(settings=self.settings)
                     el.status = 'DONE'
-                elif el.status == 'DONE':
+                if el.status == 'DONE':
                     el.prepare_upsert(db=self.sop_db,
                                       table=f'G{self.id}')
                     finished[idx] = True

@@ -86,7 +86,7 @@ def check_input(input_file: str) -> dict:
     clean_profiles = []
     n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
     if len(json_file['exp_profiles']) != n_exp:
-        print(f"There should be one csv profile file for each TP condition.")
+        print("There should be one csv profile file for each TP condition.")
         cancel_run = True
     else:
         for p in range(len(json_file['rc_pres'])):
@@ -123,7 +123,7 @@ def check_input(input_file: str) -> dict:
     json_file['exp_profiles'] = clean_profiles
 
     # Specific cases with interdependent non-mandatory settings
-    #Checking the scoring function:
+    # Checking the scoring function:
     implemented_sf: list[str] = ['weighteddif']
     if json_file['scoring_func'].casefold() not in implemented_sf:
         print('Unknown scoring function. Check the spelling?')

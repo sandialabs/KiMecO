@@ -2,6 +2,7 @@ import sys
 from copy import deepcopy
 from typing import Any
 import cantera as ct
+from numpy.typing import NDArray
 from pandas import DataFrame
 from game.cantera.customrate import MessData, MessRate
 import numpy as np
@@ -11,7 +12,6 @@ from game.parameters import SOP
 from game.q_sys import QueueingSystem
 from game.rate_coef import RateCo
 from game.well import Well
-from game.barrier import Barrier
 from game.templates.ct_reaction_tpl import reaction_yaml
 from game.templates.ct_job import ctjobtpl
 from scipy.constants import Avogadro
@@ -73,7 +73,6 @@ class SIM:
                 Defaults to None.
         """
 
-
         self.status: list[str] = []
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
@@ -102,7 +101,7 @@ class SIM:
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
         self.db: Game_db = db
-        self.profiles: list[DataFrame] = []
+        self.profiles: list[NDArray] = []
 
     def check_species_weights(self) -> None:
         if len(self.settings['w_species']) == 0:
@@ -367,7 +366,8 @@ class SIM:
                 self.simulations.append(new_sim)
 
     def q_up(self) -> None:
-        
+        """Send job to the queuing system.
+        """
         cpu: int = self.settings['cpu_sim']
         mem: int = self.settings['mem_sim']
         for i, sim in enumerate(self.simulations):
@@ -386,14 +386,21 @@ class SIM:
                   sim: ct.Solution,
                   name: str,
                   sim_id: int) -> None:
-        ct_job: str = self.ctjobtpl.format(db=self.db,
-                                           sim_name=name,
-                                           sim_id=sim_id,
-                                           gen=self.gen_id,
-                                           to_watch=self.species,
-                                           initial_X=self.settings['initial_X'],
-                                           sim_time=self.settings['sim_time'],
-                                           tstep=self.settings['sim_tstep'])
+        time_steps: list[int] = \
+            [len(i['time']) for i in self.settings['exp_profiles']]
+        ct_job: str = self.ctjobtpl.format(
+            db=self.db,
+            sim_name=name,
+            sim_id=sim_id,
+            el_num=self.id,
+            time=self.settings['exp_profiles'][sim_id]['time'],
+            all_tsteps=time_steps,
+            gen=self.gen_id,
+            to_watch=self.species,
+            initial_X=self.settings['initial_X'],
+            sim_time=self.settings['sim_time'],
+            tstep=self.settings['sim_tstep']
+            )
         with open(f'{self.loc}/{name}.py', 'w') as f:
             f.write(ct_job)
         with open(f'{self.loc}/{name}.pkl', 'wb') as pkl_file:

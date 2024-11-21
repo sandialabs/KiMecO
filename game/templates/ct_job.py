@@ -39,13 +39,22 @@ reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
 net = ct.ReactorNet([reactor])
 
 sim_time = 0.0
-tot_time = {sim_time} #in seconds
-mystep = {tstep} #in seconds
-tot_steps = int((tot_time - sim_time)/mystep)+1
+# In seconds
+time = {time}
+# tot_time = {sim_time} #in seconds
+# mystep = {tstep} #in seconds
+# tot_steps = int((tot_time - sim_time)/mystep)+1
+all_tsteps = np.array({all_tsteps})
+block_size = np.sum(all_tsteps)
+start_idx = np.sum(all_tsteps[:{sim_id}])
+tot_steps = all_tsteps[{sim_id}]
 
 to_watch = {to_watch}
-
-traces = {{'time': np.zeros(tot_steps)}}
+traces = {{}}
+traces['P'] = np.full(tot_steps, gas.P)
+traces['T'] = np.full(tot_steps, gas.T)
+traces['sim_id'] = np.full(tot_steps, {sim_id})
+traces['time'] = np.array(time)
 
 names = []
 
@@ -56,33 +65,24 @@ for idx, i in enumerate(spec):
         traces[i.name] = np.full(tot_steps, gas.X[idx])
         names.append(i.name)
 
-for n in range(tot_steps-1):
-    sim_time = mystep*(n+1)
-    net.advance(sim_time)
-    traces['time'][n+1] = sim_time
-    for idx, i in enumerate(spec):
+for idx, t in enumerate(time):
+    if idx == 0:
+        # First time should be 0, hence initial concentration
+        continue
+    net.advance(t)
+    for snum, i in enumerate(spec):
         if i.name in to_watch:
-            traces[i.name][n+1] = gas.X[idx]
-
-indexes: MultiIndex = MultiIndex.from_product([
-    [gas.P],
-    [gas.T],
-    [{sim_id}],
-    traces['time']],
-    names=['P', 'T', 'sim_id', 'time'])
-del traces['time']
-df = DataFrame(traces,
-               index=indexes,
-               )
-
-df.reset_index(inplace=True)
-row_ids = [i for i in RangeIndex(start={sim_id}*len(df),
-                                 stop={sim_id}*len(df)+len(df),
-                                 step=1)]
-df.index = row_ids
-df.index.name = 'id'
-db.save_data(table='G{gen}',
-             df=df,
-             mode='append')
+            traces[i.name][idx] = gas.X[snum]
+row_ids = [i for i in range({el_num}*block_size+start_idx,
+                            {el_num}*block_size+start_idx+len(time),
+                            1)]
+for id in row_ids:
+    row_dict = {{}}
+    for col in traces:
+        row_dict[col] = traces[col][id]
+    db.prepare_batch_upsert(table='G{gen}',
+                            id=id,
+                            values=row_dict)
+db.batch_upsert(mode='manual')
 
 """

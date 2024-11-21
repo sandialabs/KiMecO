@@ -5,6 +5,8 @@ from game.scoring_f.scoring import Scoring
 from game.simulation import SIM
 from typing import Any, Literal
 from pandas import DataFrame
+import numpy as np
+from numpy.typing import NDArray
 
 
 class Element:
@@ -124,10 +126,18 @@ class Element:
     def recover_sim_profiles(self,
                              db: Game_db,
                              table) -> None:
+        tsteps: NDArray[Any] = np.array(
+            [len(i['time']) for i in self.sim.settings['exp_profiles']])
+        block_size = np.sum(tsteps)
         for sim in range(len(self.sim.simulations)):
-            self.sim.profiles.append(
-                db.get_sim_data(table=table,
-                                sim_id=self.id*len(self.sim.simulations)+sim)
+            start_idx = np.sum(tsteps[:sim])
+            row_ids: list[int] = [
+                i for i in range(self.id*block_size+start_idx,
+                                 self.id*block_size+start_idx+tsteps[sim],
+                                 1)]
+            self.sim.profiles.append(np.array(
+                db.get_data(table=table,
+                            ids=row_ids))
             )
 
     def calc_score(self,
