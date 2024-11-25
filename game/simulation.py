@@ -89,8 +89,7 @@ class SIM:
         self.gen_id = gen_id
         self.settings: dict[str, Any] = set
         self.species: list[str] = species
-        if self.gen_id == 0:
-            self.check_species_weights()
+        self.check_species_weights()
         self.set_species()
         self.set_reactions()
         self.init_sims()
@@ -372,7 +371,6 @@ class SIM:
         mem: int = self.settings['mem_sim']
         for i, sim in enumerate(self.simulations):
             sim_id: int = i + self.id * len(self.simulations)
-            self.set_status(i)
             self.serialize(sim=sim,
                            name=self.name+f'S{i}',
                            sim_id=sim_id)
@@ -381,11 +379,19 @@ class SIM:
                                 location=self.loc,
                                 jtype='sim',
                                 ressources=(cpu, mem))
+            self.set_status(i)
 
     def serialize(self,
                   sim: ct.Solution,
                   name: str,
                   sim_id: int) -> None:
+        """Create the python job and the pkl file.
+
+        Args:
+            sim (ct.Solution): cantera simulation object
+            name (str): base of filename
+            sim_id (int): sim id unique accross a generation
+        """
         time_steps: list[int] = \
             [len(i['time']) for i in self.settings['exp_profiles']]
         ct_job: str = self.ctjobtpl.format(
@@ -393,7 +399,8 @@ class SIM:
             sim_name=name,
             sim_id=sim_id,
             el_num=self.id,
-            time=self.settings['exp_profiles'][sim_id]['time'],
+            time=self.settings['exp_profiles']
+            [sim_id - self.id*len(time_steps)]['time'],
             all_tsteps=time_steps,
             gen=self.gen_id,
             to_watch=self.species,

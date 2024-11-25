@@ -149,10 +149,14 @@ class Generation:
                     continue
                 # Reset failed caluclations
                 if el.status == 'reset':
+                    rst: int = el.reset
                     self.elements[el.id] = Element(
                         sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
                         id=el.id,
                         sf=self.sf)
+                    # Keep track of how many elements have been reset
+                    self.elements[el.id].reset = rst + 1
+                    continue
                 # Calculate rate coefficients
                 if el.status == 'sop':
                     el.sf = self.sf
@@ -167,7 +171,7 @@ class Generation:
                     el.rateCoef.q_up()
                     el.status = 'kin'
                 # Recover rate coefficients
-                if el.status == 'kin':
+                elif el.status == 'kin':
                     el.check_rc_status()
                     if el.rateCoef.status == 'finished':
                         # Next status is set in this function as it can fail.
@@ -187,7 +191,7 @@ class Generation:
                     el.sim.q_up()
                     el.status = 'sim'
                 # Recover simulations data
-                if el.status == 'sim':
+                elif el.status == 'sim':
                     for sim in range(len(el.sim.simulations)):
                         el.sim.set_status(sim=sim)
                     if all([True if status == 'finished' else False
@@ -201,7 +205,6 @@ class Generation:
                     #             table=f"G{self.id}",
                     #             mode=self.settings['restart'])
                     el.calc_score(settings=self.settings)
-                    el.status = 'DONE'
                 if el.status == 'DONE':
                     el.prepare_upsert(db=self.sop_db,
                                       table=f'G{self.id}')

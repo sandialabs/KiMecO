@@ -39,6 +39,8 @@ class Element:
         self.rateCoef: RateCo
         self.sim: SIM
         self.sf: Scoring = sf
+        # Purely for debugging
+        self.reset: int = 0
 
     def save_sop(self,
                  db: Game_db,
@@ -130,6 +132,7 @@ class Element:
             [len(i['time']) for i in self.sim.settings['exp_profiles']])
         block_size = np.sum(tsteps)
         for sim in range(len(self.sim.simulations)):
+            sim_id = self.id * len(self.sim.simulations) + sim
             start_idx = np.sum(tsteps[:sim])
             row_ids: list[int] = [
                 i for i in range(self.id*block_size+start_idx,
@@ -137,8 +140,16 @@ class Element:
                                  1)]
             self.sim.profiles.append(np.array(
                 db.get_data(table=table,
-                            ids=row_ids))
-            )
+                            ids=row_ids)))
+            self.sim.q_sys.pickUp(id=sim_id,
+                                  jtype='sim')
+            self.sim.status[sim] = self.sim.q_sys.status(id=sim_id,
+                                                         jtype='sim')
+        if any(np.array(self.sim.status) == 'reset'):
+            self.status = 'reset'
+            print(
+                f'Element {self.id} has been reset \
+                    because a simulation crashed.')
 
     def calc_score(self,
                    settings: dict[str, Any]) -> None:
@@ -151,9 +162,13 @@ class Element:
         Args:
             settings (dict[str, Any]): User input + default settings
         """
+        try:
+            self.sop.score = self.sf.score(sim=self.sim)
+            self.status = 'DONE'
+        except IndexError:
+            # Occurs when a simulation didn't work so profiles were not saved
+            self.status = 'reset'
 
-        self.sop.score = self.sf.score(sim=self.sim,
-                                       exp_profiles=settings['exp_profiles'])
 
     @property
     def score(self) -> float:

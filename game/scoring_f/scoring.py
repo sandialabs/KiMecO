@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import Any
 from numpy.typing import NDArray
 from game.simulation import SIM
@@ -29,6 +30,5 @@ class Scoring(ABC):
 
     @abstractmethod
     def score(self,
-              sim: SIM,
-              exp_profiles: NDArray) -> float:
+              sim: SIM) -> float:
         return 0.0

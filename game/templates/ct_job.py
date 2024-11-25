@@ -46,8 +46,9 @@ time = {time}
 # tot_steps = int((tot_time - sim_time)/mystep)+1
 all_tsteps = np.array({all_tsteps})
 block_size = np.sum(all_tsteps)
-start_idx = np.sum(all_tsteps[:{sim_id}])
-tot_steps = all_tsteps[{sim_id}]
+sim_in_element = {sim_id} % len(all_tsteps)
+start_idx = np.sum(all_tsteps[:sim_in_element])
+tot_steps = all_tsteps[sim_in_element]
 
 to_watch = {to_watch}
 traces = {{}}
@@ -76,10 +77,10 @@ for idx, t in enumerate(time):
 row_ids = [i for i in range({el_num}*block_size+start_idx,
                             {el_num}*block_size+start_idx+len(time),
                             1)]
-for id in row_ids:
+for idx, id in enumerate(row_ids):
     row_dict = {{}}
     for col in traces:
-        row_dict[col] = traces[col][id]
+        row_dict[col] = traces[col][idx]
     db.prepare_batch_upsert(table='G{gen}',
                             id=id,
                             values=row_dict)

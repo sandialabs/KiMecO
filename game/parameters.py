@@ -249,16 +249,16 @@ class SOP:
             key (str): parameter name
             value (float): value in db
         """
-        self.epsilons = []
-        self.sigmas = []
         if key == 'score':
             self.score: float = value
             return
         elif 'epsi' in key:
-            self.epsilons.append(value)
+            idx = int(key.split('epsi_')[-1])
+            self.epsilons[idx] = value
             return
         elif 'sigmas' in key:
-            self.sigmas.append(value)
+            idx = int(key.split('sigmas_')[-1])
+            self.sigmas[idx] = value
             return
         item_name: str = '_'.join(key.split('_')[:-1])
         param_name: str = key.split('_')[-1]
