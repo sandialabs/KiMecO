@@ -1,13 +1,11 @@
 import os
 from typing import Literal, Sequence
-from pyparsing import col
 from sqlalchemy import create_engine, MetaData, Table, Column, Row
 from sqlalchemy import Engine, Insert, update, Update, select
 from sqlalchemy import Float, Integer, String, text, TextClause
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
-from pandas import DataFrame
 from typing import Any
 
 
@@ -18,6 +16,7 @@ class Game_db:
         """Class managing the information storage of GAME database.
         """
         self.name: str = name
+        self._tabls = []
         if path == '':
             self.path = os.getcwd()
         else:
@@ -62,6 +61,25 @@ class Game_db:
             )
         self.metadata.create_all(self.eng)
 
+    @property
+    def _tables(self) -> Sequence:
+        """Query the names of the tables
+        already present in a database"""
+        if self._tabls == []:
+            query: TextClause = text(
+                text="""SELECT name FROM sqlite_master WHERE type='table';""")
+            with self.eng.begin() as connection:
+                self._tabls: Sequence = connection.execute(query).fetchall()
+        return self._tabls
+
+    def col_of_table(self,
+                     table: str):
+        """Query the name of the columns of a given table.
+
+        Args:
+            table (str): _description_
+        """
+
     def entry_exist(self,
                     table: str,
                     id: int) -> bool:
@@ -75,7 +93,7 @@ class Game_db:
         Returns:
             bool: is in db or not
         """
-        query: TextClause = text(f"SELECT id FROM {table} WHERE id={id+1}")
+        query: TextClause = text(text=f"SELECT id FROM {table} WHERE id={id+1}")
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         if len(db_rslt) == 0:

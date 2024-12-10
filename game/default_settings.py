@@ -50,7 +50,7 @@ default_settings: dict[str, Any] = {
     "max_jobs": 2000,
     # Username for the server hosting the db
     "db_user": getpass.getuser(),
-    # IP address of the database host. Should have a postgreSQL server
+    # IP address of the database host.
     "db_host": "127.0.0.1",
     # Absolute value of energy (kcal/mol) perturbation for wells
     # and bimolecular species

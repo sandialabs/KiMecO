@@ -12,6 +12,15 @@ from game.scoring_f.weighteddif import WeightedDif
 
 
 def main() -> None:
+    if len(sys.argv) != 1:
+        print("""
+    GAME needs various parameters to be set in a JSON input file.
+    This JSON input file should be supplied as the first and only
+    argument.
+
+    Usage:  game path/to/JSON/input/file.json
+    """)
+        sys.exit()
     try:
         input_file: str = sys.argv[1]
     except IndexError:

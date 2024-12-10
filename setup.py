@@ -1,13 +1,12 @@
 from setuptools import setup, find_packages
-import os
 
-VERSION = '0.0.1' 
+VERSION = '0.0.1'
 DESCRIPTION = 'GAME'
 LONG_DESCRIPTION = 'Genetic Algorythm Master Equation'
 
 # Setting up
 setup(
-        name="game", 
+        name="game",
         version=VERSION,
         author="Clement Soulie",
         author_email="<csoulie@sandia.gov>",
@@ -17,15 +16,19 @@ setup(
         long_description=LONG_DESCRIPTION,
         python_requires='>=3.10.14',
         packages=find_packages(),
-        install_requires=['ase>=3.22.1'], # add any additional packages that 
+        install_requires=["ase>=3.22.1",
+                          "cantera>=3.0.0",
+                          "numpy>=1.22.4",
+                          "pandas>=2.2",
+                          "sqlalchemy"],  # add any additional packages that
         # needs to be installed along with your package. Eg: 'caer'
-        
+
         keywords=['python',
                   'game',
                   'genetic algorythm',
                   'master equation',
                   'kinetics'],
-        classifiers= [
+        classifiers=[
             "Development Status :: 3 - Alpha",
             "Intended Audience :: Research",
             "Programming Language :: Python :: 3",

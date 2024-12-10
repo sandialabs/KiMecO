@@ -1,2 +1,3 @@
 [console_scripts]
 game = game.main:main
+gameUI = game.gui.start:main
