@@ -8,6 +8,7 @@ class SOPAnalyser(Analyser):
             self.header,
             self.core
         ]
+        return children
 
     @property
     def header(self) -> html.Div:

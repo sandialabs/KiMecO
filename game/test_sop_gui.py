@@ -35,17 +35,10 @@ app.layout = [
         dcc.Dropdown(options={},
                      id='param_selection')
     ]),
-    # ,
-
-    # html.Div(className='row', children=[
-    #     html.Div(className='six columns', children=[
-    #         dash_table.DataTable(data=df.to_dict('records'), page_size=11, style_table={'overflowX': 'auto'})
-    #     ]),
     html.Div(className='row', children=[
         html.H3(children={}, id='title_dist'),
         dcc.Graph(figure={}, id='param_dist')
     ])
-    # ])
 ]
 
 # Add controls to build the interaction
@@ -59,18 +52,12 @@ def update_param_choice(param_type) -> list[str]:
 
 @callback(
     Output(component_id='param_dist', component_property='figure'),
-    Input(component_id='param_selection', component_property='value')
-)
-def update_param_avrg(param):
-    fig: Figure = px.histogram(df, x=param, nbins=20)
-    return fig
-
-@callback(
     Output(component_id='title_dist', component_property='children'),
     Input(component_id='param_selection', component_property='value')
 )
-def update_param_avrg_title(param) -> str:
-    return f'Distribution of {param}'
+def update_figure(param):
+    fig: Figure = px.histogram(df, x=param, nbins=20)
+    return fig, f'Distribution of {param}'
 
 
 PORT = '8000'
