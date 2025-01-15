@@ -244,6 +244,35 @@ class Game_db:
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt[0][1:])
+    
+    def get_col_names(self,
+                      table):
+        query = text(f"PRAGMA table_info('{table}')")
+
+    def get_kin_rc(self,
+                   table: str,
+                   From: str,
+                   To: str,
+                   pres: float,
+                   temp: float) -> list[Any]:
+        """Query the rate coefficients.
+
+        Args:
+            table (str): Generation
+            From (str): Species name
+            To (str): Specie name
+            pres (float): Pressure (Torr)
+            temp (float): Temperature (K)
+
+        Returns:
+            list[Any]: _description_
+        """
+        query: TextClause = text(
+            f"SELECT kin_id, {To} FROM {table}\
+                WHERE P={pres} AND T={temp} AND specie=\'{From}\'")
+        with self.eng.begin() as connection:
+            db_rslt: Sequence = connection.execute(query).fetchall()
+        return list(db_rslt)
 
     def get_table(self,
                   table: str) -> Sequence:
