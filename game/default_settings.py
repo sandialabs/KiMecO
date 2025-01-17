@@ -52,28 +52,32 @@ default_settings: dict[str, Any] = {
     "db_user": getpass.getuser(),
     # IP address of the database host.
     "db_host": "127.0.0.1",
+    # Type of perturbator
+    "pert": 'normal',
+    # Boundary condition for maximal deviation
+    "max_std": 4,
     # Absolute value of energy (kcal/mol) perturbation for wells
     # and bimolecular species
-    "pert_e": 1.0,
+    "std_e": 1.0,
     # Absolute value of energy (kcal/mol) perturbation for barriers
-    "pert_b": 1.0,
+    "std_b": 1.0,
     # Absolute percentage perturbation for wells
     # and bimolecular vibrations
-    "pert_f": 0.05,
+    "std_f": 0.05,
     # Absolute percentage perturbation for hindered rotors
-    "pert_hr": 0.2,
+    "std_hr": 0.2,
     # Absolute percentage perturbation for imaginary frequencies
-    "pert_if": 0.2,
+    "std_if": 0.2,
     # Energy transfer probability, factor, percentage
-    "pert_etf": 0.5,
+    "std_etf": 0.5,
     # Energy transfer probability, exponent, percentage
-    "pert_ete": 0.15,
+    "std_ete": 0.15,
     # Lennard Jones, epsilon, percentage
-    "pert_epsi": 0.2,
+    "std_epsi": 0.2,
     # Lennard Jones, sigma, percentage
-    "pert_sigma": 0.2,
+    "std_sigma": 0.2,
     # Multiplicating/dividing factor for barrierless reactions
-    "pert_sf": 2.0,
+    "std_sf": 2.0,
     # Name of the scoring function class to use
     "scoring_func": "weighteddif",
     # list of weights for specific PT.

@@ -1,5 +1,6 @@
 import os
 from typing import Literal, Sequence
+import comm
 from sqlalchemy import create_engine, MetaData, Table, Column, Row
 from sqlalchemy import Engine, Insert, update, Update, select
 from sqlalchemy import Float, Integer, String, text, TextClause
@@ -64,21 +65,14 @@ class Game_db:
     @property
     def _tables(self) -> Sequence:
         """Query the names of the tables
-        already present in a database"""
+        already present in a database.
+        Used in GUI. preparation for actualise button."""
         if self._tabls == []:
             query: TextClause = text(
                 text="""SELECT name FROM sqlite_master WHERE type='table';""")
             with self.eng.begin() as connection:
                 self._tabls: Sequence = connection.execute(query).fetchall()
-        return self._tabls
-
-    def col_of_table(self,
-                     table: str):
-        """Query the name of the columns of a given table.
-
-        Args:
-            table (str): _description_
-        """
+        return self._tabls     
 
     def entry_exist(self,
                     table: str,
@@ -244,10 +238,18 @@ class Game_db:
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt[0][1:])
-    
+
     def get_col_names(self,
                       table):
-        query = text(f"PRAGMA table_info('{table}')")
+        """Query the name of the columns of a given table.
+
+        Args:
+            table (str): _description_
+        """
+        query: TextClause = text(f"PRAGMA table_info('{table}')")
+        with self.eng.begin() as connection:
+            db_rslt: Sequence = connection.execute(query).fetchall()
+        return list(db_rslt)
 
     def get_kin_rc(self,
                    table: str,
@@ -270,6 +272,22 @@ class Game_db:
         query: TextClause = text(
             f"SELECT kin_id, {To} FROM {table}\
                 WHERE P={pres} AND T={temp} AND specie=\'{From}\'")
+        with self.eng.begin() as connection:
+            db_rslt: Sequence = connection.execute(query).fetchall()
+        return list(db_rslt)
+
+    def get_TP_sim_profiles(self,
+                            table: str,
+                            species: list[str],
+                            pres: float,
+                            temp: float):
+        command: str = "SELECT P, T, sim_id, time, "
+        for sp in species:
+            command += f"{sp}, "
+        command = command[:-2] + \
+            f" FROM {table} WHERE P={pres} AND T={temp}"
+        query: TextClause = text(
+            command)
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt)

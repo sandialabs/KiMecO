@@ -101,9 +101,13 @@ class RateCo:
                                       dtype='<U5')
         self.q_sys.pickUp(id=self.id,
                           jtype='kin')
+        if self.q_sys.status(id=self.id,
+                             jtype='kin') == 'reset':
+            print(f'Resetting KIN job {self.id}')
+            self.status = 'reset'
         for k, v in self.tbl_map.items():
             names[v] = k
-        
+
         # Happens with convergence issues in Mess calculation
         if self.tbl_map == {}:
             data = []

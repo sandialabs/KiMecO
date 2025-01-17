@@ -154,14 +154,18 @@ class QueueingSystem:
             job = self.kin_q[id]
         elif jtype == 'sim':
             job = self.sim_q[id]
-        # If the error file is not empty, a problem occured.
-        # Could be convergence of ME -> Reset the job
+
         if os.path.exists(
-           path=f"{job['loc']}/{job['name']}.err"
-           ) and os.stat(
-           path=f"{job['loc']}/{job['name']}.err"
-           ).st_size == 0:
-            job['status'] = 'pickedUp'
+           path=f"{job['loc']}/{job['name']}.out"
+           ):
+            # If the error file is not empty, a problem occured.
+            # Could be convergence of ME -> Reset the job
+            if not os.path.exists(
+            path=f"{job['loc']}/{job['name']}.err"
+            ) or os.stat(
+            path=f"{job['loc']}/{job['name']}.err"
+            ).st_size == 0:
+                job['status'] = 'pickedUp'
         else:
             job['status'] = 'reset'
         self.clean_files(job)
@@ -253,7 +257,8 @@ class QueueingSystem:
         """
         slurm_ids: NDArray[int32] = self.get_all_running()
         for job in self.kin_q:
-            if job['status'] == 'ready':
+            if job['status'] == 'ready' or\
+               job['status'] == 'reset':
                 continue
             elif job['status'] == 'running' \
                and not any(slurm_ids == job['sub_id']):

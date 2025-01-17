@@ -25,6 +25,8 @@ class Tournament(GeneticAlgorithm):
         Returns:
             list[Element]: list of elements of the new generation.
         """
+        # Change the intensity of the perturbation
+        self.pert.set_get_fact(gen=gen.id)
         next_gen: list[Element] = []
         prev_gen: dict[int, Element] = {}
         random.shuffle(gen.elements)

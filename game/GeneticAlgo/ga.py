@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 from game.element import Element
 from game.generation import Generation
-from game.perturbator import Perturbator
+from game.Perturbators.perturbator import Perturbator
 from game.scoring_f.scoring import Scoring
 
 
@@ -18,11 +18,12 @@ class GeneticAlgorithm(ABC):
     def __init__(self,
                  settings: dict[str, Any],
                  sf: Scoring,
+                 pert: Perturbator,
                  **kwargs
                  ) -> None:
         self.settings: dict[str, Any] = settings
         self.kwargs: dict[str, Any] = kwargs
-        self.pert = Perturbator(settings=settings)
+        self.pert: Perturbator = pert
         self.sf: Scoring = sf
 
     @abstractmethod

@@ -14,7 +14,7 @@ from numpy import bool_
 from game.q_sys import QueueingSystem
 from game.rate_coef import RateCo
 from game.simulation import SIM
-from game.perturbator import Perturbator
+from game.Perturbators.perturbator import Perturbator
 
 
 class Generation:
@@ -39,6 +39,7 @@ class Generation:
                  kin_db: Game_db,
                  sim_db: Game_db,
                  sf: Scoring,
+                 pert: Perturbator,
                  previous_el: dict[int, Element] = {}
                  ) -> None:
         """Generation object manages the worflow of
@@ -59,7 +60,7 @@ class Generation:
         self.previous_el: dict[int, Element] = previous_el
         self.id: int = Generation.__id
         Generation.__id += 1
-        self.pert = Perturbator(settings=set)
+        self.pert: Perturbator = pert
         self.settings: dict[str, Any] = set
         # List of species names used by cantera
         self.species: list[str] = [
@@ -229,19 +230,7 @@ class Generation:
         for el in new_gen:
             if el.score != self.sf.default_score:
                 el.status = 'DONE'
-        # Complete the generation if elements are missing
-        # if len(new_gen) < self.settings['n_elem']:
-        #     missing_ids = [i for i in range(self.settings['n_elem'])]
-        #     for el in new_gen:
-        #         if el.id in missing_ids:
-        #             missing_ids.pop(missing_ids.index(el.id))
-        #     for i in range(self.settings['n_elem'] - len(new_gen)):
-        #         new_gen.append(Element(
-        #             sop=self.pert.perturb(
-        #                 sop=self.previous_el[missing_ids[i]].sop),
-        #             id=missing_ids[i]))
-        for db_el in new_gen:
             for idx, gen_el in enumerate(self.elements):
-                if db_el.id == gen_el.id:
-                    self.elements[idx] = db_el
+                if el.id == gen_el.id:
+                    self.elements[idx] = el
                     break

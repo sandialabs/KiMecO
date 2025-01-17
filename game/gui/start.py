@@ -3,6 +3,8 @@ import sys
 import os
 
 import numpy as np
+from numpy.typing import NDArray
+
 from game.readers.mess_input import MessInputReader
 from game.database.game_db import Game_db
 from game.element import Element
@@ -14,7 +16,9 @@ from game.scoring_f.weighteddif import WeightedDif
 import pandas as pd
 from plotly.graph_objs._figure import Figure
 import plotly.graph_objects as go
-import math
+import cantera.with_units as ctu
+ureg = ctu.cantera_units_registry
+Q_ = ureg.Quantity
 
 
 def main() -> None:
@@ -51,6 +55,7 @@ def main() -> None:
     kin_db = Game_db(name='GAME_DB_KIN')
     kin_tot_g: int = len(kin_db._tables)
     sim_db = Game_db(name='GAME_DB_SIM')
+    sim_tot_g: int = len(sim_db._tables)
 
     # Define which scoring function to use
     if settings['scoring_func'].casefold() == 'weighteddif':
@@ -98,16 +103,16 @@ def main() -> None:
             id='gen_selection',
             style={'display': 'block'},
             children=[
-                html.H3('Enter the number \
-                        of generation to plot.'),
+                html.H4('Number of generations.'),
                 dcc.Input(
                     min=1,
                     max=sop_tot_g,
                     type="number",
                     value=1,
-                    placeholder="Number of generation",
+                    placeholder="Number of generations",
                     id='gen_num'),
                 # Select from which generation
+                html.H4('Slide to select generations.'),
                 dcc.RangeSlider(
                     id='gen range slider',
                     min=0,
@@ -129,7 +134,7 @@ def main() -> None:
             className='row', id='sop',
             style={'display': 'none'},
             children=[
-                html.H3('Select which type of parameter to plot:'),
+                html.H3('Type of parameter to plot:'),
                 dcc.RadioItems(options=[
                     {'label': 'Energies', 'value': '_e'},
                     {'label': 'Imaginary freq', 'value': '_if'},
@@ -211,7 +216,43 @@ def main() -> None:
                         html.H5(children={}, id='kin_avrg'),
                         html.H5(children={}, id='kin_elem'),
                         dcc.Graph(figure={}, id='kin_dist')])]),
-        html.Div(className='row', id='sim', style={'display': 'none'})
+        ############################
+        #        SIM SECTION       #
+        ############################
+        html.Div(
+            className='row', id='sim',
+            style={'display': 'none'},
+            children=[
+                html.H4('Species to visualize'),
+                dcc.Dropdown(options=[
+                    sp for sp in species],
+                    multi=True,
+                    id='selected species'),
+                html.H4('Pressure (Torr):'),
+                dcc.Dropdown(options=[
+                    p for p in settings['rc_pres']],
+                    id='sim_P'),
+                html.H4('Temperature (K):'),
+                dcc.Dropdown(options=[
+                    t for t in settings['rc_temp']],
+                    id='sim_T'),
+                # Plot BUTTON
+                html.Div(
+                    id='show_sim_plot_button',
+                    style={'display': 'none'},
+                    children=[
+                        html.Button(id='sim_plot_button',
+                                    n_clicks=0,
+                                    children='Plot',
+                                    )]),
+                html.Div(
+                    className='row',
+                    id='sim_plot',
+                    style={'display': 'none'},
+                    children=[
+                        html.H3(children={}, id='sim_dist_title'),
+                        html.H5(children={}, id='sim_elem'),
+                        dcc.Graph(figure={}, id='sim_prof')])])
     ]
 
     # GENERATION CONTROL
@@ -345,7 +386,7 @@ def main() -> None:
                 f'Number of elements: {nel}')
 
     # KIN Interactions
-    # Show sop plot button once generation and parameters have been selected
+    # Show kin plot button once rc have been selected
     @callback(
         Output(component_id='show_kin_plot_button', component_property='style'),
         Input(component_id='rc_from', component_property='value'),
@@ -363,7 +404,7 @@ def main() -> None:
            rc_to in species and\
            rc_P in settings['rc_pres'] and\
            rc_T in settings['rc_temp'] and\
-           all([gen_i in range(sop_tot_g) for gen_i in selected_gen]):
+           all([gen_i in range(kin_tot_g) for gen_i in selected_gen]):
             return {'display': 'block'}
         else:
             return {'display': 'none'}
@@ -392,7 +433,8 @@ def main() -> None:
         avrg = []
         nel = []
         fig = go.Figure()
-        if From not in species or\
+        if clic is None or\
+           From not in species or\
            To not in species or\
            temp not in settings['rc_temp'] or\
            pres not in settings['rc_pres']:
@@ -424,9 +466,36 @@ def main() -> None:
                 bingroup=1))
         # Overlay both histograms
         fig.update_layout(barmode='overlay',
-                          xaxis={'title': 'Rate coefficient',
-                                 'tickformat': '.2e'},
-                          yaxis_title_text='Count of elements')
+                          xaxis=dict(
+                              title='Rate coefficient',
+                              showline=True,
+                              showgrid=True,
+                              showticklabels=True,
+                              linecolor='rgb(0, 0, 0)',
+                              linewidth=2,
+                              ticks='inside',
+                              tickformat='.2e',
+                              tickfont=dict(
+                                  family='Arial',
+                                  size=12,
+                                  color='rgb(0, 0, 0)')
+                          ),
+                          yaxis=dict(
+                              title='Count of elements',
+                              showline=True,
+                              showgrid=True,
+                              showticklabels=True,
+                              linecolor='rgb(0, 0, 0)',
+                              linewidth=2,
+                              ticks='inside',
+                              # tickformat='.2e',
+                              tickfont=dict(
+                                  family='Arial',
+                                  size=12,
+                                  color='rgb(0, 0, 0)')
+                          ),
+                          plot_bgcolor='white'
+                          )
         # Reduce opacity to see both histograms
         fig.update_traces(opacity=0.75)
         return ({'display': 'block'},
@@ -437,6 +506,139 @@ def main() -> None:
                 f'Average: {avrg}',
                 f'Number of elements: {nel}')
 
+    # SIM Interactions
+    # Show sim plot button once species have been selected
+    @callback(
+        Output(component_id='show_sim_plot_button', component_property='style'),
+        Input(component_id='selected species', component_property='value'),
+        State(component_id='gen range slider', component_property='value'),
+    )
+    def show_sim_plot_button(specs: list[str],
+                             selected_gen: list[int]):
+        if specs is not None and\
+           all([sp in species for sp in specs]) and\
+           all([gen_i in range(sim_tot_g) for gen_i in selected_gen]):
+            return {'display': 'block'}
+        else:
+            return {'display': 'none'}
+        
+    @callback(    
+        Output(component_id='sim_plot', component_property='style'),
+        Output(component_id='sim_prof', component_property='figure'),
+        Output(component_id='sim_dist_title', component_property='children'),
+        Output(component_id='sim_elem', component_property='children'),
+        Input(component_id='show_sim_plot_button', component_property='n_clicks'),
+        State(component_id='selected species', component_property='value'),
+        State(component_id='sim_P', component_property='value'),
+        State(component_id='sim_T', component_property='value'),
+        State(component_id='gen range slider', component_property='value')
+    )
+    def update_sim_figure(clic,
+                          specs: list[str],
+                          pres: float,
+                          temp: float,
+                          selected_gen: list[int]
+                          ) :
+        nel = []
+        fig = go.Figure()
+        if clic is None or\
+           not all([sp in species for sp in specs]) or\
+           not all([gen_i in range(sim_tot_g) for gen_i in selected_gen]):
+            return ({'display': 'none'},
+                    fig,
+                    '',
+                    '')
+        gen_arr = [
+            np.array(sim_db.get_TP_sim_profiles(
+                table=f'G{gen_i}',
+                species=specs,
+                pres=Q_(f"{pres} torr").to("Pa").magnitude,
+                temp=temp))
+            for gen_i in selected_gen]
+        op: list[float] = [1.0-((i+1)*0.9/len(selected_gen))
+                           for i in range(len(selected_gen))]
+        for idx, arr in enumerate(gen_arr):
+            if idx == 0:
+                # gen_array[generations, elements, columns]
+                # columns : P (Pa), T (K), sim_id, time, species
+                # species are in the same order as requested
+                min_sim_id = arr[:, 2].min()
+                nsteps: int = int(np.sum(arr[:, 2] == min_sim_id))
+            nel.append(int(len(arr[:, 2])/nsteps))
+            specs_arr = np.reshape(arr,
+                                   newshape=(nel[-1],
+                                             nsteps,
+                                             4+len(specs)))
+            specs_arr = specs_arr[:, :, 4:]
+            for sp_idx, sp in enumerate(specs):
+                for elem in range(len(specs_arr)):
+                    if idx == len(gen_arr)-1 and\
+                        elem == len(specs_arr)-1:
+                        fig.add_trace(go.Scatter(
+                            x=arr[:, 3][:nsteps],
+                            y=specs_arr[elem, :, sp_idx].T,
+                            mode='lines',
+                            name=sp,
+                            opacity=op[idx],
+                            # hoveron='fills',
+                            hoverinfo='name'
+                            ))
+                    else:
+                        fig.add_trace(go.Scatter(
+                            x=arr[:, 3][:nsteps],
+                            y=specs_arr[elem, :, sp_idx].T,
+                            mode='lines',
+                            name=sp,
+                            showlegend=False,
+                            opacity=op[idx],
+                            # hoveron='fills',
+                            hoverinfo='name'
+                            ))
+                if idx == len(gen_arr)-1:
+                    fig.update_traces(
+                        marker=dict(
+                            color=fig.layout['template']\
+                                ['layout']['colorway'][sp_idx]),
+                            selector=dict(name=sp))
+        # Overlay both histograms
+        fig.update_layout(xaxis=dict(
+                              title='time (s)',
+                              showline=True,
+                              showgrid=True,
+                              showticklabels=True,
+                              linecolor='rgb(0, 0, 0)',
+                              linewidth=2,
+                              ticks='inside',
+                              tickformat='.2e',
+                              tickfont=dict(
+                                  family='Arial',
+                                  size=12,
+                                  color='rgb(0, 0, 0)')
+                          ),
+                          yaxis=dict(
+                              title='Concentration',
+                              showline=True,
+                              showgrid=True,
+                              showticklabels=True,
+                              type='log',
+                              linecolor='rgb(0, 0, 0)',
+                              linewidth=2,
+                              ticks='inside',
+                              tickformat='.2e',
+                              tickfont=dict(
+                                  family='Arial',
+                                  size=12,
+                                  color='rgb(0, 0, 0)'),
+                          ),
+                          plot_bgcolor='white'
+                          )
+        # Reduce opacity to see different species
+        # fig.update_traces(opacity=0.75)
+        return ({'display': 'block'},
+                fig,
+                f"""Concentration profiles for species\
+                    {specs} in generations {selected_gen}""",
+                f'Number of elements: {nel}')
     PORT = '8000'
     ADDRESS = '127.0.0.1'
     app.run(port=PORT, host=ADDRESS)

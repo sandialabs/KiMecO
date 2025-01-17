@@ -121,6 +121,9 @@ class Element:
         self.status = 'kin2sim'
 
     def check_rc_status(self) -> None:
+        """Only set the status to reset
+        if there was a problem during KIN calculation.
+        """
         self.rateCoef.set_status()
         if self.rateCoef.status == 'reset':
             self.status = 'reset'
@@ -148,8 +151,8 @@ class Element:
         if any(np.array(self.sim.status) == 'reset'):
             self.status = 'reset'
             print(
-                f'Element {self.id} has been reset \
-                    because a simulation crashed.')
+                f"""Element {self.id} has been reset \
+                  because a simulation crashed.""")
 
     def calc_score(self,
                    settings: dict[str, Any]) -> None:

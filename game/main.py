@@ -1,9 +1,10 @@
 import sys
 import os
+from time import time
 from game.GeneticAlgo.tournament import Tournament
 from game.element import Element
 from game.generation import Generation
-from game.perturbator import Perturbator
+from game.Perturbators.normal import Normal
 from game.readers.mess_input import MessInputReader
 from game.database.game_db import Game_db
 from game.user_input import check_input
@@ -11,8 +12,9 @@ from game.parameters import SOP
 from game.scoring_f.weighteddif import WeightedDif
 
 
+
 def main() -> None:
-    if len(sys.argv) != 1:
+    if len(sys.argv) != 2:
         print("""
     GAME needs various parameters to be set in a JSON input file.
     This JSON input file should be supplied as the first and only
@@ -50,6 +52,14 @@ def main() -> None:
         # Default scoring function
         sf = WeightedDif(settings=settings)
 
+    if settings['pert'] == 'normal':
+        pert = Normal(settings=settings,
+                      initial_SOP=init_SOP)
+    else:
+        raise NotImplementedError('Currently, the only type of perturbator\
+                                   implemented is <normal>')
+    pert.set_get_fact(0)
+
     first_gen = Generation(elements=[Element(sop=init_SOP, id=0, sf=sf)],
                            set=settings,
                            rc_tpl=input_tpl,
@@ -57,18 +67,19 @@ def main() -> None:
                            sop_db=sop_db,
                            kin_db=kin_db,
                            sim_db=sim_db,
-                           sf=sf)
+                           sf=sf,
+                           pert=pert)
     first_gen.run()
 
     converged = False
-
-    pert = Perturbator(settings=settings)
 
     new_elements: list[Element] = [
         Element(sop=pert.perturb(sop=init_SOP), id=id, sf=sf)
         for id in range(settings['n_elem'])]
 
-    ga = Tournament(settings=settings, sf=sf)
+    ga = Tournament(settings=settings,
+                    sf=sf,
+                    pert=pert)
 
     # Passed to new generations in the loop
     # in case an element fails and needs to be reset.
@@ -77,6 +88,7 @@ def main() -> None:
         prev_gen[id] = first_gen.elements[0]
 
     while not converged and Generation.total() < settings['max_gen']:
+        # init_t_start = time()
         new_gen = Generation(elements=new_elements,
                              set=settings,
                              rc_tpl=input_tpl,
@@ -85,8 +97,15 @@ def main() -> None:
                              kin_db=kin_db,
                              sim_db=sim_db,
                              sf=sf,
+                             pert=pert,
                              previous_el=prev_gen)
+        # init_t_end = time()
+        # gen_init_time = init_t_end - init_t_start
+        # print('Initialization of generation')
         new_gen.run()
+        # t_end = time()
+        # gen_time = t_end - t_start
+        # print()
         if not ga.converged(gen=new_gen):
             print(f'Generation {new_gen.id} finished.')
             print(f'Best score: {new_gen.best_score}')
