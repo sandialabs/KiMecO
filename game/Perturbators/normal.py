@@ -37,7 +37,7 @@ class Normal(Perturbator):
 
         try_fact = -1
         while try_fact < 0 or\
-            not self.within_boundaries(perturbed_val=p_sop.factor,
+            not self.within_boundaries(perturbed_val=try_fact,
                                        std_val=self.settings['std_etf'],
                                        initial_val=self.i_sop.factor):
             # Truncate distribution at 0 to have positive factor
@@ -48,7 +48,7 @@ class Normal(Perturbator):
 
         try_pow = -1
         while try_pow < 0 or\
-            not self.within_boundaries(perturbed_val=p_sop.power,
+            not self.within_boundaries(perturbed_val=try_pow,
                                        std_val=self.settings['std_ete'],
                                        initial_val=self.i_sop.power):
             # Truncate distribution at 0 to have positive power
@@ -60,7 +60,7 @@ class Normal(Perturbator):
         for i in range(len(p_sop.sigmas)):
             try_sig = -1
             while try_sig < 0 or \
-                not self.within_boundaries(perturbed_val=p_sop.sigmas[i],
+                not self.within_boundaries(perturbed_val=try_sig,
                                            std_val=self.settings['std_sigma'],
                                            initial_val=self.i_sop.sigmas[i]):
                 try_sig = random.normal(
@@ -71,7 +71,7 @@ class Normal(Perturbator):
         for i in range(len(p_sop.epsilons)):
             try_eps = -1
             while try_eps < 0 or \
-                not self.within_boundaries(perturbed_val=p_sop.epsilons[i],
+                not self.within_boundaries(perturbed_val=try_eps,
                                            std_val=self.settings['std_epsi'],
                                            initial_val=self.i_sop.epsilons[i]):
                 try_eps = random.normal(

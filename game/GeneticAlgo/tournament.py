@@ -39,7 +39,7 @@ class Tournament(GeneticAlgorithm):
             # The winner has nothing to calculate
             # But its id must be changed so that each id is unique
             next_gen.append(winner)
-            winner.id = idx*2
+            winner.id = idx*2  # Change the ID of the winner to keep it unique
             prev_gen[idx*2+1] = winner
             next_gen.append(
                 Element(sop=self.pert.perturb(sop=winner.sop),

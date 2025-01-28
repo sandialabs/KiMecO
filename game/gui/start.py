@@ -3,10 +3,11 @@ import sys
 import os
 
 import numpy as np
-from numpy.typing import NDArray
 
+from game.database.kin_db import KIN_DB
+from game.database.sim_db import SIM_DB
+from game.database.sop_db import SOP_DB
 from game.readers.mess_input import MessInputReader
-from game.database.game_db import Game_db
 from game.element import Element
 from game.user_input import check_input
 from game.parameters import SOP
@@ -49,15 +50,18 @@ GAME graphical interface can only analyse the data
 of existing database created by a previous GAME run.
 Run GAME with project_name: {},
 and then analyse the results.'''.format(
-    settings['project_name']))
+            settings['project_name']))
         sys.exit()
     os.chdir(settings['project_name'])
-    sop_db = Game_db(name='GAME_DB_SOP')
-    sop_tot_g: int = len(sop_db._tables)
-    kin_db = Game_db(name='GAME_DB_KIN')
-    kin_tot_g: int = len(kin_db._tables)
-    sim_db = Game_db(name='GAME_DB_SIM')
-    sim_tot_g: int = len(sim_db._tables)
+    sop_db = SOP_DB(sop=init_SOP,
+                    name='GAME_DB_SOP')
+    sop_tot_g: int = len(sop_db.tables)
+    kin_db = KIN_DB(sop=init_SOP,
+                    name='GAME_DB_KIN')
+    kin_tot_g: int = len(kin_db.tables)
+    sim_db = SIM_DB(sop=init_SOP,
+                    name='GAME_DB_SIM')
+    sim_tot_g: int = len(sim_db.tables)
 
     # Define which scoring function to use
     if settings['scoring_func'].casefold() == 'weighteddif':
