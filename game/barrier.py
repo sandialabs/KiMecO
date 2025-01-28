@@ -1,7 +1,6 @@
 from typing import Any
 from game.bimolecular import Bimolecular
 from game.well import Well
-import numpy as np
 
 
 class Barrier(Well):

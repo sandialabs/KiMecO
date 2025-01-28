@@ -1,7 +1,7 @@
 from typing import Any
 
 from pandas import Index, MultiIndex, DataFrame, RangeIndex
-from game.database.game_db import Game_db
+from game.database.kin_db import KIN_DB
 from game.parameters import SOP
 from game.q_sys import QueueingSystem
 from game.writers.mess import MessWriter
@@ -23,7 +23,7 @@ class RateCo:
                  name: str,
                  loc: str,
                  q_sys: QueueingSystem,
-                 db: Game_db
+                 db: KIN_DB
                  ) -> None:
 
         self.status: str
@@ -35,7 +35,7 @@ class RateCo:
         self.set: dict[str, Any] = settings
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
-        self.db: Game_db = db
+        self.db: KIN_DB = db
         # Modulable if something else than mess is used.
         if self.software == 'mess':
             self.output_name: str = f"{self.loc}/{self.name}.out"
@@ -89,8 +89,8 @@ class RateCo:
         """Generate and submit a Kinetic
         Constants calculation
         """
-        if not os.path.isfile(self.output_name) and\
-           self.status == 'notInQueue' or\
+        # not os.path.isfile(self.output_name) and\
+        if self.status == 'notInQueue' or\
            self.status == 'reset':
             cpu: int = self.set['cpu_kin']
             mem: int = self.set['mem_kin']
@@ -163,7 +163,7 @@ class RateCo:
         indexes: MultiIndex = MultiIndex.from_product([
             self.set['rc_pres'],
             self.set['rc_temp'],
-            [self.name],
+            [self.id],
             names,],
             names=['P', 'T', 'kin_id', 'specie'])
         db_data = np.reshape(
@@ -180,5 +180,5 @@ class RateCo:
         df.reset_index(inplace=True)
         df.index = Index(row_ids)
         df.index.name = 'id'
-        
+
         return df

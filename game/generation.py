@@ -5,7 +5,6 @@ from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
 from game.database.sop_db import SOP_DB
 from game.element import Element
-from game.database.game_db import Game_db
 from game.scoring_f.scoring import Scoring
 from game.well import Well
 from game.barrier import Barrier
@@ -139,6 +138,7 @@ class Generation:
                 # Reset failed caluclations
                 if el.status == 'reset':
                     rst: int = el.reset
+                    self.clean_q(self.elements[el.id])
                     self.elements[el.id] = Element(
                         sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
                         id=el.id,
@@ -148,7 +148,6 @@ class Generation:
                     continue
                 # Calculate rate coefficients
                 if el.status == 'sop':
-                    # el.sf = self.sf
                     el.rateCoef = RateCo(sop=el.sop,
                                          settings=self.settings,
                                          software_tpl=self.rc_tpl,
@@ -160,14 +159,15 @@ class Generation:
                     el.rateCoef.set_status(table=f"G{self.id}")
                     if el.rateCoef.status == 'notInQueue':
                         el.rateCoef.q_up()
+                    elif el.rateCoef.status == 'running':
+                        continue
                     elif el.rateCoef.status == 'finished':
                         # Next status is set in this function as it can fail.
                         el.save_kin(db=self.kin_db,
                                     table=f'G{self.id}')
-                    elif el.rateCoef.status == 'running':
-                        continue
+                        el.status = 'kin'
                 # Calculate SIMs
-                if el.status == 'kin2sim':
+                if el.status == 'kin':
                     el.sim = SIM(sop=el.sop,
                                  kin=el.rateCoef,
                                  id=el.id,
@@ -187,13 +187,11 @@ class Generation:
                             for status in el.sim.status]):
                         el.recover_sim_profiles(db=self.sim_db,
                                                 table=f'G{self.id}')
-                        el.status = 'scoring'
+                        if el.status != 'reset':
+                            el.status = 'scoring'
                 # Scoring
                 if el.status == 'scoring':
-                    # el.save_sop(db=self.sop_db,
-                    #             table=f"G{self.id}",
-                    #             mode=self.settings['restart'])
-                    el.calc_score(settings=self.settings)
+                    el.calc_score()
                 if el.status == 'DONE':
                     el.prepare_upsert(db=self.sop_db,
                                       table=f'G{self.id}')
@@ -222,3 +220,18 @@ class Generation:
                 if el.id == gen_el.id:
                     self.elements[idx] = el
                     break
+
+    def clean_q(self,
+                elem: Element):
+        """Reset the statuses in the queing system
+        for an element when it gets reset.
+
+        Args:
+            elem (Element): Element that has status reset before
+            it gets reperturbed.
+        """
+        self.qs.kin_q[elem.id]['status'] = 'notInQueue'
+
+        for sim in range(len(elem.sim.simulations)):
+            sim_id = self.id * len(elem.sim.simulations) + sim
+            self.qs.sim_q[sim_id]['status'] = 'notInQueue'

@@ -155,9 +155,9 @@ class QueueingSystem:
         elif jtype == 'sim':
             job = self.sim_q[id]
 
-        if os.path.exists(
+        if (jtype == 'kin' and os.path.exists(
            path=f"{job['loc']}/{job['name']}.out"
-           ):
+           )) or (jtype == 'sim'):
             # If the error file is not empty, a problem occured.
             # Could be convergence of ME -> Reset the job
             if not os.path.exists(
@@ -166,6 +166,11 @@ class QueueingSystem:
                path=f"{job['loc']}/{job['name']}.err"
                ).st_size == 0:
                 job['status'] = 'pickedUp'
+            else:
+                job['status'] = 'reset'
+                print(f"Resetting job {job['name']} because an error occured.")
+                if os.path.exists(f"{job['loc']}/{job['name']}.out"):
+                    os.remove(f"{job['loc']}/{job['name']}.out")
         else:
             job['status'] = 'reset'
         self.clean_files(job)

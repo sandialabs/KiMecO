@@ -1,4 +1,7 @@
 from game.database.game_db import Game_db
+from game.database.kin_db import KIN_DB
+from game.database.sim_db import SIM_DB
+from game.database.sop_db import SOP_DB
 from game.parameters import SOP
 from game.rate_coef import RateCo
 from game.scoring_f.scoring import Scoring
@@ -43,7 +46,7 @@ class Element:
         self.reset: int = 0
 
     def save_sop(self,
-                 db: Game_db,
+                 db: SOP_DB,
                  table: str,
                  mode: Literal['default',
                                'scratch']) -> None:
@@ -92,7 +95,7 @@ class Element:
                          mode='append')
 
     def save_kin(self,
-                 db: Game_db,
+                 db: KIN_DB,
                  table: str) -> None:
         """Save the RateCoef in the database in the table
         of the generation
@@ -118,23 +121,9 @@ class Element:
             db.save_data(table=table,
                          df=df,
                          mode='append')
-        self.status = 'kin2sim'
-
-    # def check_rc_status(self,
-    #                     gen_id: int) -> None:
-    #     """Only set the status to reset
-    #     if there was a problem during KIN calculation.
-
-    #     Args:
-    #         gen_id (int): Generation ID
-    #     """
-    #     self.rateCoef.set_status(table=gen_id)
-    #     if self.rateCoef.status == 'finished':
-    #         self.status = 
-    #     self.status = self.rateCoef.status
 
     def recover_sim_profiles(self,
-                             db: Game_db,
+                             db: SIM_DB,
                              table) -> None:
         tsteps: NDArray[Any] = np.array(
             [len(i['time']) for i in self.sim.settings['exp_profiles']])
@@ -159,8 +148,7 @@ class Element:
                 f"""Element {self.id} has been reset \
                   because a simulation crashed.""")
 
-    def calc_score(self,
-                   settings: dict[str, Any]) -> None:
+    def calc_score(self) -> None:
         """Calculate the score of the element
         using the user requested function.
         If the elif statement for a new scoring function
@@ -176,7 +164,7 @@ class Element:
         except IndexError:
             # Occurs when a simulation didn't work so profiles were not saved
             self.status = 'reset'
-
+            print(f'Resetting element {self.id} because a simulation crashed')
 
     @property
     def score(self) -> float:
