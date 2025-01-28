@@ -42,22 +42,53 @@ class RateCo:
         else:
             self.output_name = f"{self.loc}/{self.name}.out"
 
-    def set_status(self) -> None:
+    def set_status(self,
+                   table: str) -> None:
         status: str = self.q_sys.status(id=self.id,
                                         jtype='kin')
-        if status == 'notInQueue':
-            if os.path.isfile(self.output_name):
-                self.status = 'finished'
-            else:
-                self.status = status
+        if status == 'notInQueue' and\
+           os.path.isfile(self.output_name) and\
+           self.is_in_db(table=table):
+            self.status = 'finished'
         else:
             self.status = status
+
+    def is_in_db(self,
+                 table: str) -> bool:
+        """Check if the rate coefficients of this object are in the db.
+
+
+        Args:
+            table (int): Generation id
+
+        Returns:
+            bool: Wether data in db correspond to this object.
+        """
+        db_row_ids: list[int] = self.db.get_ids_from_kin_id(table=table,
+                                                            kin_id=self.id)
+        cols = self.db.get_col_names(table=table)
+        row_ids: list[int] = [i for i in RangeIndex(
+            start=(self.id *
+                   len(self.set['rc_pres']) *
+                   len(self.set['rc_temp']) *
+                   len(cols[5:])),
+            stop=(self.id *
+                  len(self.set['rc_pres']) *
+                  len(self.set['rc_temp']) *
+                  len(cols[5:]) +
+                  len(self.set['rc_pres']) *
+                  len(self.set['rc_temp']) *
+                  len(cols[5:])),
+            step=1)]
+        if db_row_ids == row_ids:
+            return True
+        else:
+            return False
 
     def q_up(self) -> None:
         """Generate and submit a Kinetic
         Constants calculation
         """
-        self.set_status()
         if not os.path.isfile(self.output_name) and\
            self.status == 'notInQueue' or\
            self.status == 'reset':
@@ -105,6 +136,7 @@ class RateCo:
                              jtype='kin') == 'reset':
             print(f'Resetting KIN job {self.id}')
             self.status = 'reset'
+            
         for k, v in self.tbl_map.items():
             names[v] = k
 

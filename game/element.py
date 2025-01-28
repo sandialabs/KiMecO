@@ -120,13 +120,18 @@ class Element:
                          mode='append')
         self.status = 'kin2sim'
 
-    def check_rc_status(self) -> None:
-        """Only set the status to reset
-        if there was a problem during KIN calculation.
-        """
-        self.rateCoef.set_status()
-        if self.rateCoef.status == 'reset':
-            self.status = 'reset'
+    # def check_rc_status(self,
+    #                     gen_id: int) -> None:
+    #     """Only set the status to reset
+    #     if there was a problem during KIN calculation.
+
+    #     Args:
+    #         gen_id (int): Generation ID
+    #     """
+    #     self.rateCoef.set_status(table=gen_id)
+    #     if self.rateCoef.status == 'finished':
+    #         self.status = 
+    #     self.status = self.rateCoef.status
 
     def recover_sim_profiles(self,
                              db: Game_db,

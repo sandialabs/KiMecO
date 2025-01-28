@@ -161,10 +161,10 @@ class QueueingSystem:
             # If the error file is not empty, a problem occured.
             # Could be convergence of ME -> Reset the job
             if not os.path.exists(
-            path=f"{job['loc']}/{job['name']}.err"
-            ) or os.stat(
-            path=f"{job['loc']}/{job['name']}.err"
-            ).st_size == 0:
+               path=f"{job['loc']}/{job['name']}.err"
+               ) or os.stat(
+               path=f"{job['loc']}/{job['name']}.err"
+               ).st_size == 0:
                 job['status'] = 'pickedUp'
         else:
             job['status'] = 'reset'
@@ -301,12 +301,12 @@ class QueueingSystem:
         if jtype == 'kin':
             # Any checks if the array has a content.
             # Return false if empty.
-            if any(self.kin_q[id]):
+            if self.kin_q[id]['status'] != '':
                 return self.kin_q[id]['status']
             else:
                 return 'notInQueue'
         else:  # jtype == 'sim':
-            if any(self.sim_q[id]):
+            if self.sim_q[id]['status'] != '':
                 return self.sim_q[id]['status']
             else:
                 return 'notInQueue'

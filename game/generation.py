@@ -1,6 +1,9 @@
 import os
 from typing import Any
 
+from game.database.kin_db import KIN_DB
+from game.database.sim_db import SIM_DB
+from game.database.sop_db import SOP_DB
 from game.element import Element
 from game.database.game_db import Game_db
 from game.scoring_f.scoring import Scoring
@@ -35,9 +38,9 @@ class Generation:
                  set: dict[str, Any],
                  rc_tpl: list[str],
                  loc: str,
-                 sop_db: Game_db,
-                 kin_db: Game_db,
-                 sim_db: Game_db,
+                 sop_db: SOP_DB,
+                 kin_db: KIN_DB,
+                 sim_db: SIM_DB,
                  sf: Scoring,
                  pert: Perturbator,
                  previous_el: dict[int, Element] = {}
@@ -76,9 +79,9 @@ class Generation:
         if not os.path.isdir(f'{self.loc}/G{self.id}'):
             os.mkdir(f'{self.loc}/G{self.id}')
         os.chdir(f'{self.loc}/G{self.id}')
-        self.sop_db: Game_db = sop_db
-        self.kin_db: Game_db = kin_db
-        self.sim_db: Game_db = sim_db
+        self.sop_db: SOP_DB = sop_db
+        self.kin_db: KIN_DB = kin_db
+        self.sim_db: SIM_DB = sim_db
         self.create_tables()
         if set['restart'] == 'default':
             self.restore_gen_from_db()
@@ -100,36 +103,21 @@ class Generation:
         """
         # Create table for gen in SOP, KIN and SIM
         # SOP
-        self.sop_db.create_table(
-            name=f'G{self.id}',
-            columns=[key for key in
-                     self.elements[0].sop.parameters_names.keys()],
-            types=[type(val) for val in
-                   self.elements[0].sop.parameters_names.values()]
-            )
+        tbl_name: str = f'G{self.id}'
+        if tbl_name not in self.sop_db.tables:
+            self.sop_db.create_table(
+                name=tbl_name
+                )
         # KIN
-        kin_col: list[str] = ['P', 'T', 'kin_id', 'specie']
-        kin_col.extend(self.elements[0].sop.wells_names)
-        kin_col.extend(self.elements[0].sop.bimols_names)
-        kin_types: list = [float, float, str, str]
-        kin_types.extend([float for i in range(
-            len(self.elements[0].sop.wells_names) +
-            len(self.elements[0].sop.bimols_names))])
-        self.kin_db.create_table(
-            name=f'G{self.id}',
-            columns=kin_col,
-            types=kin_types
-            )
+        if tbl_name not in self.kin_db.tables:
+            self.kin_db.create_table(
+                name=tbl_name
+                )
         # SIM
-        sim_col: list[str] = ['P', 'T', 'sim_id', 'time']
-        sim_col.extend(self.species)
-        sim_types = [int, float, float, int, float]
-        sim_types.extend([float for i in range(len(self.species))])
-        self.sim_db.create_table(
-            name=f'G{self.id}',
-            columns=sim_col,
-            types=sim_types
-            )
+        if tbl_name not in self.sim_db.tables:
+            self.sim_db.create_table(
+                name=tbl_name
+                )
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
@@ -160,7 +148,7 @@ class Generation:
                     continue
                 # Calculate rate coefficients
                 if el.status == 'sop':
-                    el.sf = self.sf
+                    # el.sf = self.sf
                     el.rateCoef = RateCo(sop=el.sop,
                                          settings=self.settings,
                                          software_tpl=self.rc_tpl,
@@ -169,15 +157,15 @@ class Generation:
                                          loc=f'{self.loc}/G{self.id}',
                                          q_sys=self.qs,
                                          db=self.kin_db)
-                    el.rateCoef.q_up()
-                    el.status = 'kin'
-                # Recover rate coefficients
-                elif el.status == 'kin':
-                    el.check_rc_status()
-                    if el.rateCoef.status == 'finished':
+                    el.rateCoef.set_status(table=f"G{self.id}")
+                    if el.rateCoef.status == 'notInQueue':
+                        el.rateCoef.q_up()
+                    elif el.rateCoef.status == 'finished':
                         # Next status is set in this function as it can fail.
                         el.save_kin(db=self.kin_db,
                                     table=f'G{self.id}')
+                    elif el.rateCoef.status == 'running':
+                        continue
                 # Calculate SIMs
                 if el.status == 'kin2sim':
                     el.sim = SIM(sop=el.sop,

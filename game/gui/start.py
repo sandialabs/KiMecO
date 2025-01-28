@@ -44,10 +44,12 @@ def main() -> None:
     input_tpl: list[str]
     (init_SOP, input_tpl) = mr.read()
     if not os.path.isdir(settings['project_name']):
-        print('''GAME graphical interface can only analyse the data
-              of existing database created by a previous GAME run.
-              Run GAME with project_name:{project_name},
-              and then analyse the results.''')
+        print('''
+GAME graphical interface can only analyse the data
+of existing database created by a previous GAME run.
+Run GAME with project_name: {},
+and then analyse the results.'''.format(
+    settings['project_name']))
         sys.exit()
     os.chdir(settings['project_name'])
     sop_db = Game_db(name='GAME_DB_SOP')

@@ -1,6 +1,5 @@
 import os
 from typing import Literal, Sequence
-import comm
 from sqlalchemy import create_engine, MetaData, Table, Column, Row
 from sqlalchemy import Engine, Insert, update, Update, select
 from sqlalchemy import Float, Integer, String, text, TextClause
@@ -40,6 +39,13 @@ class Game_db:
         }
         self._upsert = {}
 
+    def get_table_names(self):
+        query: TextClause = text(
+            "SELECT name FROM sqlite_master WHERE type='table'")
+        with self.eng.begin() as connection:
+            db_rslt: Sequence = connection.execute(query).fetchall()
+        return db_rslt
+
     def table_exists(self,
                      name: str) -> bool:
         with self.eng.begin() as conn:
@@ -61,18 +67,6 @@ class Game_db:
               for i in range(len(columns))]
             )
         self.metadata.create_all(self.eng)
-
-    @property
-    def _tables(self) -> Sequence:
-        """Query the names of the tables
-        already present in a database.
-        Used in GUI. preparation for actualise button."""
-        if self._tabls == []:
-            query: TextClause = text(
-                text="""SELECT name FROM sqlite_master WHERE type='table';""")
-            with self.eng.begin() as connection:
-                self._tabls: Sequence = connection.execute(query).fetchall()
-        return self._tabls     
 
     def entry_exist(self,
                     table: str,
@@ -221,24 +215,6 @@ class Game_db:
                       method="multi"
                       )
 
-    def get_sop_row(self,
-                    table: str,
-                    id: int) -> list[Any]:
-        """Return the values in the row uniquely identified by id
-        in the table.
-
-        Args:
-            table (_type_): table name in db
-            id (_type_): row id
-
-        Returns:
-            list[Any]: List of values in the row
-        """
-        query: TextClause = text(f"SELECT * FROM {table} WHERE id={id}")
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
-        return list(db_rslt[0][1:])
-
     def get_col_names(self,
                       table):
         """Query the name of the columns of a given table.
@@ -247,47 +223,6 @@ class Game_db:
             table (str): _description_
         """
         query: TextClause = text(f"PRAGMA table_info('{table}')")
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
-        return list(db_rslt)
-
-    def get_kin_rc(self,
-                   table: str,
-                   From: str,
-                   To: str,
-                   pres: float,
-                   temp: float) -> list[Any]:
-        """Query the rate coefficients.
-
-        Args:
-            table (str): Generation
-            From (str): Species name
-            To (str): Specie name
-            pres (float): Pressure (Torr)
-            temp (float): Temperature (K)
-
-        Returns:
-            list[Any]: _description_
-        """
-        query: TextClause = text(
-            f"SELECT kin_id, {To} FROM {table}\
-                WHERE P={pres} AND T={temp} AND specie=\'{From}\'")
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
-        return list(db_rslt)
-
-    def get_TP_sim_profiles(self,
-                            table: str,
-                            species: list[str],
-                            pres: float,
-                            temp: float):
-        command: str = "SELECT P, T, sim_id, time, "
-        for sp in species:
-            command += f"{sp}, "
-        command = command[:-2] + \
-            f" FROM {table} WHERE P={pres} AND T={temp}"
-        query: TextClause = text(
-            command)
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt)

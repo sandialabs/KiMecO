@@ -2,11 +2,13 @@ import sys
 import os
 from time import time
 from game.GeneticAlgo.tournament import Tournament
+from game.database.kin_db import KIN_DB
+from game.database.sim_db import SIM_DB
+from game.database.sop_db import SOP_DB
 from game.element import Element
 from game.generation import Generation
 from game.Perturbators.normal import Normal
 from game.readers.mess_input import MessInputReader
-from game.database.game_db import Game_db
 from game.user_input import check_input
 from game.parameters import SOP
 from game.scoring_f.weighteddif import WeightedDif
@@ -41,9 +43,12 @@ def main() -> None:
     os.chdir(settings['project_name'])
     location: str = os.getcwd()
 
-    sop_db = Game_db(name='GAME_DB_SOP')
-    kin_db = Game_db(name='GAME_DB_KIN')
-    sim_db = Game_db(name='GAME_DB_SIM')
+    sop_db = SOP_DB(sop=init_SOP,
+                    name='GAME_DB_SOP')
+    kin_db = KIN_DB(sop=init_SOP,
+                    name='GAME_DB_KIN')
+    sim_db = SIM_DB(sop=init_SOP,
+                    name='GAME_DB_SIM')
 
     # Define which scoring function to use
     if settings['scoring_func'].casefold() == 'weighteddif':
