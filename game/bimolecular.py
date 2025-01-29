@@ -55,7 +55,7 @@ class Bimolecular:
     @property
     def db_dict(self) -> dict[str, Any]:
         db_dict = {
-            f"{self.name}_e": float(self.energy)}
+            f"{self.name}__e": float(self.energy)}
         for frag in self.fragments:
             db_dict.update(frag.db_dict)
 

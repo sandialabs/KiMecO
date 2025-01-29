@@ -144,7 +144,7 @@ class Well:
                 value (float): parameter value
         """
         db_dict: dict = {
-                f"{self.name}_e": float(self.energy)
+                f"{self.name}__e": float(self.energy)
             }
         if len(self.frequencies) != 0:
             db_dict.update(self.freq_dict)
@@ -162,7 +162,7 @@ class Well:
         """
         fd: dict[str, float] = {}
         for num, f in enumerate(self.frequencies):
-            fd[f"{self.name}_f{num}"] = float(f)
+            fd[f"{self.name}__f{num}"] = float(f)
 
         return fd
 
@@ -176,6 +176,6 @@ class Well:
         """
         rd: dict[str, float] = {}
         for idx, rot in enumerate(self.rotors):
-            rd[f"{self.name}_r{idx}"] = float(rot.pert)
+            rd[f"{self.name}__r{idx}"] = float(rot.pert)
 
         return rd

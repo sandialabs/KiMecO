@@ -143,9 +143,9 @@ class SOP:
     def parameters_names(self) -> dict[str, Any]:
         pn: dict[str, Any] = {'score': float(self.score)}
         for idx, ep in enumerate(self.epsilons):
-            pn[f'epsi_{idx}'] = float(ep)
+            pn[f'__epsi_{idx}'] = float(ep)
         for idx, sig in enumerate(self.sigmas):
-            pn[f'sigmas_{idx}'] = float(sig)
+            pn[f'__sigmas_{idx}'] = float(sig)
         for well in self.wells:
             pn.update(well.db_dict)
         for bar in self.barriers:
@@ -260,8 +260,8 @@ class SOP:
             idx = int(key.split('sigmas_')[-1])
             self.sigmas[idx] = value
             return
-        item_name: str = '_'.join(key.split('_')[:-1])
-        param_name: str = key.split('_')[-1]
+        item_name: str = '__'.join(key.split('__')[:-1])
+        param_name: str = key.split('__')[-1]
         # Energies
         if param_name == 'e':
             self.items[item_name].energy = value

@@ -75,9 +75,9 @@ class Generation:
         self.loc: str = loc
         self.sf: Scoring = sf
         self.best_score: float = np.inf
-        if not os.path.isdir(f'{self.loc}/G{self.id}'):
-            os.mkdir(f'{self.loc}/G{self.id}')
-        os.chdir(f'{self.loc}/G{self.id}')
+        if not os.path.isdir(f'{self.loc}/G{self.id:04d}'):
+            os.mkdir(f'{self.loc}/G{self.id:04d}')
+        os.chdir(f'{self.loc}/G{self.id:04d}')
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
@@ -152,8 +152,8 @@ class Generation:
                                          settings=self.settings,
                                          software_tpl=self.rc_tpl,
                                          id=el.id,
-                                         name=f'G{self.id}E{el.id}',
-                                         loc=f'{self.loc}/G{self.id}',
+                                         name=f'G{self.id:04d}E{el.id:04d}',
+                                         loc=f'{self.loc}/G{self.id:04d}',
                                          q_sys=self.qs,
                                          db=self.kin_db)
                     el.rateCoef.set_status(table=f"G{self.id}")
@@ -174,7 +174,7 @@ class Generation:
                                  db=self.sim_db,
                                  gen_id=self.id,
                                  species=self.species,
-                                 loc=f'{self.loc}/G{self.id}',
+                                 loc=f'{self.loc}/G{self.id:04d}',
                                  q_sys=self.qs,
                                  set=self.settings)
                     el.sim.q_up()

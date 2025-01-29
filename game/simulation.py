@@ -95,12 +95,13 @@ class SIM:
         self.init_sims()
         self.id: int = id
         self.gen_id: int = gen_id
-        self.name: str = f'G{gen_id}E{id}'
+        self.name: str = f'G{gen_id:04d}E{id:04d}'
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
         self.db: Game_db = db
         self.profiles: list[NDArray] = []
+        self.status = ['notInQueue' for i in self.simulations]
 
     def check_species_weights(self) -> None:
         if len(self.settings['w_species']) == 0:
@@ -415,9 +416,6 @@ class SIM:
 
     def set_status(self,
                    sim: int) -> None:
-
-        if len(self.status) < sim + 1:
-            self.status.append('notInQueue')
 
         self.status[sim] = self.q_sys.status(
             id=self.id*len(self.simulations)+sim,

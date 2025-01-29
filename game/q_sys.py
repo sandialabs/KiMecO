@@ -174,9 +174,9 @@ class QueueingSystem:
         else:
             job['status'] = 'reset'
         self.clean_files(job)
-        self.av_cpu += int(job['cpu'])
-        self.av_mem += int(job['mem'])
-        self.av_jobs += 1
+        # self.av_cpu += int(job['cpu'])
+        # self.av_mem += int(job['mem'])
+        # self.av_jobs += 1
 
     def clean_files(self,
                     job: NDArray[Any]) -> None:
