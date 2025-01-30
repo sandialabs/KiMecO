@@ -249,6 +249,8 @@ class SOP:
             key (str): parameter name
             value (float): value in db
         """
+        # db_sep = '__'
+
         if key == 'score':
             self.score: float = value
             return

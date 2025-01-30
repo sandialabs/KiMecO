@@ -205,8 +205,6 @@ class Normal(Perturbator):
                 scale=self.settings['std_if']*self.gen_fact)
 
         bar.ifreq = try_if
-        bar.ifreq = random.normal(loc=bar.ifreq,
-                                  scale=self.settings['std_if']*self.gen_fact)
 
     def perturb_symmetry_factor(self,
                                 bar: Barrier):

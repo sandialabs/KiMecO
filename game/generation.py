@@ -181,14 +181,18 @@ class Generation:
                     el.status = 'sim'
                 # Recover simulations data
                 elif el.status == 'sim':
-                    for sim in range(len(el.sim.simulations)):
-                        el.sim.set_status(sim=sim)
-                    if all([True if status == 'finished' else False
-                            for status in el.sim.status]):
+                    for sim_i in range(len(el.sim.simulations)):
+                        el.sim.set_status(sim=sim_i)
+                    if all([True if stat == 'finished' else False
+                            for stat in el.sim.status]):
                         el.recover_sim_profiles(db=self.sim_db,
                                                 table=f'G{self.id}')
                         if el.status != 'reset':
                             el.status = 'scoring'
+                    # Not sure yet why this case happens, but it does happen
+                    elif any([True if stat == 'notInQueue' else False
+                              for stat in el.sim.status]):
+                        el.sim.q_up()
                 # Scoring
                 if el.status == 'scoring':
                     el.calc_score()

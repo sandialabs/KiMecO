@@ -56,17 +56,17 @@ default_settings: dict[str, Any] = {
     "pert": 'normal',
     # Boundary condition for maximal deviation
     "max_std": 4,
-    # Absolute value of energy (kcal/mol) perturbation for wells
+    # Standard deviation of energy (kcal/mol) perturbation for wells
     # and bimolecular species
     "std_e": 1.0,
-    # Absolute value of energy (kcal/mol) perturbation for barriers
+    # Standard deviation of energy (kcal/mol) perturbation for barriers
     "std_b": 1.0,
-    # Absolute percentage perturbation for wells
+    # Standard deviation perturbation for wells
     # and bimolecular vibrations
     "std_f": 0.05,
-    # Absolute percentage perturbation for hindered rotors
+    # Standard deviation percentage perturbation for hindered rotors
     "std_hr": 0.2,
-    # Absolute percentage perturbation for imaginary frequencies
+    # Standard deviation perturbation for imaginary frequencies
     "std_if": 0.2,
     # Energy transfer probability, factor, percentage
     "std_etf": 0.5,

@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 
+from game.bimolecular import Bimolecular
 from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
 from game.database.sop_db import SOP_DB
@@ -82,6 +83,8 @@ and then analyse the results.'''.format(
                 if name in bimol.frag_names():
                     og_names[ct_name] = bimol.name
 
+    init_vals = sop_db.get_table(table='G0')[0]
+
     # Initialize app
     external_stylesheets: list[str] = ['~/projects/ethylperoxy/me/file.css']
     app = Dash(external_stylesheets=external_stylesheets)
@@ -142,8 +145,12 @@ and then analyse the results.'''.format(
             children=[
                 html.H3('Type of parameter to plot:'),
                 dcc.RadioItems(options=[
-                    {'label': 'Energies', 'value': '_e'},
-                    {'label': 'Imaginary freq', 'value': '_if'},
+                    {'label': 'Energies', 'value': 'e'},
+                    {'label': 'Frequencies', 'value': 'f'},
+                    {'label': 'Imaginary freq', 'value': 'if'},
+                    {'label': 'Rotor perturbation', 'value': 'r'},
+                    {'label': 'Sigmas', 'value': 'sigmas'},
+                    {'label': 'Epsilon', 'value': 'epsi'},
                     {'label': 'Score', 'value': 'score'}],
                                 value='Energies',
                                 inline=True,
@@ -154,15 +161,14 @@ and then analyse the results.'''.format(
                          children=[
                             # Select which parameter
                             dcc.Dropdown(options={},
-                                         value='score',
                                          id='param_selection')
                             ]),
                 # Plot BUTTON
                 html.Div(
-                    id='show_sop_plot_button',
+                    id='sop_plot_button',
                     style={'display': 'none'},
                     children=[
-                        html.Button(id='sop_plot_button',
+                        html.Button(id='sop_plot_b',
                                     n_clicks=0,
                                     children='Plot',
                                     )]),
@@ -206,7 +212,7 @@ and then analyse the results.'''.format(
                     id='rc_T'),
                 # Plot BUTTON
                 html.Div(
-                    id='show_kin_plot_button',
+                    id='kin_plot_b',
                     style={'display': 'none'},
                     children=[
                         html.Button(id='kin_plot_button',
@@ -324,22 +330,59 @@ and then analyse the results.'''.format(
         Output(component_id='param_selection', component_property='options'),
         Input(component_id='ptype', component_property='value')
     )
-    def update_param_choice(param_type):
-        filtered_param: list[str] = [
-            nm for nm in init_SOP.parameters_names if nm.endswith(param_type)]
-        if len(filtered_param) != len(init_SOP.parameters_names):
-            style = {'display': 'block'}
+    def update_param_choice(param_type: str
+                            ) -> tuple[dict[str, str], list[dict[str, str]]]:
+        """Create a list of parameters depending on user selected ptype.
+
+        Args:
+            param_type (str): parameter identifier in the sop db.
+
+        Returns:
+            tuple[dict[str, str], list[str]]: _description_
+        """
+        filtered_param: list[dict[str, str]] = []
+        if param_type == 'score':
+            filtered_param.append({
+                'lable': param_type,
+                'value': param_type})
+        else:
+            for col in sop_db.columns[1:]:
+                molec = col.split('__')[0]
+                param: str = col.split('__')[1]
+                if param.startswith(param_type):
+                    if param_type == 'e' or 'if':
+                        if param.startswith('epsi'):
+                            continue
+                        if col.split('__')[0] in settings['ct_names']:
+                            filtered_param.append({
+                                'label': f"{settings['ct_names'][molec]}",
+                                'value': col})
+                        else:
+                            filtered_param.append({
+                                'label': f"{molec} {param}",
+                                'value': col})
+                    else:
+                        if col.split('__')[0] in settings['ct_names']:
+                            filtered_param.append({
+                                'label': f"{settings['ct_names'][molec]} {param}",
+                                'value': col})
+                        else:
+                            filtered_param.append({
+                                'label': f"{molec} {param}",
+                                'value': col})
+        if param_type != '':
+            style: dict[str, str] = {'display': 'block'}
         else:
             style = {'display': 'none'}
         return style, filtered_param
 
     # Show sop plot button once generation and parameters have been selected
     @callback(
-        Output(component_id='show_sop_plot_button', component_property='style'),
+        Output(component_id='sop_plot_button', component_property='style'),
         Input(component_id='param_selection', component_property='value')
     )
-    def show_sop_one_gen_plot_button(selected_param: str
-                                     ) -> dict[str, str]:
+    def show_sop_plot_button(selected_param: str
+                             ) -> dict[str, str]:
         if selected_param in init_SOP.parameters_names:
             return {'display': 'block'}
         else:
@@ -352,49 +395,169 @@ and then analyse the results.'''.format(
         Output(component_id='sop_dist_title', component_property='children'),
         Output(component_id='sop_avrg', component_property='children'),
         Output(component_id='sop_elem', component_property='children'),
-        Input(component_id='show_sop_plot_button', component_property='n_clicks'),
+        Input(component_id='sop_plot_b', component_property='n_clicks'),
+        State(component_id='ptype', component_property='value'),
         State(component_id='param_selection', component_property='value'),
         State(component_id='gen range slider', component_property='value')
     )
     def update_sop_figure(clic,
+                          ptype: str,
                           param: str,
                           selected_gen: list[int]
                           ) -> tuple[dict[str, str], Figure, str, str, str]:
-        names: list[str] = ['sop_id']
-        for nm in init_SOP.parameters_names:
-            names.append(nm)
+        if clic == 0:
+            return ({'display': 'none'},
+                    go.Figure(),
+                    '',
+                    '',
+                    '')
+        title: str
+        std_allowed: float
+        fig = go.Figure()
+        for idx, col in enumerate(sop_db.columns):
+            if col == param:
+                init_val: float = init_vals[idx+1]
+                break
+        if '__' in param:
+            short_p: str = param.split('__')[1]
+            if param.split('__')[0] in settings['ct_names']:
+                molec = settings['ct_names'][param.split('__')[0]]
+            else:
+                molec = param.split('__')[0]
+            if ptype == 'e':
+                title = f'Energy of {molec} (kcal/mol)'
+                if not isinstance(
+                   init_SOP.items[param.split('__')[0]], Barrier):
+                    std_allowed = settings['std_e'] * settings['max_std']
+                else:
+                    std_allowed = settings['std_b'] * settings['max_std']
+            elif ptype == 'f':
+                std_allowed = settings['std_f'] * settings['max_std']
+                title = fr'Frequency {short_p} of {molec} (1/cm)'
+            elif ptype == 'r':
+                std_allowed = settings['std_hr'] * settings['max_std']
+                title = f'Rotor perturbation {short_p} of {molec}'
+            elif ptype == 'if':
+                std_allowed = settings['std_if'] * settings['max_std']
+                bar: Barrier = init_SOP.items[molec]
+                if isinstance(bar.connected[0], Well):
+                    if bar.connected[0].name in settings['ct_names']:
+                        From: str = settings['ct_names'][bar.connected[0].name]
+                    else:
+                        From = bar.connected[0].name
+                elif isinstance(bar.connected[0], Bimolecular):
+                    From = ''
+                    for idx, frag in enumerate(bar.connected[0].frag_names()):
+                        if idx == 1:
+                            From += ' + '
+                        if frag in settings['ct_names']:
+                            From += settings['ct_names'][frag]
+                        else:
+                            From += frag
+                else:
+                    raise NotImplementedError('Unknown reactant object.')
+                if isinstance(bar.connected[0], Well):
+                    if bar.connected[1].name in settings['ct_names']:
+                        To: str = settings['ct_names'][bar.connected[1].name]
+                    else:
+                        To = bar.connected[1].name
+                elif isinstance(bar.connected[1], Bimolecular):
+                    To = ''
+                    for idx, frag in enumerate(bar.connected[1].frag_names()):
+                        if idx == 1:
+                            To += ' + '
+                        if frag in settings['ct_names']:
+                            To += settings['ct_names'][frag]
+                        else:
+                            To += frag
+                else:
+                    raise NotImplementedError('Unknown reactant object.')
+                title = f'I. frequency from {From} to {To} (1/cm)'
+            elif ptype == 'sigmas':
+                std_allowed = settings['std_sigma'] * settings['max_std']
+                title = f"Sigma {short_p.split('_')[-1]}"
+            elif ptype == 'epsi':
+                std_allowed = settings['std_epsi'] * settings['max_std']
+                title = f"Epsilon {short_p.split('_')[-1]}"
+            else:
+                raise NotImplementedError('Unknown parameter')
+            lb: float = init_val - std_allowed
+            ub: float = init_val + std_allowed
+            fig.add_vline(x=init_val,
+                          line_dash='dash',
+                          line_width=2,
+                          line_color='black')
+            fig.add_vline(x=lb,
+                          line_dash='dash',
+                          line_width=4,
+                          line_color='brown')
+            fig.add_vline(x=ub,
+                          line_dash='dash',
+                          line_width=4,
+                          line_color='brown')
+        else:
+            title = 'Score'
         avrg = []
         nel = []
-        fig = go.Figure()
+        cols = ['sop_id']
+        cols.extend(sop_db.columns)
         gen_rows = [
             sop_db.get_table(table=f'G{gen_i}')
             for gen_i in selected_gen]
         for idx, gen_rows in enumerate(gen_rows):
-            df = pd.DataFrame(data=gen_rows, columns=names)
-            avrg.append(df[param].mean())
+            df = pd.DataFrame(data=gen_rows, columns=cols)
+            avrg.append(f"{df[param].mean():.3f}")
             nel.append(len(df[param]))
             fig.add_trace(go.Histogram(
                 histfunc="count",
                 x=df[param],
-                nbinsx=20,
+                nbinsx=30,
                 name=f'Gen {selected_gen[idx]}',
                 bingroup=1))
         # Overlay both histograms
         fig.update_layout(barmode='overlay',
-                          xaxis_title_text=param,
-                          yaxis_title_text='Count of elements')
+                          xaxis=dict(
+                              title=title,
+                              showline=True,
+                              showgrid=True,
+                              showticklabels=True,
+                              linecolor='rgb(0, 0, 0)',
+                              linewidth=2,
+                              ticks='inside',
+                              tickformat='.2f',
+                              tickfont=dict(
+                                  family='Arial',
+                                  size=12,
+                                  color='rgb(0, 0, 0)')
+                          ),
+                          yaxis=dict(
+                              title='Count of elements',
+                              showline=True,
+                              showgrid=True,
+                              showticklabels=True,
+                              linecolor='rgb(0, 0, 0)',
+                              linewidth=2,
+                              ticks='inside',
+                              # tickformat='.2e',
+                              tickfont=dict(
+                                  family='Arial',
+                                  size=12,
+                                  color='rgb(0, 0, 0)')
+                          ),
+                          plot_bgcolor='white'
+                          )
         # Reduce opacity to see both histograms
         fig.update_traces(opacity=0.75)
         return ({'display': 'block'},
                 fig,
                 f'Distribution of {param} in generation {selected_gen}',
-                f'Average: {avrg}',
+                f"Average: {avrg}",
                 f'Number of elements: {nel}')
 
     # KIN Interactions
     # Show kin plot button once rc have been selected
     @callback(
-        Output(component_id='show_kin_plot_button', component_property='style'),
+        Output(component_id='kin_plot_b', component_property='style'),
         Input(component_id='rc_from', component_property='value'),
         Input(component_id='rc_to', component_property='value'),
         Input(component_id='rc_P', component_property='value'),
@@ -422,7 +585,7 @@ and then analyse the results.'''.format(
         Output(component_id='kin_dist_title', component_property='children'),
         Output(component_id='kin_avrg', component_property='children'),
         Output(component_id='kin_elem', component_property='children'),
-        Input(component_id='show_kin_plot_button', component_property='n_clicks'),
+        Input(component_id='kin_plot_button', component_property='n_clicks'),
         State(component_id='rc_from', component_property='value'),
         State(component_id='rc_to', component_property='value'),
         State(component_id='rc_P', component_property='value'),
@@ -439,7 +602,7 @@ and then analyse the results.'''.format(
         avrg = []
         nel = []
         fig = go.Figure()
-        if clic is None or\
+        if clic == 0 or\
            From not in species or\
            To not in species or\
            temp not in settings['rc_temp'] or\
@@ -456,24 +619,12 @@ and then analyse the results.'''.format(
                               pres=pres,
                               temp=temp)
             for gen_i in selected_gen]
-        nbinsx = 20
-        for idx, gen_rows in enumerate(gen_rows):
-            df = pd.DataFrame(
-                    data=gen_rows,
-                    columns=['kin_id', 'Rate coefficient'])
-            avrg.append(df['Rate coefficient'].mean())
-            nel.append(len(df['Rate coefficient']))
-            fig.add_trace(go.Histogram(
-                histfunc="count",
-                x=df['Rate coefficient'],
-                nbinsx=nbinsx,
-                autobinx=False,
-                name=f'Gen {idx}',
-                bingroup=1))
+        nbinsx = 30
         # Overlay both histograms
         fig.update_layout(barmode='overlay',
                           xaxis=dict(
                               title='Rate coefficient',
+                            #   type="log",
                               showline=True,
                               showgrid=True,
                               showticklabels=True,
@@ -502,6 +653,19 @@ and then analyse the results.'''.format(
                           ),
                           plot_bgcolor='white'
                           )
+        for idx, gen_row in enumerate(gen_rows):
+            df = pd.DataFrame(
+                    data=gen_row,
+                    columns=['kin_id', 'Rate coefficient'])
+            avrg.append(f"{df['Rate coefficient'].mean():.3f}")
+            nel.append(len(df['Rate coefficient']))
+            fig.add_trace(go.Histogram(
+                histfunc="count",
+                x=df['Rate coefficient'],
+                nbinsx=nbinsx,
+                autobinx=False,
+                name=f'Gen {idx}',
+                bingroup=1))
         # Reduce opacity to see both histograms
         fig.update_traces(opacity=0.75)
         return ({'display': 'block'},
@@ -544,7 +708,7 @@ and then analyse the results.'''.format(
                           pres: float,
                           temp: float,
                           selected_gen: list[int]
-                          ) :
+                          ):
         nel = []
         fig = go.Figure()
         if clic is None or\
@@ -554,6 +718,23 @@ and then analyse the results.'''.format(
                     fig,
                     '',
                     '')
+        idx = 0
+        for p in settings['rc_pres']:
+            for t in settings['rc_temp']:
+                if p == pres and t == temp:
+                    break
+                else:
+                    idx += 1
+        
+        fig.add_trace(go.Scatter(
+                            x=arr[:, 3][:nsteps],
+                            y=specs_arr[elem, :, sp_idx].T,
+                            mode='lines',
+                            name=sp,
+                            opacity=op[idx],
+                            # hoveron='fills',
+                            hoverinfo='name'
+                            ))
         gen_arr = [
             np.array(sim_db.get_TP_sim_profiles(
                 table=f'G{gen_i}',
