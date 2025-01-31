@@ -23,7 +23,7 @@ class SOP:
         self.rc_pres: list[float]
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
-        self.score = 9999.9
+        self.scores: list[float] = []
 
     @classmethod
     def from_db_row(cls,
@@ -141,7 +141,12 @@ class SOP:
 
     @property
     def parameters_names(self) -> dict[str, Any]:
-        pn: dict[str, Any] = {'score': float(self.score)}
+        pn: dict[str, Any] = {
+            '__fact': self.factor,
+            '__pow': self.power
+            }
+        for idx, sc in enumerate(self.scores):
+            pn[f'__score_{idx}'] = float(sc)
         for idx, ep in enumerate(self.epsilons):
             pn[f'__epsi_{idx}'] = float(ep)
         for idx, sig in enumerate(self.sigmas):
@@ -251,15 +256,24 @@ class SOP:
         """
         # db_sep = '__'
 
-        if key == 'score':
-            self.score: float = value
+        if 'score' in key:
+            idx = int(key.split('score_')[-1])
+            self.scores[idx] = value
+            return
+        # Energy transfer probability, factor
+        elif 'fact' in key:
+            self.factor = value
+            return
+        # Energy transfer probability, exponent
+        elif 'pow' in key:
+            self.power = value
             return
         elif 'epsi' in key:
             idx = int(key.split('epsi_')[-1])
             self.epsilons[idx] = value
             return
-        elif 'sigmas' in key:
-            idx = int(key.split('sigmas_')[-1])
+        elif 'sigma' in key:
+            idx = int(key.split('sigma_')[-1])
             self.sigmas[idx] = value
             return
         item_name: str = '__'.join(key.split('__')[:-1])

@@ -3,6 +3,8 @@ import os
 import sys
 import json
 from game.default_settings import default_settings, mandatory_keys
+import numpy as np
+from numpy import float64
 
 
 def check_input(input_file: str) -> dict:
@@ -119,7 +121,17 @@ def check_input(input_file: str) -> dict:
                 nstep: int = len(clean_profiles[-1]['time'])
                 for header, profile in clean_profiles[-1].items():
                     if len(profile) != nstep:
-                        print(f'Not enough values in profile {header} in file {file}')
+                        print(
+                            f'Not enough values in profile {header} in file {file}')
+    # # Transform the profiles in numpy structured arrays
+    for idx, prof in enumerate(clean_profiles):
+            prof_type = np.dtype(dtype=[
+                *[(key, float64) for key in prof]])
+            clean_profiles[idx] = np.empty(
+                shape=(len(prof['time'])),
+                dtype=prof_type)
+            for col in prof:
+                clean_profiles[idx][col] = prof[col]
     json_file['exp_profiles'] = clean_profiles
 
     # Specific cases with interdependent non-mandatory settings

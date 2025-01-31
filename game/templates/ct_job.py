@@ -41,9 +41,6 @@ net = ct.ReactorNet([reactor])
 sim_time = 0.0
 # In seconds
 time = {time}
-# tot_time = {sim_time} #in seconds
-# mystep = {tstep} #in seconds
-# tot_steps = int((tot_time - sim_time)/mystep)+1
 all_tsteps = np.array({all_tsteps})
 block_size = np.sum(all_tsteps)
 sim_in_element = {sim_id} % len(all_tsteps)

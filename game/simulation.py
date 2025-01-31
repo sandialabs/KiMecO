@@ -405,9 +405,7 @@ class SIM:
             all_tsteps=time_steps,
             gen=self.gen_id,
             to_watch=self.species,
-            initial_X=self.settings['initial_X'],
-            sim_time=self.settings['sim_time'],
-            tstep=self.settings['sim_tstep']
+            initial_X=self.settings['initial_X']
             )
         with open(f'{self.loc}/{name}.py', 'w') as f:
             f.write(ct_job)

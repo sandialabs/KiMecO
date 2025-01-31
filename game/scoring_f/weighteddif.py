@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 class WeightedDif(Scoring):
 
     @property
-    def default_score(self):
+    def default_score(self) -> float:
         return 9999999.9
 
     def score(self,
@@ -23,7 +23,7 @@ class WeightedDif(Scoring):
             float: the score of the element
         """
 
-        exp_profiles: dict[str, list[float]] = self.settings['exp_profiles']
+        exp_profiles: list[NDArray] = self.settings['exp_profiles']
         n_exp: int = len(self.settings['rc_temp']) *\
             len(self.settings['rc_pres'])
 

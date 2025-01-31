@@ -200,8 +200,8 @@ class Generation:
                     el.prepare_upsert(db=self.sop_db,
                                       table=f'G{self.id}')
                     finished[idx] = True
-                    if el.score < self.best_score:
-                        self.best_score: float = el.score
+                    if np.sum(el.scores) < self.best_score:
+                        self.best_score: float = np.sum(el.scores)
             self.sop_db.batch_upsert()
             self.qs.run()
 
@@ -218,7 +218,7 @@ class Generation:
             sf=self.sf)
             for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
         for el in new_gen:
-            if el.score != self.sf.default_score:
+            if all(el.scores != self.sf.default_score):
                 el.status = 'DONE'
             for idx, gen_el in enumerate(self.elements):
                 if el.id == gen_el.id:

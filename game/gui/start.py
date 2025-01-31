@@ -417,6 +417,10 @@ and then analyse the results.'''.format(
         for idx, col in enumerate(sop_db.columns):
             if col == param:
                 init_val: float = init_vals[idx+1]
+                fig.add_vline(x=init_val,
+                              line_dash='dash',
+                              line_width=2,
+                              line_color='black')
                 break
         if '__' in param:
             short_p: str = param.split('__')[1]
@@ -483,10 +487,6 @@ and then analyse the results.'''.format(
                 raise NotImplementedError('Unknown parameter')
             lb: float = init_val - std_allowed
             ub: float = init_val + std_allowed
-            fig.add_vline(x=init_val,
-                          line_dash='dash',
-                          line_width=2,
-                          line_color='black')
             fig.add_vline(x=lb,
                           line_dash='dash',
                           line_width=4,
@@ -719,22 +719,22 @@ and then analyse the results.'''.format(
                     '',
                     '')
         idx = 0
-        for p in settings['rc_pres']:
-            for t in settings['rc_temp']:
-                if p == pres and t == temp:
-                    break
-                else:
-                    idx += 1
+        # for p in settings['rc_pres']:
+        #     for t in settings['rc_temp']:
+        #         if p == pres and t == temp:
+        #             break
+        #         else:
+        #             idx += 1
         
-        fig.add_trace(go.Scatter(
-                            x=arr[:, 3][:nsteps],
-                            y=specs_arr[elem, :, sp_idx].T,
-                            mode='lines',
-                            name=sp,
-                            opacity=op[idx],
-                            # hoveron='fills',
-                            hoverinfo='name'
-                            ))
+        # fig.add_trace(go.Scatter(
+        #                     x=arr[:, 3][:nsteps],
+        #                     y=specs_arr[elem, :, sp_idx].T,
+        #                     mode='lines',
+        #                     name=sp,
+        #                     opacity=op[idx],
+        #                     # hoveron='fills',
+        #                     hoverinfo='name'
+        #                     ))
         gen_arr = [
             np.array(sim_db.get_TP_sim_profiles(
                 table=f'G{gen_i}',

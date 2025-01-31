@@ -26,27 +26,7 @@ class Perturbator(ABC):
         # Factor that starts at 1 and decreases as the number
         # of generations go up.
         self.gen_fact: float
-
-    def within_boundaries(self,
-                          perturbed_val: float,
-                          std_val: float,
-                          initial_val: float) -> bool:
-        """Check wether a perturbed parameter is within
-        the trusted space from the initial value.
-
-        Args:
-            perturbed_val (float): trial perturbed value
-            std_val (float): standard deviation
-            initial_val (float): value in the initial set of parameter
-
-        Returns:
-            bool: Wether or not within boundaries.
-        """
-        dist = np.absolute(perturbed_val-initial_val)/std_val
-        if dist > self.settings['max_std']:
-            return False
-        else:
-            return True
+        self.has_boundaries = False
 
     @abstractmethod
     def set_get_fact(self,

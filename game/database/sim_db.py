@@ -3,7 +3,9 @@ from game.parameters import SOP
 from game.well import Well
 from game.barrier import Barrier
 from sqlalchemy import select
-from typing import Any, Sequence
+from typing import Sequence
+import numpy as np
+from numpy import float64
 
 
 class SIM_DB(Game_db):
@@ -40,6 +42,7 @@ class SIM_DB(Game_db):
                             species: list[str],
                             pres: float,
                             temp: float):
+
         query = select(
             self.tables[table].c.P,
             self.tables[table].c.T,
@@ -51,13 +54,20 @@ class SIM_DB(Game_db):
             self.tables[table].c.P == pres,
             self.tables[table].c.T == temp
         )
-        # command: str = "SELECT P, T, sim_id, time, "
-        # for sp in species:
-        #     command += f"{sp}, "
-        # command = command[:-2] + \
-        #     f" FROM {table} WHERE P={pres} AND T={temp}"
-        # query: TextClause = text(
-        #     command)
+        with self.eng.begin() as connection:
+            db_rslt: Sequence = connection.execute(query).fetchall()
+        return list(db_rslt)
+    
+    def get_profile_from_id(self,
+                            table,
+                            sim_id) -> list[list[float]]:
+        query = select(
+            self.tables[table].c.time,
+            *[self.tables[table].c[sp]
+              for sp in self.columns[3:]]
+        ).where(
+            self.tables[table].c.sim_id == sim_id
+        )
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt)

@@ -10,6 +10,7 @@ from typing import Any, Literal
 from pandas import DataFrame
 import numpy as np
 from numpy.typing import NDArray
+from numpy import float64
 
 
 class Element:
@@ -125,19 +126,15 @@ class Element:
     def recover_sim_profiles(self,
                              db: SIM_DB,
                              table) -> None:
-        tsteps: NDArray[Any] = np.array(
-            [len(i['time']) for i in self.sim.settings['exp_profiles']])
-        block_size = np.sum(tsteps)
+        prof_type = np.dtype(dtype=[
+                *[(key, float64) for key in db.columns[3:]]])
+
         for sim in range(len(self.sim.simulations)):
-            sim_id = self.id * len(self.sim.simulations) + sim
-            start_idx = np.sum(tsteps[:sim])
-            row_ids: list[int] = [
-                i for i in range(self.id*block_size+start_idx,
-                                 self.id*block_size+start_idx+tsteps[sim],
-                                 1)]
+            sim_id: int = self.id * len(self.sim.simulations) + sim
             self.sim.profiles.append(np.array(
-                db.get_data(table=table,
-                            ids=row_ids)))
+                db.get_profile_from_id(table=table,
+                                       sim_id=sim_id),
+                dtype=prof_type))
             self.sim.q_sys.pickUp(id=sim_id,
                                   jtype='sim')
             self.sim.status[sim] = self.sim.q_sys.status(id=sim_id,
@@ -159,7 +156,7 @@ class Element:
             settings (dict[str, Any]): User input + default settings
         """
         try:
-            self.sop.score = self.sf.score(sim=self.sim)
+            self.sop.scores = list(self.sf.score(sim=self.sim))
             self.status = 'DONE'
         except IndexError:
             # Occurs when a simulation didn't work so profiles were not saved
@@ -167,8 +164,8 @@ class Element:
             print(f'Resetting element {self.id} because a simulation crashed')
 
     @property
-    def score(self) -> float:
-        return self.sop.score
+    def scores(self) -> list[float]:
+        return self.sop.scores
 
     def prepare_upsert(self,
                        db: Game_db,

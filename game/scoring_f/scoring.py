@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
-from copy import deepcopy
 from typing import Any
-from numpy.typing import NDArray
 from game.simulation import SIM
 
 
@@ -24,7 +22,7 @@ class Scoring(ABC):
     @property
     @abstractmethod
     def default_score(self) -> None:
-        """Default score used to initialize sops
+        """Default scores used to initialize sops
         """
         pass
 

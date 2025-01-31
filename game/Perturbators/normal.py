@@ -7,9 +7,97 @@ from game.Perturbators.perturbator import Perturbator
 from game.well import Well
 from numpy import random
 import numpy as np
+from typing import Any
 
 
 class Normal(Perturbator):
+    def __init__(self,
+                 settings: dict[str, Any],
+                 initial_SOP: SOP) -> None:
+        super().__init__(settings=settings,
+                         initial_SOP=initial_SOP)
+        self.has_boundaries = True
+
+    def get_boundaries(self,
+                       ptype: str,
+                       i_val: float) -> list[float]:
+        """Get the appropriate boundaries for a given parameter.
+
+        Args:
+            ptype (str): type of parameter
+            i_val (float): initial value before perturbation
+
+        Raises:
+            NotImplementedError: unknown ptype
+
+        Returns:
+            list[float]: boundaries [lower, upper]
+        """
+        if ptype == 'e':
+            return [i_val - self.settings['std_e'] * self.settings['max_std'],
+                    i_val + self.settings['std_e'] * self.settings['max_std']]
+        elif ptype == 'b':
+            return [i_val - self.settings['std_b'] * self.settings['max_std'],
+                    i_val + self.settings['std_b'] * self.settings['max_std']]
+        elif ptype == 'f':
+            return [-i_val * self.settings['std_f'] * self.settings['max_std'],
+                    i_val * self.settings['std_f'] * self.settings['max_std']]
+        elif ptype == 'if':
+            return [i_val - i_val *
+                    self.settings['std_if'] * self.settings['max_std'],
+                    i_val + i_val *
+                    self.settings['std_if'] * self.settings['max_std']]
+        elif ptype == 'r':
+            return [i_val - i_val *
+                    self.settings['std_hr'] * self.settings['max_std'],
+                    i_val + i_val *
+                    self.settings['std_hr'] * self.settings['max_std']]
+        elif ptype == 'sigma':
+            return [i_val - i_val *
+                    self.settings['std_sigma'] * self.settings['max_std'],
+                    i_val + i_val *
+                    self.settings['std_sigma'] * self.settings['max_std']]
+        elif ptype == 'epsi':
+            return [i_val - i_val *
+                    self.settings['std_sigma'] * self.settings['max_std'],
+                    i_val + i_val *
+                    self.settings['std_sigma'] * self.settings['max_std']]
+        elif ptype == 'fact':
+            return [i_val - i_val *
+                    self.settings['std_etf'] * self.settings['max_std'],
+                    i_val + i_val *
+                    self.settings['std_etf'] * self.settings['max_std']]
+        elif ptype == 'pow':
+            return [i_val -
+                    self.settings['std_ete'] * self.settings['max_std'],
+                    i_val +
+                    self.settings['std_ete'] * self.settings['max_std']]
+        else:
+            raise NotImplementedError('Parameter not parametrised.')
+
+    def within_boundaries(self,
+                          perturbed_val: float,
+                          ptype: str,
+                          initial_val: float
+                          ) -> bool:
+        """Check wether a perturbed parameter is within
+        the trusted space from the initial value.
+
+        Args:
+            perturbed_val (float): trial perturbed value
+            ptype (str): type of parameter to obtain the boundaries from
+            initial_val (float): value in the initial set of parameter
+
+        Returns:
+            bool: Wether or not within boundaries.
+        """
+        boundaries: list[float] = self.get_boundaries(ptype=ptype,
+                                                      i_val=initial_val)
+        if perturbed_val > min(boundaries) and\
+           perturbed_val < max(boundaries):
+            return True
+        else:
+            return False
 
     def set_get_fact(self,
                      gen: int) -> None:
@@ -38,18 +126,18 @@ class Normal(Perturbator):
         try_fact = -1
         while try_fact < 0 or\
             not self.within_boundaries(perturbed_val=try_fact,
-                                       std_val=self.settings['std_etf'],
+                                       ptype='fact',
                                        initial_val=self.i_sop.factor):
             # Truncate distribution at 0 to have positive factor
-            try_fact: float = random.normal(
-                loc=p_sop.factor,
+            try_fact: float = p_sop.factor * random.normal(
+                loc=1,
                 scale=self.settings['std_etf']*self.gen_fact)
         p_sop.factor = try_fact
 
         try_pow = -1
         while try_pow < 0 or\
             not self.within_boundaries(perturbed_val=try_pow,
-                                       std_val=self.settings['std_ete'],
+                                       ptype='pow',
                                        initial_val=self.i_sop.power):
             # Truncate distribution at 0 to have positive power
             try_pow: float = random.normal(
@@ -61,10 +149,10 @@ class Normal(Perturbator):
             try_sig = -1
             while try_sig < 0 or \
                 not self.within_boundaries(perturbed_val=try_sig,
-                                           std_val=self.settings['std_sigma'],
+                                           ptype='sigma',
                                            initial_val=self.i_sop.sigmas[i]):
-                try_sig = random.normal(
-                    loc=p_sop.sigmas[i],
+                try_sig = p_sop.sigmas[i] * random.normal(
+                    loc=1,
                     scale=self.settings['std_sigma']*self.gen_fact)
             p_sop.sigmas[i] = try_sig
 
@@ -72,7 +160,7 @@ class Normal(Perturbator):
             try_eps = -1
             while try_eps < 0 or \
                 not self.within_boundaries(perturbed_val=try_eps,
-                                           std_val=self.settings['std_epsi'],
+                                           ptype='epsi',
                                            initial_val=self.i_sop.epsilons[i]):
                 try_eps = random.normal(
                     loc=p_sop.epsilons[i],
@@ -121,15 +209,19 @@ class Normal(Perturbator):
 
         if isinstance(item, (Well, Bimolecular)):
             value: float = self.settings['std_e']
+            ptype = 'e'
         elif isinstance(item, Barrier):
             value = self.settings['std_b']
+            ptype = 'b'
+        else:
+            raise TypeError('Unknown item type')
 
         # Set trial energy out of the boundaries
         try_e: float = self.i_sop.items[item.name].energy\
             - (1+self.settings['max_std']) * value
         while not self.within_boundaries(
               perturbed_val=try_e,
-              std_val=value,
+              ptype=ptype,
               initial_val=self.i_sop.items[item.name].energy):
             try_e = random.normal(
                 loc=item.energy,
@@ -148,13 +240,14 @@ class Normal(Perturbator):
         for idx, f in enumerate(well.frequencies):
             # Set trial frequency out of the boundaries
             try_f: float = self.i_sop.items[well.name].frequencies[idx]\
-                           - (1+self.settings['max_std']) * self.settings['std_f']
+                           - (1+self.settings['max_std'])\
+                           * self.settings['std_f']
             while not self.within_boundaries(
                   perturbed_val=try_f,
-                  std_val=self.settings['std_f'],
+                  ptype='f',
                   initial_val=self.i_sop.items[well.name].frequencies[idx]):
-                try_f = random.normal(
-                    loc=f,
+                try_f = f * random.normal(
+                    loc=1,
                     scale=self.settings['std_f']*self.gen_fact)
 
             well.frequencies[idx] = try_f
@@ -174,10 +267,10 @@ class Normal(Perturbator):
                 (1+self.settings['max_std']) * self.settings['std_hr']
             while not self.within_boundaries(
                   perturbed_val=try_r,
-                  std_val=self.settings['std_hr'],
+                  ptype='r',
                   initial_val=1):
-                try_r = random.normal(
-                    loc=rot.pert,
+                try_r = rot.pert * random.normal(
+                    loc=1,
                     scale=self.settings['std_hr']*self.gen_fact)
 
             well.rotors[num].pert = try_r
@@ -198,10 +291,10 @@ class Normal(Perturbator):
             - (1+self.settings['max_std']) * self.settings['std_if']
         while not self.within_boundaries(
                 perturbed_val=try_if,
-                std_val=self.settings['std_if'],
+                ptype='if',
                 initial_val=self.i_sop.items[bar.name].ifreq):
-            try_if = random.normal(
-                loc=bar.ifreq,
+            try_if = bar.ifreq*random.normal(
+                loc=1,
                 scale=self.settings['std_if']*self.gen_fact)
 
         bar.ifreq = try_if
