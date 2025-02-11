@@ -12,7 +12,7 @@ class WeightedDif(Scoring):
         return 9999999.9
 
     def score(self,
-              sim: SIM) -> float:
+              sim: SIM) -> list[float]:
         """Calculate the score of a sim as the cumulated difference.
         Weights can be given to species and TP conditions
 
@@ -23,24 +23,25 @@ class WeightedDif(Scoring):
             float: the score of the element
         """
 
-        exp_profiles: list[NDArray] = self.settings['exp_profiles']
+        exp_prof: list[NDArray] = self.settings['exp_profiles']
         n_exp: int = len(self.settings['rc_temp']) *\
             len(self.settings['rc_pres'])
 
-        score = 0.0
         sp_weight: NDArray[float64] = np.array(
             [sim.settings['w_species'][sp] for sp in sim.species])
+        score = np.array([0.0 for sp in sim.species])
         for p in range(len(self.settings['rc_pres'])):
             for t in range(len(self.settings['rc_temp'])):
                 sim_index: int = p*len(self.settings['rc_temp']) + t
                 w_exp_i = self.settings['w_exp'][sim_index]
-                ordered_profiles: NDArray[float64] = np.zeros((
-                    len(sim.species),
-                    len(exp_profiles[sim_index][sim.species[0]])))
-                cur_sim_profile = sim.profiles[sim_index][:, 5:].T
-                for idx, specie in enumerate(sim.species):
-                    ordered_profiles[idx] = exp_profiles[sim_index][specie]
-                score += (w_exp_i * np.sum(
-                          np.sum(np.abs(cur_sim_profile -
-                          ordered_profiles)/n_exp, axis=1) * sp_weight/len(sim.species)))
-        return score
+                # dtype of sim_prof and exp_prof[sim_index] should be the same
+                dif = w_exp_i * np.sum(
+                    np.abs(
+                        sim.profiles[sim_index].T - exp_prof[sim_index]
+                        )/len(exp_prof[sim_index][0]),  # Normalize time
+                    axis=1
+                    )
+                # Accumulate and normalize the x
+                score += dif[1:]
+        score *= sp_weight/len(sp_weight)/n_exp
+        return score.tolist()

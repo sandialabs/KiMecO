@@ -166,15 +166,14 @@ class Game_db:
 
         Args:
             table (str): name of table
-            id (int): id of the element
+            id (int): row id
             values (dict[str, Any]): dictionary of param name - value
         """
         if table not in self._upsert:
             self._upsert[table] = {}
         self._upsert[table][id] = values
 
-    def batch_upsert(self,
-                     mode: str = 'sqlalchemy') -> None:
+    def batch_upsert(self) -> None:
         if len(self._upsert) == 0:
             return
         for table in self._upsert:
@@ -183,14 +182,10 @@ class Game_db:
             for id in self._upsert[table]:
                 ids.append(id)
                 values.append(self._upsert[table][id])
-            if mode == 'manual':
-                self.manual_upsert_entries(table=table,
-                                           ids=ids,
-                                           values=values)
-            else:
-                self.upsert_entries(table=table,
-                                    ids=ids,
-                                    values=values)
+            self.upsert_entries(
+                table=table,
+                ids=ids,
+                values=values)
         self._upsert = {}
 
     def save_data(self,

@@ -394,14 +394,14 @@ class SIM:
             sim_id (int): sim id unique accross a generation
         """
         time_steps: list[int] = \
-            [len(i['time']) for i in self.settings['exp_profiles']]
+            [len(i[0]) for i in self.settings['exp_profiles']]
         ct_job: str = self.ctjobtpl.format(
             db=self.db,
             sim_name=name,
             sim_id=sim_id,
             el_num=self.id,
             time=self.settings['exp_profiles']
-            [sim_id - self.id*len(time_steps)]['time'],
+            [sim_id - self.id*len(time_steps)][0].tolist(),
             all_tsteps=time_steps,
             gen=self.gen_id,
             to_watch=self.species,

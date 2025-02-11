@@ -1,6 +1,6 @@
 ctjobtpl = """import cantera as ct
 from game.cantera.customrate import MessData, MessRate
-from game.database.game_db import Game_db
+from game.database.sim_db import SIM_DB
 import numpy as np
 from numpy import float32
 from pandas import MultiIndex, DataFrame, RangeIndex
@@ -11,7 +11,7 @@ import cantera.with_units as ctu
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 
-db = Game_db(name='{db.name}',
+db = SIM_DB(name='{db.name}',
              path='{db.path}')
 
 i = 0
@@ -71,6 +71,7 @@ for idx, t in enumerate(time):
     for snum, i in enumerate(spec):
         if i.name in to_watch:
             traces[i.name][idx] = gas.X[snum]
+# unique ids of rows in the DB
 row_ids = [i for i in range({el_num}*block_size+start_idx,
                             {el_num}*block_size+start_idx+len(time),
                             1)]
@@ -81,6 +82,6 @@ for idx, id in enumerate(row_ids):
     db.prepare_batch_upsert(table='G{gen}',
                             id=id,
                             values=row_dict)
-db.batch_upsert(mode='manual')
+db.batch_upsert()
 
 """

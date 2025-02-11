@@ -145,6 +145,11 @@ class SOP:
             '__fact': self.factor,
             '__pow': self.power
             }
+        sc = 0
+        for obj in self.items.values():
+            if isinstance(obj, Well) and not isinstance(obj, Barrier):
+                pn[f'__score_{sc}'] = float(99999)
+                sc += 1
         for idx, sc in enumerate(self.scores):
             pn[f'__score_{idx}'] = float(sc)
         for idx, ep in enumerate(self.epsilons):
@@ -258,7 +263,11 @@ class SOP:
 
         if 'score' in key:
             idx = int(key.split('score_')[-1])
-            self.scores[idx] = value
+            # In case scores are not ordered in db for some reason.
+            while len(self.scores) < idx+1:
+                self.scores.append(value)
+            else:
+                self.scores[idx] = value
             return
         # Energy transfer probability, factor
         elif 'fact' in key:

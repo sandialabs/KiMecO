@@ -4,28 +4,31 @@ from game.well import Well
 from game.barrier import Barrier
 from sqlalchemy import select
 from typing import Sequence
-import numpy as np
-from numpy import float64
 
 
 class SIM_DB(Game_db):
     def __init__(self,
-                 sop: SOP,
                  name: str,
-                 path: str = '',) -> None:
+                 path: str = '',
+                 sop: SOP | None = None) -> None:
         super().__init__(name=name,
                          path=path)
-        
-        self.species: list[str] = [
-            sop.items[specie].ct_name
-            for specie, obj in sop.items.items()
-            if isinstance(obj, Well) and not isinstance(obj, Barrier)]
-        
-        self.columns: list[str] = ['P', 'T', 'sim_id', 'time']
-        self.columns.extend(self.species)
+
+        if isinstance(sop, SOP):
+            self.species: list[str] = [
+                sop.items[specie].ct_name
+                for specie, obj in sop.items.items()
+                if isinstance(obj, Well) and not isinstance(obj, Barrier)]
+
+            self.columns: list[str] = ['P', 'T', 'sim_id', 'time']
+            self.columns.extend(self.species)
+        else:
+            # Only work if the SIM_DB is already created.
+            self.columns: list[str] = [
+                c[1] for c in self.get_col_names('G0')[1:]]
+            self.species = self.columns[4:]
         self.types = [int, float, float, int, float]
         self.types.extend([float for i in range(len(self.species))])
-
         tbls_in_db = self.get_table_names()
 
         for tbl in tbls_in_db:
@@ -57,14 +60,14 @@ class SIM_DB(Game_db):
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt)
-    
+
     def get_profile_from_id(self,
                             table,
                             sim_id) -> list[list[float]]:
         query = select(
             self.tables[table].c.time,
             *[self.tables[table].c[sp]
-              for sp in self.columns[3:]]
+              for sp in self.columns[4:]]
         ).where(
             self.tables[table].c.sim_id == sim_id
         )

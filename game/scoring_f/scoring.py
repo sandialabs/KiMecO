@@ -28,5 +28,5 @@ class Scoring(ABC):
 
     @abstractmethod
     def score(self,
-              sim: SIM) -> float:
-        return 0.0
+              sim: SIM) -> list[float]:
+        return [0.0]

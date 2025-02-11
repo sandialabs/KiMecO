@@ -61,6 +61,8 @@ class Element:
                 'default': Make the SOP in the worflow equal to the db entry
                 'scratch': Update the db with new SOP values.
         """
+        if len(self.scores == 0):
+            raise AttributeError('Cannot store a SOP with no score.')
         db_table: dict[str, Any] = {}
         db_table.update(self.sop.parameters_names)
 
@@ -126,15 +128,12 @@ class Element:
     def recover_sim_profiles(self,
                              db: SIM_DB,
                              table) -> None:
-        prof_type = np.dtype(dtype=[
-                *[(key, float64) for key in db.columns[3:]]])
 
         for sim in range(len(self.sim.simulations)):
             sim_id: int = self.id * len(self.sim.simulations) + sim
             self.sim.profiles.append(np.array(
                 db.get_profile_from_id(table=table,
-                                       sim_id=sim_id),
-                dtype=prof_type))
+                                       sim_id=sim_id)))
             self.sim.q_sys.pickUp(id=sim_id,
                                   jtype='sim')
             self.sim.status[sim] = self.sim.q_sys.status(id=sim_id,
@@ -156,12 +155,12 @@ class Element:
             settings (dict[str, Any]): User input + default settings
         """
         try:
-            self.sop.scores = list(self.sf.score(sim=self.sim))
+            self.sop.scores = self.sf.score(sim=self.sim)
             self.status = 'DONE'
         except IndexError:
             # Occurs when a simulation didn't work so profiles were not saved
             self.status = 'reset'
-            print(f'Resetting element {self.id} because a simulation crashed')
+            print(f'Resetting element {self.id}: error during scoring.')
 
     @property
     def scores(self) -> list[float]:

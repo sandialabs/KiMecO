@@ -123,15 +123,13 @@ def check_input(input_file: str) -> dict:
                     if len(profile) != nstep:
                         print(
                             f'Not enough values in profile {header} in file {file}')
-    # # Transform the profiles in numpy structured arrays
+    # Transform the profiles in numpy structured arrays
     for idx, prof in enumerate(clean_profiles):
-            prof_type = np.dtype(dtype=[
-                *[(key, float64) for key in prof]])
-            clean_profiles[idx] = np.empty(
-                shape=(len(prof['time'])),
-                dtype=prof_type)
-            for col in prof:
-                clean_profiles[idx][col] = prof[col]
+        clean_profiles[idx] = np.empty(
+            shape=(len(prof), len(prof['time'])),
+            dtype=float64)
+        for cidx, col in enumerate(prof):
+            clean_profiles[idx][cidx] = prof[col]
     json_file['exp_profiles'] = clean_profiles
 
     # Specific cases with interdependent non-mandatory settings

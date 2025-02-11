@@ -218,7 +218,9 @@ class Generation:
             sf=self.sf)
             for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
         for el in new_gen:
-            if all(el.scores != self.sf.default_score):
+            not_default: list[bool] = [
+                i != self.sf.default_score for i in el.scores]
+            if all(not_default):
                 el.status = 'DONE'
             for idx, gen_el in enumerate(self.elements):
                 if el.id == gen_el.id:

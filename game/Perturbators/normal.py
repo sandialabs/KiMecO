@@ -40,8 +40,10 @@ class Normal(Perturbator):
             return [i_val - self.settings['std_b'] * self.settings['max_std'],
                     i_val + self.settings['std_b'] * self.settings['max_std']]
         elif ptype == 'f':
-            return [-i_val * self.settings['std_f'] * self.settings['max_std'],
-                    i_val * self.settings['std_f'] * self.settings['max_std']]
+            return [i_val - i_val 
+                    * self.settings['std_f'] * self.settings['max_std'],
+                    i_val + i_val 
+                    * self.settings['std_f'] * self.settings['max_std']]
         elif ptype == 'if':
             return [i_val - i_val *
                     self.settings['std_if'] * self.settings['max_std'],
