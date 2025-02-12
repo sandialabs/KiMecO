@@ -4,6 +4,7 @@ from game.well import Well
 from game.barrier import Barrier
 from sqlalchemy import select
 from typing import Sequence
+from sqlalchemy import event
 
 
 class SIM_DB(Game_db):
@@ -13,6 +14,14 @@ class SIM_DB(Game_db):
                  sop: SOP | None = None) -> None:
         super().__init__(name=name,
                          path=path)
+        # Help with communication journal
+        # self.set_wal_mode()
+
+        # @event.listens_for(self.eng, "connect")
+        # def set_sqlite_pragma(dbapi_connection, connection_record):
+        #     cursor = dbapi_connection.cursor()
+        #     cursor.execute("PRAGMA journal_mode=WAL")
+        #     cursor.close()
 
         if isinstance(sop, SOP):
             self.species: list[str] = [

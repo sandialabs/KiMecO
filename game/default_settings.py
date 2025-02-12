@@ -94,5 +94,7 @@ default_settings: dict[str, Any] = {
     # Value of score under which a generation has converged
     "score_conv": 0.01,
     # Maximum number of generations
-    "max_gen": 10
+    "max_gen": 10,
+    # Percentage of deviation of means and stds of parameters to converge
+    "rockme_conv": 0.05
 }

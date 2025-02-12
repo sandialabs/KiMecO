@@ -1,6 +1,6 @@
 import sys
 import os
-from time import time
+from typing import Dict
 from game.GeneticAlgo.tournament import Tournament
 from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
@@ -17,7 +17,7 @@ from game.scoring_f.weighteddif import WeightedDif
 def main() -> None:
     if len(sys.argv) != 2:
         print("""
-    GAME needs various parameters to be set in a JSON input file.
+    ROCKME needs various parameters to be set in a JSON input file.
     This JSON input file should be supplied as the first and only
     argument.
 
@@ -74,6 +74,7 @@ def main() -> None:
                            sf=sf,
                            pert=pert)
     first_gen.run()
+    old_means, old_stds = first_gen.get_stats()
 
     converged = False
 
@@ -107,14 +108,80 @@ def main() -> None:
         # gen_init_time = init_t_end - init_t_start
         # print('Initialization of generation')
         new_gen.run()
-        # t_end = time()
-        # gen_time = t_end - t_start
-        # print()
-        if not ga.converged(gen=new_gen):
+        means, stds = new_gen.get_stats()
+        if not rockme_converged(threshold = settings['rockme_conv'],
+                                old_means=old_means,
+                                old_stds=old_stds,
+                                new_means=means,
+                                new_stds=stds):
             print(f'Generation {new_gen.id} finished.')
             print(f'Best score: {new_gen.best_score}')
+            print('Statistics:')
+            print('{:16s} {:10s} {:10s}'.format(
+                'Parameter name',
+                'Mean',
+                '2 STD dev'
+            ))
+            for k in means:
+                print('{:16s} {:-10.2e} {:-10.2e}'.format(
+                    k,
+                    means[k],
+                    stds[k]
+                ))
             prev_gen, new_elements = ga.next_gen(gen=new_gen)
+            old_means: Dict[str, float] = means
+            old_stds: Dict[str, float] = stds
         else:
             converged = True
 
-    print(f'Run Sucessful. Termination at generation {new_gen.id} with score {new_gen.best_score}')
+    print('Run Sucessful.')
+    print(f'Termination at generation {new_gen.id} with score {new_gen.best_score}')
+
+
+def rockme_converged(threshold: float,
+                     old_means: Dict[str, float],
+                     old_stds: Dict[str, float],
+                     new_means: Dict[str, float],
+                     new_stds: Dict[str, float]) -> bool:
+    """Check if the means and standard deviations
+    have converged within a user defined threshold.
+
+    Args:
+        old_means (Dict[str, float]): Old mean values for each key.
+        old_stds (Dict[str, float]): Old standard deviation values for each key.
+        new_means (Dict[str, float]): New mean values for each key.
+        new_stds (Dict[str, float]): New standard deviation values for each key.
+
+    Returns:
+        bool: True if all ratios are within 5%, False otherwise.
+    """
+
+    # Check convergence for means
+    for key in old_means:
+        if key in new_means:
+            old_mean = old_means[key]
+            new_mean = new_means[key]
+            if old_mean != 0:  # Avoid division by zero
+                ratio_mean = abs(new_mean - old_mean) / abs(old_mean)
+                if ratio_mean > threshold:
+                    return False
+            else:
+                print(f'Warning: {key} skipped (div 0)')
+                print(f'Mean old: {old_mean}')
+                print(f'Mean new: {new_mean}')
+
+    # Check convergence for standard deviations
+    for key in old_stds:
+        if key in new_stds:
+            old_std = old_stds[key]
+            new_std = new_stds[key]
+            if old_std != 0:  # Avoid division by zero
+                ratio_std = abs(new_std - old_std) / abs(old_std)
+                if ratio_std > threshold:
+                    return False
+            else:
+                print(f'Warning: {key} skipped (div 0)')
+                print(f'StdD old: {old_std}')
+                print(f'StdD new: {new_std}')
+
+    return True

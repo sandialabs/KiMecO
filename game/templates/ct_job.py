@@ -38,6 +38,8 @@ gas.TP = wf_gas.T, Q_(f"{{wf_gas.P}} torr").to("Pa").magnitude
 
 reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
 net = ct.ReactorNet([reactor])
+net.atol = 1e-10
+net.rtol = 1e-10
 
 sim_time = 0.0
 # In seconds

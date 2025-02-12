@@ -246,9 +246,6 @@ class Generation:
         """Calculate the standard deviation of each key in the
         parameters_names dictionary across all SOP objects.
 
-        Args:
-            sop_list (List[SOP]): List of SOP objects.
-
         Returns:
             Dict[str, float]: Dictionary with the mean values for each key.
             Dict[str, float]:

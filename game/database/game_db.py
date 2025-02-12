@@ -45,6 +45,12 @@ class Game_db:
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return db_rslt
+    
+
+    def set_wal_mode(self):
+        query: TextClause = text(f"PRAGMA journal_mode=WAL")
+        with self.eng.begin() as connection:
+            db_rslt = connection.execute(query)
 
     def table_exists(self,
                      name: str) -> bool:
