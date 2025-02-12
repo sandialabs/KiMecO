@@ -4,7 +4,7 @@ from game.well import Well
 from game.barrier import Barrier
 from sqlalchemy import select
 from typing import Sequence
-from sqlalchemy import event
+from typing import Any
 
 
 class SIM_DB(Game_db):
@@ -14,6 +14,7 @@ class SIM_DB(Game_db):
                  sop: SOP | None = None) -> None:
         super().__init__(name=name,
                          path=path)
+        self._select = {}
         # Help with communication journal
         # self.set_wal_mode()
 
@@ -83,3 +84,41 @@ class SIM_DB(Game_db):
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt)
+
+    def prepare_batch_select(self, table: str, sim_id: int) -> None:
+        """Prepare a batch select request to store in the _select dictionary.
+
+        Args:
+            table (str): name of the table
+            sim_id (int): simulation ID to select
+        """
+        if table not in self._select:
+            self._select[table] = []
+        self._select[table].append(sim_id)
+
+    def batch_select(self) -> dict[int, list[list[Any]]]:
+        """Execute batch select requests stored in the _select dictionary.
+
+        Returns:
+            dict[int, list[list[Any]]]: A dictionary with sim_id as keys and lists of their corresponding data as values.
+        """
+        results = {}
+        for table in self._select:
+            sim_ids = self._select[table]
+            query = select(
+            self.tables[table].c.sim_id,
+            self.tables[table].c.time,
+            *[self.tables[table].c[sp]
+              for sp in self.columns[4:]]
+                ).where(
+                    self.tables[table].c.sim_id.in_(sim_ids))
+            with self.eng.begin() as connection:
+                db_rslt: Sequence[Row[Any]] = connection.execute(query).fetchall()
+            for row in db_rslt:
+                sim_id = int(row.sim_id)
+                if sim_id not in results:
+                    results[sim_id] = []
+                results[sim_id].append(row)
+
+        self._select = {}  # Clear the _select dictionary after processing
+        return results

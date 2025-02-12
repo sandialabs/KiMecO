@@ -100,7 +100,8 @@ class SIM:
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
         self.db: Game_db = db
-        self.profiles: list[NDArray] = []
+        self.profiles: list[NDArray | None] = [
+            None for i in range(len(set['rc_pres']) * len(set['rc_temp']))]
         self.status = ['notInQueue' for i in self.simulations]
 
     def check_species_weights(self) -> None:

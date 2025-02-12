@@ -72,24 +72,15 @@ class Element:
                                     id=db_id,
                                     values=vals)
 
-    def recover_sim_profiles(self,
+    def request_sim_profiles(self,
                              db: SIM_DB,
                              table) -> None:
 
         for sim in range(len(self.sim.simulations)):
             sim_id: int = self.id * len(self.sim.simulations) + sim
-            self.sim.profiles.append(np.array(
-                db.get_profile_from_id(table=table,
-                                       sim_id=sim_id)))
-            self.sim.q_sys.pickUp(id=sim_id,
-                                  jtype='sim')
-            self.sim.status[sim] = self.sim.q_sys.status(id=sim_id,
-                                                         jtype='sim')
-        if any(np.array(self.sim.status) == 'reset'):
-            self.status = 'reset'
-            print(
-                f"""Element {self.id} has been reset \
-                  because a simulation crashed.""")
+            db.prepare_batch_select(
+                table=table,
+                sim_id=sim_id)
 
     def calc_score(self) -> None:
         """Calculate the score of the element

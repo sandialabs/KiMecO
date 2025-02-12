@@ -74,7 +74,9 @@ def main() -> None:
                            sf=sf,
                            pert=pert)
     first_gen.run()
-    old_means, old_stds = first_gen.get_stats()
+    old_means = first_gen.means
+    old_stds = first_gen.stds
+    first_gen.get_stats()
 
     converged = False
 
@@ -109,33 +111,19 @@ def main() -> None:
         # print('Initialization of generation')
         new_gen.run()
         means, stds = new_gen.get_stats()
-        if not rockme_converged(threshold = settings['rockme_conv'],
+        if not rockme_converged(threshold=settings['rockme_conv'],
                                 old_means=old_means,
                                 old_stds=old_stds,
-                                new_means=means,
-                                new_stds=stds):
-            print(f'Generation {new_gen.id} finished.')
-            print(f'Best score: {new_gen.best_score}')
-            print('Statistics:')
-            print('{:16s} {:10s} {:10s}'.format(
-                'Parameter name',
-                'Mean',
-                '2 STD dev'
-            ))
-            for k in means:
-                print('{:16s} {:-10.2e} {:-10.2e}'.format(
-                    k,
-                    means[k],
-                    stds[k]
-                ))
+                                new_means=new_gen.means,
+                                new_stds=new_gen.stds):
             prev_gen, new_elements = ga.next_gen(gen=new_gen)
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
         else:
             converged = True
-
     print('Run Sucessful.')
-    print(f'Termination at generation {new_gen.id} with score {new_gen.best_score}')
+    print(f'Termination at generation {new_gen.id}')
+    print(f'Final score: {new_gen.best_score}')
 
 
 def rockme_converged(threshold: float,
@@ -147,14 +135,19 @@ def rockme_converged(threshold: float,
     have converged within a user defined threshold.
 
     Args:
-        old_means (Dict[str, float]): Old mean values for each key.
-        old_stds (Dict[str, float]): Old standard deviation values for each key.
-        new_means (Dict[str, float]): New mean values for each key.
-        new_stds (Dict[str, float]): New standard deviation values for each key.
+        old_means (Dict[str, float]):
+            Old mean values for each key.
+        old_stds (Dict[str, float]):
+            Old standard deviation values for each key.
+        new_means (Dict[str, float]):
+            New mean values for each key.
+        new_stds (Dict[str, float]):
+            New standard deviation values for each key.
 
     Returns:
-        bool: True if all ratios are within 5%, False otherwise.
+        bool: True if all ratios are within user defined %, False otherwise.
     """
+    converged = True
 
     # Check convergence for means
     for key in old_means:
@@ -164,7 +157,8 @@ def rockme_converged(threshold: float,
             if old_mean != 0:  # Avoid division by zero
                 ratio_mean = abs(new_mean - old_mean) / abs(old_mean)
                 if ratio_mean > threshold:
-                    return False
+                    converged = False
+                    print(f"{key} not converged: {ratio_mean}")
             else:
                 print(f'Warning: {key} skipped (div 0)')
                 print(f'Mean old: {old_mean}')
@@ -173,15 +167,16 @@ def rockme_converged(threshold: float,
     # Check convergence for standard deviations
     for key in old_stds:
         if key in new_stds:
-            old_std = old_stds[key]
-            new_std = new_stds[key]
+            old_std: float = old_stds[key]
+            new_std: float = new_stds[key]
             if old_std != 0:  # Avoid division by zero
-                ratio_std = abs(new_std - old_std) / abs(old_std)
+                ratio_std: float = abs(new_std - old_std) / abs(old_std)
                 if ratio_std > threshold:
-                    return False
+                    converged = False
+                    print(f"{key} not converged: {ratio_std}")
             else:
                 print(f'Warning: {key} skipped (div 0)')
                 print(f'StdD old: {old_std}')
                 print(f'StdD new: {new_std}')
 
-    return True
+    return converged

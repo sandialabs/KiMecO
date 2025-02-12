@@ -13,6 +13,7 @@ import numpy as np
 import numpy.typing as npt
 from numpy import bool_
 import math
+import time
 from game.q_sys import QueueingSystem
 from game.rate_coef import RateCo
 from game.simulation import SIM
@@ -126,6 +127,7 @@ class Generation:
                                     the ressources and running as many jobs
                                     in parallel as possible.
         """
+        start_time = time.time()
         print(f'Running generation {self.id} ...')
         finished: npt.NDArray[bool_] = np.full(shape=(len(self.elements), 1),
                                                fill_value=False)
@@ -184,16 +186,16 @@ class Generation:
                         el.sim.set_status(sim=sim_i)
                     if all([True if stat == 'finished' else False
                             for stat in el.sim.status]):
-                        el.recover_sim_profiles(db=self.sim_db,
+                        el.request_sim_profiles(db=self.sim_db,
                                                 table=f'G{self.id}')
-                        if el.status != 'reset':
-                            el.status = 'scoring'
+                        # The status of the element is changed
+                        # after data from the db are recovered
                     # Not sure yet why this case happens, but it does happen
                     elif any([True if stat == 'notInQueue' else False
                               for stat in el.sim.status]):
                         el.sim.q_up()
                 # Scoring
-                if el.status == 'scoring':
+                elif el.status == 'scoring':
                     el.calc_score()
                 if el.status == 'DONE':
                     el.prepare_upsert(db=self.sop_db,
@@ -203,7 +205,50 @@ class Generation:
                         self.best_score: float = np.sum(el.scores)
             self.sop_db.batch_upsert()
             self.kin_db.batch_upsert()
+            self.collect_sim_profiles()
             self.qs.run()
+        end_time = time.time()
+        runtime = end_time - start_time  # Calculate runtime
+        print(f'Generation {self.id} completed in {runtime:.2f} seconds.')
+        self.means, self.stds = self.get_stats()
+        print(f'Best score: {self.best_score}')
+        print('Statistics:')
+        print('{:16s} {:10s} {:10s}'.format(
+            'Parameter name',
+            'Mean',
+            'STD dev'
+        ))
+        for k in self.means:
+            print('{:16s} {:-10.2e} {:-10.2e}'.format(
+                k,
+                self.means[k],
+                self.stds[k]
+            ))
+
+    def collect_sim_profiles(self):
+        """Batch recovery of the concentration profiles to avoid
+        multiple db transactions.
+        """
+        if len(self.sim_db._select) == 0:
+            return
+        nsim: int = len(self.settings['rc_pres']) * len(self.settings['rc_temp'])
+        collected: dict[int, list[list[Any]]] = self.sim_db.batch_select()
+        for sim_id, rows in collected.items():
+            el: Element = self.elements[sim_id // nsim]
+            sim: int = sim_id % nsim
+            el.sim.profiles[sim] = np.array(
+                [i[1:] for i in rows])
+            el.sim.q_sys.pickUp(id=sim_id,
+                                jtype='sim')
+            el.sim.status[sim] = el.sim.q_sys.status(id=int(sim_id),
+                                                     jtype='sim')
+            if any(np.array(el.sim.status) == 'reset'):
+                el.status = 'reset'
+                print(
+                    f"Element {self.id} has been reset",
+                    "because a simulation crashed.")
+            elif all(np.array(el.sim.status) == 'pickedUp'):
+                el.status = 'scoring'
 
     def restore_gen_from_db(self) -> None:
         """Create a complete list of elements from the data in the database.
