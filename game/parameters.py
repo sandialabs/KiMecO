@@ -155,7 +155,7 @@ class SOP:
         for idx, ep in enumerate(self.epsilons):
             pn[f'__epsi_{idx}'] = float(ep)
         for idx, sig in enumerate(self.sigmas):
-            pn[f'__sigmas_{idx}'] = float(sig)
+            pn[f'__sigma_{idx}'] = float(sig)
         for well in self.wells:
             pn.update(well.db_dict)
         for bar in self.barriers:

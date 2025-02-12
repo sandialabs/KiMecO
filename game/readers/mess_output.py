@@ -29,7 +29,7 @@ class MessOutputReader:
                                          len(self.species),
                                          len(self.species)),
                                          fill_value=0.0)
-        
+
         self.lnum: int = 0  # Line index of table. Save map for first table
         self.tbl_map: dict[str, int] = {}  # Map linking indexes to species name
 

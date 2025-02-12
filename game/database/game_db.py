@@ -163,7 +163,7 @@ class Game_db:
                              id: int,
                              values: dict[str, Any]) -> None:
         """Actualize the upsert variable to prepare a batch upsert.
-
+1
         Args:
             table (str): name of table
             id (int): row id

@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from typing import List, Dict, Any
 
 from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
@@ -12,7 +12,7 @@ from game.parameters import SOP
 import numpy as np
 import numpy.typing as npt
 from numpy import bool_
-
+import math
 from game.q_sys import QueueingSystem
 from game.rate_coef import RateCo
 from game.simulation import SIM
@@ -58,19 +58,19 @@ class Generation:
             rc_tpl: Template for rate constant calculation.
             loc: Location. Absolute path of where the gen folder should be.
         """
-        self.elements: list[Element] = elements
+        self.elements: List[Element] = elements
         self.previous_el: dict[int, Element] = previous_el
         self.id: int = Generation.__id
         Generation.__id += 1
         self.pert: Perturbator = pert
         self.settings: dict[str, Any] = set
         # List of species names used by cantera
-        self.species: list[str] = [
+        self.species: List[str] = [
             self.elements[0].sop.items[specie].ct_name
             for specie, obj in self.elements[0].sop.items.items()
             if isinstance(obj, Well) and not isinstance(obj, Barrier)]
         # Rate coefficients template
-        self.rc_tpl: list[str] = rc_tpl
+        self.rc_tpl: List[str] = rc_tpl
         # where the generation is running
         self.loc: str = loc
         self.sf: Scoring = sf
@@ -165,9 +165,8 @@ class Generation:
                         # Next status is set in this function as it can fail.
                         el.save_kin(db=self.kin_db,
                                     table=f'G{self.id}')
-                        el.status = 'kin'
                 # Calculate SIMs
-                if el.status == 'kin':
+                elif el.status == 'kin':
                     el.sim = SIM(sop=el.sop,
                                  kin=el.rateCoef,
                                  id=el.id,
@@ -203,6 +202,7 @@ class Generation:
                     if np.sum(el.scores) < self.best_score:
                         self.best_score: float = np.sum(el.scores)
             self.sop_db.batch_upsert()
+            self.kin_db.batch_upsert()
             self.qs.run()
 
     def restore_gen_from_db(self) -> None:
@@ -211,14 +211,14 @@ class Generation:
         # Read the data from the db
         rows = self.sop_db.get_table(table=f'G{self.id}')
         # Create the list of elements from the db
-        new_gen: list[Element] = [Element(
+        new_gen: List[Element] = [Element(
             sop=SOP.from_db_row(sop_tpl=self.elements[0].sop,
                                 row=row[1:]),
             id=row[0],
             sf=self.sf)
             for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
         for el in new_gen:
-            not_default: list[bool] = [
+            not_default: List[bool] = [
                 i != self.sf.default_score for i in el.scores]
             if all(not_default):
                 el.status = 'DONE'
@@ -237,7 +237,48 @@ class Generation:
             it gets reperturbed.
         """
         self.qs.kin_q[elem.id]['status'] = 'notInQueue'
+        if hasattr(elem, 'sim'):
+            for sim in range(len(elem.sim.simulations)):
+                sim_id: int = self.id * len(elem.sim.simulations) + sim
+                self.qs.sim_q[sim_id]['status'] = 'notInQueue'
 
-        for sim in range(len(elem.sim.simulations)):
-            sim_id = self.id * len(elem.sim.simulations) + sim
-            self.qs.sim_q[sim_id]['status'] = 'notInQueue'
+    def get_stats(self) -> tuple[Dict[str, float], Dict[str, float]]:
+        """Calculate the standard deviation of each key in the
+        parameters_names dictionary across all SOP objects.
+
+        Args:
+            sop_list (List[SOP]): List of SOP objects.
+
+        Returns:
+            Dict[str, float]: Dictionary with the mean values for each key.
+            Dict[str, float]:
+                Dictionary with the standard deviation for each key.
+        """
+        sop_list: List[SOP] = [el.sop for el in self.elements]
+
+        # Initialize dictionaries to hold the sum of values,
+        # sum of squared values, and a count of SOPs
+        sum_values: Dict[str, float] = {}
+        sum_squared_values: Dict[str, float] = {}
+        count: int = len(sop_list)
+
+        # Iterate through each SOP object
+        for sop in sop_list:
+            parameters = sop.parameters_names
+            for key, value in parameters.items():
+                if key not in sum_values:
+                    sum_values[key] = 0.0
+                    sum_squared_values[key] = 0.0
+                sum_values[key] += value
+                sum_squared_values[key] += value ** 2
+
+        # Calculate the standard deviation for each key
+        stddev_values: Dict[str, float] = {}
+        mean_values: Dict[str, float] = {}
+        for key in sum_values:
+            mean: float = sum_values[key] / count
+            mean_values[key] = mean
+            variance: float = (sum_squared_values[key] / count) - (mean ** 2)
+            stddev_values[key] = math.sqrt(variance) if variance > 0 else 0.0
+
+        return mean_values, stddev_values

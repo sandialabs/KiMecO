@@ -341,35 +341,34 @@ and then analyse the results.'''.format(
             tuple[dict[str, str], list[str]]: _description_
         """
         filtered_param: list[dict[str, str]] = []
-        if param_type == 'score':
-            filtered_param.append({
-                'lable': param_type,
-                'value': param_type})
-        else:
-            for col in sop_db.columns[1:]:
-                molec = col.split('__')[0]
-                param: str = col.split('__')[1]
-                if param.startswith(param_type):
-                    if param_type == 'e' or 'if':
-                        if param.startswith('epsi'):
-                            continue
-                        if col.split('__')[0] in settings['ct_names']:
-                            filtered_param.append({
-                                'label': f"{settings['ct_names'][molec]}",
-                                'value': col})
-                        else:
-                            filtered_param.append({
-                                'label': f"{molec} {param}",
-                                'value': col})
+        for col in sop_db.columns[1:]:
+            molec = col.split('__')[0]
+            param: str = col.split('__')[1]
+            if param.startswith(param_type):
+                if param_type == 'score':
+                    filtered_param.append({
+                        'lable': param,
+                        'value': col})
+                if param_type == 'e' or 'if':
+                    if param.startswith('epsi'):
+                        continue
+                    if col.split('__')[0] in settings['ct_names']:
+                        filtered_param.append({
+                            'label': f"{settings['ct_names'][molec]}",
+                            'value': col})
                     else:
-                        if col.split('__')[0] in settings['ct_names']:
-                            filtered_param.append({
-                                'label': f"{settings['ct_names'][molec]} {param}",
-                                'value': col})
-                        else:
-                            filtered_param.append({
-                                'label': f"{molec} {param}",
-                                'value': col})
+                        filtered_param.append({
+                            'label': f"{molec} {param}",
+                            'value': col})
+                else:
+                    if col.split('__')[0] in settings['ct_names']:
+                        filtered_param.append({
+                            'label': f"{settings['ct_names'][molec]} {param}",
+                            'value': col})
+                    else:
+                        filtered_param.append({
+                            'label': f"{molec} {param}",
+                            'value': col})
         if param_type != '':
             style: dict[str, str] = {'display': 'block'}
         else:
@@ -422,7 +421,11 @@ and then analyse the results.'''.format(
                               line_width=2,
                               line_color='black')
                 break
-        if '__' in param:
+        
+        if 'score' in ptype:
+            # std_allowed = settings['std_f'] * settings['max_std']
+            title = fr'{ptype}'
+        elif '__' in param:
             short_p: str = param.split('__')[1]
             if param.split('__')[0] in settings['ct_names']:
                 molec = settings['ct_names'][param.split('__')[0]]
@@ -719,22 +722,7 @@ and then analyse the results.'''.format(
                     '',
                     '')
         idx = 0
-        # for p in settings['rc_pres']:
-        #     for t in settings['rc_temp']:
-        #         if p == pres and t == temp:
-        #             break
-        #         else:
-        #             idx += 1
-        
-        # fig.add_trace(go.Scatter(
-        #                     x=arr[:, 3][:nsteps],
-        #                     y=specs_arr[elem, :, sp_idx].T,
-        #                     mode='lines',
-        #                     name=sp,
-        #                     opacity=op[idx],
-        #                     # hoveron='fills',
-        #                     hoverinfo='name'
-        #                     ))
+
         gen_arr = [
             np.array(sim_db.get_TP_sim_profiles(
                 table=f'G{gen_i}',
@@ -803,7 +791,7 @@ and then analyse the results.'''.format(
                                   color='rgb(0, 0, 0)')
                           ),
                           yaxis=dict(
-                              title='Concentration',
+                              title='Molar fraction',
                               showline=True,
                               showgrid=True,
                               showticklabels=True,

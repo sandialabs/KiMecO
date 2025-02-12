@@ -136,7 +136,7 @@ class RateCo:
                              jtype='kin') == 'reset':
             print(f'Resetting KIN job {self.id}')
             self.status = 'reset'
-            
+
         for k, v in self.tbl_map.items():
             names[v] = k
 

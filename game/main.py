@@ -14,7 +14,6 @@ from game.parameters import SOP
 from game.scoring_f.weighteddif import WeightedDif
 
 
-
 def main() -> None:
     if len(sys.argv) != 2:
         print("""

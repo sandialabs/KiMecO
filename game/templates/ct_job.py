@@ -8,6 +8,7 @@ import pickle
 import os
 import time
 import cantera.with_units as ctu
+import sqlalchemy
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 
@@ -40,7 +41,7 @@ net = ct.ReactorNet([reactor])
 
 sim_time = 0.0
 # In seconds
-time = {time}
+times = {time}
 all_tsteps = np.array({all_tsteps})
 block_size = np.sum(all_tsteps)
 sim_in_element = {sim_id} % len(all_tsteps)
@@ -52,7 +53,7 @@ traces = {{}}
 traces['P'] = np.full(tot_steps, gas.P)
 traces['T'] = np.full(tot_steps, gas.T)
 traces['sim_id'] = np.full(tot_steps, {sim_id})
-traces['time'] = np.array(time)
+traces['time'] = np.array(times)
 
 names = []
 
@@ -63,7 +64,7 @@ for idx, i in enumerate(spec):
         traces[i.name] = np.full(tot_steps, gas.X[idx])
         names.append(i.name)
 
-for idx, t in enumerate(time):
+for idx, t in enumerate(times):
     if idx == 0:
         # First time should be 0, hence initial concentration
         continue
@@ -73,7 +74,7 @@ for idx, t in enumerate(time):
             traces[i.name][idx] = gas.X[snum]
 # unique ids of rows in the DB
 row_ids = [i for i in range({el_num}*block_size+start_idx,
-                            {el_num}*block_size+start_idx+len(time),
+                            {el_num}*block_size+start_idx+len(times),
                             1)]
 for idx, id in enumerate(row_ids):
     row_dict = {{}}
@@ -82,6 +83,21 @@ for idx, id in enumerate(row_ids):
     db.prepare_batch_upsert(table='G{gen}',
                             id=id,
                             values=row_dict)
-db.batch_upsert()
+db_wait = np.random.normal(loc=0.5, scale=0.1)
+try_db = 0
+while True:
+    if try_db > 40:
+        # tried too many times, something is probably wrong, kill job
+        raise ValueError('Too many db connections at once.')
+        break
+    try:
+        db.batch_upsert()
+        break
+    # Happens when db is occupied/locked
+    except sqlalchemy.exc.OperationalError:
+        while db_wait < 0:
+            db_wait = np.random.normal(loc=3, scale=0.7)
+        try_db += 1
+        time.sleep(db_wait)
 
 """

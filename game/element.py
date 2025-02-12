@@ -46,57 +46,6 @@ class Element:
         # Purely for debugging
         self.reset: int = 0
 
-    def save_sop(self,
-                 db: SOP_DB,
-                 table: str,
-                 mode: Literal['default',
-                               'scratch']) -> None:
-        """Save the SOP in the database in the table
-        of the generation
-
-        Args:
-            db (Game_db): SOP Game database
-            table (str): Table name (GX)
-            mode (Literal):
-                'default': Make the SOP in the worflow equal to the db entry
-                'scratch': Update the db with new SOP values.
-        """
-        if len(self.scores == 0):
-            raise AttributeError('Cannot store a SOP with no score.')
-        db_table: dict[str, Any] = {}
-        db_table.update(self.sop.parameters_names)
-
-        df: DataFrame = DataFrame(data=db_table, index=[self.id])
-        df.index.name = 'id'
-
-        if db.entry_exist(table=table,
-                          id=self.id):
-            if mode == 'scratch':
-                db.update_entry(table=table,
-                                id=self.id,
-                                values=db_table)
-            elif mode == 'default':
-                sop_param: list[str] = \
-                    [key for key in self.sop.parameters_names.keys()]
-                db_param: list[str] = \
-                    [key for key in db.tables[table].columns.keys()]
-                if sop_param != db_param[1:]:
-                    raise KeyError(
-                        "The db and workflow parameters are different.")
-
-                row: list[float] = db.get_sop_row(table=table,
-                                                  id=self.id)
-                pos = 0
-                for key, val in self.sop.parameters_names.items():
-                    if val != row[pos]:
-                        self.sop.update(key=key,
-                                        value=val)
-                    pos += 1
-        else:
-            db.save_data(table=table,
-                         df=df,
-                         mode='append')
-
     def save_kin(self,
                  db: KIN_DB,
                  table: str) -> None:
@@ -112,18 +61,16 @@ class Element:
         if len(df) == 0:
             self.status = 'reset'
             return
-        if db.entry_exist(table=table,
-                          id=df.index[0]):
-            # Make sure the data in db are always consistent witgh the run
-            for id in df.index:
-                db_table: dict[str, Any] = df.loc[id].to_dict()
-                db.update_entry(table=table,
-                                id=id,
-                                values=db_table)
         else:
-            db.save_data(table=table,
-                         df=df,
-                         mode='append')
+            self.status = 'kin'
+        ids = [i for i in df.index]
+        for db_id in ids:
+            vals: dict[str, Any] = df.loc[[db_id]].to_dict()
+            for k, v in vals.items():
+                vals[k] = v[db_id]
+            db.prepare_batch_upsert(table=table,
+                                    id=db_id,
+                                    values=vals)
 
     def recover_sim_profiles(self,
                              db: SIM_DB,
@@ -165,6 +112,10 @@ class Element:
     @property
     def scores(self) -> list[float]:
         return self.sop.scores
+
+    @property
+    def score(self) -> list[float]:
+        return np.sum(self.sop.scores)
 
     def prepare_upsert(self,
                        db: Game_db,
