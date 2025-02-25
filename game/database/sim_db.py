@@ -1,6 +1,6 @@
 from game.database.game_db import Game_db
 from game.parameters import SOP
-from sqlalchemy import select
+from sqlalchemy import select, Row
 from typing import Sequence
 from typing import Any
 
@@ -93,12 +93,12 @@ class SIM_DB(Game_db):
         for table in self._select:
             sim_ids = self._select[table]
             query = select(
-            self.tables[table].c.sim_id,
-            self.tables[table].c.time,
-            *[self.tables[table].c[sp]
-              for sp in self.columns[4:]]
-                ).where(
-                    self.tables[table].c.sim_id.in_(sim_ids))
+                self.tables[table].c.sim_id,
+                self.tables[table].c.time,
+                *[self.tables[table].c[sp]
+                  for sp in self.columns[4:]]
+                    ).where(
+                        self.tables[table].c.sim_id.in_(sim_ids))
             with self.eng.begin() as connection:
                 db_rslt: Sequence[Row[Any]] = connection.execute(query).fetchall()
             for row in db_rslt:

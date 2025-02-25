@@ -263,7 +263,8 @@ class SOP:
         # db_sep = '__'
 
         if 'score' in key:
-            idx = int(key.split('score_')[-1])
+            specie: str = key.split('__')[0]
+            idx: int = self.species.index(specie)
             # In case scores are not ordered in db for some reason.
             while len(self.scores) < idx+1:
                 self.scores.append(value)
