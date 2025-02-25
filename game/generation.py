@@ -6,8 +6,6 @@ from game.database.sim_db import SIM_DB
 from game.database.sop_db import SOP_DB
 from game.element import Element
 from game.scoring_f.scoring import Scoring
-from game.well import Well
-from game.barrier import Barrier
 from game.parameters import SOP
 import numpy as np
 import numpy.typing as npt

@@ -31,7 +31,6 @@ class SOP:
     def from_db_row(cls,
                     sop_tpl,
                     row: list[Any]):
-        self = cls()
         self = deepcopy(sop_tpl)
         pos = 0
         for key, val in self.parameters_names.items():
@@ -149,12 +148,11 @@ class SOP:
             }
         sc = 0
         for obj in self.items.values():
-            if isinstance(obj, Well) and not isinstance(obj, Barrier):
-                if obj.ct_name in self.species:
-                    pn[f'__score_{sc}'] = float(99999)
-                    sc += 1
+            if obj.ct_name in self.species:
+                pn[f'{obj.ct_name}__score'] = float(99999)
+                sc += 1
         for idx, sc in enumerate(self.scores):
-            pn[f'__score_{idx}'] = float(sc)
+            pn[f'{self.species[idx]}__score'] = float(sc)
         for idx, ep in enumerate(self.epsilons):
             pn[f'__epsi_{idx}'] = float(ep)
         for idx, sig in enumerate(self.sigmas):

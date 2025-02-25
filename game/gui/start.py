@@ -151,7 +151,7 @@ and then analyse the results.'''.format(
                     {'label': 'Frequencies', 'value': 'f'},
                     {'label': 'Imaginary freq', 'value': 'if'},
                     {'label': 'Rotor perturbation', 'value': 'r'},
-                    {'label': 'Sigmas', 'value': 'sigmas'},
+                    {'label': 'Sigmas', 'value': 'sigma'},
                     {'label': 'Epsilon', 'value': 'epsi'},
                     {'label': 'Score', 'value': 'score'}],
                                 value='Energies',
@@ -345,32 +345,31 @@ and then analyse the results.'''.format(
         filtered_param: list[dict[str, str]] = []
         for col in sop_db.columns[1:]:
             molec: str = col.split('__')[0]
+            if molec in settings['ct_names']:
+                molec = settings['ct_names'][molec]
             param: str = col.split('__')[1]
             if param.startswith(param_type):
                 if param_type == 'score':
                     filtered_param.append({
-                        'lable': param,
+                        'label': f"{molec}",
                         'value': col})
-                if param_type == 'e' or 'if':
+                elif param_type == 'e' or\
+                   param_type == 'if':
                     if param.startswith('epsi'):
                         continue
-                    if col.split('__')[0] in settings['ct_names']:
+                    if molec in settings['score_sp']:
                         filtered_param.append({
-                            'label': f"{settings['ct_names'][molec]}",
+                            'label': f"{molec}",
                             'value': col})
                     else:
                         filtered_param.append({
                             'label': f"{molec} {param}",
                             'value': col})
                 else:
-                    if col.split('__')[0] in settings['ct_names']:
-                        filtered_param.append({
-                            'label': f"{settings['ct_names'][molec]} {param}",
-                            'value': col})
-                    else:
-                        filtered_param.append({
-                            'label': f"{molec} {param}",
-                            'value': col})
+                    filtered_param.append({
+                        'label': f"{molec} {param}",
+                        'value': col})
+
         if param_type != '':
             style: dict[str, str] = {'display': 'block'}
         else:
@@ -425,7 +424,6 @@ and then analyse the results.'''.format(
                 break
 
         if 'score' in ptype:
-            # std_allowed = settings['std_f'] * settings['max_std']
             title = fr'{ptype}'
         elif '__' in param:
             short_p: str = param.split('__')[1]
@@ -482,7 +480,7 @@ and then analyse the results.'''.format(
                 else:
                     raise NotImplementedError('Unknown reactant object.')
                 title = f'I. frequency from {From} to {To} (1/cm)'
-            elif ptype == 'sigmas':
+            elif ptype == 'sigma':
                 std_allowed = settings['std_sigma'] * settings['max_std']
                 title = f"Sigma {short_p.split('_')[-1]}"
             elif ptype == 'epsi':

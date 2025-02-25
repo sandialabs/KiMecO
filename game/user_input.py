@@ -115,6 +115,9 @@ def check_input(input_file: str) -> dict:
                                 cancel_run = True
                             else:
                                 for header in line:
+                                    # Skip excluded species
+                                    if header in json_file['exclude_sp']:
+                                        continue
                                     if header not in species and\
                                        header != 'time':
                                         species.append(header)
@@ -158,6 +161,10 @@ def check_input(input_file: str) -> dict:
                       'because it is not in the',
                       'experimental profiles.')
                 cancel_run = True
+    # Exclude non-desired species
+    # for sp in json_file['exclude_sp']:
+    #     if sp in json_file['score_sp']:
+    #         json_file['score_sp'].pop(json_file['score_sp'].index(sp))
 
     # Setting the weight for each experiment
     # default

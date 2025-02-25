@@ -89,7 +89,6 @@ class SIM:
         self.gen_id = gen_id
         self.settings: dict[str, Any] = set
         self.species: list[str] = species
-        # self.check_species_weights()
         self.set_species()
         self.set_reactions()
         self.init_sims()
@@ -103,32 +102,6 @@ class SIM:
         self.profiles: list[NDArray | None] = [
             None for i in range(len(set['rc_pres']) * len(set['rc_temp']))]
         self.status = ['notInQueue' for i in self.simulations]
-
-    # def check_species_weights(self) -> None:
-    #     if len(self.settings['w_species']) == 0:
-    #         for specie in self.species:
-    #             self.settings['w_species'][specie] = 1.0
-    #     else:
-    #         cancel_run = False
-    #         for specie in self.settings['w_species']:
-    #             if specie not in self.species:
-    #                 print(
-    #                     f"""A weight was given for specie {specie},
-    #                     but it doesn't exist.
-    #                     Use same names as in mechanism file.""")
-    #                 cancel_run = True
-    #         if cancel_run:
-    #             sys.exit(-1)
-
-    #         tot_w: float = 0.0
-    #         for specie in self.species:
-    #             if specie not in self.settings['w_species']:
-    #                 self.settings['w_species'][specie] = 1.0
-    #             tot_w += self.settings['w_species'][specie]
-    #         if tot_w != len(self.species):
-    #             for specie in self.species:
-    #                 self.settings['w_species'][specie] *= (len(self.species) /
-    #                                                        tot_w)
 
     def set_species(self) -> None:
         """Create the simulation with all the species,

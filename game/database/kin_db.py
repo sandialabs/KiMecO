@@ -56,9 +56,6 @@ class KIN_DB(Game_db):
                 self.tables[table].c.P == pres,
                 self.tables[table].c.T == temp,
                 self.tables[table].c.specie == From)
-        # query: TextClause = text(
-        #     f"SELECT kin_id, {To} FROM {table}\
-        #         WHERE P={pres} AND T={temp} AND specie=\'{From}\'")
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt)
@@ -71,9 +68,6 @@ class KIN_DB(Game_db):
             self.tables[table].c.id
             ).where(
                 self.tables[table].c.kin_id == kin_id)
-        # query: TextClause = text(
-        #     f"SELECT id FROM {table} " +
-        #     f"WHERE kin_id={kin_id}")
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         return list(db_rslt)
