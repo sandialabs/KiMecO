@@ -86,6 +86,7 @@ def check_input(input_file: str) -> dict:
 
     # READ CSVs
     clean_profiles = []
+    species = []
     n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
     if len(json_file['exp_profiles']) != n_exp:
         print("There should be one csv profile file for each TP condition.")
@@ -105,16 +106,24 @@ def check_input(input_file: str) -> dict:
                         ln = 0
                         for line in csv_DictReader:
                             if 'time' not in line:
-                                print(f"A column should be 'time' column in file {file}.")
+                                print(
+                                    "A column should be the 'time'",
+                                    f"column in file {file}.")
                                 cancel_run = True
                             else:
                                 for header in line:
+                                    if header != 'times' and\
+                                       header not in species:
+                                        species.append(header)
                                     if ln == 0:
                                         clean_profiles[-1][header] = []
                                     try:
-                                        clean_profiles[-1][header].append(float(line[header]))
+                                        clean_profiles[-1][header].append(
+                                            float(line[header]))
                                     except TypeError:
-                                        print(f'Incorrect value detected line {ln} in file {file} column {header}')
+                                        print('Incorrect value detected line',
+                                              f'{ln} in file {file}',
+                                              'column {header}')
                                         cancel_run = True
                             ln += 1
                 # check the created profiles:
@@ -132,17 +141,18 @@ def check_input(input_file: str) -> dict:
             clean_profiles[idx][cidx] = prof[col]
     json_file['exp_profiles'] = clean_profiles
 
-    # Specific cases with interdependent non-mandatory settings
-    # Checking the scoring function:
-    implemented_sf: list[str] = ['weighteddif']
-    if json_file['scoring_func'].casefold() not in implemented_sf:
-        print('Unknown scoring function. Check the spelling?')
-        cancel_run = True
-    implemented_restart: list[str] = ['default', 'scratch']
-    if json_file['restart'].casefold() not in implemented_restart:
-        print('Unknown restart mode. Check the spelling?')
-        cancel_run = True
-    # SETTING w_exp
+    # Modify score_sp to contain appropriate species
+    if json_file['score_sp'] == []:
+        json_file['score_sp'] = species
+    else:
+        for sp in json_file['score_sp']:
+            if sp not in species:
+                print(f'Specie {key} cannot be scored',
+                      'because it is not in the',
+                      'experimental profiles.')
+                cancel_run = True
+
+    # Setting the weight for each experiment
     # default
     if len(json_file['w_exp']) == 0:
         json_file['w_exp'] = [1.0 for i in range(n_exp)]
@@ -155,7 +165,49 @@ def check_input(input_file: str) -> dict:
         for val in json_file['w_exp']:
             sum += val
         # Normalize the weights
-        json_file['w_exp'] = [val*n_exp/sum for val in json_file['w_exp']]
+        json_file['w_exp'] = np.array(
+            [val*n_exp/sum for val in json_file['w_exp']])
+
+    # Setup species weights for each experiment
+    json_file['weights'] = []
+    for key in json_file['w_species']:
+        if key not in species:
+            print(f'Specie {key} cannot have a weight',
+                    'because it is not in the',
+                    'experimental profiles.')
+            cancel_run = True
+    for idx, exp in enumerate(json_file['exp_profiles']):
+        sp_w_exp = np.ones(
+            shape=len(exp)-1,
+            dtype=float64)
+        i = 0
+        for sp_i in exp:
+            if sp_i == 'time':
+                continue
+            # If a specie should have a score
+            if sp_i in json_file['score_sp']:
+                # If the specie has a specific weight
+                if sp_i in json_file['w_species']:
+                    sp_w_exp[i] = json_file['w_species'][sp_i]
+                else:
+                    continue
+
+            else:
+                sp_w_exp[i] = 0.0
+            i += 1
+        sp_w_exp *= json_file['w_exp'][idx]
+        json_file['weights'].append(sp_w_exp)
+
+    # Specific cases with interdependent non-mandatory settings
+    # Checking the scoring function:
+    implemented_sf: list[str] = ['weighteddif']
+    if json_file['scoring_func'].casefold() not in implemented_sf:
+        print('Unknown scoring function. Check the spelling?')
+        cancel_run = True
+    implemented_restart: list[str] = ['default', 'scratch']
+    if json_file['restart'].casefold() not in implemented_restart:
+        print('Unknown restart mode. Check the spelling?')
+        cancel_run = True
 
     if cancel_run:
         sys.exit(-1)

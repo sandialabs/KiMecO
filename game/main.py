@@ -64,15 +64,20 @@ def main() -> None:
                                    implemented is <normal>')
     pert.set_get_fact(0)
 
-    first_gen = Generation(elements=[Element(sop=init_SOP, id=0, sf=sf)],
-                           set=settings,
-                           rc_tpl=input_tpl,
-                           loc=location,
-                           sop_db=sop_db,
-                           kin_db=kin_db,
-                           sim_db=sim_db,
-                           sf=sf,
-                           pert=pert)
+    first_gen = Generation(
+        elements=[Element(
+            sop=init_SOP,
+            id=0,
+            sf=sf,
+            settings=settings)],
+        set=settings,
+        rc_tpl=input_tpl,
+        loc=location,
+        sop_db=sop_db,
+        kin_db=kin_db,
+        sim_db=sim_db,
+        sf=sf,
+        pert=pert)
     first_gen.run()
     old_means = first_gen.means
     old_stds = first_gen.stds
@@ -81,7 +86,10 @@ def main() -> None:
     converged = False
 
     new_elements: list[Element] = [
-        Element(sop=pert.perturb(sop=init_SOP), id=id, sf=sf)
+        Element(
+            sop=pert.perturb(sop=init_SOP),
+            id=id,
+            sf=sf)
         for id in range(settings['n_elem'])]
 
     ga = Tournament(settings=settings,

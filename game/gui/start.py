@@ -70,7 +70,9 @@ and then analyse the results.'''.format(
     else:
         # Default scoring function
         sf = WeightedDif(settings=settings)
-    elem = Element(sop=init_SOP, id=0, sf=sf)
+    elem = Element(sop=init_SOP,
+                   id=0,
+                   sf=sf)
 
     species: list[str] = [
             elem.sop.items[specie].ct_name
@@ -342,7 +344,7 @@ and then analyse the results.'''.format(
         """
         filtered_param: list[dict[str, str]] = []
         for col in sop_db.columns[1:]:
-            molec = col.split('__')[0]
+            molec: str = col.split('__')[0]
             param: str = col.split('__')[1]
             if param.startswith(param_type):
                 if param_type == 'score':
@@ -421,7 +423,7 @@ and then analyse the results.'''.format(
                               line_width=2,
                               line_color='black')
                 break
-        
+
         if 'score' in ptype:
             # std_allowed = settings['std_f'] * settings['max_std']
             title = fr'{ptype}'

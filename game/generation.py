@@ -231,7 +231,8 @@ class Generation:
         """
         if len(self.sim_db._select) == 0:
             return
-        nsim: int = len(self.settings['rc_pres']) * len(self.settings['rc_temp'])
+        nsim: int = len(self.settings['rc_pres']) *\
+            len(self.settings['rc_temp'])
         collected: dict[int, list[list[Any]]] = self.sim_db.batch_select()
         for sim_id, rows in collected.items():
             el: Element = self.elements[sim_id // nsim]

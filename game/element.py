@@ -1,16 +1,13 @@
 from game.database.game_db import Game_db
 from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
-from game.database.sop_db import SOP_DB
 from game.parameters import SOP
 from game.rate_coef import RateCo
 from game.scoring_f.scoring import Scoring
 from game.simulation import SIM
-from typing import Any, Literal
+from typing import Any
 from pandas import DataFrame
 import numpy as np
-from numpy.typing import NDArray
-from numpy import float64
 
 
 class Element:
@@ -27,13 +24,7 @@ class Element:
             sop (SOP): perturbed set of parameters
 
         Attributes:
-            status (int): Status of the element
-                0 - initialized
-                1 - Rate coefficients are submitted
-                2 - Rate coefficients are calculated
-                3 - Cantera simulations submitted
-                4 - Cantera simulations finished
-                5 - Scoring is finished for all P and T
+            status (str): Status of the element.
             id (int): ID of the element.
         """
         self.sop: SOP = sop
@@ -105,7 +96,13 @@ class Element:
         return self.sop.scores
 
     @property
-    def score(self) -> list[float]:
+    def score(self) -> float:
+        """Return the score of the selected species.
+
+        Returns:
+            float:
+                Sum of the score selected by the user with score_sp.
+        """
         return np.sum(self.sop.scores)
 
     def prepare_upsert(self,

@@ -80,6 +80,9 @@ default_settings: dict[str, Any] = {
     "std_sf": 2.0,
     # Name of the scoring function class to use
     "scoring_func": "weighteddif",
+    # Name of species as in exp profiles header
+    # Selected species for scoring
+    'score_sp': [],
     # list of weights for specific PT.
     # Order is P1T1, P1T2, ..., P2T1, P2T2,...
     "w_exp": [],
