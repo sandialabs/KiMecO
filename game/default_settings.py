@@ -83,6 +83,9 @@ default_settings: dict[str, Any] = {
     # Name of species as in exp profiles header
     # Selected species for scoring
     'score_sp': [],
+    # Name of species as in exp profiles header
+    # Exclude species for scoring
+    'exclude_sp': [],
     # list of weights for specific PT.
     # Order is P1T1, P1T2, ..., P2T1, P2T2,...
     "w_exp": [],

@@ -68,8 +68,7 @@ def main() -> None:
         elements=[Element(
             sop=init_SOP,
             id=0,
-            sf=sf,
-            settings=settings)],
+            sf=sf)],
         set=settings,
         rc_tpl=input_tpl,
         loc=location,

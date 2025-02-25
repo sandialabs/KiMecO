@@ -66,10 +66,7 @@ class Generation:
         self.pert: Perturbator = pert
         self.settings: dict[str, Any] = set
         # List of species names used by cantera
-        self.species: List[str] = [
-            self.elements[0].sop.items[specie].ct_name
-            for specie, obj in self.elements[0].sop.items.items()
-            if isinstance(obj, Well) and not isinstance(obj, Barrier)]
+        self.species: List[str] = self.settings['score_sp']
         # Rate coefficients template
         self.rc_tpl: List[str] = rc_tpl
         # where the generation is running

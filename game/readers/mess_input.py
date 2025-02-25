@@ -19,7 +19,7 @@ class MessInputReader:
         """
 
         self.filename: str = settings["initial_mess"]
-        self.SOP: SOP = SOP()  # Set of parameters
+        self.SOP: SOP = SOP(settings['score_sp'])  # Set of parameters
         self.SOP.rc_temp = settings["rc_temp"]
         self.SOP.rc_pres = settings["rc_pres"]
         self.SOP.ct_names = settings["ct_names"]

@@ -10,7 +10,9 @@ class SOP:
     """Set Of Parameters.
     Main object of the GAME code, to be perturbed and optimized."""
 
-    def __init__(self) -> None:
+    def __init__(self,
+                 species: list[str]) -> None:
+        self.species: list[str] = species
         self.wells: list[Well] = []
         self.bimolecular: list[Bimolecular] = []
         self.barriers: list[Barrier] = []
@@ -148,8 +150,9 @@ class SOP:
         sc = 0
         for obj in self.items.values():
             if isinstance(obj, Well) and not isinstance(obj, Barrier):
-                pn[f'__score_{sc}'] = float(99999)
-                sc += 1
+                if obj.ct_name in self.species:
+                    pn[f'__score_{sc}'] = float(99999)
+                    sc += 1
         for idx, sc in enumerate(self.scores):
             pn[f'__score_{idx}'] = float(sc)
         for idx, ep in enumerate(self.epsilons):

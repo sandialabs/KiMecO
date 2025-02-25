@@ -5,6 +5,7 @@ import json
 from game.default_settings import default_settings, mandatory_keys
 import numpy as np
 from numpy import float64
+from numpy.typing import NDArray
 
 
 def check_input(input_file: str) -> dict:
@@ -87,6 +88,7 @@ def check_input(input_file: str) -> dict:
     # READ CSVs
     clean_profiles = []
     species = []
+    exp_headers = []
     n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
     if len(json_file['exp_profiles']) != n_exp:
         print("There should be one csv profile file for each TP condition.")
@@ -97,6 +99,7 @@ def check_input(input_file: str) -> dict:
                 idx: int = p*len(json_file['rc_temp']) + t
                 file: str = json_file['exp_profiles'][idx]
                 clean_profiles.append({})
+                exp_headers.append([])
                 if not os.path.isfile(file):
                     print(f'Could not find file {file}.')
                     cancel_run = True
@@ -112,9 +115,12 @@ def check_input(input_file: str) -> dict:
                                 cancel_run = True
                             else:
                                 for header in line:
-                                    if header != 'times' and\
-                                       header not in species:
+                                    if header not in species and\
+                                       header != 'time':
                                         species.append(header)
+                                    if header not in exp_headers[-1] and\
+                                       header != 'time':
+                                        exp_headers[-1].append(header)
                                     if ln == 0:
                                         clean_profiles[-1][header] = []
                                     try:
@@ -131,7 +137,8 @@ def check_input(input_file: str) -> dict:
                 for header, profile in clean_profiles[-1].items():
                     if len(profile) != nstep:
                         print(
-                            f'Not enough values in profile {header} in file {file}')
+                            f'Not enough values in profile {header}',
+                            f'in file {file}')
     # Transform the profiles in numpy structured arrays
     for idx, prof in enumerate(clean_profiles):
         clean_profiles[idx] = np.empty(
@@ -173,24 +180,23 @@ def check_input(input_file: str) -> dict:
     for key in json_file['w_species']:
         if key not in species:
             print(f'Specie {key} cannot have a weight',
-                    'because it is not in the',
-                    'experimental profiles.')
+                  'because it is not in the',
+                  'experimental profiles.')
             cancel_run = True
-    for idx, exp in enumerate(json_file['exp_profiles']):
-        sp_w_exp = np.ones(
-            shape=len(exp)-1,
+    for idx, exp_h in enumerate(exp_headers):
+        sp_w_exp: NDArray[float64] = np.ones(
+            shape=len(exp_h),
             dtype=float64)
         i = 0
-        for sp_i in exp:
-            if sp_i == 'time':
-                continue
+        for sp_i in exp_h:
             # If a specie should have a score
-            if sp_i in json_file['score_sp']:
+            if sp_i in json_file['score_sp'] and \
+               sp_i not in json_file['exclude_sp']:
                 # If the specie has a specific weight
                 if sp_i in json_file['w_species']:
                     sp_w_exp[i] = json_file['w_species'][sp_i]
                 else:
-                    continue
+                    pass
 
             else:
                 sp_w_exp[i] = 0.0
