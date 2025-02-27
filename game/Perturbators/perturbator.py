@@ -14,7 +14,8 @@ class Perturbator(ABC):
                  settings: dict[str, Any],
                  initial_SOP: SOP
                  ) -> None:
-        """_summary_
+        """Model class for perturbator.
+        Cannot be used directly, but should be inherited
 
         Args:
             settings (dict[str, Any]): user input
@@ -27,6 +28,59 @@ class Perturbator(ABC):
         # of generations go up.
         self.gen_fact: float
         self.has_boundaries = False
+        self.additive: list[str] = ['e', 'b', 'pow', 'lf_p', 'hf_p']
+        self.percent: list[str] = ['if', 'hr', 'sigma', 'epsi', 'fact']
+
+    def get_boundaries(self,
+                       ptype: str,
+                       i_val: float) -> list[float]:
+        """Get the appropriate boundaries for a given parameter.
+
+        Args:
+            ptype (str): type of parameter
+            i_val (float): initial value before perturbation
+
+        Raises:
+            NotImplementedError: unknown ptype
+
+        Returns:
+            list[float]: boundaries [lower, upper]
+        """
+        std_p: str = 'std_' + ptype
+        if ptype in self.additive:
+            return [i_val - self.settings[std_p] * self.settings['max_std'],
+                    i_val + self.settings[std_p] * self.settings['max_std']]
+        elif ptype in self.percent:
+            return [i_val - i_val
+                    * self.settings[std_p] * self.settings['max_std'],
+                    i_val + i_val
+                    * self.settings[std_p] * self.settings['max_std']]
+        else:
+            raise NotImplementedError('Parameter not parametrised.')
+
+    def within_boundaries(self,
+                          perturbed_val: float,
+                          ptype: str,
+                          initial_val: float
+                          ) -> bool:
+        """Check wether a perturbed parameter is within
+        the trusted space from the initial value.
+
+        Args:
+            perturbed_val (float): trial perturbed value
+            ptype (str): type of parameter to obtain the boundaries from
+            initial_val (float): value in the initial set of parameter
+
+        Returns:
+            bool: Wether or not within boundaries.
+        """
+        boundaries: list[float] = self.get_boundaries(ptype=ptype,
+                                                      i_val=initial_val)
+        if perturbed_val > min(boundaries) and\
+           perturbed_val < max(boundaries):
+            return True
+        else:
+            return False
 
     @abstractmethod
     def set_get_fact(self,

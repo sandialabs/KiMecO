@@ -63,15 +63,18 @@ default_settings: dict[str, Any] = {
     "std_b": 1.0,
     # Standard deviation percentage perturbation for wells
     # and bimolecular vibrations
-    "std_f": 0.05,
+    "std_hf_p": 0.05,
+    # Standard deviation percentage perturbation for wells
+    # and bimolecular vibrations
+    "std_lf_p": 0.2,
     # Standard deviation percentage perturbation for hindered rotors
     "std_hr": 0.2,
     # Standard deviation percentage perturbation for imaginary frequencies
     "std_if": 0.2,
     # Energy transfer probability, factor, percentage
-    "std_etf": 0.5,
+    "std_factor": 0.5,
     # Energy transfer probability, exponent, absolute
-    "std_ete": 0.15,
+    "std_pow": 0.15,
     # Lennard Jones, epsilon, percentage
     "std_epsi": 0.2,
     # Lennard Jones, sigma, percentage

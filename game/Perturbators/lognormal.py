@@ -10,13 +10,14 @@ import numpy as np
 from typing import Any
 
 
-class Normal(Perturbator):
+class LogNormal(Perturbator):
     def __init__(self,
                  settings: dict[str, Any],
                  initial_SOP: SOP) -> None:
         super().__init__(settings=settings,
                          initial_SOP=initial_SOP)
         self.has_boundaries = True
+        self.gen_fact = 1
 
     def set_get_fact(self,
                      gen: int) -> None:
@@ -137,7 +138,7 @@ class Normal(Perturbator):
 
         # Set trial energy out of the boundaries
         try_e: float = self.i_sop.items[item.name].energy\
-            - (1+self.settings['max_std']) * value
+            - (3*self.settings['max_std']) * value
         while not self.within_boundaries(
               perturbed_val=try_e,
               ptype=ptype,
@@ -156,20 +157,30 @@ class Normal(Perturbator):
         Args:
             well (Well) : Well object
         """
-        for idx, f in enumerate(well.frequencies):
-            # Set trial frequency out of the boundaries
-            try_f: float = self.i_sop.items[well.name].frequencies[idx]\
-                           - (1+self.settings['max_std'])\
-                           * self.settings['std_f']
-            while not self.within_boundaries(
-                  perturbed_val=try_f,
-                  ptype='f',
-                  initial_val=self.i_sop.items[well.name].frequencies[idx]):
-                try_f = f * random.normal(
-                    loc=1,
-                    scale=self.settings['std_f']*self.gen_fact)
+        # Set trial low-frequency perturbation out of the boundaries
+        try_lf_p = -1
 
-            well.frequencies[idx] = try_f
+        while try_lf_p < 0 and\
+            not self.within_boundaries(
+                perturbed_val=try_lf_p,
+                ptype='lf_p',
+                initial_val=1):
+            try_lf_p = random.lognormal(
+                mean=np.exp(well.lf_p),
+                sigma=self.settings['std_lf_p']*self.gen_fact)
+        well.lf_p = try_lf_p
+        # Set trial low-frequency perturbation out of the boundaries
+        try_hf_p = -1
+
+        while try_lf_p < 0 and\
+            not self.within_boundaries(
+                perturbed_val=try_lf_p,
+                ptype='hf_p',
+                initial_val=1):
+            try_hf_p = random.lognormal(
+                mean=np.exp(well.hf_p),
+                sigma=self.settings['std_hf_p']*self.gen_fact)
+        well.hf_p = try_hf_p
 
     def perturb_hindered_rotors(self,
                                 well: Well) -> None:
@@ -183,14 +194,14 @@ class Normal(Perturbator):
         for num, rot in enumerate(well.rotors):
             # Set trial rotor perturbation out of the boundaries
             try_r: float = 1 -\
-                (1+self.settings['max_std']) * self.settings['std_hr']
+                (3*self.settings['max_std']) * self.settings['std_hr']
             while not self.within_boundaries(
                   perturbed_val=try_r,
                   ptype='hr',
                   initial_val=1):
-                try_r = rot.pert * random.normal(
-                    loc=1,
-                    scale=self.settings['std_hr']*self.gen_fact)
+                try_r = rot.pert * random.lognormal(
+                    mean=np.exp(well.rotors[num].pert),
+                    sigma=self.settings['std_hr']*self.gen_fact)
 
             well.rotors[num].pert = try_r
 
@@ -207,14 +218,14 @@ class Normal(Perturbator):
 
         # Set trial imaginary frequency out of the boundaries
         try_if: float = self.i_sop.items[bar.name].ifreq\
-            - (1+self.settings['max_std']) * self.settings['std_if']
+            - (3*self.settings['max_std']) * self.settings['std_if']
         while not self.within_boundaries(
                 perturbed_val=try_if,
                 ptype='if',
                 initial_val=self.i_sop.items[bar.name].ifreq):
-            try_if = bar.ifreq*random.normal(
-                loc=1,
-                scale=self.settings['std_if']*self.gen_fact)
+            try_if = bar.ifreq*random.lognormal(
+                mean=1,
+                sigma=self.settings['std_if']*self.gen_fact)
 
         bar.ifreq = try_if
 

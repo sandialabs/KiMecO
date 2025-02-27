@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Any
 
 from ase import Atoms
@@ -17,11 +18,15 @@ class Well:
                  ) -> None:
 
         self.name: str = name
-        self.frequencies: NDArray
+        self._freq: NDArray
         self.rotors: list[Rotor] = []
         self.ct_name: str = ct_name
         self.energy: float
         self.structure: Atoms
+        # low frequencies perturbation
+        self.lf_p = 1.0
+        # high frequencies perturbation
+        self.hf_p = 1.0
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -42,6 +47,13 @@ class Well:
                     f'Well does not have the attribute {name}')
         else:
             self.__getattribute__(name)
+
+    @property
+    def frequencies(self) -> NDArray[Any]:
+        freq = deepcopy(self._freq)
+        freq[self._freq <= 500.0] *= (1 / freq * (self.lf_p - 1) * 100 + 1)
+        freq[self._freq > 500.0] *= (1 / freq * (self.hf_p - 1) * 100 + 1)
+        return freq
 
     @property
     def r_struct(self) -> str:
@@ -111,7 +123,7 @@ class Well:
         Args:
             freqs (list[float]): list of frequencies
         """
-        self.frequencies = np.array(freqs)
+        self._freq = np.array(freqs)
 
     def add_rotor(self,
                   thermalpowermax: float,

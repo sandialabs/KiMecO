@@ -353,8 +353,7 @@ and then analyse the results.'''.format(
                     filtered_param.append({
                         'label': f"{molec}",
                         'value': col})
-                elif param_type == 'e' or\
-                   param_type == 'if':
+                elif param_type == 'e' or param_type == 'if':
                     if param.startswith('epsi'):
                         continue
                     if molec in settings['score_sp']:
