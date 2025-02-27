@@ -172,9 +172,14 @@ class Well:
         Returns:
             dict[str, float]: dictionary of frequencies.
         """
-        fd: dict[str, float] = {}
-        for num, f in enumerate(self.frequencies):
-            fd[f"{self.name}__f{num}"] = float(f)
+        fd: dict[str, float] = {
+            f"{self.name}__lf_p": float(self.lf_p),
+            f"{self.name}__hf_p": float(self.hf_p),
+        }
+
+        # to save all freqs in db
+        # for num, f in enumerate(self.frequencies):
+        #     fd[f"{self.name}__f{num}"] = float(f)
 
         return fd
 
