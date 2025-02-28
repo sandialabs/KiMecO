@@ -34,12 +34,13 @@ gas = ct.Solution(name=wf_gas.name,
                        species=wf_gas.species(),
                        reactions=wf_gas.reactions())
 gas.X = {initial_X}
-gas.TP = wf_gas.T, Q_(f"{{wf_gas.P}} torr").to("Pa").magnitude
+gas.TP = wf_gas.T, np.round(Q_(f"{{wf_gas.P}} torr").to("Pa").magnitude, 5)
 
 reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
 net = ct.ReactorNet([reactor])
-net.atol = 1e-10
-net.rtol = 1e-10
+# Higher values make the simulation less accurate but easier to converge
+net.atol = 1e-15
+net.rtol = 1e-15
 
 sim_time = 0.0
 # In seconds

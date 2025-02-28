@@ -243,7 +243,7 @@ class Generation:
                 print(
                     f"Element {self.id} has been reset",
                     "because a simulation crashed.")
-            elif all(np.array(el.sim.status) == 'pickedUp'):
+            if all(np.array(el.sim.status) == 'pickedUp'):
                 el.status = 'scoring'
 
     def restore_gen_from_db(self) -> None:

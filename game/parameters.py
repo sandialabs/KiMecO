@@ -296,9 +296,10 @@ class SOP:
         elif 'if' in param_name:
             self.items[item_name].ifreq = value
         # Frequencies
-        elif 'f' in param_name:
-            idx = int(param_name.split('f')[-1])
-            self.items[item_name].frequencies[idx] = value
+        elif 'hf_p' in param_name:
+            self.items[item_name].hf_p = value
+        elif 'lf_p' in param_name:
+            self.items[item_name].lf_p = value
         elif 'r' in param_name:
             idx = int(param_name.split('r')[-1])
             # Reset the rotor's scan

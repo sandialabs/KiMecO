@@ -70,14 +70,9 @@ and then analyse the results.'''.format(
     else:
         # Default scoring function
         sf = WeightedDif(settings=settings)
-    elem = Element(sop=init_SOP,
-                   id=0,
-                   sf=sf)
 
-    species: list[str] = [
-            elem.sop.items[specie].ct_name
-            for specie, obj in elem.sop.items.items()
-            if isinstance(obj, Well) and not isinstance(obj, Barrier)]
+    species: list[str] = init_SOP.species
+
     og_names = {v: k for k, v in settings['ct_names'].items()}
     for ct_name, name in og_names.items():
         if name not in init_SOP.wells_names:
@@ -148,7 +143,7 @@ and then analyse the results.'''.format(
                 html.H3('Type of parameter to plot:'),
                 dcc.RadioItems(options=[
                     {'label': 'Energies', 'value': 'e'},
-                    {'label': 'Frequencies', 'value': 'f'},
+                    {'label': 'Frequencies', 'value': 'f_p'},
                     {'label': 'Imaginary freq', 'value': 'if'},
                     {'label': 'Rotor perturbation', 'value': 'r'},
                     {'label': 'Sigmas', 'value': 'sigma'},
@@ -422,8 +417,10 @@ and then analyse the results.'''.format(
                               line_color='black')
                 break
 
+        tickformat: str = '.2f'
         if 'score' in ptype:
             title = fr'{ptype}'
+            tickformat: str = 'e'
         elif '__' in param:
             short_p: str = param.split('__')[1]
             if param.split('__')[0] in settings['ct_names']:
@@ -526,7 +523,7 @@ and then analyse the results.'''.format(
                               linecolor='rgb(0, 0, 0)',
                               linewidth=2,
                               ticks='inside',
-                              tickformat='.2f',
+                              tickformat=tickformat,
                               tickfont=dict(
                                   family='Arial',
                                   size=12,
@@ -726,7 +723,7 @@ and then analyse the results.'''.format(
             np.array(sim_db.get_TP_sim_profiles(
                 table=f'G{gen_i}',
                 species=specs,
-                pres=Q_(f"{pres} torr").to("Pa").magnitude,
+                pres=np.round(Q_(f"{pres} torr").to("Pa").magnitude, 5),
                 temp=temp))
             for gen_i in selected_gen]
         op: list[float] = [1.0-((i+1)*0.9/len(selected_gen))

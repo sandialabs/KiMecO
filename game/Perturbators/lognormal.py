@@ -17,9 +17,8 @@ class LogNormal(Perturbator):
         super().__init__(settings=settings,
                          initial_SOP=initial_SOP)
         self.has_boundaries = True
-        self.gen_fact = 1
 
-    def set_get_fact(self,
+    def set_gen_fact(self,
                      gen: int) -> None:
         """Set the generation factor depending on the
         generation number.
@@ -29,7 +28,7 @@ class LogNormal(Perturbator):
         Args:
             gen (int): number of generation
         """
-        self.gen_fact = np.exp(-np.power(gen, 0.5)*0.1)
+        self.gen_fact = 1.0
 
     def perturb(self,
                 sop: SOP) -> SOP:
@@ -51,7 +50,7 @@ class LogNormal(Perturbator):
             # Truncate distribution at 0 to have positive factor
             try_fact: float = p_sop.factor * random.normal(
                 loc=1,
-                scale=self.settings['std_etf']*self.gen_fact)
+                scale=self.settings['std_fact']*self.gen_fact)
         p_sop.factor = try_fact
 
         try_pow = -1
@@ -62,7 +61,7 @@ class LogNormal(Perturbator):
             # Truncate distribution at 0 to have positive power
             try_pow: float = random.normal(
                 loc=p_sop.power,
-                scale=self.settings['std_ete']*self.gen_fact)
+                scale=self.settings['std_pow']*self.gen_fact)
         p_sop.power = try_pow
 
         for i in range(len(p_sop.sigmas)):
@@ -71,8 +70,8 @@ class LogNormal(Perturbator):
                 not self.within_boundaries(perturbed_val=try_sig,
                                            ptype='sigma',
                                            initial_val=self.i_sop.sigmas[i]):
-                try_sig = p_sop.sigmas[i] * random.normal(
-                    loc=1,
+                try_sig = random.normal(
+                    loc=p_sop.sigmas[i],
                     scale=self.settings['std_sigma']*self.gen_fact)
             p_sop.sigmas[i] = try_sig
 
@@ -160,25 +159,25 @@ class LogNormal(Perturbator):
         # Set trial low-frequency perturbation out of the boundaries
         try_lf_p = -1
 
-        while try_lf_p < 0 and\
+        while try_lf_p < 0 or\
             not self.within_boundaries(
                 perturbed_val=try_lf_p,
                 ptype='lf_p',
                 initial_val=1):
             try_lf_p = random.lognormal(
-                mean=np.exp(well.lf_p),
+                mean=np.log(well.lf_p),
                 sigma=self.settings['std_lf_p']*self.gen_fact)
         well.lf_p = try_lf_p
-        # Set trial low-frequency perturbation out of the boundaries
+        # Set trial high-frequency perturbation out of the boundaries
         try_hf_p = -1
 
-        while try_lf_p < 0 and\
+        while try_hf_p < 0 or\
             not self.within_boundaries(
-                perturbed_val=try_lf_p,
+                perturbed_val=try_hf_p,
                 ptype='hf_p',
                 initial_val=1):
             try_hf_p = random.lognormal(
-                mean=np.exp(well.hf_p),
+                mean=np.log(well.hf_p),
                 sigma=self.settings['std_hf_p']*self.gen_fact)
         well.hf_p = try_hf_p
 
@@ -199,9 +198,9 @@ class LogNormal(Perturbator):
                   perturbed_val=try_r,
                   ptype='hr',
                   initial_val=1):
-                try_r = rot.pert * random.lognormal(
-                    mean=np.exp(well.rotors[num].pert),
-                    sigma=self.settings['std_hr']*self.gen_fact)
+                try_r = random.normal(
+                    loc=well.rotors[num].pert,
+                    scale=self.settings['std_hr']*self.gen_fact)
 
             well.rotors[num].pert = try_r
 
@@ -223,8 +222,8 @@ class LogNormal(Perturbator):
                 perturbed_val=try_if,
                 ptype='if',
                 initial_val=self.i_sop.items[bar.name].ifreq):
-            try_if = bar.ifreq*random.lognormal(
-                mean=1,
+            try_if = random.lognormal(
+                mean=np.log(bar.ifreq),
                 sigma=self.settings['std_if']*self.gen_fact)
 
         bar.ifreq = try_if

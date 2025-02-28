@@ -72,7 +72,7 @@ default_settings: dict[str, Any] = {
     # Standard deviation percentage perturbation for imaginary frequencies
     "std_if": 0.2,
     # Energy transfer probability, factor, percentage
-    "std_factor": 0.5,
+    "std_fact": 0.5,
     # Energy transfer probability, exponent, absolute
     "std_pow": 0.15,
     # Lennard Jones, epsilon, percentage

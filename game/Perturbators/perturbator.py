@@ -26,7 +26,7 @@ class Perturbator(ABC):
         self.i_sop: SOP = deepcopy(initial_SOP)
         # Factor that starts at 1 and decreases as the number
         # of generations go up.
-        self.gen_fact: float
+        self.gen_fact: float = 1.0
         self.has_boundaries = False
         self.additive: list[str] = ['e', 'b', 'pow', 'lf_p', 'hf_p']
         self.percent: list[str] = ['if', 'hr', 'sigma', 'epsi', 'fact']
@@ -83,7 +83,7 @@ class Perturbator(ABC):
             return False
 
     @abstractmethod
-    def set_get_fact(self,
+    def set_gen_fact(self,
                      gen: int) -> None:
         """Set the generation factor depending on the
         generation number.

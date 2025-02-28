@@ -8,6 +8,7 @@ from game.database.sop_db import SOP_DB
 from game.element import Element
 from game.generation import Generation
 from game.Perturbators.normal import Normal
+from game.Perturbators.lognormal import LogNormal
 from game.readers.mess_input import MessInputReader
 from game.user_input import check_input
 from game.parameters import SOP
@@ -59,10 +60,13 @@ def main() -> None:
     if settings['pert'] == 'normal':
         pert = Normal(settings=settings,
                       initial_SOP=init_SOP)
+    elif settings['pert'] == 'lognormal':
+        pert = LogNormal(settings=settings,
+                         initial_SOP=init_SOP)
     else:
         raise NotImplementedError('Currently, the only type of perturbator\
                                    implemented is <normal>')
-    pert.set_get_fact(0)
+    pert.set_gen_fact(0)
 
     first_gen = Generation(
         elements=[Element(

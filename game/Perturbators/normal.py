@@ -18,7 +18,7 @@ class Normal(Perturbator):
                          initial_SOP=initial_SOP)
         self.has_boundaries = True
 
-    def set_get_fact(self,
+    def set_gen_fact(self,
                      gen: int) -> None:
         """Set the generation factor depending on the
         generation number.
@@ -50,7 +50,7 @@ class Normal(Perturbator):
             # Truncate distribution at 0 to have positive factor
             try_fact: float = p_sop.factor * random.normal(
                 loc=1,
-                scale=self.settings['std_etf']*self.gen_fact)
+                scale=self.settings['std_fact']*self.gen_fact)
         p_sop.factor = try_fact
 
         try_pow = -1
@@ -61,7 +61,7 @@ class Normal(Perturbator):
             # Truncate distribution at 0 to have positive power
             try_pow: float = random.normal(
                 loc=p_sop.power,
-                scale=self.settings['std_ete']*self.gen_fact)
+                scale=self.settings['std_pow']*self.gen_fact)
         p_sop.power = try_pow
 
         for i in range(len(p_sop.sigmas)):
