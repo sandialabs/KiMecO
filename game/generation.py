@@ -186,9 +186,9 @@ class Generation:
                         # The status of the element is changed
                         # after data from the db are recovered
                     # Not sure yet why this case happens, but it does happen
-                    elif any([True if stat == 'notInQueue' else False
-                              for stat in el.sim.status]):
-                        el.sim.q_up()
+                    # elif any([True if stat == 'notInQueue' else False
+                    #           for stat in el.sim.status]):
+                    #     el.sim.q_up()
                 # Scoring
                 elif el.status == 'scoring':
                     el.calc_score()
@@ -238,13 +238,13 @@ class Generation:
                                 jtype='sim')
             el.sim.status[sim] = el.sim.q_sys.status(id=int(sim_id),
                                                      jtype='sim')
-            if any(np.array(el.sim.status) == 'reset'):
+            if all(np.array(el.sim.status) == 'pickedUp'):
+                el.status = 'scoring'
+            else:
                 el.status = 'reset'
                 print(
                     f"Element {self.id} has been reset",
-                    "because a simulation crashed.")
-            if all(np.array(el.sim.status) == 'pickedUp'):
-                el.status = 'scoring'
+                    "because a simulation couldn't be picked-up.")
 
     def restore_gen_from_db(self) -> None:
         """Create a complete list of elements from the data in the database.
