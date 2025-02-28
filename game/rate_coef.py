@@ -50,6 +50,8 @@ class RateCo:
            os.path.isfile(self.output_name) and\
            self.is_in_db(table=table):
             self.status = 'finished'
+        elif status == 'fail':
+            self.status = 'reset'
         else:
             self.status = status
 
@@ -133,7 +135,7 @@ class RateCo:
         self.q_sys.pickUp(id=self.id,
                           jtype='kin')
         if self.q_sys.status(id=self.id,
-                             jtype='kin') == 'reset':
+                             jtype='kin') == 'fail':
             print(f'Resetting KIN job {self.id}')
             self.status = 'reset'
 

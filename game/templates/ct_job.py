@@ -9,6 +9,7 @@ import os
 import time
 import cantera.with_units as ctu
 import sqlalchemy
+import json
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 
@@ -86,21 +87,20 @@ for idx, id in enumerate(row_ids):
     db.prepare_batch_upsert(table='G{gen}',
                             id=id,
                             values=row_dict)
-db_wait = np.random.normal(loc=0.5, scale=0.1)
-try_db = 0
-while True:
-    if try_db > 40:
-        # tried too many times, something is probably wrong, kill job
-        raise ValueError('Too many db connections at once.')
-        break
-    try:
-        db.batch_upsert()
-        break
-    # Happens when db is occupied/locked
-    except sqlalchemy.exc.OperationalError:
-        while db_wait < 0:
-            db_wait = np.random.normal(loc=3, scale=0.7)
-        try_db += 1
-        time.sleep(db_wait)
+db_wait = np.random.lognormal(mean=np.log(1), sigma=1)
+time.sleep(db_wait)
+
+try:
+    db.batch_upsert()
+# Happens when db is occupied/locked
+except sqlalchemy.exc.OperationalError:
+    traces['row_ids'] = row_ids
+    traces_serializable = {{key: value.tolist() if isinstance(value, np.ndarray) else value for key, value in traces.items()}}
+    # Serializing json
+    json_object = json.dumps(traces_serializable, indent=4)
+
+    # Writing to sample.json
+    with open("G{gen}E{el_num}S{sim_id}.json", "w") as outfile:
+        outfile.write(json_object)
 
 """

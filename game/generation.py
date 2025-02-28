@@ -16,6 +16,7 @@ from game.q_sys import QueueingSystem
 from game.rate_coef import RateCo
 from game.simulation import SIM
 from game.Perturbators.perturbator import Perturbator
+from game.templates.sim_helper import sim_helper
 
 
 class Generation:
@@ -71,6 +72,9 @@ class Generation:
         self.loc: str = loc
         self.sf: Scoring = sf
         self.best_score: float = np.inf
+        self.sim_hlpers = [
+            [] for i in range(self.settings['max_helpers'])
+            ]
         if not os.path.isdir(f'{self.loc}/G{self.id:04d}'):
             os.mkdir(f'{self.loc}/G{self.id:04d}')
         os.chdir(f'{self.loc}/G{self.id:04d}')
@@ -90,7 +94,8 @@ class Generation:
                                  nkin=len(self.elements),
                                  nsim=len(self.elements) *
                                  len(self.settings['rc_temp']) *
-                                 len(self.settings['rc_pres'])
+                                 len(self.settings['rc_pres']),
+                                 nhlp=self.settings['max_helpers']
                                  )
 
     def create_tables(self) -> None:
@@ -200,6 +205,7 @@ class Generation:
                         self.best_score: float = np.sum(el.scores)
             self.sop_db.batch_upsert()
             self.kin_db.batch_upsert()
+            self.check_helpers_status()
             self.collect_sim_profiles()
             self.qs.run()
         end_time = time.time()
@@ -228,8 +234,10 @@ class Generation:
             return
         nsim: int = len(self.settings['rc_pres']) *\
             len(self.settings['rc_temp'])
-        collected: dict[int, list[list[Any]]] = self.sim_db.batch_select()
-        for sim_id, rows in collected.items():
+        collected: list[int] = []
+        to_collect = self.sim_db._select[f'G{self.id}']
+        collecting: dict[int, list[list[Any]]] = self.sim_db.batch_select()
+        for sim_id, rows in collecting.items():
             el: Element = self.elements[sim_id // nsim]
             sim: int = sim_id % nsim
             el.sim.profiles[sim] = np.array(
@@ -240,11 +248,73 @@ class Generation:
                                                      jtype='sim')
             if all(np.array(el.sim.status) == 'pickedUp'):
                 el.status = 'scoring'
-            else:
-                el.status = 'reset'
-                print(
-                    f"Element {self.id} has been reset",
-                    "because a simulation couldn't be picked-up.")
+            collected.append(sim_id)
+        hlp_idx = -1
+        # Look if helpers are available
+        for idx, hlp in enumerate(self.sim_hlpers):
+            if len(hlp) == 0:
+                hlp_idx = idx
+                break
+        # Don't create helpers if none available
+        if hlp_idx == -1:
+            return
+        # Create helpers if needed
+        need_helper = [
+            i for i in to_collect
+            if i not in collected]
+        if len(need_helper) == 0:
+            return
+        filenames = []
+        for sim_id in need_helper:
+            el: Element = self.elements[sim_id // nsim]
+            sim: int = sim_id % nsim
+            filenames.append(f'G{self.id}E{el.id}S{sim_id}.json')
+        # Avoid asking multiple helpers to do the same
+        for sim_id in need_helper:
+            for hlp in self.sim_hlpers:
+                if sim_id in hlp:
+                    need_helper.pop(need_helper.index(sim_id))
+                    continue
+        self.submit_helper(hlp_idx=hlp_idx,
+                           filenames=filenames)
+
+    def submit_helper(self,
+                      hlp_idx: int,
+                      filenames: list[str]) -> None:
+        hlp_name: str = f'hlp_{hlp_idx}'
+        hlp_job: str = sim_helper.format(
+            db=self.sim_db,
+            hlp_idx=hlp_idx,
+            filenames=filenames,
+            gen=self.id
+            )
+        with open(f'{self.loc}/{hlp_name}.py', 'w') as f:
+            f.write(hlp_job)
+        self.qs.add_to_q(
+                 name=hlp_name,
+                 idx=hlp_idx,
+                 location=self.loc,
+                 jtype='hlp',
+                 ressources=(1, 300)
+                 )
+
+    def check_helpers_status(self):
+        nsim: int = len(self.settings['rc_pres']) *\
+            len(self.settings['rc_temp'])
+        for idx, hlp in enumerate(self.qs.hlp_q):
+            if hlp['status'] == 'finished':
+                self.qs.pickUp(id=idx,
+                               jtype='hlp')
+            if hlp['status'] == 'fail':
+                print(f'Helper {idx} failed to collect sim profiles.',
+                      'Corresponding sim_ids are reset')
+                for sim_id in self.sim_hlpers[idx]:
+                    el: Element = self.elements[sim_id // nsim]
+                    el.status = 'reset'
+                self.sim_hlpers[idx] = []
+            elif hlp['status'] == 'pickedUp':
+                hlp['status'] = 'notInQueue'
+                self.sim_hlpers[idx] = []
 
     def restore_gen_from_db(self) -> None:
         """Create a complete list of elements from the data in the database.

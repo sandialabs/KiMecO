@@ -7,6 +7,7 @@ from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
 from typing import Any
+from sqlalchemy.exc import OperationalError
 
 
 class Game_db:
@@ -121,19 +122,40 @@ class Game_db:
                 values are list of values to update,
                     given in same order as ids
         """
-        for i in range(len(values)):
-            values[i]['id'] = ids[i]
-        g_insert: Insert = (
-            insert(table=self.tables[table]).
-            values(values))
+        try:
+            for i in range(len(values)):
+                values[i]['id'] = ids[i]
+            g_insert: Insert = (
+                insert(table=self.tables[table]).
+                values(values))
 
-        g_upsert: Insert = g_insert.on_conflict_do_update(
-                index_elements=[self.tables[table].c.id],
-                set_=g_insert.excluded
-            )
+            g_upsert: Insert = g_insert.on_conflict_do_update(
+                    index_elements=[self.tables[table].c.id],
+                    set_=g_insert.excluded
+                )
 
-        with self.eng.begin() as connection:
-            connection.execute(g_upsert)
+            with self.eng.begin() as connection:
+                connection.execute(g_upsert)
+        except OperationalError:
+            # Happens when trying to insert too many values at once
+            half: int = len(values) // 2
+            val1 = [values[i] for i in range(0, half)]
+            val2 = [values[i] for i in range(half, len(values))]
+            for val in [val1, val2]:
+                for i in range(len(val)):
+                    val[i]['id'] = ids[i]
+                g_insert: Insert = (
+                    insert(table=self.tables[table]).
+                    values(val))
+
+                g_upsert: Insert = g_insert.on_conflict_do_update(
+                        index_elements=[self.tables[table].c.id],
+                        set_=g_insert.excluded
+                    )
+
+                with self.eng.begin() as connection:
+                    connection.execute(g_upsert)
+
 
     def manual_upsert_entries(self,
                               table: str,

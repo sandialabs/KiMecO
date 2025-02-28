@@ -17,6 +17,7 @@ class QueueingSystem:
                  max_mem: int,
                  nkin: int,
                  nsim: int,
+                 nhlp: int,
                  cpu_kin: int,
                  cpu_sim: int,
                  mem_kin: int,
@@ -78,6 +79,9 @@ class QueueingSystem:
 
         self.sim_q: NDArray[Any] = np.empty(shape=(nsim),
                                             dtype=self.jobdata)
+
+        self.hlp_q: NDArray[Any] = np.empty(shape=(nhlp),
+                                            dtype=self.jobdata)
         self.submitted: int = 0
         self.running: int = 0
         self.n_ready: int = 0
@@ -116,6 +120,8 @@ class QueueingSystem:
             self.kin_q[idx] = job[0]
         elif jtype == 'sim':
             self.sim_q[idx] = job[0]
+        elif jtype == 'hlp':
+            self.sim_q[idx] = job[0]
         self.n_ready += 1
 
     def create_sub_file(self,
@@ -131,9 +137,11 @@ class QueueingSystem:
                                           sub_queue=self.q_name,
                                           mem_mb=job['mem'][0]
                                           )
+        # Mess jobs
         if job['type'] == 'kin':
             job_cmd: str = self.messtpl.format(filename=str(job['name'][0]))
-        elif job['type'] == 'sim':
+        # Python jobs
+        elif job['type'] == 'sim' or job['type'] == 'hlp':
             job_cmd: str = self.pytpl.format(filename=str(job['name'][0]))
 
         sub_file: str = sub_cmd + job_cmd
@@ -154,6 +162,10 @@ class QueueingSystem:
             job = self.kin_q[id]
         elif jtype == 'sim':
             job = self.sim_q[id]
+        elif jtype == 'hlp':
+            job = self.sim_q[id]
+
+        clear_err = True
 
         if (jtype == 'kin' and os.path.exists(
            path=f"{job['loc']}/{job['name']}.out"
@@ -167,19 +179,29 @@ class QueueingSystem:
                ).st_size == 0:
                 job['status'] = 'pickedUp'
             else:
-                job['status'] = 'reset'
+                job['status'] = 'fail'
+                clear_err = False
                 print(f"Resetting job {job['name']} because an error occured.")
                 if os.path.exists(f"{job['loc']}/{job['name']}.out"):
                     os.remove(f"{job['loc']}/{job['name']}.out")
-        else:
-            job['status'] = 'reset'
-        self.clean_files(job)
+        elif jtype == 'hlp':
+            if os.path.exists(
+               path=f"{job['loc']}/{job['name']}.err"
+               ) and os.stat(
+               path=f"{job['loc']}/{job['name']}.err"
+               ).st_size != 0:
+                clear_err = False
+                print(f"Helper {job['name']} failed.")
+                job['status'] = 'fail'
+        self.clean_files(job,
+                         clear_err=clear_err)
         # self.av_cpu += int(job['cpu'])
         # self.av_mem += int(job['mem'])
         # self.av_jobs += 1
 
     def clean_files(self,
-                    job: NDArray[Any]) -> None:
+                    job: NDArray[Any],
+                    clear_err: bool) -> None:
         """Erase all files except the output
         if the job finished without error.
 
@@ -187,6 +209,8 @@ class QueueingSystem:
             job (NDArray[Any]): Array of the job with custom datatype.
         """
         for ext in ['log', 'err', 'inp', 'stdout', 'aux', 'slurm', 'pkl']:
+            if ext == 'err' and not clear_err:
+                continue
             if os.path.exists(f"{job['loc']}/{job['name']}.{ext}"):
                 os.remove(f"{job['loc']}/{job['name']}.{ext}")
 
@@ -263,7 +287,7 @@ class QueueingSystem:
         slurm_ids: NDArray[int32] = self.get_all_running()
         for job in self.kin_q:
             if job['status'] == 'ready' or\
-               job['status'] == 'reset':
+               job['status'] == 'fail':
                 continue
             elif job['status'] == 'running' \
                and not any(slurm_ids == job['sub_id']):
