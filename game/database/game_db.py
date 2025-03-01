@@ -141,9 +141,12 @@ class Game_db:
             half: int = len(values) // 2
             val1 = [values[i] for i in range(0, half)]
             val2 = [values[i] for i in range(half, len(values))]
-            for val in [val1, val2]:
+            half: int = len(ids) // 2
+            ids1 = [ids[i] for i in range(0, half)]
+            ids2 = [ids[i] for i in range(half, len(ids))]
+            for val, rids in zip([val1, val2], [ids1, ids2]):
                 for i in range(len(val)):
-                    val[i]['id'] = ids[i]
+                    val[i]['id'] = rids[i]
                 g_insert: Insert = (
                     insert(table=self.tables[table]).
                     values(val))
@@ -155,7 +158,6 @@ class Game_db:
 
                 with self.eng.begin() as connection:
                     connection.execute(g_upsert)
-
 
     def manual_upsert_entries(self,
                               table: str,

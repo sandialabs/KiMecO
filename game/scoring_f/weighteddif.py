@@ -31,7 +31,6 @@ class WeightedDif(Scoring):
                 sim_index: int = p*len(self.settings['rc_temp']) + t
                 exp_sp_weight: NDArray[float64] = \
                     self.settings['weights'][sim_index]
-                # dtype of sim_prof and exp_prof[sim_index] should be the same
                 dif = np.sum(
                     np.abs(
                         sim.profiles[sim_index].T - exp_prof[sim_index]

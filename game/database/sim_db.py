@@ -87,7 +87,9 @@ class SIM_DB(Game_db):
         """Execute batch select requests stored in the _select dictionary.
 
         Returns:
-            dict[int, list[list[Any]]]: A dictionary with sim_id as keys and lists of their corresponding data as values.
+            dict[int, list[list[Any]]]:
+            A dictionary with sim_id as keys and lists
+            of their corresponding data as values.
         """
         results = {}
         for table in self._select:

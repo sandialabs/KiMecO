@@ -4,6 +4,7 @@ import numpy as np
 from game.database.sim_db import SIM_DB
 import sqlalchemy
 import time
+import os
 
 hid = {hlp_idx}
 
@@ -12,11 +13,11 @@ db = SIM_DB(name='{db.name}',
 
 filenames = {filenames}
 
-collected = np.fill(len(filenames), False)
+collected = np.full(len(filenames), False)
 sims = []
 
 while not all(collected):
-    for idx, fn in filenames:
+    for idx, fn in enumerate(filenames):
         if os.path.isfile(fn):
             with open(fn, 'r') as f:
                 sim = json.load(f)
@@ -25,12 +26,12 @@ while not all(collected):
             collected[idx] = True
         # Helpers should not try to collect data from failed sims.
         else:
-            raise FileNotFoundError(f'Could not find data for {{fn}}'.)
+            raise FileNotFoundError(f'Could not find data for {{fn}}.')
 
 for sim in sims:
     row_ids = sim['row_ids']
     sim.pop('row_ids', None)
-    for idx, id in enumerate():
+    for idx, id in enumerate(row_ids):
         row_dict = {{}}
         for col in sim:
             row_dict[col] = sim[col][idx]

@@ -1,3 +1,4 @@
+from genericpath import isfile
 import os
 from typing import List, Dict, Any
 
@@ -265,16 +266,22 @@ class Generation:
         if len(need_helper) == 0:
             return
         filenames = []
-        for sim_id in need_helper:
+        # Avoid asking multiple helpers to do the same
+        if hlp_idx > 0:
+            need_helper_copy = need_helper
+            for sim_id in need_helper_copy:
+                for hlp in self.sim_hlpers:
+                    if sim_id in hlp:
+                        need_helper.pop(
+                            need_helper.index(sim_id))
+                        break
+        self.sim_hlpers[hlp_idx] = need_helper
+        for sim_id in self.sim_hlpers[hlp_idx]:
             el: Element = self.elements[sim_id // nsim]
             sim: int = sim_id % nsim
-            filenames.append(f'G{self.id}E{el.id}S{sim_id}.json')
-        # Avoid asking multiple helpers to do the same
-        for sim_id in need_helper:
-            for hlp in self.sim_hlpers:
-                if sim_id in hlp:
-                    need_helper.pop(need_helper.index(sim_id))
-                    continue
+            flnm: str = f'G{self.id:04d}E{el.id:04d}S{sim}.json'
+            if os.path.isfile(flnm):
+                filenames.append(flnm)
         self.submit_helper(hlp_idx=hlp_idx,
                            filenames=filenames)
 
@@ -288,12 +295,12 @@ class Generation:
             filenames=filenames,
             gen=self.id
             )
-        with open(f'{self.loc}/{hlp_name}.py', 'w') as f:
+        with open(f'{self.loc}/G{self.id:04d}/{hlp_name}.py', 'w') as f:
             f.write(hlp_job)
         self.qs.add_to_q(
                  name=hlp_name,
                  idx=hlp_idx,
-                 location=self.loc,
+                 location=f'{self.loc}/G{self.id:04d}',
                  jtype='hlp',
                  ressources=(1, 300)
                  )

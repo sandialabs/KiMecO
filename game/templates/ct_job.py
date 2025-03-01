@@ -100,7 +100,7 @@ except sqlalchemy.exc.OperationalError:
     json_object = json.dumps(traces_serializable, indent=4)
 
     # Writing to sample.json
-    with open("G{gen}E{el_num}S{sim_id}.json", "w") as outfile:
+    with open(f"G{gen:04d}E{el_num:04d}S{{sim_in_element:04d}}.json", "w") as outfile:
         outfile.write(json_object)
 
 """

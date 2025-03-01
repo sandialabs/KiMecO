@@ -1,3 +1,4 @@
 {
-    "python.defaultInterpreterPath": "/home/csoulie/.conda/envs/game/bin/python"
+    "python.defaultInterpreterPath": "/home/csoulie/.conda/envs/game/bin/python",
+    "python.venvPath": "/home/csoulie/.conda/envs/"
 }

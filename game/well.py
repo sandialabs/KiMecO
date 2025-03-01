@@ -51,8 +51,9 @@ class Well:
     @property
     def frequencies(self) -> NDArray[Any]:
         freq = deepcopy(self._freq)
-        freq[self._freq <= 500.0] *= (1 / freq[self._freq <= 500.0] * (self.lf_p - 1) * 100 + 1)
-        freq[self._freq > 500.0] *= (1 / freq[self._freq > 500.0] * (self.hf_p - 1) * 100 + 1)
+        if len(freq[self._freq <= 500.0]) > 0:
+            freq[self._freq <= 500.0] *= (1 / freq[self._freq <= 500.0] * (self.lf_p - 1) * min(freq[self._freq <= 500.0]) + 1)
+        freq[self._freq > 500.0] *= (1 / freq[self._freq > 500.0] * (self.hf_p - 1) * min(freq[self._freq > 500.0]) + 1)
         return freq
 
     @property
