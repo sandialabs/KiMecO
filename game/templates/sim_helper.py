@@ -40,18 +40,22 @@ for sim in sims:
                                 values=row_dict)
 trying2connect = True
 
-# Stop trying after 2 minutes
+# Stop trying after 3 minutes
 start = time.time()
 while trying2connect:
     now = time.time()
-    if now-start > 120:
+    if now-start > 180:
         raise ValueError(
             'Could not access the database for more than 2 minutes.'
         )
     try:
+        upsert_start = time.time()
         db.batch_upsert()
+        upsert_stop = time.time()
+        upsert_time = upsert_stop - upsert_start
+        print(f'Writting the db took {{upsert_time}} secondes.')
         break
     # Happens when db is occupied/locked
     except sqlalchemy.exc.OperationalError:
-        time.sleep(3)
+        time.sleep(5)
             """

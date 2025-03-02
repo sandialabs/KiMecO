@@ -122,7 +122,7 @@ def main() -> None:
         # print('Initialization of generation')
         new_gen.run()
         means, stds = new_gen.get_stats()
-        if not rockme_converged(threshold=settings['rockme_conv'],
+        if not isconverged(threshold=settings['final_conv'],
                                 old_means=old_means,
                                 old_stds=old_stds,
                                 new_means=new_gen.means,
@@ -137,7 +137,7 @@ def main() -> None:
     print(f'Final score: {new_gen.best_score}')
 
 
-def rockme_converged(threshold: float,
+def isconverged(threshold: float,
                      old_means: Dict[str, float],
                      old_stds: Dict[str, float],
                      new_means: Dict[str, float],

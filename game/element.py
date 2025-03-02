@@ -8,6 +8,16 @@ from game.simulation import SIM
 from typing import Any
 from pandas import DataFrame
 import numpy as np
+from enum import Enum
+
+
+class ElementStatus(Enum):
+    SOP = 'sop'
+    KIN = 'kin'
+    SIM = 'sim'
+    SCORING = 'scoring'
+    DONE = 'DONE'
+    RESET = 'reset'
 
 
 class Element:
@@ -24,11 +34,11 @@ class Element:
             sop (SOP): perturbed set of parameters
 
         Attributes:
-            status (str): Status of the element.
+            status (ElementStatus): Status of the element.
             id (int): ID of the element.
         """
         self.sop: SOP = sop
-        self.status: str = 'sop'
+        self.status: ElementStatus = ElementStatus.SOP
         self.id: int = id
         self.sop.id = self.id
         self.rateCoef: RateCo
@@ -50,10 +60,10 @@ class Element:
         df: DataFrame = self.rateCoef.recover_rslts()
         # Happens if the ME calculation didn't converge
         if len(df) == 0:
-            self.status = 'reset'
+            self.status = ElementStatus.RESET
             return
         else:
-            self.status = 'kin'
+            self.status = ElementStatus.KIN
         ids = [i for i in df.index]
         for db_id in ids:
             vals: dict[str, Any] = df.loc[[db_id]].to_dict()
@@ -85,10 +95,10 @@ class Element:
         """
         try:
             self.sop.scores = self.sf.score(sim=self.sim)
-            self.status = 'DONE'
+            self.status = ElementStatus.DONE
         except IndexError:
             # Occurs when a simulation didn't work so profiles were not saved
-            self.status = 'reset'
+            self.status = ElementStatus.RESET
             print(f'Resetting element {self.id}: error during scoring.')
 
     @property

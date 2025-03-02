@@ -3,7 +3,7 @@ from typing import Any
 from pandas import Index, MultiIndex, DataFrame, RangeIndex
 from game.database.kin_db import KIN_DB
 from game.parameters import SOP
-from game.q_sys import QueueingSystem
+from game.q_sys import QueueingSystem, JobStatus
 from game.writers.mess import MessWriter
 from game.readers.mess_output import MessOutputReader
 import os
@@ -26,7 +26,7 @@ class RateCo:
                  db: KIN_DB
                  ) -> None:
 
-        self.status: str
+        self.status: JobStatus = JobStatus.NOT_IN_QUEUE
         self.id: int = id
         self.sop: SOP = sop
         self.software: str = settings['rc_software'].casefold()
@@ -44,14 +44,12 @@ class RateCo:
 
     def set_status(self,
                    table: str) -> None:
-        status: str = self.q_sys.status(id=self.id,
-                                        jtype='kin')
-        if status == 'notInQueue' and\
-           os.path.isfile(self.output_name) and\
-           self.is_in_db(table=table):
-            self.status = 'finished'
-        elif status == 'fail':
-            self.status = 'reset'
+        status: JobStatus = self.q_sys.status(id=self.id,
+                                              jtype='kin')
+        if (status == JobStatus.NOT_IN_QUEUE
+           and os.path.isfile(self.output_name)
+           and self.is_in_db(table=table)):
+            self.status = JobStatus.FINISHED
         else:
             self.status = status
 
@@ -82,18 +80,16 @@ class RateCo:
                   len(self.set['rc_temp']) *
                   len(cols[5:])),
             step=1)]
-        if db_row_ids == row_ids:
-            return True
-        else:
-            return False
+        return db_row_ids == row_ids
 
     def q_up(self) -> None:
         """Generate and submit a Kinetic
         Constants calculation
         """
         # not os.path.isfile(self.output_name) and\
-        if self.status == 'notInQueue' or\
-           self.status == 'reset':
+        if self.status in {
+           JobStatus.NOT_IN_QUEUE,
+           JobStatus.FAILED}:
             cpu: int = self.set['cpu_kin']
             mem: int = self.set['mem_kin']
             self.create_input()
@@ -134,10 +130,10 @@ class RateCo:
                                       dtype='<U5')
         self.q_sys.pickUp(id=self.id,
                           jtype='kin')
-        if self.q_sys.status(id=self.id,
-                             jtype='kin') == 'fail':
+        if (self.q_sys.status(id=self.id, jtype='kin')
+           == JobStatus.FAILED):
             print(f'Resetting KIN job {self.id}')
-            self.status = 'reset'
+            self.status = JobStatus.FAILED
 
         for k, v in self.tbl_map.items():
             names[v] = k

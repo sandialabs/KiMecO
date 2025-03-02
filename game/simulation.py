@@ -1,15 +1,13 @@
-import sys
 from copy import deepcopy
 from typing import Any
 import cantera as ct
 from numpy.typing import NDArray
-from pandas import DataFrame
 from game.cantera.customrate import MessData, MessRate
 import numpy as np
 from game.bimolecular import Bimolecular
 from game.database.game_db import Game_db
 from game.parameters import SOP
-from game.q_sys import QueueingSystem
+from game.q_sys import QueueingSystem, JobStatus
 from game.rate_coef import RateCo
 from game.well import Well
 from game.templates.ct_reaction_tpl import reaction_yaml
@@ -73,7 +71,10 @@ class SIM:
                 Defaults to None.
         """
 
-        self.status: list[str] = []
+        self.status: list[JobStatus] = [
+            JobStatus.NOT_IN_QUEUE]\
+            * len(set['rc_pres'])\
+            * len(set['rc_temp'])
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
         self.initial_sim: ct.Solution = ct.Solution(f"../../{set['ct_yaml']}")
@@ -83,9 +84,6 @@ class SIM:
         # ct is the name in cantera and wf is name in worflow
         self.ct_names: dict[str, str] = {ct: wf for wf, ct in set['ct_names'].items()}
         self.ct_unitSystem: dict = ct.UnitSystem().units
-        # SOP.items is a dictionary.
-        # key = name of species (str)
-        # Value = The associated object. Can be a Well, Bimolecular or Barrier
         self.gen_id = gen_id
         self.settings: dict[str, Any] = set
         self.species: list[str] = species
@@ -101,7 +99,6 @@ class SIM:
         self.db: Game_db = db
         self.profiles: list[NDArray | None] = [
             None for i in range(len(set['rc_pres']) * len(set['rc_temp']))]
-        self.status = ['notInQueue' for i in self.simulations]
 
     def set_species(self) -> None:
         """Create the simulation with all the species,
