@@ -171,7 +171,8 @@ class QueueingSystem:
                 clear_err = False
                 print(f"Resetting job {job['name']}",
                       "because an error occurred.")
-                os.remove(f"{file}.out")
+                if jtype == 'kin':
+                    os.remove(f"{file}.out")
             else:
                 job['status'] = JobStatus.PICKED_UP.value
         elif jtype == 'hlp':

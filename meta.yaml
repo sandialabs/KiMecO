@@ -11,4 +11,4 @@ build:
     number: 0
     entry_points:
         - game = game.main:main
-        - gameUI = game.gui.start:main
+        - gameUI = game.gui.gameapp:main

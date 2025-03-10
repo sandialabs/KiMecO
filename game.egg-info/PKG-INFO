@@ -1,4 +1,4 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.2
 Name: game
 Version: 0.0.1
 Summary: GAME
@@ -46,6 +46,9 @@ Classifier: Topic :: Scientific/Engineering :: Chemistry
 Requires-Python: >=3.10.14
 Description-Content-Type: text/markdown
 License-File: LICENSE
+Dynamic: author
+Dynamic: maintainer
+Dynamic: requires-python
 
 # Example Package
 

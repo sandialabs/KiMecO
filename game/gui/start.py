@@ -9,7 +9,6 @@ from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
 from game.database.sop_db import SOP_DB
 from game.readers.mess_input import MessInputReader
-from game.element import Element
 from game.user_input import check_input
 from game.parameters import SOP
 from game.well import Well

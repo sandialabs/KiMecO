@@ -35,4 +35,4 @@ classifiers = [
 
 [project.scripts]
 game = "game.main:main"
-gameUI = "game.gui.start:main"
+gameUI = "game.gui.gameapp:main"
