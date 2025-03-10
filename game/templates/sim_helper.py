@@ -53,7 +53,7 @@ while trying2connect:
         db.batch_upsert()
         upsert_stop = time.time()
         upsert_time = upsert_stop - upsert_start
-        print(f'Writting the db took {{upsert_time}} secondes.')
+        print(f'Writting {{len(filenames)}} profiles in the db took {{upsert_time}} secondes.')
         break
     # Happens when db is occupied/locked
     except sqlalchemy.exc.OperationalError:

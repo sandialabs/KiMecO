@@ -5,7 +5,7 @@ from game.templates.slurm import slurmtpl
 from subprocess import Popen, PIPE
 import numpy as np
 from numpy.typing import NDArray
-from numpy import int16, int32, unicode_
+from numpy import int16, int32, ndarray, unicode_
 from typing import Any
 import getpass
 import os
@@ -88,6 +88,7 @@ class QueueingSystem:
         self.kin_q: NDArray[Any] = np.empty(shape=(nkin), dtype=self.jobdata)
         self.sim_q: NDArray[Any] = np.empty(shape=(nsim), dtype=self.jobdata)
         self.hlp_q: NDArray[Any] = np.empty(shape=(nhlp), dtype=self.jobdata)
+        self.queues: list[NDArray] = [self.kin_q, self.sim_q, self.hlp_q]
 
         self.submitted: int = 0
         self.running: int = 0
@@ -161,16 +162,16 @@ class QueueingSystem:
             job = self.hlp_q[id]
 
         clear_err = True
-        file: str = f"{job['loc'][0]}/{job['name'][0]}"
+        file: str = f"{job['loc']}/{job['name']}"
         if (jtype == 'kin' and os.path.exists(f"{file}.out")) or\
-            jtype == 'sim':
+           jtype == 'sim':
             if ((os.path.exists(f"{file}.err") and
                os.stat(f"{file}.err").st_size > 0)):
-                    job['status'] = JobStatus.FAILED.value
-                    clear_err = False
-                    print(f"Resetting job {job['name'][0]}",
-                          "because an error occurred.")
-                    os.remove(f"{file}.out")
+                job['status'] = JobStatus.FAILED.value
+                clear_err = False
+                print(f"Resetting job {job['name']}",
+                      "because an error occurred.")
+                os.remove(f"{file}.out")
             else:
                 job['status'] = JobStatus.PICKED_UP.value
         elif jtype == 'hlp':
@@ -198,8 +199,7 @@ class QueueingSystem:
                 os.remove(f"{job['loc'][0]}/{job['name'][0]}.{ext}")
 
     def submit(self, job) -> None:
-        """Go in the submission directory,
-        submit the job, and return the slurm's job id.
+        """Submit the job, and return the slurm's job id.
         Set the Job's status to <running>.
 
         Args:
@@ -226,15 +226,15 @@ class QueueingSystem:
         """Run all jobs of the workflow in parallel
         as long as ressources are available.
         """
-        for queue in [self.kin_q, self.sim_q, self.hlp_q]:
-            for job in queue:
-                if job['status'] == JobStatus.READY.value:
-                    if self.enough_resources_for(job):
-                        self.submit(job=job)
+        for q in self.queues:
+            for idx, rdy in enumerate(q['status'] == JobStatus.READY.value):
+                if rdy:
+                    if self.enough_resources_for(job=q[idx]):
+                        self.submit(job=q[idx])
                     else:
                         self.actualize()
                         break
-        if self.n_ready < self.av_jobs:
+        if self.n_ready <= self.av_jobs:
             self.actualize()
 
     def enough_resources_for(self, job) -> bool:
@@ -248,19 +248,26 @@ class QueueingSystem:
         Change status of newly finished jobs.
         """
         slurm_ids: NDArray[int32] = self.get_all_running()
-        for queue in [self.kin_q, self.sim_q, self.hlp_q]:
-            for job in queue:
-                if job['status'] == JobStatus.READY.value:
-                    continue
-                elif (job['status'] == JobStatus.RUNNING.value and
-                      not any(slurm_ids == job['sub_id'])):
-                    job['status'] = JobStatus.FINISHED.value
-                    self.av_cpu += job['cpu']
-                    self.av_mem += job['mem']
-                    self.av_jobs += 1
-                elif (job['status'] in
-                      [JobStatus.PICKED_UP.value, JobStatus.FAILED.value]):
-                    job['status'] = JobStatus.NOT_IN_QUEUE.value
+        for q in self.queues:
+            running = q['status'] == JobStatus.RUNNING.value
+            finished_jobs: ndarray = (
+                np.isin(element=q['sub_id'],
+                        test_elements=slurm_ids,
+                        assume_unique=True,
+                        invert=True)
+                )
+            mask = np.logical_and(
+                running, finished_jobs
+                )
+            q['status'][mask] = JobStatus.FINISHED.value
+            self.av_cpu += np.sum(q['cpu'][mask])
+            self.av_mem += np.sum(q['mem'][mask])
+            self.av_jobs += len(q[mask])
+
+            pu_jobs: ndarray = np.isin(
+                q['status'],
+                [JobStatus.PICKED_UP.value, JobStatus.FAILED.value])
+            q['status'][pu_jobs] = JobStatus.NOT_IN_QUEUE.value
 
     def get_all_running(self) -> NDArray[int32]:
         """Create numpy array of job ids for fast comparaison

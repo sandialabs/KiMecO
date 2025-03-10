@@ -202,10 +202,10 @@ class Generation:
     def recover_simulation_data(self,
                                 el: Element) -> None:
         """Recover simulation data for an element."""
-        for sim_i in range(len(el.sim.simulations)):
-            el.sim.set_status(sim=sim_i)
-        if all(stat == JobStatus.FINISHED for stat in el.sim.status):
-            el.request_sim_profiles(db=self.sim_db, table=f'G{self.id}')
+        for prof in el.sim.profiles:
+            if prof is None:
+                el.request_sim_profiles(db=self.sim_db, table=f'G{self.id}')
+                break
 
     def finalize_element(self,
                          el: Element,
@@ -261,9 +261,12 @@ class Generation:
             el.sim.profiles[sim] = db_data
             self.qs.pickUp(id=sim_id,
                            jtype='sim')
-            el.sim.status[sim] = self.qs.status(id=int(sim_id),
-                                                jtype='sim')
-            if all(np.array(el.sim.status) == JobStatus.PICKED_UP):
+            go2scoring = True
+            for prof in el.sim.profiles:
+                if prof is None:
+                    go2scoring = False
+                    break
+            if go2scoring:
                 el.status = ElementStatus.SCORING
             collected.append(sim_id)
         if collected == to_collect:
@@ -278,15 +281,10 @@ class Generation:
         if hlp_idx == -1:
             return
         # Create helpers if needed
-        need_helper = []
-        for j, i in enumerate(to_collect):
-            # Avoids too much writting at one
-            # which makes the db crash
-            if j < 200:
-                if i not in collected:
-                    need_helper.append(i)
-            else:
-                break
+        need_helper = [
+            i for i in to_collect
+            if i not in collected
+        ]
 
         filenames = []
         # Avoid asking multiple helpers to do the same
@@ -297,14 +295,17 @@ class Generation:
             assigned_ids.update(hlp)
 
         # Filter need_helper to remove any sim_ids that are already assigned
-        need_helper = [
-            sim_id for sim_id in need_helper
-            if sim_id not in assigned_ids]
-
-        if len(need_helper) == 0:
+        unique_need_helper = []
+        for sim_id in need_helper:
+            if len(unique_need_helper) < 30:
+                if sim_id not in assigned_ids:
+                    unique_need_helper.append(sim_id)
+            else:
+                break
+        if len(unique_need_helper) == 0:
             return
 
-        self.sim_hlpers[hlp_idx] = need_helper
+        self.sim_hlpers[hlp_idx] = unique_need_helper
         for sim_id in self.sim_hlpers[hlp_idx]:
             el: Element = self.elements[sim_id // nsim]
             sim: int = sim_id % nsim
@@ -340,17 +341,17 @@ class Generation:
         nsim: int = len(self.settings['rc_pres']) *\
             len(self.settings['rc_temp'])
         for i in range(len(self.sim_hlpers)):
-            if self.qs.status(i, 'hlp') == JobStatus.FINISHED.value:
+            if self.qs.status(i, 'hlp') == JobStatus.FINISHED:
                 self.qs.pickUp(id=i,
                                jtype='hlp')
-            if self.qs.status(i, 'hlp') == JobStatus.FAILED.value:
+            if self.qs.status(i, 'hlp') == JobStatus.FAILED:
                 print(f'Helper {i} failed to collect sim profiles.',
                       'Corresponding sim_ids are reset')
                 for sim_id in self.sim_hlpers[i]:
                     el: Element = self.elements[sim_id // nsim]
                     el.status = ElementStatus.RESET
                 self.sim_hlpers[i] = []
-            elif self.qs.status(i, 'hlp') == JobStatus.NOT_IN_QUEUE.value:
+            elif self.qs.status(i, 'hlp') == JobStatus.NOT_IN_QUEUE:
                 self.sim_hlpers[i] = []
 
     def restore_gen_from_db(self) -> None:

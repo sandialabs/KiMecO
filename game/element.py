@@ -79,9 +79,10 @@ class Element:
 
         for sim in range(len(self.sim.simulations)):
             sim_id: int = self.id * len(self.sim.simulations) + sim
-            db.prepare_batch_select(
-                table=table,
-                sim_id=sim_id)
+            if self.sim.profiles[sim] is None:
+                db.prepare_batch_select(
+                    table=table,
+                    sim_id=sim_id)
 
     def calc_score(self) -> None:
         """Calculate the score of the element
