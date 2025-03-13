@@ -163,6 +163,8 @@ class Well:
             db_dict: dict = {
                     f"{self.name}__e": float(self.energy)
                 }
+        else:
+            db_dict = {}
         if len(self.frequencies) != 0:
             db_dict.update(self.freq_dict)
         if len(self.rotors) > 0:
