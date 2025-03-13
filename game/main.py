@@ -10,6 +10,7 @@ from game.generation import Generation
 from game.Perturbators.normal import Normal
 from game.Perturbators.lognormal import LogNormal
 from game.readers.mess_input import MessInputReader
+from game.sensitivity.linear import Linear
 from game.user_input import check_input
 from game.parameters import SOP
 from game.scoring_f.weighteddif import WeightedDif
@@ -73,7 +74,7 @@ def main() -> None:
             sop=init_SOP,
             id=0,
             sf=sf)],
-        set=settings,
+        settings=settings,
         rc_tpl=input_tpl,
         loc=location,
         sop_db=sop_db,
@@ -105,10 +106,22 @@ def main() -> None:
     for id in range(settings['n_elem']):
         prev_gen[id] = first_gen.elements[0]
 
+    if len(settings['only_perturb']) == 0:
+        sensitivity = Linear(elements=first_gen.elements,
+                             settings=settings,
+                             rc_tpl=input_tpl,
+                             loc=location,
+                             sf=sf,
+                             pert=pert)
+        sensitivity.run()
+        settings['only_perturb'] = sensitivity.selected
+    else:
+        settings['only_perturb'] = [k for k in init_SOP.parameters_names]
+
     while not converged and Generation.total() < settings['max_gen']:
         # init_t_start = time()
         new_gen = Generation(elements=new_elements,
-                             set=settings,
+                             settings=settings,
                              rc_tpl=input_tpl,
                              loc=location,
                              sop_db=sop_db,
@@ -116,7 +129,8 @@ def main() -> None:
                              sim_db=sim_db,
                              sf=sf,
                              pert=pert,
-                             previous_el=prev_gen)
+                             previous_el=prev_gen
+                             )
         # init_t_end = time()
         # gen_init_time = init_t_end - init_t_start
         # print('Initialization of generation')

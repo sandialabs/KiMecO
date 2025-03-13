@@ -56,7 +56,7 @@ class GameApp:
                     if name in bimol.frag_names():
                         self.og_names[ct_name] = bimol.name
 
-        self.init_vals = self.sop_db.get_table(table='G0')[0]
+        self.init_vals = self.sop_db.get_table(table='G0000')[0]
 
         # Initialize app
         external_stylesheets: list[str] = ['~/projects/ethylperoxy/me/file.css']

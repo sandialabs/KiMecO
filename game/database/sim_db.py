@@ -9,7 +9,8 @@ class SIM_DB(Game_db):
     def __init__(self,
                  name: str,
                  path: str = '',
-                 sop: SOP | None = None) -> None:
+                 sop: SOP | None = None,
+                 tbl_name: str = 'G0000') -> None:
         super().__init__(name=name,
                          path=path)
         self._select = {}
@@ -22,7 +23,7 @@ class SIM_DB(Game_db):
         else:
             # Only work if the SIM_DB is already created.
             self.columns: list[str] = [
-                c[1] for c in self.get_col_names('G0')[1:]]
+                c[1] for c in self.get_col_names(tbl_name)[1:]]
             self.species = self.columns[4:]
         self.types = [int, float, float, int, float]
         self.types.extend([float for i in range(len(self.species))])

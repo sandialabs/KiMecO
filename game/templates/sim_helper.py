@@ -9,7 +9,8 @@ import os
 hid = {hlp_idx}
 
 db = SIM_DB(name='{db.name}',
-             path='{db.path}')
+             path='{db.path}',
+             tbl_name='{table}')
 
 filenames = {filenames}
 
@@ -35,7 +36,7 @@ for sim in sims:
         row_dict = {{}}
         for col in sim:
             row_dict[col] = sim[col][idx]
-        db.prepare_batch_upsert(table='G{gen}',
+        db.prepare_batch_upsert(table='{table}',
                                 id=id,
                                 values=row_dict)
 trying2connect = True

@@ -18,15 +18,19 @@ class Barrier(Well):
 
     @property
     def r_coff(self) -> float:
-        return min(self.r_lenergy, self.r_renergy)
+        return 0.01
 
     @property
     def r_lenergy(self) -> float:
-        return self.energy - self.connected[0].energy
+        le: float = self.energy - self.connected[0].energy
+        re: float = self.energy - self.connected[1].energy
+        return (le - min(le, re) + 0.01)
 
     @property
     def r_renergy(self) -> float:
-        return self.energy - self.connected[1].energy
+        le: float = self.energy - self.connected[0].energy
+        re: float = self.energy - self.connected[1].energy
+        return (re - min(le, re) + 0.01)
 
     @property
     def db_dict(self) -> dict[str, Any]:

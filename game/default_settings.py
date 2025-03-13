@@ -83,6 +83,8 @@ default_settings: dict[str, Any] = {
     "std_sf": 2.0,
     # Name of the scoring function class to use
     "scoring_func": "weighteddif",
+    # Absolute error for all species for all experiments
+    "abs_err": 1e-9,
     # Name of species as in exp profiles header
     # Selected species for scoring
     'score_sp': [],
@@ -107,5 +109,13 @@ default_settings: dict[str, Any] = {
     # Percentage of deviation of means and stds of parameters to converge
     "final_conv": 0.05,
     # Numbers of helpers to save the simulations profiles
-    "max_helpers": 10
+    "max_helpers": 10,
+    # Multiplicating factors of std parameters for derivative in
+    # sensitivity analysis
+    "sensi_d": 0.1,
+    # Threshold of cumulative sensitivity percent to select
+    # important parameters to perturb
+    "cumul_sensi": 0.9,
+    # User given list of parameters to perturb. All if empty.
+    "only_perturb": []
 }

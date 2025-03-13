@@ -24,7 +24,7 @@ class WeightedDif(Scoring):
         """
 
         exp_prof: list[NDArray] = self.settings['exp_profiles']
-
+        w_point = self.settings['abs_err']
         score = np.array([0.0 for sp in sim.species])
         for p in range(len(self.settings['rc_pres'])):
             for t in range(len(self.settings['rc_temp'])):
@@ -33,8 +33,9 @@ class WeightedDif(Scoring):
                     self.settings['weights'][sim_index]
                 dif = np.sum(
                     np.abs(
-                        sim.profiles[sim_index].T - exp_prof[sim_index]
-                        )/len(exp_prof[sim_index][0]),  # Normalize time
+                        ((1/w_point)**2)/len(exp_prof[sim_index][0]) *
+                        (sim.profiles[sim_index].T - exp_prof[sim_index])**2
+                        ),  # Normalize time
                     axis=1
                     )
                 # Accumulate and normalize the x

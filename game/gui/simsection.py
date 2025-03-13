@@ -116,7 +116,6 @@ class SIMSection(Section):
                                 mode='lines',
                                 name=sp,
                                 opacity=op[idx],
-                                # hoveron='fills',
                                 hoverinfo='name'
                                 ))
                         else:
@@ -135,6 +134,23 @@ class SIMSection(Section):
                             marker=dict(
                                 color=fig.layout['template']['layout']['colorway'][sp_idx]),
                             selector=dict(name=sp))
+            # Add experimental profiles
+            tidx: int = self.settings['rc_temp'].index(temp)
+            pidx: int = self.settings['rc_pres'].index(pres)
+            eidx: int = pidx * len(self.settings['rc_temp']) + tidx
+            exp_p = self.settings['exp_profiles'][eidx]
+            sidx = []
+            for sp in specs:
+                sidx.append(self.species.index(sp)+1)
+            for sp in sidx:
+                fig.add_trace(go.Scatter(
+                                x=exp_p[0],
+                                y=exp_p[sp],
+                                mode='lines',
+                                name='Exp. profile',
+                                line=dict(color='black'),
+                                hoverinfo='name'
+                                ))
             # Overlay both histograms
             fig.update_layout(xaxis=dict(
                                 title='time (s)',

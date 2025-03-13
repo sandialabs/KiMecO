@@ -46,6 +46,7 @@ class Element:
         self.sf: Scoring = sf
         # Purely for debugging
         self.reset: int = 0
+        self.name: str = f'E{self.id:04d}'
 
     def save_kin(self,
                  db: KIN_DB,

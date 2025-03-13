@@ -21,7 +21,7 @@ class SIM:
                  sop: SOP,
                  kin: RateCo,
                  id: int,
-                 gen_id: int,
+                 gen_name: str,
                  species: list[str],
                  db: Game_db,
                  loc: str,
@@ -75,6 +75,7 @@ class SIM:
             JobStatus.NOT_IN_QUEUE]\
             * len(set['rc_pres'])\
             * len(set['rc_temp'])
+        self.gen_name: str = gen_name
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
         self.initial_sim: ct.Solution = ct.Solution(f"../../{set['ct_yaml']}")
@@ -82,17 +83,17 @@ class SIM:
         self.reac_idx: list[int] | None = reac_idx
         self.simulations: list[ct.Solution] = []
         # ct is the name in cantera and wf is name in worflow
-        self.ct_names: dict[str, str] = {ct: wf for wf, ct in set['ct_names'].items()}
+        self.ct_names: dict[str, str] = {
+            ct: wf for wf, ct in set['ct_names'].items()}
         self.ct_unitSystem: dict = ct.UnitSystem().units
-        self.gen_id = gen_id
         self.settings: dict[str, Any] = set
         self.species: list[str] = species
         self.set_species()
         self.set_reactions()
         self.init_sims()
         self.id: int = id
-        self.gen_id: int = gen_id
-        self.name: str = f'G{gen_id:04d}E{id:04d}'
+        self.el_name: str = f'E{id:04d}'
+        self.name: str = f'{gen_name}{self.el_name}'
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
@@ -374,7 +375,7 @@ class SIM:
             time=self.settings['exp_profiles']
             [sim_id - self.id*len(time_steps)][0].tolist(),
             all_tsteps=time_steps,
-            gen=self.gen_id,
+            gen_name=self.gen_name,
             to_watch=self.species,
             initial_X=self.settings['initial_X']
             )

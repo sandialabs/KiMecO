@@ -7,7 +7,8 @@ class SOP_DB(Game_db):
     def __init__(self,
                  sop: SOP,
                  name: str,
-                 path: str = '',) -> None:
+                 path: str = '',
+                 tbl_name: str = 'G0000') -> None:
         super().__init__(name=name,
                          path=path)
 

@@ -84,7 +84,7 @@ for idx, id in enumerate(row_ids):
     row_dict = {{}}
     for col in traces:
         row_dict[col] = traces[col][idx]
-#     db.prepare_batch_upsert(table='G{gen}',
+#     db.prepare_batch_upsert(table={gen_name},
 #                             id=id,
 #                             values=row_dict)
 # db_wait = np.random.lognormal(mean=np.log(1), sigma=1)
@@ -100,7 +100,7 @@ traces_serializable = {{key: value.tolist() if isinstance(value, np.ndarray) els
 json_object = json.dumps(traces_serializable, indent=4)
 
 # Writing to sample.json
-with open(f"G{gen:04d}E{el_num:04d}S{{sim_in_element:02d}}.json", "w") as outfile:
+with open(f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json", "w") as outfile:
     outfile.write(json_object)
 
 """

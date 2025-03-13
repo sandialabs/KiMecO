@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Any
 
-import numpy as np
 from game.barrier import Barrier
 from game.bimolecular import Bimolecular
 from game.parameters import SOP
@@ -30,6 +29,7 @@ class Perturbator(ABC):
         self.has_boundaries = False
         self.additive: list[str] = ['e', 'b', 'pow', 'lf_p', 'hf_p']
         self.percent: list[str] = ['if', 'hr', 'sigma', 'epsi', 'fact']
+        self.select: list[str] = self.settings['only_perturb']
 
     def get_boundaries(self,
                        ptype: str,

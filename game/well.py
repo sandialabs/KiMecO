@@ -194,6 +194,6 @@ class Well:
         """
         rd: dict[str, float] = {}
         for idx, rot in enumerate(self.rotors):
-            rd[f"{self.name}__r{idx}"] = float(rot.pert)
+            rd[f"{self.name}__hr{idx}"] = float(rot.pert)
 
         return rd

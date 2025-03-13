@@ -80,26 +80,25 @@ class SOPSection(Section):
                 if molec in self.settings['ct_names']:
                     molec = self.settings['ct_names'][molec]
                 param: str = col.split('__')[1]
-                if param.startswith(param_type):
-                    if param_type == 'score':
+                if param_type == 'score':
+                    filtered_param.append({
+                        'label': f"{molec}",
+                        'value': col})
+                elif param_type == 'e' or param_type == 'if':
+                    if param.startswith('epsi'):
+                        continue
+                    if molec in self.settings['score_sp']:
                         filtered_param.append({
                             'label': f"{molec}",
                             'value': col})
-                    elif param_type == 'e' or param_type == 'if':
-                        if param.startswith('epsi'):
-                            continue
-                        if molec in self.settings['score_sp']:
-                            filtered_param.append({
-                                'label': f"{molec}",
-                                'value': col})
-                        else:
-                            filtered_param.append({
-                                'label': f"{molec} {param}",
-                                'value': col})
                     else:
                         filtered_param.append({
                             'label': f"{molec} {param}",
                             'value': col})
+                else:
+                    filtered_param.append({
+                        'label': f"{molec} {param}",
+                        'value': col})
 
             if param_type != '':
                 style: dict[str, str] = {'display': 'block'}
@@ -172,8 +171,8 @@ class SOPSection(Section):
                     else:
                         std_allowed = self.settings['std_b'] * self.settings['max_std']
                 elif ptype == 'f':
-                    std_allowed = self.settings['std_f'] * self.settings['max_std']
-                    title = fr'Frequency {short_p} of {molec} (1/cm)'
+                        std_allowed = self.settings['std_hf_p'] * self.settings['max_std']
+                        title = fr'Frequency {short_p} of {molec} (1/cm)'
                 elif ptype == 'r':
                     std_allowed = self.settings['std_hr'] * self.settings['max_std']
                     title = f'Rotor perturbation {short_p} of {molec}'
