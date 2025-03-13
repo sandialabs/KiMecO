@@ -115,7 +115,7 @@ default_settings: dict[str, Any] = {
     "sensi_d": 0.1,
     # Threshold of cumulative sensitivity percent to select
     # important parameters to perturb
-    "cumul_sensi": 0.9,
+    "cumul_sensi": 0.95,
     # User given list of parameters to perturb. All if empty.
     "only_perturb": []
 }

@@ -117,6 +117,8 @@ def main() -> None:
         settings['only_perturb'] = sensitivity.selected
     else:
         settings['only_perturb'] = [k for k in init_SOP.parameters_names]
+    print('Parameters to perturb:\n',
+          f"{settings['only_perturb']}")
 
     while not converged and Generation.total() < settings['max_gen']:
         # init_t_start = time()

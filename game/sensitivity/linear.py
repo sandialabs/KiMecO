@@ -119,6 +119,10 @@ class Linear:
                     modif = self.settings['std_e'] * lin_fact
             elif param.startswith('hr'):
                 modif = self.settings['std_hr'] * lin_fact
+            elif param.startswith('epsi'):
+                modif = self.settings['std_epsi'] * lin_fact
+            elif param.startswith('sigma'):
+                modif = self.settings['std_sigma'] * lin_fact
             else:
                 modif = self.settings[f'std_{param}'] * lin_fact
             new_sop = SOP.from_db_row(
@@ -160,15 +164,15 @@ class Linear:
             cumul += self.rs[i]/tot
             if cumul > self.settings['cumul_sensi']:
                 break
-        
-        txt_file = 'Parameters names:   Cum. Percent    Percent    Value\n'
+
+        txt_file = 'Parameters names:   Cum. Percent    Percent      Value\n'
         cumul = 0
         for idx in range(len(rslts)):
             cumul += rslts_sorted[idx]/tot
             txt_file += f'{params_sorted[idx]:19s}'
             txt_file += f' {cumul:-12.2f}'
-            txt_file += f' {rslts_sorted[idx]/tot:-12.2f}'
-            txt_file += f' {rslts_sorted[idx]:7.2e}'
+            txt_file += f' {rslts_sorted[idx]/tot:-10.2f}'
+            txt_file += f' {rslts_sorted[idx]:9.2e}'
             txt_file += '\n'
 
         with open(f'{self.name}.out', 'w') as f:

@@ -14,7 +14,8 @@ class Well:
     """
     def __init__(self,
                  name: str,
-                 ct_name: str = ""
+                 ct_name: str = "",
+                 pert_e: bool = True
                  ) -> None:
 
         self.name: str = name
@@ -27,6 +28,8 @@ class Well:
         self.lf_p = 1.0
         # high frequencies perturbation
         self.hf_p = 1.0
+        # Set to False for fragments
+        self.pert_e = pert_e
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -156,9 +159,10 @@ class Well:
                 key (str): parameter name
                 value (float): parameter value
         """
-        db_dict: dict = {
-                f"{self.name}__e": float(self.energy)
-            }
+        if self.pert_e:
+            db_dict: dict = {
+                    f"{self.name}__e": float(self.energy)
+                }
         if len(self.frequencies) != 0:
             db_dict.update(self.freq_dict)
         if len(self.rotors) > 0:

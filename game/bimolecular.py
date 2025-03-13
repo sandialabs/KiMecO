@@ -38,7 +38,7 @@ class Bimolecular:
                 ct_name: str = self.ct_names[name]
         else:
             ct_name: str = name
-        frag = Well(name=name, ct_name=ct_name, *args)
+        frag = Well(name=name, ct_name=ct_name, *args, pert_e=False)
         self.fragments.append(frag)
 
     def frag_names(self) -> list[str]:
