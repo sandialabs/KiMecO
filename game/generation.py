@@ -9,6 +9,7 @@ from game.scoring_f.scoring import Scoring
 from game.Perturbators.perturbator import Perturbator
 from game.parameters import SOP
 import math
+import numpy as np
 import time
 
 
@@ -127,7 +128,11 @@ class Generation(CoreRun):
             Dict[str, float]:
                 Dictionary with the standard deviation for each key.
         """
-        sop_list: List[SOP] = [el.sop for el in self.elements]
+        scores = [el.score for el in self.elements]
+        median = np.median(scores)
+        sop_list: List[SOP] = [
+            el.sop for el in self.elements if el.score <= median
+            ]
 
         # Initialize dictionaries to hold the sum of values,
         # sum of squared values, and a count of SOPs
@@ -139,6 +144,8 @@ class Generation(CoreRun):
         for sop in sop_list:
             parameters = sop.parameters_names
             for key, value in parameters.items():
+                if key not in self.settings['only_perturb']:
+                    continue
                 if key not in sum_values:
                     sum_values[key] = 0.0
                     sum_squared_values[key] = 0.0

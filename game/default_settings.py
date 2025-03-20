@@ -107,7 +107,7 @@ default_settings: dict[str, Any] = {
     # Maximum number of generations
     "max_gen": 10,
     # Percentage of deviation of means and stds of parameters to converge
-    "final_conv": 0.05,
+    "final_conv": 0.01,
     # Numbers of helpers to save the simulations profiles
     "max_helpers": 10,
     # Multiplicating factors of std parameters for derivative in

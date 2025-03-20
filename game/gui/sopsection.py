@@ -21,10 +21,10 @@ class SOPSection(Section):
                     {'label': 'Energies', 'value': 'e'},
                     {'label': 'Frequencies', 'value': 'f_p'},
                     {'label': 'Imaginary freq', 'value': 'if'},
-                    {'label': 'Rotor perturbation', 'value': 'r'},
-                    {'label': 'Sigmas', 'value': 'sigma'},
-                    {'label': 'Epsilon', 'value': 'epsi'},
-                    {'label': 'Score', 'value': 'score'}],
+                    {'label': 'Rotor perturbation', 'value': 'hr'},
+                    {'label': 'Lennard-Jones', 'value': 'lj'},
+                    {'label': 'Score', 'value': 'score'},
+                    {'label': 'ME collision', 'value': 'me'}],
                                 value='Energies',
                                 inline=True,
                                 id='ptype'),
@@ -64,43 +64,58 @@ class SOPSection(Section):
             Output(component_id='param_selection', component_property='options'),
             Input(component_id='ptype', component_property='value')
         )
-        def update_param_choice(param_type: str
+        def update_param_choice(ptype: str
                                 ) -> tuple[dict[str, str], list[dict[str, str]]]:
             """Create a list of parameters depending on user selected ptype.
 
             Args:
-                param_type (str): parameter identifier in the sop db.
+                ptype (str): parameter identifier in the sop db.
 
             Returns:
                 tuple[dict[str, str], list[str]]: _description_
             """
             filtered_param: list[dict[str, str]] = []
-            for col in self.sop_db.columns[1:]:
+            for col in self.sop_db.columns:
                 molec: str = col.split('__')[0]
                 if molec in self.settings['ct_names']:
                     molec = self.settings['ct_names'][molec]
                 param: str = col.split('__')[1]
-                if param_type == 'score':
+                if ptype == 'score':
+                    if 'score' not in param:
+                        continue
                     filtered_param.append({
                         'label': f"{molec}",
                         'value': col})
-                elif param_type == 'e' or param_type == 'if':
-                    if param.startswith('epsi'):
-                        continue
-                    if molec in self.settings['score_sp']:
-                        filtered_param.append({
-                            'label': f"{molec}",
-                            'value': col})
-                    else:
-                        filtered_param.append({
-                            'label': f"{molec} {param}",
-                            'value': col})
-                else:
+                elif ptype == 'e' and param == 'e':
+                    filtered_param.append({
+                        'label': f"{molec}",
+                        'value': col})
+                elif ptype == 'if' and param == 'if':
+                    filtered_param.append({
+                        'label': f"{molec}",
+                        'value': col})
+                elif ptype == 'hr' and 'hr' in param:
                     filtered_param.append({
                         'label': f"{molec} {param}",
                         'value': col})
+                elif ptype == 'f_p' and 'f_p' in param:
+                    filtered_param.append({
+                        'label': f"{molec} {param}",
+                        'value': col})
+                elif (ptype == 'lj' and
+                      ('epsi' in param or 'sigma' in param)):
+                    filtered_param.append({
+                        'label': f"{molec} {param}",
+                        'value': col})
+                elif (ptype == 'me' and
+                      (param == 'pow' or param == 'fact')):
+                    filtered_param.append({
+                        'label': f"{molec} {param}",
+                        'value': col})
+                else:
+                    continue
 
-            if param_type != '':
+            if ptype != '':
                 style: dict[str, str] = {'display': 'block'}
             else:
                 style = {'display': 'none'}
@@ -132,7 +147,7 @@ class SOPSection(Section):
         )
         def update_sop_figure(clic,
                               ptype: str,
-                              param: str,
+                              param_selected: str,
                               selected_gen: list[int]
                               ) -> tuple[dict[str, str], Figure, str, str, str]:
             if clic == 0:
@@ -141,111 +156,122 @@ class SOPSection(Section):
                         '',
                         '',
                         '')
-            title: str
+            title: str = param_selected
             std_allowed: float
             fig = go.Figure()
+            # Add line for initial value to the graph
             for idx, col in enumerate(self.sop_db.columns):
-                if col == param:
+                if col == param_selected:
                     init_val: float = self.gapp.init_vals[idx+1]
                     fig.add_vline(x=init_val,
                                   line_dash='dash',
                                   line_width=2,
                                   line_color='black')
                     break
-
+            raw_molec: str = col.split('__')[0]
+            if raw_molec in self.settings['ct_names']:
+                molec = self.settings['ct_names'][raw_molec]
+            else:
+                molec = raw_molec
+            param: str = col.split('__')[1]
             tickformat: str = '.2f'
-            if 'score' in ptype:
+            std_allowed: float = 0.0
+            if ptype == 'score' and param == 'score':
                 title = fr'{ptype}'
                 tickformat: str = 'e'
-            elif '__' in param:
-                short_p: str = param.split('__')[1]
-                if param.split('__')[0] in self.settings['ct_names']:
-                    molec = self.settings['ct_names'][param.split('__')[0]]
+            elif ptype == 'e' and param == 'e':
+                title = f'Energy of {molec} (kcal/mol)'
+                if not isinstance(
+                    self.init_SOP.items[raw_molec], Barrier):
+                    std_allowed = self.settings['std_e'] * self.settings['max_std']
                 else:
-                    molec = param.split('__')[0]
-                if ptype == 'e':
-                    title = f'Energy of {molec} (kcal/mol)'
-                    if not isinstance(
-                       self.init_SOP.items[param.split('__')[0]], Barrier):
-                        std_allowed = self.settings['std_e'] * self.settings['max_std']
+                    std_allowed = self.settings['std_b'] * self.settings['max_std']
+            elif ptype == 'if' and param == 'if':
+                std_allowed = self.settings['std_if'] * self.settings['max_std']
+                bar: Barrier = self.init_SOP.items[raw_molec]
+                if isinstance(bar.connected[0], Well):
+                    if bar.connected[0].name in self.settings['ct_names']:
+                        From: str = self.settings['ct_names'][bar.connected[0].name]
                     else:
-                        std_allowed = self.settings['std_b'] * self.settings['max_std']
-                elif ptype == 'f':
-                        std_allowed = self.settings['std_hf_p'] * self.settings['max_std']
-                        title = fr'Frequency {short_p} of {molec} (1/cm)'
-                elif ptype == 'r':
-                    std_allowed = self.settings['std_hr'] * self.settings['max_std']
-                    title = f'Rotor perturbation {short_p} of {molec}'
-                elif ptype == 'if':
-                    std_allowed = self.settings['std_if'] * self.settings['max_std']
-                    bar: Barrier = self.init_SOP.items[molec]
-                    if isinstance(bar.connected[0], Well):
-                        if bar.connected[0].name in self.settings['ct_names']:
-                            From: str = self.settings['ct_names'][bar.connected[0].name]
+                        From = bar.connected[0].name
+                elif isinstance(bar.connected[0], Bimolecular):
+                    From = ''
+                    for idx, frag in enumerate(bar.connected[0].frag_names()):
+                        if idx == 1:
+                            From += ' + '
+                        if frag in self.settings['ct_names']:
+                            From += self.settings['ct_names'][frag]
                         else:
-                            From = bar.connected[0].name
-                    elif isinstance(bar.connected[0], Bimolecular):
-                        From = ''
-                        for idx, frag in enumerate(bar.connected[0].frag_names()):
-                            if idx == 1:
-                                From += ' + '
-                            if frag in self.settings['ct_names']:
-                                From += self.settings['ct_names'][frag]
-                            else:
-                                From += frag
+                            From += frag
+                else:
+                    raise NotImplementedError('Unknown reactant object.')
+                if isinstance(bar.connected[0], Well):
+                    if bar.connected[1].name in self.settings['ct_names']:
+                        To: str = self.settings['ct_names'][bar.connected[1].name]
                     else:
-                        raise NotImplementedError('Unknown reactant object.')
-                    if isinstance(bar.connected[0], Well):
-                        if bar.connected[1].name in self.settings['ct_names']:
-                            To: str = self.settings['ct_names'][bar.connected[1].name]
+                        To = bar.connected[1].name
+                elif isinstance(bar.connected[1], Bimolecular):
+                    To = ''
+                    for idx, frag in enumerate(bar.connected[1].frag_names()):
+                        if idx == 1:
+                            To += ' + '
+                        if frag in self.settings['ct_names']:
+                            To += self.settings['ct_names'][frag]
                         else:
-                            To = bar.connected[1].name
-                    elif isinstance(bar.connected[1], Bimolecular):
-                        To = ''
-                        for idx, frag in enumerate(bar.connected[1].frag_names()):
-                            if idx == 1:
-                                To += ' + '
-                            if frag in self.settings['ct_names']:
-                                To += self.settings['ct_names'][frag]
-                            else:
-                                To += frag
-                    else:
-                        raise NotImplementedError('Unknown reactant object.')
-                    title = f'I. frequency from {From} to {To} (1/cm)'
-                elif ptype == 'sigma':
-                    std_allowed = self.settings['std_sigma'] * self.settings['max_std']
-                    title = f"Sigma {short_p.split('_')[-1]}"
-                elif ptype == 'epsi':
+                            To += frag
+                else:
+                    raise NotImplementedError('Unknown reactant object.')
+                title = f'I. frequency from {From} to {To} (1/cm)'
+            elif ptype == 'hr' and 'hr' in param:
+                std_allowed = self.settings['std_hr'] * self.settings['max_std']
+                title = f'Rotor perturbation {param} of {molec}'
+            elif ptype == 'f_p' and 'f_p' in param:
+                std_allowed = self.settings['std_hf_p'] * self.settings['max_std']
+                title = fr'Frequency perturbation {param} of {molec}'
+            elif (ptype == 'lj' and
+                    ('epsi' in param or 'sigma' in param)):
+                if 'epsi' in param:
                     std_allowed = self.settings['std_epsi'] * self.settings['max_std']
-                    title = f"Epsilon {short_p.split('_')[-1]}"
+                elif 'sigma' in param:
+                    std_allowed = self.settings['std_sigma'] * self.settings['max_std']
                 else:
-                    raise NotImplementedError('Unknown parameter')
-                lb: float = init_val - std_allowed
-                ub: float = init_val + std_allowed
-                fig.add_vline(x=lb,
-                              line_dash='dash',
-                              line_width=4,
-                              line_color='brown')
-                fig.add_vline(x=ub,
-                              line_dash='dash',
-                              line_width=4,
-                              line_color='brown')
+                    raise KeyError('Unknown parameter in Lennard-Jones.')
+                title = f"{param}"
+            elif (ptype == 'me' and
+                    (param == 'pow' or param == 'fact')):
+                if param == 'pow':
+                    std_allowed = self.settings['std_pow'] * self.settings['max_std']
+                elif param == 'fact':
+                    std_allowed = self.settings['std_fact'] * self.settings['max_std']
+                else:
+                    raise KeyError('Unknown parameter in ME collison.')
             else:
-                title = 'Score'
+                raise KeyError('Unknown type of parameter selected.')
+            lb: float = init_val - std_allowed
+            ub: float = init_val + std_allowed
+            fig.add_vline(x=lb,
+                          line_dash='dash',
+                          line_width=4,
+                          line_color='brown')
+            fig.add_vline(x=ub,
+                          line_dash='dash',
+                          line_width=4,
+                          line_color='brown')
+
             avrg = []
             nel = []
             cols = ['sop_id']
             cols.extend(self.gapp.sop_db.columns)
             gen_rows = [
-                self.gapp.sop_db.get_table(table=f'G{gen_i}')
+                self.gapp.sop_db.get_table(table=f'G{gen_i:04d}')
                 for gen_i in selected_gen]
             for idx, gen_rows in enumerate(gen_rows):
                 df = pd.DataFrame(data=gen_rows, columns=cols)
-                avrg.append(f"{df[param].mean():.3f}")
-                nel.append(len(df[param]))
+                avrg.append(f"{df[param_selected].mean():.3f}")
+                nel.append(len(df[param_selected]))
                 fig.add_trace(go.Histogram(
                     histfunc="count",
-                    x=df[param],
+                    x=df[param_selected],
                     nbinsx=30,
                     name=f'Gen {selected_gen[idx]}',
                     bingroup=1))
@@ -285,6 +311,6 @@ class SOPSection(Section):
             fig.update_traces(opacity=0.75)
             return ({'display': 'block'},
                     fig,
-                    f'Distribution of {param} in generation {selected_gen}',
+                    f'Distribution of {param_selected} in generation {selected_gen}',
                     f"Average: {avrg}",
                     f'Number of elements: {nel}')

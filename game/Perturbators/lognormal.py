@@ -40,8 +40,6 @@ class LogNormal(Perturbator):
         Returns:
             SOP: Perturbed SOP
         """
-        if len(self.settings['only_perturb']) == 0:
-            self.select = [k for k in sop.parameters_names]
         p_sop: SOP = deepcopy(sop)
 
         if '__fact' in self.select:

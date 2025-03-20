@@ -112,7 +112,7 @@ class KINSection(Section):
                         '',
                         '')
             gen_rows = [
-                self.kin_db.get_kin_rc(table=f'G{gen_i}',
+                self.kin_db.get_kin_rc(table=f'G{gen_i:04d}',
                                        From=self.gapp.og_names[From],
                                        To=self.gapp.og_names[To],
                                        pres=pres,

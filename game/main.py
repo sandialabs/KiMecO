@@ -19,7 +19,7 @@ from game.scoring_f.weighteddif import WeightedDif
 def main() -> None:
     if len(sys.argv) != 2:
         print("""
-    ROCKME needs various parameters to be set in a JSON input file.
+    GAME needs various parameters to be set in a JSON input file.
     This JSON input file should be supplied as the first and only
     argument.
 
@@ -58,22 +58,34 @@ def main() -> None:
         # Default scoring function
         sf = WeightedDif(settings=settings)
 
-    if settings['pert'] == 'normal':
-        pert = Normal(settings=settings,
-                      initial_SOP=init_SOP)
-    elif settings['pert'] == 'lognormal':
-        pert = LogNormal(settings=settings,
-                         initial_SOP=init_SOP)
-    else:
-        raise NotImplementedError('Currently, the only type of perturbator\
-                                   implemented is <normal>')
+    pert: Normal | LogNormal = set_pert(
+        settings=settings,
+        init_SOP=init_SOP)
     pert.set_gen_fact(0)
 
+    # Sensitivity analysis
+    if len(settings['only_perturb']) == 0:
+        sensitivity = Linear(
+            elements=[Element(
+                sop=init_SOP,
+                id=0,
+                sf=sf)],
+            settings=settings,
+            rc_tpl=input_tpl,
+            loc=location,
+            sf=sf,
+            pert=pert)
+        sensitivity.run()
+        settings['only_perturb'] = sensitivity.selected
+
+    # Reinitialize the perturbator once the list of parameters to perturb
+    # has been reduced
+    pert: Normal | LogNormal = set_pert(
+        settings=settings,
+        init_SOP=init_SOP)
+
     first_gen = Generation(
-        elements=[Element(
-            sop=init_SOP,
-            id=0,
-            sf=sf)],
+        elements=[sensitivity.elements[0]],
         settings=settings,
         rc_tpl=input_tpl,
         loc=location,
@@ -106,17 +118,6 @@ def main() -> None:
     for id in range(settings['n_elem']):
         prev_gen[id] = first_gen.elements[0]
 
-    if len(settings['only_perturb']) == 0:
-        sensitivity = Linear(elements=first_gen.elements,
-                             settings=settings,
-                             rc_tpl=input_tpl,
-                             loc=location,
-                             sf=sf,
-                             pert=pert)
-        sensitivity.run()
-        settings['only_perturb'] = sensitivity.selected
-    else:
-        settings['only_perturb'] = [k for k in init_SOP.parameters_names]
     print('Parameters to perturb:\n',
           f"{settings['only_perturb']}")
 
@@ -138,11 +139,12 @@ def main() -> None:
         # print('Initialization of generation')
         new_gen.run()
         means, stds = new_gen.get_stats()
-        if not isconverged(threshold=settings['final_conv'],
-                                old_means=old_means,
-                                old_stds=old_stds,
-                                new_means=new_gen.means,
-                                new_stds=new_gen.stds):
+        if not isconverged(
+           threshold=settings['final_conv'],
+           old_means=old_means,
+           old_stds=old_stds,
+           new_means=new_gen.means,
+           new_stds=new_gen.stds):
             prev_gen, new_elements = ga.next_gen(gen=new_gen)
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
@@ -207,3 +209,17 @@ def isconverged(threshold: float,
                 print(f'StdD new: {new_std}')
 
     return converged
+
+
+def set_pert(settings,
+             init_SOP: SOP):
+    if settings['pert'] == 'normal':
+        pert = Normal(settings=settings,
+                      initial_SOP=init_SOP)
+    elif settings['pert'] == 'lognormal':
+        pert = LogNormal(settings=settings,
+                         initial_SOP=init_SOP)
+    else:
+        raise NotImplementedError('Currently, the only type of perturbator\
+                                   implemented is <normal>')
+    return pert

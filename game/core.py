@@ -253,6 +253,11 @@ class CoreRun:
             flnm: str = f'{self.loc}/{self.name}/{self.name}{el.name}S{sim:02d}.json'
             if os.path.isfile(f'{flnm}'):
                 filenames.append(f'{flnm}')
+            else:
+                # Bug during SIM submission, resubmit
+                el.status = ElementStatus.KIN
+        if len(filenames) == 0:
+            return
         self.submit_helper(hlp_idx=hlp_idx,
                            filenames=filenames)
 

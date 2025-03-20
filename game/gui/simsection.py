@@ -84,7 +84,7 @@ class SIMSection(Section):
 
             gen_arr = [
                 np.array(self.sim_db.get_TP_sim_profiles(
-                    table=f'G{gen_i}',
+                    table=f'G{gen_i:04d}',
                     species=specs,
                     pres=np.round(Q_(f"{pres} torr").to("Pa").magnitude, 5),
                     temp=temp))
