@@ -20,6 +20,7 @@ setup(
                           "cantera>=3.0.0",
                           "numpy>=1.22.4",
                           "pandas>=2.2",
+                          "setuptools>=61.0",
                           "sqlalchemy"],  # add any additional packages that
         # needs to be installed along with your package. Eg: 'caer'
 

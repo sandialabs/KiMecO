@@ -1,4 +1,4 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: game
 Version: 0.0.1
 Summary: GAME
@@ -47,6 +47,7 @@ Requires-Python: >=3.10.14
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Dynamic: author
+Dynamic: license-file
 Dynamic: maintainer
 Dynamic: requires-python
 

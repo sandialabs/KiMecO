@@ -13,10 +13,15 @@ mandatory_keys: dict[str, Any] = {
     # If no 'base' specie is given, N2 is assumed to be the base.
     # (most likely with air composition).
     "initial_X": {},
-    # CSV files for the experimental reaction profiles
-    # list of str correspondint to the path of the profiles
+    # CSV files for the experimental reaction profiles.
+    # list of str corresponding to the path of the profiles
     # order is P1T1, P1T2, ..., P2T1, P2T2,...
-    "exp_profiles": []
+    "exp_profiles": [],
+    # CSV files for the experimental error associated with
+    # the reaction profiles.
+    # list of str corresponding to the path of the profiles
+    # order is eP1T1, eP1T2, ..., eP2T1, eP2T2,...
+    "exp_error": []
                                   }
 
 default_settings: dict[str, Any] = {
