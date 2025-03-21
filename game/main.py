@@ -1,6 +1,8 @@
 import sys
 import os
-from typing import Dict
+import math
+import numpy as np
+from typing import Any, Dict
 from game.GeneticAlgo.tournament import Tournament
 from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
@@ -77,6 +79,12 @@ def main() -> None:
             pert=pert)
         sensitivity.run()
         settings['only_perturb'] = sensitivity.selected
+        f_el = sensitivity.elements[0]
+    else:
+        f_el = Element(
+            sop=init_SOP,
+            id=0,
+            sf=sf)
 
     # Reinitialize the perturbator once the list of parameters to perturb
     # has been reduced
@@ -85,7 +93,7 @@ def main() -> None:
         init_SOP=init_SOP)
 
     first_gen = Generation(
-        elements=[sensitivity.elements[0]],
+        elements=[f_el],
         settings=settings,
         rc_tpl=input_tpl,
         loc=location,
@@ -122,7 +130,6 @@ def main() -> None:
           f"{settings['only_perturb']}")
 
     while not converged and Generation.total() < settings['max_gen']:
-        # init_t_start = time()
         new_gen = Generation(elements=new_elements,
                              settings=settings,
                              rc_tpl=input_tpl,
@@ -134,11 +141,29 @@ def main() -> None:
                              pert=pert,
                              previous_el=prev_gen
                              )
-        # init_t_end = time()
-        # gen_init_time = init_t_end - init_t_start
-        # print('Initialization of generation')
         new_gen.run()
-        means, stds = new_gen.get_stats()
+
+        # Actualize the list of best elements accross all generations
+        if new_gen.id == 1:
+            median = np.median([
+                el.score for el in new_gen.elements
+                ])
+            goat: list[Element] = [
+                el for el in new_gen.elements if el.score <= median]
+        else:
+            old_scores = np.array([el.score for el in goat])
+            low_new = np.array([
+                el for el in new_gen.elements
+                if el.score < np.max(old_scores)])
+            for el in low_new:
+                if el.score < np.max([el.score for el in goat]):
+                    new_scores: list[float] = [el.score for el in goat]
+                    goat[new_scores.index(np.max(new_scores))] = el
+
+        means, stds = get_stats(
+            elements=goat,
+            settings=settings
+            )
         if not isconverged(
            threshold=settings['final_conv'],
            old_means=old_means,
@@ -156,10 +181,10 @@ def main() -> None:
 
 
 def isconverged(threshold: float,
-                     old_means: Dict[str, float],
-                     old_stds: Dict[str, float],
-                     new_means: Dict[str, float],
-                     new_stds: Dict[str, float]) -> bool:
+                old_means: Dict[str, float],
+                old_stds: Dict[str, float],
+                new_means: Dict[str, float],
+                new_stds: Dict[str, float]) -> bool:
     """Check if the means and standard deviations
     have converged within a user defined threshold.
 
@@ -181,13 +206,13 @@ def isconverged(threshold: float,
     # Check convergence for means
     for key in old_means:
         if key in new_means:
-            old_mean = old_means[key]
-            new_mean = new_means[key]
+            old_mean: float = old_means[key]
+            new_mean: float = new_means[key]
             if old_mean != 0:  # Avoid division by zero
-                ratio_mean = abs(new_mean - old_mean) / abs(old_mean)
+                ratio_mean: float = abs(new_mean - old_mean) / abs(old_mean)
                 if ratio_mean > threshold:
                     converged = False
-                    print(f"{key} not converged: {ratio_mean}")
+                    print(f"MEAN {key} not converged: {ratio_mean}")
             else:
                 print(f'Warning: {key} skipped (div 0)')
                 print(f'Mean old: {old_mean}')
@@ -202,7 +227,7 @@ def isconverged(threshold: float,
                 ratio_std: float = abs(new_std - old_std) / abs(old_std)
                 if ratio_std > threshold:
                     converged = False
-                    print(f"{key} not converged: {ratio_std}")
+                    print(f"STD {key} not converged: {ratio_std}")
             else:
                 print(f'Warning: {key} skipped (div 0)')
                 print(f'StdD old: {old_std}')
@@ -212,7 +237,7 @@ def isconverged(threshold: float,
 
 
 def set_pert(settings,
-             init_SOP: SOP):
+             init_SOP: SOP) -> Normal | LogNormal:
     if settings['pert'] == 'normal':
         pert = Normal(settings=settings,
                       initial_SOP=init_SOP)
@@ -223,3 +248,49 @@ def set_pert(settings,
         raise NotImplementedError('Currently, the only type of perturbator\
                                    implemented is <normal>')
     return pert
+
+
+def get_stats(elements: list[Element],
+              settings: dict[str, Any]
+              ) -> tuple[Dict[str, float], Dict[str, float]]:
+    """Calculate the standard deviation of each key in the
+    parameters_names dictionary across all SOP objects.
+
+    Returns:
+        Dict[str, float]: Dictionary with the mean values for each key.
+        Dict[str, float]:
+            Dictionary with the standard deviation for each key.
+    """
+
+    sop_list: list[SOP] = [
+        el.sop for el in elements
+        ]
+
+    # Initialize dictionaries to hold the sum of values,
+    # sum of squared values, and a count of SOPs
+    sum_values: Dict[str, float] = {}
+    sum_squared_values: Dict[str, float] = {}
+    count: int = len(sop_list)
+
+    # Iterate through each SOP object
+    for sop in sop_list:
+        parameters = sop.parameters_names
+        for key, value in parameters.items():
+            if key not in settings['only_perturb']:
+                continue
+            if key not in sum_values:
+                sum_values[key] = 0.0
+                sum_squared_values[key] = 0.0
+            sum_values[key] += value
+            sum_squared_values[key] += value ** 2
+
+    # Calculate the standard deviation for each key
+    stddev_values: Dict[str, float] = {}
+    mean_values: Dict[str, float] = {}
+    for key in sum_values:
+        mean: float = sum_values[key] / count
+        mean_values[key] = mean
+        variance: float = (sum_squared_values[key] / count) - (mean ** 2)
+        stddev_values[key] = math.sqrt(variance) if variance > 0 else 0.0
+
+    return mean_values, stddev_values

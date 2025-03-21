@@ -1,6 +1,8 @@
 from typing import Any
 from game.bimolecular import Bimolecular
 from game.well import Well
+import numpy as np
+from numpy.typing import NDArray
 
 
 class Barrier(Well):
@@ -12,30 +14,50 @@ class Barrier(Well):
 
         super().__init__(name=name)
         self.connected: list[Well | Bimolecular] = [lside, rside]
-        self.energy: float
+        self._energy: float
         self.ifreq: float
         self.barrierless: bool = False
 
     @property
+    def frequencies(self) -> NDArray[Any]:
+        if not self.barrierless:
+            freq: NDArray = super(Barrier, self).frequencies
+        else:
+            tmp = []
+            for side in self.connected:
+                if isinstance(side, Bimolecular):
+                    tmp.extend(side.fragments[0].frequencies.tolist())
+                    tmp.extend(side.fragments[1].frequencies.tolist())
+                    break
+            freq: NDArray = np.array(tmp)
+        return freq
+
+    @property
+    def energy(self):
+        if self.barrierless:
+            return max(self.connected[0].energy,
+                       self.connected[1].energy)
+        else:
+            return self._energy
+
+    @property
     def r_coff(self) -> float:
-        return 0.01
+        return min(self.r_lenergy, self.r_renergy)
 
     @property
     def r_lenergy(self) -> float:
-        le: float = self.energy - self.connected[0].energy
-        re: float = self.energy - self.connected[1].energy
-        return (le - min(le, re) + 0.01)
+        return self.energy - self.connected[0].energy
 
     @property
     def r_renergy(self) -> float:
-        le: float = self.energy - self.connected[0].energy
-        re: float = self.energy - self.connected[1].energy
-        return (re - min(le, re) + 0.01)
+        return self.energy - self.connected[1].energy
 
     @property
     def db_dict(self) -> dict[str, Any]:
+        # barrierless are not perturbed
+        if self.barrierless:
+            return {}
         db_dict: dict = super(Barrier, self).db_dict
-        # Not true for barrierless reactions
-        if hasattr(self, 'ifreq'):
-            db_dict.update({f"{self.name}__if": float(self.ifreq)})
+        db_dict.update({f"{self.name}__if": float(self.ifreq)})
+
         return db_dict

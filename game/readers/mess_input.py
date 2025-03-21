@@ -415,7 +415,10 @@ class MessInputReader:
             energy (float): Energy of the object in (kcal/mol)
             lnum (int): Line number in input file
         """
-        self.SOP.items[name].energy = energy
+        if isinstance(self.SOP.items[name], Barrier):
+            self.SOP.items[name]._energy = energy
+        else:
+            self.SOP.items[name].energy = energy
         new_line: str = f"{self.file[lnum].split()[0]}" \
                         + " {" + f"{name}" \
                         + ".energy}\n"

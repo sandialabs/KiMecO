@@ -1,3 +1,4 @@
+from copy import deepcopy
 from game.GeneticAlgo.ga import GeneticAlgorithm
 from game.element import Element
 from game.generation import Generation
@@ -27,22 +28,21 @@ class Tournament(GeneticAlgorithm):
         """
         # Change the intensity of the perturbation
         self.pert.set_gen_fact(gen=gen.id)
-        next_gen: list[Element] = []
+        next_gen: list[Element] = deepcopy(gen.elements)
         prev_gen: dict[int, Element] = {}
         random.shuffle(gen.elements)
-        for idx, el1 in enumerate(gen.elements[1::2]):
-            el2: Element = gen.elements[idx*2]
+        half = int(len(gen.elements)/2)
+        for idx, el1 in enumerate(gen.elements[1:half]):
+            el2: Element = gen.elements[idx+half]
             if el1.score < el2.score:
                 winner: Element = el1
+                loser: Element = el2
             else:
                 winner: Element = el2
-            # The winner has nothing to calculate
-            # But its id must be changed so that each id is unique
-            next_gen.append(winner)
-            winner.id = idx*2  # Change the ID of the winner to keep it unique
-            prev_gen[idx*2+1] = winner
-            next_gen.append(
-                Element(sop=self.pert.perturb(sop=winner.sop),
-                        id=idx*2+1,
-                        sf=self.sf))
+                loser: Element = el1
+            prev_gen[loser.id] = winner
+            next_gen[loser.id] = Element(
+                sop=self.pert.perturb(sop=winner.sop),
+                id=loser.id,
+                sf=self.sf)
         return prev_gen, next_gen

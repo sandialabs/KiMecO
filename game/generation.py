@@ -107,7 +107,8 @@ class Generation(CoreRun):
             sop=SOP.from_db_row(sop_tpl=self.elements[0].sop,
                                 row=row[1:]),
             id=row[0],
-            sf=self.sf)
+            sf=self.sf,
+            gen=self.id)
             for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
         for el in new_gen:
             not_default: List[bool] = [
@@ -128,8 +129,9 @@ class Generation(CoreRun):
             Dict[str, float]:
                 Dictionary with the standard deviation for each key.
         """
-        scores = [el.score for el in self.elements]
-        median = np.median(scores)
+        median = np.median([
+            el.score for el in self.elements
+            ])
         sop_list: List[SOP] = [
             el.sop for el in self.elements if el.score <= median
             ]
