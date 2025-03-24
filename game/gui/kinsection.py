@@ -71,7 +71,8 @@ class KINSection(Section):
                 rc_to in self.species and
                 rc_P in self.settings['rc_pres'] and
                 rc_T in self.settings['rc_temp'] and
-                all([gen_i in range(self.gapp.kin_tot_g) for gen_i in selected_gen])):
+                all([gen_i in range(self.gapp.kin_tot_g)
+                     for gen_i in selected_gen])):
                 return {'display': 'block'}
             else:
                 return {'display': 'none'}
@@ -96,7 +97,8 @@ class KINSection(Section):
                               pres: float,
                               temp: float,
                               selected_gen: list[int]
-                            ) -> tuple[dict[str, str], Figure, str, str, str]:
+                              ) -> \
+                tuple[dict[str, str], Figure, str, str, str]:
             avrg = []
             nel = []
             fig = go.Figure()

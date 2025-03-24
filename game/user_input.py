@@ -44,10 +44,9 @@ def check_input(input_file: str) -> dict:
 
     # Check if initial concentrations are correct:
     # May fail if mandatory key is missing
-    
+
     # Calculate total number of mol in 1 cm3
     # n = PV/RT
-    min_ntot = np.inf
     json_file['initial_X'] = []
     if 'initial_C' in json_file:
         sum = 0.0

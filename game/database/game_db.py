@@ -87,7 +87,9 @@ class Game_db:
         Returns:
             bool: is in db or not
         """
-        query: TextClause = text(text=f"SELECT id FROM {table} WHERE id={id+1}")
+        query: TextClause = text(
+            text=f"SELECT id FROM {table} WHERE id={id+1}"
+            )
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         if len(db_rslt) == 0:
@@ -284,5 +286,3 @@ class Game_db:
         with self.eng.begin() as connection:
             rslt: Sequence[Row[Any]] = connection.execute(query).fetchall()
         return rslt
-    
-

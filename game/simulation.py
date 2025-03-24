@@ -221,7 +221,8 @@ class SIM:
 
     def get_reaction_eq(self,
                         reactant: Well | Bimolecular,
-                        product: Well | Bimolecular) -> tuple[list[str], list[str]]:
+                        product: Well | Bimolecular
+                        ) -> tuple[list[str], list[str]]:
         """Create the reation's equations (forward and reverse) and find
         appropriate units for the rate coefficient.
 
@@ -330,10 +331,10 @@ class SIM:
                 simid += 1
                 name: str = f'sim{simid}'
                 new_sim = ct.Solution(name=name,
-                                        thermo='ideal-gas',
-                                        kinetics='gas',
-                                        species=species,
-                                        reactions=reactions)
+                                      thermo='ideal-gas',
+                                      kinetics='gas',
+                                      species=species,
+                                      reactions=reactions)
                 new_sim.TP = t, p
                 self.simulations.append(new_sim)
 

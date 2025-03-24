@@ -99,12 +99,16 @@ for idx, id in enumerate(row_ids):
 # # Happens when db is occupied/locked
 # except sqlalchemy.exc.OperationalError:
 traces['row_ids'] = row_ids
-traces_serializable = {{key: value.tolist() if isinstance(value, np.ndarray) else value for key, value in traces.items()}}
+traces_serializable = \
+    {{key: value.tolist() if isinstance(value, np.ndarray)
+    else value for key, value in traces.items()}}
 # Serializing json
 json_object = json.dumps(traces_serializable, indent=4)
 
 # Writing to sample.json
-with open(f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json", "w") as outfile:
+with open(
+    f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json", "w"
+    ) as outfile:
     outfile.write(json_object)
 
 """

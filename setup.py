@@ -21,7 +21,9 @@ setup(
                           "numpy>=1.22.4",
                           "pandas>=2.2",
                           "setuptools>=61.0",
-                          "sqlalchemy"],  # add any additional packages that
+                          "sqlalchemy",
+                          "sqlalchemy-utils",
+                          "dash"],  # add any additional packages that
 
         keywords=['python',
                   'game',

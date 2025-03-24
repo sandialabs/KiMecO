@@ -4,7 +4,9 @@ requires = ["setuptools>=61.0",
             "cantera>=3.0.0",
             "numpy>=1.22.4",
             "pandas>=2.2",
-            "sqlalchemy"]
+            "sqlalchemy",
+            "sqlalchemy-utils",
+            "dash"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
