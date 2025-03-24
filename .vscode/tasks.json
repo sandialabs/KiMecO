@@ -6,7 +6,7 @@
         {
             "label": "LoadEnv",
             "type": "shell",
-            "command": "conda activate game"
+            "command": "source ~/.bashrc; conda activate game"
         }
     ]
 }

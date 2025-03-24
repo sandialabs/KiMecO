@@ -18,12 +18,14 @@ setup(
         packages=find_packages(),
         install_requires=["ase>=3.22.1",
                           "cantera>=3.0.0",
-                          "numpy>=1.22.4",
+                          "numpy>=2",
                           "pandas>=2.2",
                           "setuptools>=61.0",
                           "sqlalchemy",
                           "sqlalchemy-utils",
-                          "dash"],  # add any additional packages that
+                          "dash",
+                          "pint",
+                          "mess"],  # add any additional packages that
 
         keywords=['python',
                   'game',

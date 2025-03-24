@@ -71,6 +71,8 @@ def check_input(input_file: str) -> dict:
                 # Setup molar fraction for each experiment for 1cm^3
                 for p in json_file['rc_pres']:
                     for t in json_file['rc_temp']:
+                        if len(json_file['initial_X']) <= exp:
+                            json_file['initial_X'].append({})
                         ntot = p*0.001/(62.363577*t)
                         json_file['initial_X'][exp][key] = n/ntot
                         exp += 1
@@ -89,7 +91,8 @@ def check_input(input_file: str) -> dict:
     # Has unknown keys?
     for key in json_file:
         if key not in default_settings and\
-           key not in mandatory_keys:
+           key not in mandatory_keys and\
+           key != 'initial_X':
             print(f"{key} is an unknown keyword and will be ignored.")
 
     # Set default values for all keys
@@ -114,7 +117,7 @@ def check_input(input_file: str) -> dict:
             for t in range(len(json_file['rc_temp'])):
                 idx: int = p*len(json_file['rc_temp']) + t
                 file: str = json_file['exp_profiles'][idx]
-                file_err: str = json_file['exp_error'][idx]
+                file_err: str = json_file['exp_errors'][idx]
                 clean_profiles.append({})
                 clean_errors.append({})
                 exp_headers.append([])
@@ -124,7 +127,7 @@ def check_input(input_file: str) -> dict:
                     cancel_run = True
                 else:
                     # Read experimental profiles
-                    with open(file, 'r') as f:
+                    with open(file, mode='r', encoding='utf-8-sig') as f:
                         csv_DictReader = csv.DictReader(f)
                         ln = 0
                         for line in csv_DictReader:
@@ -157,14 +160,14 @@ def check_input(input_file: str) -> dict:
                                         cancel_run = True
                             ln += 1
                     # Read experimental profiles errors
-                    with open(file_err, 'r') as f:
+                    with open(file_err, mode='r', encoding='utf-8-sig') as f:
                         csv_DictReader = csv.DictReader(f)
                         ln = 0
                         for line in csv_DictReader:
                             if 'time' not in line:
                                 print(
                                     "A column should be the 'time'",
-                                    f"column in file {file}.")
+                                    f"column in file {file_err}.")
                                 cancel_run = True
                             else:
                                 for header in line:
@@ -202,6 +205,14 @@ def check_input(input_file: str) -> dict:
         for cidx, col in enumerate(prof):
             clean_profiles[idx][cidx] = prof[col]
     json_file['exp_profiles'] = clean_profiles
+    # Do the same with error files
+    for idx, prof in enumerate(clean_errors):
+        clean_errors[idx] = np.empty(
+            shape=(len(prof), len(prof['time'])),
+            dtype=float64)
+        for cidx, col in enumerate(prof):
+            clean_errors[idx][cidx] = prof[col]
+    json_file['exp_errors'] = clean_errors
 
     # Modify score_sp to contain appropriate species
     if json_file['score_sp'] == []:

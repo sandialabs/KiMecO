@@ -21,7 +21,7 @@ mandatory_keys: dict[str, Any] = {
     # the reaction profiles.
     # list of str corresponding to the path of the profiles
     # order is eP1T1, eP1T2, ..., eP2T1, eP2T2,...
-    "exp_error": []
+    "exp_errors": []
                                   }
 
 default_settings: dict[str, Any] = {

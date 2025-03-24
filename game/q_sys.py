@@ -5,7 +5,7 @@ from game.templates.slurm import slurmtpl
 from subprocess import Popen, PIPE
 import numpy as np
 from numpy.typing import NDArray
-from numpy import int16, int32, ndarray, unicode_
+from numpy import int16, int32, ndarray, str_
 from typing import Any
 import getpass
 import os
@@ -78,12 +78,12 @@ class QueueingSystem:
         # Define a dtype object to create a structured numpy array.
         self.jobdata = np.dtype(dtype=[
             ('sub_id', int32),
-            ('name', unicode_, (20)),
-            ('loc', unicode_, (150)),
-            ('status', unicode_, (10)),
+            ('name', str_, (20)),
+            ('loc', str_, (150)),
+            ('status', str_, (10)),
             ('cpu', int16),
             ('mem', int32),
-            ('type', unicode_, (3))])
+            ('type', str_, (3))])
 
         self.kin_q: NDArray[Any] = np.empty(shape=(nkin), dtype=self.jobdata)
         self.sim_q: NDArray[Any] = np.empty(shape=(nsim), dtype=self.jobdata)

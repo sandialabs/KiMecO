@@ -86,7 +86,6 @@ class RateCo:
         """Generate and submit a Kinetic
         Constants calculation
         """
-        # not os.path.isfile(self.output_name) and\
         if self.status in {
            JobStatus.NOT_IN_QUEUE,
            JobStatus.FAILED}:
