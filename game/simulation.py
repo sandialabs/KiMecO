@@ -367,17 +367,18 @@ class SIM:
         """
         time_steps: list[int] = \
             [len(i[0]) for i in self.settings['exp_profiles']]
+        exp = sim_id % len(self.simulations)
         ct_job: str = self.ctjobtpl.format(
             db=self.db,
             sim_name=name,
             sim_id=sim_id,
             el_num=self.id,
             time=self.settings['exp_profiles']
-            [sim_id - self.id*len(time_steps)][0].tolist(),
+            [exp][0].tolist(),
             all_tsteps=time_steps,
             gen_name=self.gen_name,
             to_watch=self.species,
-            initial_X=self.settings['initial_X']
+            initial_X=self.settings['initial_X'][exp]
             )
         with open(f'{self.loc}/{name}.py', 'w') as f:
             f.write(ct_job)

@@ -22,11 +22,10 @@ setup(
                           "pandas>=2.2",
                           "setuptools>=61.0",
                           "sqlalchemy"],  # add any additional packages that
-        # needs to be installed along with your package. Eg: 'caer'
 
         keywords=['python',
                   'game',
-                  'genetic algorythm',
+                  'machine learning',
                   'master equation',
                   'kinetics'],
         classifiers=[

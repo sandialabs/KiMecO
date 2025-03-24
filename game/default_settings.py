@@ -7,12 +7,12 @@ mandatory_keys: dict[str, Any] = {
     "initial_mess": "",
     # path to Cantera mechanism file
     "ct_yaml": "",
-    # Dictionary {'ct_name': float} of initial molecular percentage.
-    # (see X in Cantera)
+    # Dictionary {'ct_name': float} of initial density (molecules/cm^3).
+    # (converted to molar fraction in Cantera)
     # Note: One specie concentration can be 'base', meaning 1-the rest.
     # If no 'base' specie is given, N2 is assumed to be the base.
     # (most likely with air composition).
-    "initial_X": {},
+    "initial_C": {},
     # CSV files for the experimental reaction profiles.
     # list of str corresponding to the path of the profiles
     # order is P1T1, P1T2, ..., P2T1, P2T2,...

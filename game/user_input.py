@@ -6,6 +6,7 @@ from game.default_settings import default_settings, mandatory_keys
 import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
+from scipy.constants import Avogadro
 
 
 def check_input(input_file: str) -> dict:
@@ -43,33 +44,48 @@ def check_input(input_file: str) -> dict:
 
     # Check if initial concentrations are correct:
     # May fail if mandatory key is missing
-    if 'initial_X' in json_file:
+    
+    # Calculate total number of mol in 1 cm3
+    # n = PV/RT
+    min_ntot = np.inf
+    json_file['initial_X'] = []
+    if 'initial_C' in json_file:
         sum = 0.0
         base_key = 'n2'
         base_given = False
-        for key, value in json_file['initial_X'].items():
+        for key, value in json_file['initial_C'].items():
             if not isinstance(key, str):
-                print('initial_X keys should be ct species names.')
+                print('initial_C keys should be ct species names.')
                 cancel_run = True
                 break
-            if isinstance(value, str) and value.casefold() == 'base' and\
-               not base_given:
-                base_key: str = key
-                base_given = True
-            elif isinstance(value, float):
-                sum += value
-                if sum > 1.0:
+            if isinstance(value, str) and value.casefold() == 'base':
+                if not base_given:
+                    base_key: str = key
+                    base_given = True
+                else:
                     print(
-                        f"The sum of initial X exeeds 1 from specie {key}.")
+                        f"{key} cannot be the base. It is already {base_key}.")
+                    cancel_run = True
+            elif isinstance(value, float):
+                n = value/Avogadro
+                exp = 0
+                # Setup molar fraction for each experiment for 1cm^3
+                for p in json_file['rc_pres']:
+                    for t in json_file['rc_temp']:
+                        ntot = p*0.001/(62.363577*t)
+                        json_file['initial_X'][exp][key] = n/ntot
+                        exp += 1
+                sum += n/ntot
+                if sum > 1:
+                    print(
+                        "The sum of initial C exeeds the total pressure.")
                     cancel_run = True
             else:
-                if base_given:
-                    print('More than 1 base given in initial_X.')
-                else:
-                    print('Values of initial_X should be floats.')
+                print('Values of initial_X should be floats.')
                 cancel_run = True
                 break
-        json_file['initial_X'][base_key] = 1 - sum
+        for exp in json_file['initial_X']:
+            exp[base_key] = 1 - sum
 
     # Has unknown keys?
     for key in json_file:
@@ -87,6 +103,7 @@ def check_input(input_file: str) -> dict:
 
     # READ CSVs
     clean_profiles = []
+    clean_errors = []
     species = []
     exp_headers = []
     n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
@@ -98,12 +115,16 @@ def check_input(input_file: str) -> dict:
             for t in range(len(json_file['rc_temp'])):
                 idx: int = p*len(json_file['rc_temp']) + t
                 file: str = json_file['exp_profiles'][idx]
+                file_err: str = json_file['exp_error'][idx]
                 clean_profiles.append({})
+                clean_errors.append({})
                 exp_headers.append([])
-                if not os.path.isfile(file):
+                if not os.path.isfile(file) or\
+                   not os.path.isfile(file_err):
                     print(f'Could not find file {file}.')
                     cancel_run = True
                 else:
+                    # Read experimental profiles
                     with open(file, 'r') as f:
                         csv_DictReader = csv.DictReader(f)
                         ln = 0
@@ -118,6 +139,7 @@ def check_input(input_file: str) -> dict:
                                     # Skip excluded species
                                     if header in json_file['exclude_sp']:
                                         continue
+                                    # Consider other species
                                     if header not in species and\
                                        header != 'time':
                                         species.append(header)
@@ -135,8 +157,39 @@ def check_input(input_file: str) -> dict:
                                               'column {header}')
                                         cancel_run = True
                             ln += 1
+                    # Read experimental profiles errors
+                    with open(file_err, 'r') as f:
+                        csv_DictReader = csv.DictReader(f)
+                        ln = 0
+                        for line in csv_DictReader:
+                            if 'time' not in line:
+                                print(
+                                    "A column should be the 'time'",
+                                    f"column in file {file}.")
+                                cancel_run = True
+                            else:
+                                for header in line:
+                                    # Skip excluded species
+                                    if header in json_file['exclude_sp']:
+                                        continue
+                                    # Consider other species
+                                    if ln == 0:
+                                        clean_errors[-1][header] = []
+                                    try:
+                                        clean_errors[-1][header].append(
+                                            float(line[header]))
+                                    except TypeError:
+                                        print('Incorrect value detected line',
+                                              f'{ln} in file {file}',
+                                              'column {header}')
+                                        cancel_run = True
+                            ln += 1
                 # check the created profiles:
                 nstep: int = len(clean_profiles[-1]['time'])
+                if nstep != len(clean_errors[-1]['time']):
+                    print('Error file has a different number of values',
+                          'than corresponding profile.')
+                    cancel_run = True
                 for header, profile in clean_profiles[-1].items():
                     if len(profile) != nstep:
                         print(
@@ -161,10 +214,6 @@ def check_input(input_file: str) -> dict:
                       'because it is not in the',
                       'experimental profiles.')
                 cancel_run = True
-    # Exclude non-desired species
-    # for sp in json_file['exclude_sp']:
-    #     if sp in json_file['score_sp']:
-    #         json_file['score_sp'].pop(json_file['score_sp'].index(sp))
 
     # Setting the weight for each experiment
     # default
