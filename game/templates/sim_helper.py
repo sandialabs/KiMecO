@@ -20,6 +20,12 @@ sims = []
 while not all(collected):
     for idx, fn in enumerate(filenames):
         if os.path.isfile(fn):
+            # Happens if the file is being written
+            while True:
+                if os.path.getsize(fn) == 0:
+                    time.sleep(0.2)
+                else:
+                    break
             with open(fn, 'r') as f:
                 sim = json.load(f)
             sims.append(sim)

@@ -89,18 +89,7 @@ class Generation(CoreRun):
         message = f'Generation {self.id} completed. RUNTIME:'
         glog.info(f'{message:<65}{runtime:>14.2f}s.')
         glog.info(f"{'Best score:':<65}{self.best_score:>14.2f}")
-        glog.info('Statistics:')
-        glog.info('{:16s} {:10s} {:10s}'.format(
-            'Parameter name',
-            'Mean',
-            'STD dev'
-        ))
-        for k in self.means:
-            glog.info('{:16s} {:-10.2e} {:-10.2e}'.format(
-                k,
-                self.means[k],
-                self.stds[k]
-            ))
+
 
     def restore_gen_from_db(self) -> None:
         """Create a complete list of elements from the data in the database.

@@ -200,8 +200,8 @@ class QueueingSystem:
                os.stat(f"{file}.err").st_size > 0)):
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
-                glog.info(f"Resetting job {job['name']}",
-                          "because an error occurred.")
+                glog.warning(
+                    f"Resetting job {job['name']} because an error occurred.")
                 if jtype == 'kin':
                     os.remove(f"{file}.out")
             else:

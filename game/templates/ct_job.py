@@ -25,9 +25,15 @@ while not os.path.isfile('{sim_name}.pkl'):
     if i > 3:
         exit()
 try:
+    # Happens if the file is being written
+    while True:
+        if os.path.getsize('{sim_name}.pkl') == 0:
+            time.sleep(0.2)
+        else:
+            break
     with open('{sim_name}.pkl', 'rb') as pkl_file:
         wf_gas = pickle.load(pkl_file)
-except EOFError:
+except EOFError as e:
     raise KeyError('Unsuccesful opening of {sim_name}.pkl.')
 
 gas = ct.Solution(name=wf_gas.name,

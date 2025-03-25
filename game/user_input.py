@@ -116,7 +116,8 @@ def check_input(input_file: str) -> dict:
     exp_headers = []
     n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
     if len(json_file['exp_profiles']) != n_exp:
-        glog.info("There should be one csv profile file for each TP condition.")
+        glog.info(
+            "There should be one csv profile file for each TP condition.")
         cancel_run = True
     else:
         for p in range(len(json_file['rc_pres'])):
@@ -138,9 +139,9 @@ def check_input(input_file: str) -> dict:
                         ln = 0
                         for line in csv_DictReader:
                             if 'time' not in line:
-                                glog.info(
-                                    "A column should be the 'time'",
-                                    f"column in file {file}.")
+                                msg = "A column should be the 'time'"
+                                msg += f" in file {file}."
+                                glog.info(msg)
                                 cancel_run = True
                             else:
                                 for header in line:
@@ -159,10 +160,12 @@ def check_input(input_file: str) -> dict:
                                     try:
                                         clean_profiles[-1][header].append(
                                             float(line[header]))
-                                    except TypeError:
-                                        glog.info('Incorrect value detected line',
-                                              f'{ln} in file {file}',
-                                              'column {header}')
+                                    except TypeError as e:
+                                        glog.warning(e)
+                                        msg = 'Incorrect value detected' +\
+                                              f' line{ln} in file {file}' +\
+                                              f' column {header}'
+                                        glog.info(msg)
                                         cancel_run = True
                             ln += 1
                     # Read experimental profiles errors
@@ -171,9 +174,9 @@ def check_input(input_file: str) -> dict:
                         ln = 0
                         for line in csv_DictReader:
                             if 'time' not in line:
-                                glog.info(
-                                    "A column should be the 'time'",
-                                    f"column in file {file_err}.")
+                                msg = "A column should be the 'time'" +\
+                                      f"column in file {file_err}."
+                                glog.info(msg)
                                 cancel_run = True
                             else:
                                 for header in line:
@@ -186,23 +189,26 @@ def check_input(input_file: str) -> dict:
                                     try:
                                         clean_errors[-1][header].append(
                                             float(line[header]))
-                                    except TypeError:
-                                        glog.info('Incorrect value detected line',
-                                              f'{ln} in file {file}',
-                                              'column {header}')
+                                    except TypeError as e:
+                                        glog.warning(e)
+                                        msg = 'Incorrect value detected' +\
+                                              f' line{ln} in file {file}' +\
+                                              f' column {header}'
+                                        glog.info(msg)
                                         cancel_run = True
                             ln += 1
                 # check the created profiles:
                 nstep: int = len(clean_profiles[-1]['time'])
                 if nstep != len(clean_errors[-1]['time']):
-                    glog.info('Error file has a different number of values',
-                              'than corresponding profile.')
+                    msg = 'Error file has a different number of values' +\
+                          ' than corresponding profile.'
+                    glog.info(msg)
                     cancel_run = True
                 for header, profile in clean_profiles[-1].items():
                     if len(profile) != nstep:
-                        glog.info(
-                            f'Not enough values in profile {header}',
-                            f'in file {file}')
+                        msg = f'Not enough values in profile {header}' +\
+                              f' in file {file}'
+                        glog.info(msg)
     # Transform the profiles in numpy structured arrays
     for idx, prof in enumerate(clean_profiles):
         clean_profiles[idx] = np.empty(
@@ -226,9 +232,10 @@ def check_input(input_file: str) -> dict:
     else:
         for sp in json_file['score_sp']:
             if sp not in species:
-                glog.info(f'Specie {key} cannot be scored',
-                      'because it is not in the',
-                      'experimental profiles.')
+                msg = f'Specie {key} cannot be scored' +\
+                      ' because it is not in the' +\
+                      ' experimental profiles.'
+                glog.info(msg)
                 cancel_run = True
 
     # Setting the weight for each experiment
@@ -237,7 +244,7 @@ def check_input(input_file: str) -> dict:
         json_file['w_exp'] = [1.0 for i in range(n_exp)]
     # Error in input
     elif len(json_file['w_exp']) != n_exp:
-        glog.info("The number of weights in w_exp should be {n_exp}")
+        glog.info(f"The number of weights in w_exp should be {n_exp}")
         cancel_run = True
     else:
         sum = 0.0
@@ -251,9 +258,10 @@ def check_input(input_file: str) -> dict:
     json_file['weights'] = []
     for key in json_file['w_species']:
         if key not in species:
-            glog.info(f'Specie {key} cannot have a weight',
-                  'because it is not in the',
-                  'experimental profiles.')
+            msg = f'Specie {key} cannot have a weight' +\
+                  ' because it is not in the' +\
+                  ' experimental profiles.'
+            glog.info(msg)
             cancel_run = True
     for idx, exp_h in enumerate(exp_headers):
         sp_w_exp: NDArray[float64] = np.ones(

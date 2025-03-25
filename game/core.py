@@ -299,8 +299,8 @@ class CoreRun:
                 self.qs.pickUp(id=i,
                                jtype='hlp')
             if self.qs.status(i, 'hlp') == JobStatus.FAILED:
-                glog.warning(f'Helper {i} failed to collect sim profiles.',
-                      'Corresponding sim_ids are reset')
+                glog.warning(f'Helper {i} failed to collect sim profiles.')
+                glog.warning('Corresponding sim_ids are reset')
                 for sim_id in self.sim_hlpers[i]:
                     el: Element = self.elements[sim_id // nsim]
                     el.status = ElementStatus.RESET

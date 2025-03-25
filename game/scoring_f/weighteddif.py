@@ -40,12 +40,13 @@ class WeightedDif(Scoring):
                     self.settings['weights'][sim_index]
                 dif = np.sum(
                     np.abs(
-                        (((1/exp_errs[sim_index])**2)
+                        (((1/exp_errs[sim_index][1:])**2)
                          / len(exp_prof[sim_index][0])) *
-                        (sim.profiles[sim_index].T - exp_prof[sim_index])**2
+                        (sim.profiles[sim_index].T[1:] -
+                         exp_prof[sim_index][1:])**2
                         ),  # Normalize time
                     axis=1
                     )
                 # Accumulate and normalize the x
-                score += dif[1:] * exp_sp_weight
+                score += dif * exp_sp_weight
         return score.tolist()

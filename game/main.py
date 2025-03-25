@@ -143,9 +143,6 @@ def main() -> None:
     for id in range(settings['n_elem']):
         prev_gen[id] = first_gen.elements[0]
 
-    glog.info('Parameters to perturb:\n',
-              f"{settings['only_perturb']}")
-
     median = np.median([
         el.score for el in first_gen.elements
         ])
