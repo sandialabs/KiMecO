@@ -164,8 +164,8 @@ class RateCo:
             names,],
             names=['P', 'T', 'kin_id', 'specie'])
         db_data = np.reshape(
-            a=self.rc,
-            newshape=(
+            self.rc,
+            shape=(
                 len(self.set['rc_pres']) *
                 len(self.set['rc_temp']) *
                 len(names),

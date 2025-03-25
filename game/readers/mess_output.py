@@ -113,4 +113,4 @@ class MessOutputReader:
         if p_idx == len(self.pres):
             self.hp_rc[t_idx] = table
         else:
-            self.rc[t_idx, p_idx] = table
+            self.rc[p_idx, t_idx] = table

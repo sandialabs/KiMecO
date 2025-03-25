@@ -149,7 +149,8 @@ class SOPSection(Section):
                               ptype: str,
                               param_selected: str,
                               selected_gen: list[int]
-                              ) -> tuple[dict[str, str], Figure, str, str, str]:
+                              ) \
+                -> tuple[dict[str, str], Figure, str, str, str]:
             if clic == 0:
                 return ({'display': 'none'},
                         go.Figure(),
@@ -182,16 +183,20 @@ class SOPSection(Section):
             elif ptype == 'e' and param == 'e':
                 title = f'Energy of {molec} (kcal/mol)'
                 if not isinstance(
-                    self.init_SOP.items[raw_molec], Barrier):
-                    std_allowed = self.settings['std_e'] * self.settings['max_std']
+                   self.init_SOP.items[raw_molec], Barrier):
+                    std_allowed = self.settings['std_e'] *\
+                          self.settings['max_std']
                 else:
-                    std_allowed = self.settings['std_b'] * self.settings['max_std']
+                    std_allowed = self.settings['std_b'] *\
+                          self.settings['max_std']
             elif ptype == 'if' and param == 'if':
-                std_allowed = self.settings['std_if'] * self.settings['max_std']
+                std_allowed = self.settings['std_if'] *\
+                      self.settings['max_std']
                 bar: Barrier = self.init_SOP.items[raw_molec]
                 if isinstance(bar.connected[0], Well):
                     if bar.connected[0].name in self.settings['ct_names']:
-                        From: str = self.settings['ct_names'][bar.connected[0].name]
+                        From: str = \
+                            self.settings['ct_names'][bar.connected[0].name]
                     else:
                         From = bar.connected[0].name
                 elif isinstance(bar.connected[0], Bimolecular):
@@ -207,7 +212,8 @@ class SOPSection(Section):
                     raise NotImplementedError('Unknown reactant object.')
                 if isinstance(bar.connected[0], Well):
                     if bar.connected[1].name in self.settings['ct_names']:
-                        To: str = self.settings['ct_names'][bar.connected[1].name]
+                        To: str = \
+                            self.settings['ct_names'][bar.connected[1].name]
                     else:
                         To = bar.connected[1].name
                 elif isinstance(bar.connected[1], Bimolecular):
@@ -223,26 +229,32 @@ class SOPSection(Section):
                     raise NotImplementedError('Unknown reactant object.')
                 title = f'I. frequency from {From} to {To} (1/cm)'
             elif ptype == 'hr' and 'hr' in param:
-                std_allowed = self.settings['std_hr'] * self.settings['max_std']
+                std_allowed = self.settings['std_hr'] *\
+                      self.settings['max_std']
                 title = f'Rotor perturbation {param} of {molec}'
             elif ptype == 'f_p' and 'f_p' in param:
-                std_allowed = self.settings['std_hf_p'] * self.settings['max_std']
+                std_allowed = self.settings['std_hf_p'] *\
+                      self.settings['max_std']
                 title = fr'Frequency perturbation {param} of {molec}'
             elif (ptype == 'lj' and
                     ('epsi' in param or 'sigma' in param)):
                 if 'epsi' in param:
-                    std_allowed = self.settings['std_epsi'] * self.settings['max_std']
+                    std_allowed = self.settings['std_epsi'] *\
+                          self.settings['max_std']
                 elif 'sigma' in param:
-                    std_allowed = self.settings['std_sigma'] * self.settings['max_std']
+                    std_allowed = self.settings['std_sigma'] *\
+                          self.settings['max_std']
                 else:
                     raise KeyError('Unknown parameter in Lennard-Jones.')
                 title = f"{param}"
             elif (ptype == 'me' and
                     (param == 'pow' or param == 'fact')):
                 if param == 'pow':
-                    std_allowed = self.settings['std_pow'] * self.settings['max_std']
+                    std_allowed = self.settings['std_pow'] *\
+                          self.settings['max_std']
                 elif param == 'fact':
-                    std_allowed = self.settings['std_fact'] * self.settings['max_std']
+                    std_allowed = self.settings['std_fact'] *\
+                          self.settings['max_std']
                 else:
                     raise KeyError('Unknown parameter in ME collison.')
             else:
@@ -257,14 +269,21 @@ class SOPSection(Section):
                           line_dash='dash',
                           line_width=4,
                           line_color='brown')
-
+            with open('goat.txt', 'r') as f:
+                lines = f.readlines()
             avrg = []
             nel = []
             cols = ['sop_id']
-            cols.extend(self.gapp.sop_db.columns)
-            gen_rows = [
-                self.gapp.sop_db.get_table(table=f'G{gen_i:04d}')
-                for gen_i in selected_gen]
+            cols.extend(self.sop_db.columns)
+            for gen_i in selected_gen:
+                for origin in lines[gen_i].split():
+                    gen_id = int(origin.split('_')[0])
+                    el_id = int(origin.split('_')[1])
+                    self.sop_db.prepare_batch_select(
+                        table=f'G{gen_id:04d}',
+                        row_id=el_id
+                    )
+            gen_rows = self.sop_db.batch_select()
             for idx, gen_rows in enumerate(gen_rows):
                 df = pd.DataFrame(data=gen_rows, columns=cols)
                 avrg.append(f"{df[param_selected].mean():.3f}")

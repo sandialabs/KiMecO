@@ -1,8 +1,7 @@
 from game.database.game_db import Game_db
 from game.parameters import SOP
 from sqlalchemy import select, Row
-from typing import Sequence
-from typing import Any
+from typing import Any, Sequence
 
 
 class SIM_DB(Game_db):

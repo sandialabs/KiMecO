@@ -14,6 +14,13 @@ import numpy as np
 import numpy.typing as npt
 from numpy import bool_
 from game.templates.sim_helper import sim_helper
+import logging
+from game.logger_config import setup_logger
+
+
+# Call the setup function to configure logging
+setup_logger()
+glog = logging.getLogger()
 
 
 class CoreRun:
@@ -291,7 +298,7 @@ class CoreRun:
                 self.qs.pickUp(id=i,
                                jtype='hlp')
             if self.qs.status(i, 'hlp') == JobStatus.FAILED:
-                print(f'Helper {i} failed to collect sim profiles.',
+                glog.warning(f'Helper {i} failed to collect sim profiles.',
                       'Corresponding sim_ids are reset')
                 for sim_id in self.sim_hlpers[i]:
                     el: Element = self.elements[sim_id // nsim]

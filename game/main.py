@@ -16,11 +16,18 @@ from game.sensitivity.linear import Linear
 from game.user_input import check_input
 from game.parameters import SOP
 from game.scoring_f.weighteddif import WeightedDif
+import logging
+from game.logger_config import setup_logger
+
+
+# Call the setup function to configure logging
+setup_logger()
+glog = logging.getLogger()
 
 
 def main() -> None:
     if len(sys.argv) != 2:
-        print("""
+        glog.info("""
     GAME needs various parameters to be set in a JSON input file.
     This JSON input file should be supplied as the first and only
     argument.
@@ -31,11 +38,11 @@ def main() -> None:
     try:
         input_file: str = sys.argv[1]
     except IndexError:
-        print('To use GAME, supply the input file as argument.')
+        glog.info('To use GAME, supply the input file as argument.')
         sys.exit(-1)
 
     settings: dict = check_input(input_file=input_file)
-
+    glog.info(f"{'Input reading...':<65}{'PASSED':>15}")
     mr = MessInputReader(settings=settings)
     init_SOP: SOP
     input_tpl: list[str]
@@ -52,6 +59,7 @@ def main() -> None:
                     name='GAME_DB_KIN')
     sim_db = SIM_DB(sop=init_SOP,
                     name='GAME_DB_SIM')
+    glog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
 
     # Define which scoring function to use
     if settings['scoring_func'].casefold() == 'weighteddif':
@@ -59,14 +67,17 @@ def main() -> None:
     else:
         # Default scoring function
         sf = WeightedDif(settings=settings)
+    glog.info(f"{'Scoring function:':<65}{sf.name:>15}")
 
     pert: Normal | LogNormal = set_pert(
         settings=settings,
         init_SOP=init_SOP)
     pert.set_gen_fact(0)
+    glog.info(f"{'Perturbator:':<65}{pert.name:>15}")
 
     # Sensitivity analysis
     if len(settings['only_perturb']) == 0:
+        glog.info(f"{'Running sensitivity analysis':<65}")
         sensitivity = Linear(
             elements=[Element(
                 sop=init_SOP,
@@ -85,12 +96,15 @@ def main() -> None:
             sop=init_SOP,
             id=0,
             sf=sf)
+    glog.info(f"{'Parameters selected for perturbation:':<65}")
+    glog.info(f"{settings['only_perturb']:<65}")
 
     # Reinitialize the perturbator once the list of parameters to perturb
     # has been reduced
     pert: Normal | LogNormal = set_pert(
         settings=settings,
         init_SOP=init_SOP)
+    glog.info(f"{'Selected parameters transmitted to perturbator':<65}")
 
     first_gen = Generation(
         elements=[f_el],
@@ -103,9 +117,6 @@ def main() -> None:
         sf=sf,
         pert=pert)
     first_gen.run()
-    old_means = first_gen.means
-    old_stds = first_gen.stds
-    first_gen.get_stats()
 
     converged = False
 
@@ -126,8 +137,25 @@ def main() -> None:
     for id in range(settings['n_elem']):
         prev_gen[id] = first_gen.elements[0]
 
-    print('Parameters to perturb:\n',
+    glog.info('Parameters to perturb:\n',
           f"{settings['only_perturb']}")
+
+    median = np.median([
+        el.score for el in first_gen.elements
+        ])
+    goat: list[Element] = [
+        el for el in first_gen.elements if el.score <= median]
+    old_means, old_stds = get_stats(
+        elements=goat,
+        settings=settings
+        )
+    goat_line = ''
+    for el in goat:
+        goat_line += f'{el.gen}_{el.id} '
+    goat_line += '\n'
+
+    with open('goat.txt', 'w') as f:
+        f.write(goat_line)
 
     while not converged and Generation.total() < settings['max_gen']:
         new_gen = Generation(elements=new_elements,
@@ -144,21 +172,22 @@ def main() -> None:
         new_gen.run()
 
         # Actualize the list of best elements accross all generations
-        if new_gen.id == 1:
-            median = np.median([
-                el.score for el in new_gen.elements
-                ])
-            goat: list[Element] = [
-                el for el in new_gen.elements if el.score <= median]
-        else:
-            old_scores = np.array([el.score for el in goat])
-            low_new = np.array([
-                el for el in new_gen.elements
-                if el.score < np.max(old_scores)])
-            for el in low_new:
-                if el.score < np.max([el.score for el in goat]):
-                    new_scores: list[float] = [el.score for el in goat]
-                    goat[new_scores.index(np.max(new_scores))] = el
+        old_scores = np.array([el.score for el in goat])
+        low_new = np.array([
+            el for el in new_gen.elements
+            if el.score < np.max(old_scores)])
+        for el in low_new:
+            if el.score < np.max([el.score for el in goat]):
+                new_scores: list[float] = [el.score for el in goat]
+                goat[new_scores.index(np.max(new_scores))] = el
+
+        # Add the new line in goat.txt
+        goat_line = ''
+        for el in goat:
+            goat_line += f'{el.gen}_{el.id} '
+        goat_line += '\n'
+        with open('goat.txt', 'w') as f:
+            f.write(goat_line)
 
         means, stds = get_stats(
             elements=goat,
@@ -168,16 +197,16 @@ def main() -> None:
            threshold=settings['final_conv'],
            old_means=old_means,
            old_stds=old_stds,
-           new_means=new_gen.means,
-           new_stds=new_gen.stds):
+           new_means=means,
+           new_stds=stds):
             prev_gen, new_elements = ga.next_gen(gen=new_gen)
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
         else:
             converged = True
-    print('Run Sucessful.')
-    print(f'Termination at generation {new_gen.id}')
-    print(f'Final score: {new_gen.best_score}')
+    glog.info('Run Sucessful.')
+    glog.info(f'Termination at generation {new_gen.id}')
+    glog.info(f'Final score: {new_gen.best_score}')
 
 
 def isconverged(threshold: float,
@@ -212,11 +241,11 @@ def isconverged(threshold: float,
                 ratio_mean: float = abs(new_mean - old_mean) / abs(old_mean)
                 if ratio_mean > threshold:
                     converged = False
-                    print(f"MEAN {key} not converged: {ratio_mean}")
+                    glog.info(f"MEAN {key} not converged: {ratio_mean}")
             else:
-                print(f'Warning: {key} skipped (div 0)')
-                print(f'Mean old: {old_mean}')
-                print(f'Mean new: {new_mean}')
+                glog.info(f'Warning: {key} skipped (div 0)')
+                glog.info(f'Mean old: {old_mean}')
+                glog.info(f'Mean new: {new_mean}')
 
     # Check convergence for standard deviations
     for key in old_stds:
@@ -227,11 +256,11 @@ def isconverged(threshold: float,
                 ratio_std: float = abs(new_std - old_std) / abs(old_std)
                 if ratio_std > threshold:
                     converged = False
-                    print(f"STD {key} not converged: {ratio_std}")
+                    glog.info(f"STD {key} not converged: {ratio_std}")
             else:
-                print(f'Warning: {key} skipped (div 0)')
-                print(f'StdD old: {old_std}')
-                print(f'StdD new: {new_std}')
+                glog.info(f'Warning: {key} skipped (div 0)')
+                glog.info(f'StdD old: {old_std}')
+                glog.info(f'StdD new: {new_std}')
 
     return converged
 

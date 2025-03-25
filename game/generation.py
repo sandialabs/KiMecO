@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Any
+from typing import List, Any
 from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
 from game.database.sop_db import SOP_DB
@@ -8,9 +8,14 @@ from game.core import CoreRun
 from game.scoring_f.scoring import Scoring
 from game.Perturbators.perturbator import Perturbator
 from game.parameters import SOP
-import math
-import numpy as np
 import time
+import logging
+from game.logger_config import setup_logger
+
+
+# Call the setup function to configure logging
+setup_logger()
+glog = logging.getLogger()
 
 
 class Generation(CoreRun):
@@ -73,7 +78,7 @@ class Generation(CoreRun):
         """Run a generation until all of its elements are scored.
         """
         start_time: float = time.time()
-        print(f'Running generation {self.id} ...')
+        glog.info(f'Running generation {self.id} ...')
         super().run()
         self.end_run(start_time)
 
@@ -81,17 +86,17 @@ class Generation(CoreRun):
         """Report the runtime of the generation."""
         end_time = time.time()
         runtime = end_time - start_time
-        print(f'Generation {self.id} completed in {runtime:.2f} seconds.')
-        self.means, self.stds = self.get_stats()
-        print(f'Best score: {self.best_score}')
-        print('Statistics:')
-        print('{:16s} {:10s} {:10s}'.format(
+        message = f'Generation {self.id} completed. RUNTIME:'
+        glog.info(f'{message:<65}{runtime:>14.2f}s.')
+        glog.info(f"{'Best score:':<65}{self.best_score:>14.2f}")
+        glog.info('Statistics:')
+        glog.info('{:16s} {:10s} {:10s}'.format(
             'Parameter name',
             'Mean',
             'STD dev'
         ))
         for k in self.means:
-            print('{:16s} {:-10.2e} {:-10.2e}'.format(
+            glog.info('{:16s} {:-10.2e} {:-10.2e}'.format(
                 k,
                 self.means[k],
                 self.stds[k]
@@ -120,47 +125,3 @@ class Generation(CoreRun):
                     self.elements[idx] = el
                     break
 
-    def get_stats(self) -> tuple[Dict[str, float], Dict[str, float]]:
-        """Calculate the standard deviation of each key in the
-        parameters_names dictionary across all SOP objects.
-
-        Returns:
-            Dict[str, float]: Dictionary with the mean values for each key.
-            Dict[str, float]:
-                Dictionary with the standard deviation for each key.
-        """
-        median = np.median([
-            el.score for el in self.elements
-            ])
-        sop_list: List[SOP] = [
-            el.sop for el in self.elements if el.score <= median
-            ]
-
-        # Initialize dictionaries to hold the sum of values,
-        # sum of squared values, and a count of SOPs
-        sum_values: Dict[str, float] = {}
-        sum_squared_values: Dict[str, float] = {}
-        count: int = len(sop_list)
-
-        # Iterate through each SOP object
-        for sop in sop_list:
-            parameters = sop.parameters_names
-            for key, value in parameters.items():
-                if key not in self.settings['only_perturb']:
-                    continue
-                if key not in sum_values:
-                    sum_values[key] = 0.0
-                    sum_squared_values[key] = 0.0
-                sum_values[key] += value
-                sum_squared_values[key] += value ** 2
-
-        # Calculate the standard deviation for each key
-        stddev_values: Dict[str, float] = {}
-        mean_values: Dict[str, float] = {}
-        for key in sum_values:
-            mean: float = sum_values[key] / count
-            mean_values[key] = mean
-            variance: float = (sum_squared_values[key] / count) - (mean ** 2)
-            stddev_values[key] = math.sqrt(variance) if variance > 0 else 0.0
-
-        return mean_values, stddev_values

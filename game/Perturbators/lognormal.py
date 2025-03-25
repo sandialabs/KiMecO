@@ -17,6 +17,7 @@ class LogNormal(Perturbator):
         super().__init__(settings=settings,
                          initial_SOP=initial_SOP)
         self.has_boundaries = True
+        self.name = 'LogNormal'
 
     def set_gen_fact(self,
                      gen: int) -> None:

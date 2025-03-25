@@ -3,9 +3,15 @@ from game.simulation import SIM
 import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
+from typing import Any
 
 
 class WeightedDif(Scoring):
+    def __init__(self,
+                 settings: dict[str, Any],
+                 **kwargs) -> None:
+        super().__init__(settings, **kwargs)
+        self.name = 'W-difference'
 
     @property
     def default_score(self) -> float:
