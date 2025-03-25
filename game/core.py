@@ -44,7 +44,7 @@ class CoreRun:
         self.best_score: float = np.inf
         self.name: str = name
         # List of species names used by cantera
-        self.species: list[str] = self.settings['score_sp']
+        self.sc_species: list[str] = self.settings['score_sp']
         # Rate coefficients template
         self.rc_tpl: list[str] = rc_tpl
         self.loc: str = loc
@@ -159,7 +159,8 @@ class CoreRun:
             id=el.id,
             db=self.sim_db,
             gen_name=self.name,
-            species=self.species,
+            sc_species=self.sc_species,
+            species=self.elements[0].sop.species,
             loc=f'{self.loc}/{self.name}',
             q_sys=self.qs,
             set=self.settings

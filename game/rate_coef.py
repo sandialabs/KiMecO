@@ -9,6 +9,12 @@ from game.readers.mess_output import MessOutputReader
 import os
 import numpy as np
 from numpy.typing import NDArray
+import logging
+from game.logger_config import setup_logger
+
+
+setup_logger()
+glog = logging.getLogger()
 
 
 class RateCo:
@@ -131,7 +137,7 @@ class RateCo:
                           jtype='kin')
         if (self.q_sys.status(id=self.id, jtype='kin')
            == JobStatus.FAILED):
-            print(f'Resetting KIN job {self.id}')
+            glog.info(f'Resetting KIN job {self.id}')
             self.status = JobStatus.FAILED
 
         for k, v in self.tbl_map.items():

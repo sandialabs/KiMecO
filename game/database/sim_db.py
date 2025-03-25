@@ -15,17 +15,17 @@ class SIM_DB(Game_db):
         self._select = {}
 
         if isinstance(sop, SOP):
-            self.species: list[str] = sop.species
+            self.sv_species: list[str] = sop.sc_species
 
             self.columns: list[str] = ['P', 'T', 'sim_id', 'time']
-            self.columns.extend(self.species)
+            self.columns.extend(self.sv_species)
         else:
             # Only work if the SIM_DB is already created.
             self.columns: list[str] = [
                 c[1] for c in self.get_col_names(tbl_name)[1:]]
-            self.species = self.columns[4:]
+            self.sv_species = self.columns[4:]
         self.types = [int, float, float, int, float]
-        self.types.extend([float for i in range(len(self.species))])
+        self.types.extend([float for i in range(len(self.sv_species))])
         tbls_in_db = self.get_table_names()
 
         for tbl in tbls_in_db:
@@ -102,7 +102,9 @@ class SIM_DB(Game_db):
                     ).where(
                         self.tables[table].c.sim_id.in_(sim_ids))
             with self.eng.begin() as connection:
-                db_rslt: Sequence[Row[Any]] = connection.execute(query).fetchall()
+                db_rslt: Sequence[Row[Any]] = connection.execute(
+                    query
+                    ).fetchall()
             for row in db_rslt:
                 sim_id = int(row.sim_id)
                 if sim_id not in results:

@@ -8,9 +8,15 @@ from game.parameters import SOP
 from game.database.sop_db import SOP_DB
 from game.database.kin_db import KIN_DB
 from game.database.sim_db import SIM_DB
-from game.gui.sopsection import SOPSection  # Import SOPSection class
-from game.gui.kinsection import KINSection    # Import KINSection class
-from game.gui.simsection import SIMSection      # Import SIMSection class
+from game.gui.sopsection import SOPSection
+from game.gui.kinsection import KINSection
+from game.gui.simsection import SIMSection
+import logging
+from game.logger_config import setup_logger
+
+
+setup_logger()
+glog = logging.getLogger()
 
 
 class GameApp:
@@ -53,7 +59,7 @@ class GameApp:
         for ct_name, name in self.og_names.items():
             if name not in self.init_SOP.wells_names:
                 for bimol in self.init_SOP.bimolecular:
-                    if name in bimol.frag_names():
+                    if name in bimol.frag_names:
                         self.og_names[ct_name] = bimol.name
 
         self.init_vals = self.sop_db.get_table(table='G0000')[0]

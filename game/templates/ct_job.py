@@ -38,7 +38,7 @@ gas = ct.Solution(name=wf_gas.name,
 gas.X = {initial_X}
 gas.TP = wf_gas.T, np.round(Q_(f"{{wf_gas.P}} torr").to("Pa").magnitude, 5)
 # number of mol of gas in 1 cm^3
-ntot = {{wf_gas.P}}*0.001/(62.363577*wf_gas.T)
+ntot = wf_gas.P*0.001/(62.363577*wf_gas.T)
 
 reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
 net = ct.ReactorNet([reactor])

@@ -20,12 +20,15 @@ import logging
 from game.logger_config import setup_logger
 
 
-# Call the setup function to configure logging
-setup_logger()
-glog = logging.getLogger()
-
-
 def main() -> None:
+    # if os.path.isfile('game.log'):
+    #     for i in range(50):
+    #         if not os.path.isfile(f'game.log_{i}'):
+    #             os.remove('game.log', f'game.log_{i}')
+    #             break
+    # Call the setup function to configure logging
+    setup_logger()
+    glog = logging.getLogger()
     if len(sys.argv) != 2:
         glog.info("""
     GAME needs various parameters to be set in a JSON input file.
@@ -97,7 +100,10 @@ def main() -> None:
             id=0,
             sf=sf)
     glog.info(f"{'Parameters selected for perturbation:':<65}")
-    glog.info(f"{settings['only_perturb']:<65}")
+    pp = ''
+    for p in settings['only_perturb']:
+        pp += f'{p} '
+    glog.info(f"{pp:<65}")
 
     # Reinitialize the perturbator once the list of parameters to perturb
     # has been reduced
@@ -138,7 +144,7 @@ def main() -> None:
         prev_gen[id] = first_gen.elements[0]
 
     glog.info('Parameters to perturb:\n',
-          f"{settings['only_perturb']}")
+              f"{settings['only_perturb']}")
 
     median = np.median([
         el.score for el in first_gen.elements
@@ -170,7 +176,13 @@ def main() -> None:
                              previous_el=prev_gen
                              )
         new_gen.run()
-
+        # Change the number of elements in goats after the first generation
+        if len(goat) == 1:
+            median = np.median([
+                el.score for el in new_gen.elements
+            ])
+        goat: list[Element] = [
+            el for el in new_gen.elements if el.score <= median]
         # Actualize the list of best elements accross all generations
         old_scores = np.array([el.score for el in goat])
         low_new = np.array([

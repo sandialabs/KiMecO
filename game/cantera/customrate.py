@@ -59,6 +59,10 @@ class MessRate(ct.ExtensibleRate):
                 params.set_quantity(f"rc_{pidx}_{tidx}",
                                     self.rc[pidx][tidx],
                                     self.conversion_units)
+        for idx, p in enumerate(self.Pgrid):
+            self.Pgrid[idx] = round(p, 5)
+        for idx, t in enumerate(self.Tgrid):
+            self.Tgrid[idx] = round(t, 5)
 
     def validate(self, equation, soln) -> None:
         # if soln.P not in self.Pgrid:
@@ -73,6 +77,10 @@ class MessRate(ct.ExtensibleRate):
         pass
 
     def eval(self, data) -> float:
+        for idx, p in enumerate(self.Pgrid):
+            self.Pgrid[idx] = round(p, 5)
+        for idx, t in enumerate(self.Tgrid):
+            self.Tgrid[idx] = round(t, 5)
         Pindex: int = self.Pgrid.index(round(data.P, 5))
         Tindex: int = self.Tgrid.index(round(data.T, 5))
         return self.rc[Pindex][Tindex]

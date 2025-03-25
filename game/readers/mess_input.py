@@ -19,7 +19,7 @@ class MessInputReader:
         """
 
         self.filename: str = settings["initial_mess"]
-        self.SOP: SOP = SOP(settings['score_sp'])  # Set of parameters
+        self.SOP: SOP = SOP(score_species=settings['score_sp'])
         self.SOP.rc_temp = settings["rc_temp"]
         self.SOP.rc_pres = settings["rc_pres"]
         self.SOP.ct_names = settings["ct_names"]
@@ -121,7 +121,7 @@ class MessInputReader:
                 last_item = 'frag'
                 fname: str = line.split()[1]
                 if not isinstance(self.SOP.items[name], Barrier):
-                    if fname not in self.SOP.items[name].frag_names():
+                    if fname not in self.SOP.items[name].frag_names:
                         self.SOP.items[name].add_new_frag(fname)
                         if fname not in self.SOP.items:
                             self.SOP.items[fname] = \

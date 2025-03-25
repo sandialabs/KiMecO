@@ -41,6 +41,7 @@ class Bimolecular:
         frag = Well(name=name, ct_name=ct_name, *args, pert_e=False)
         self.fragments.append(frag)
 
+    @property
     def frag_names(self) -> list[str]:
         """Return the list of fragments' name for this bimol object
 

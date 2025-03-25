@@ -9,6 +9,12 @@ from typing import Any
 from pandas import DataFrame
 import numpy as np
 from enum import Enum
+import logging
+from game.logger_config import setup_logger
+
+
+setup_logger()
+glog = logging.getLogger()
 
 
 class ElementStatus(Enum):
@@ -98,16 +104,18 @@ class Element:
             settings (dict[str, Any]): User input + default settings
         """
         try:
-            self.sop.scores = self.sf.score(sim=self.sim)
+            scores = self.sf.score(sim=self.sim)
+            for idx, k in enumerate(self.sop.scores):
+                self.sop.scores[k] = scores[idx]
             self.status = ElementStatus.DONE
         except IndexError:
             # Occurs when a simulation didn't work so profiles were not saved
             self.status = ElementStatus.RESET
-            print(f'Resetting element {self.id}: error during scoring.')
+            glog.info(f'Resetting element {self.id}: error during scoring.')
 
     @property
     def scores(self) -> list[float]:
-        return self.sop.scores
+        return [v for v in self.sop.scores.values()]
 
     @property
     def score(self) -> float:
@@ -117,7 +125,7 @@ class Element:
             float:
                 Sum of the score selected by the user with score_sp.
         """
-        return np.sum(self.sop.scores)
+        return np.sum(self.scores)
 
     def prepare_upsert(self,
                        db: Game_db,

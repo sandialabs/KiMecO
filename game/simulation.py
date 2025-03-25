@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 from game.cantera.customrate import MessData, MessRate
 import numpy as np
 from game.bimolecular import Bimolecular
-from game.database.game_db import Game_db
+from game.database.sim_db import SIM_DB
 from game.parameters import SOP
 from game.q_sys import QueueingSystem, JobStatus
 from game.rate_coef import RateCo
@@ -23,7 +23,8 @@ class SIM:
                  id: int,
                  gen_name: str,
                  species: list[str],
-                 db: Game_db,
+                 sc_species: list[str],
+                 db: SIM_DB,
                  loc: str,
                  q_sys: QueueingSystem,
                  set: dict[str, Any],
@@ -87,7 +88,12 @@ class SIM:
             ct: wf for wf, ct in set['ct_names'].items()}
         self.ct_unitSystem: dict = ct.UnitSystem().units
         self.settings: dict[str, Any] = set
+        # Species to be in the mechanism
         self.species: list[str] = species
+        # Species to save in db
+        self.sv_species: list[str] = sc_species
+        # Species to used in scoring
+        self.sc_species: list[str] = sc_species
         self.set_species()
         self.set_reactions()
         self.init_sims()
@@ -97,7 +103,7 @@ class SIM:
         self.loc: str = loc
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
-        self.db: Game_db = db
+        self.db: SIM_DB = db
         self.profiles: list[NDArray | None] = [
             None for i in range(len(set['rc_pres']) * len(set['rc_temp']))]
 
@@ -154,10 +160,10 @@ class SIM:
                                                        units=units)
         p_yaml: str = ''
         for p in self.KIN.set["rc_pres"]:
-            p_yaml += f'  - {p} torr' + '\n'
+            p_yaml += f'  - {round(p, 5)} torr' + '\n'
         t_yaml: str = ''
         for t in self.KIN.set["rc_temp"]:
-            t_yaml += f'  - {t} K' + '\n'
+            t_yaml += f'  - {round(t, 5)} K' + '\n'
         forward_yaml: str = reaction_yaml.format(equation=equations[0],
                                                  rates_yaml=rates_yaml[0][:-1],
                                                  p_yaml=p_yaml[:-1],
@@ -175,12 +181,14 @@ class SIM:
         """Replace mechanism reactions by workflow reactions.
         """
         new_reactions: list[ct.Reaction] = []
+        # Create well to well reactions
         for idx, reactant in enumerate(self.SOP.wells[:-1]):
             for product in self.SOP.wells[idx+1:]:
                 forward, reverse = self.create_reaction(reactant=reactant,
                                                         product=product)
                 new_reactions.append(forward)
                 new_reactions.append(reverse)
+        # Create well to bimolecular reactions
         for reactant in self.SOP.wells:
             for product in self.SOP.bimolecular:
                 forward, reverse = self.create_reaction(reactant=reactant,
@@ -294,10 +302,10 @@ class SIM:
 
         for pindex in range(len(self.KIN.set["rc_pres"])):
             for tindex in range(len(self.KIN.set["rc_temp"])):
-                f_rates_yaml += f'rc_{pindex}_{tindex}: \
-                                {f_rates[pindex,tindex]}' + '\n'
-                r_rates_yaml += f'rc_{pindex}_{tindex}: \
-                                {r_rates[pindex,tindex]}' + '\n'
+                f_rates_yaml += f'rc_{pindex}_{tindex}: ' +\
+                                f'{f_rates[pindex,tindex]}' + '\n'
+                r_rates_yaml += f'rc_{pindex}_{tindex}: ' +\
+                                f'{r_rates[pindex,tindex]}' + '\n'
         return [f_rates_yaml, r_rates_yaml]
 
     def get_std_unit(self,
@@ -378,7 +386,7 @@ class SIM:
             [exp][0].tolist(),
             all_tsteps=time_steps,
             gen_name=self.gen_name,
-            to_watch=self.species,
+            to_watch=self.sv_species,
             initial_X=self.settings['initial_X'][exp]
             )
         with open(f'{self.loc}/{name}.py', 'w') as f:

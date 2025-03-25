@@ -201,7 +201,7 @@ class SOPSection(Section):
                         From = bar.connected[0].name
                 elif isinstance(bar.connected[0], Bimolecular):
                     From = ''
-                    for idx, frag in enumerate(bar.connected[0].frag_names()):
+                    for idx, frag in enumerate(bar.connected[0].frag_names):
                         if idx == 1:
                             From += ' + '
                         if frag in self.settings['ct_names']:
@@ -218,7 +218,7 @@ class SOPSection(Section):
                         To = bar.connected[1].name
                 elif isinstance(bar.connected[1], Bimolecular):
                     To = ''
-                    for idx, frag in enumerate(bar.connected[1].frag_names()):
+                    for idx, frag in enumerate(bar.connected[1].frag_names):
                         if idx == 1:
                             To += ' + '
                         if frag in self.settings['ct_names']:

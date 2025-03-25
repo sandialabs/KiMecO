@@ -30,9 +30,9 @@ class WeightedDif(Scoring):
         """
 
         exp_prof: list[NDArray] = self.settings['exp_profiles']
-        exp_errs: list[NDArray] = self.settings['exp_error']
+        exp_errs: list[NDArray] = self.settings['exp_errors']
 
-        score = np.array([0.0 for sp in sim.species])
+        score = np.array([0.0 for sp in sim.sc_species])
         for p in range(len(self.settings['rc_pres'])):
             for t in range(len(self.settings['rc_temp'])):
                 sim_index: int = p*len(self.settings['rc_temp']) + t

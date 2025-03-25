@@ -9,6 +9,12 @@ from numpy import int16, int32, ndarray, str_
 from typing import Any
 import getpass
 import os
+import logging
+from game.logger_config import setup_logger
+
+
+setup_logger()
+glog = logging.getLogger()
 
 
 class JobStatus(Enum):
@@ -57,9 +63,9 @@ class QueueingSystem:
             location (str, optional): Where jobs should be submitted from.
                                       Defaults to local.
         """
-        self.av_jobs: int = max_jobs
-        self.av_cpu: int = max_cpu
-        self.av_mem: int = max_mem
+        self._max_jobs: int = max_jobs
+        self._max_cpu: int = max_cpu
+        self._max_mem: int = max_mem
         self.cpu_kin: int = cpu_kin
         self.cpu_sim: int = cpu_sim
         self.mem_kin: int = mem_kin
@@ -92,7 +98,34 @@ class QueueingSystem:
 
         self.submitted: int = 0
         self.running: int = 0
-        self.n_ready: int = 0
+
+    @property
+    def av_jobs(self):
+        job_sum = len(self.kin_q[self.kin_q['status'] == JobStatus.RUNNING])
+        job_sum += len(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING])
+        job_sum += len(self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING])
+        return self._max_jobs - job_sum
+
+    @property
+    def av_cpu(self):
+        cpu_sum = np.sum(self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['cpu'])
+        cpu_sum += np.sum(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['cpu'])
+        cpu_sum += np.sum(self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['cpu'])
+        return self._max_cpu - cpu_sum
+
+    @property
+    def av_mem(self):
+        mem_sum = np.sum(self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['mem'])
+        mem_sum += np.sum(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['mem'])
+        mem_sum += np.sum(self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['mem'])
+        return self._max_mem - mem_sum
+
+    @property
+    def n_ready(self):
+        n_ready = len(self.kin_q[self.kin_q['status'] == JobStatus.READY])
+        n_ready += len(self.sim_q[self.sim_q['status'] == JobStatus.READY])
+        n_ready += len(self.hlp_q[self.hlp_q['status'] == JobStatus.READY])
+        return n_ready
 
     def add_to_q(self,
                  name: str,
@@ -123,8 +156,6 @@ class QueueingSystem:
             self.sim_q[idx] = job[0]
         elif jtype == 'hlp':
             self.hlp_q[idx] = job[0]
-
-        self.n_ready += 1
 
     def create_sub_file(self,
                         job: NDArray[Any]) -> None:
@@ -169,8 +200,8 @@ class QueueingSystem:
                os.stat(f"{file}.err").st_size > 0)):
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
-                print(f"Resetting job {job['name']}",
-                      "because an error occurred.")
+                glog.info(f"Resetting job {job['name']}",
+                          "because an error occurred.")
                 if jtype == 'kin':
                     os.remove(f"{file}.out")
             else:
@@ -181,7 +212,7 @@ class QueueingSystem:
                         f"{file}.err").st_size > 0):
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
-                print(f"Helper {job['name'][0]} failed.")
+                glog.info(f"Helper {job['name'][0]} failed.")
             else:
                 job['status'] = JobStatus.PICKED_UP.value
         self.clean_files(job, clear_err=clear_err)
@@ -218,10 +249,6 @@ class QueueingSystem:
         slurm_id: int = int(outstr.split()[-1])
         job['sub_id'] = np.int32(slurm_id)
         job['status'] = JobStatus.RUNNING.value
-        self.av_cpu -= job['cpu']
-        self.av_mem -= job['mem']
-        self.av_jobs -= 1
-        self.n_ready -= 1
 
     def run(self) -> None:
         """Run all jobs of the workflow in parallel
@@ -261,9 +288,6 @@ class QueueingSystem:
                 running, finished_jobs
                 )
             q['status'][mask] = JobStatus.FINISHED.value
-            self.av_cpu += np.sum(q['cpu'][mask])
-            self.av_mem += np.sum(q['mem'][mask])
-            self.av_jobs += len(q[mask])
 
             pu_jobs: ndarray = np.isin(
                 q['status'],

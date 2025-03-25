@@ -11,8 +11,8 @@ class SOP:
     Main object of the GAME code, to be perturbed and optimized."""
 
     def __init__(self,
-                 species: list[str]) -> None:
-        self.species: list[str] = species
+                 score_species: list[str]) -> None:
+        self.sc_species: list[str] = score_species
         self.wells: list[Well] = []
         self.bimolecular: list[Bimolecular] = []
         self.barriers: list[Barrier] = []
@@ -25,7 +25,9 @@ class SOP:
         self.rc_pres: list[float]
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
-        self.scores: list[float] = []
+        self.scores: dict[str, float] = {
+            sp: 999999.9 for sp in self.sc_species
+            }
 
     @classmethod
     def from_db_row(cls,
@@ -45,6 +47,18 @@ class SOP:
         for v in self.parameters_names.values():
             table_repr += f"'{v}',"
         return table_repr[:-1] + ")>"
+
+    @property
+    def species(self):
+        species = []
+        for well in self.wells:
+            species.append(well.ct_name)
+        for bm in self.bimolecular:
+            if bm.fragments[0].ct_name not in species:
+                species.append(bm.fragments[0].ct_name)
+            if bm.fragments[1].ct_name not in species:
+                species.append(bm.fragments[1].ct_name)
+        return species
 
     @property
     def r_epsilons(self) -> str:
@@ -148,11 +162,11 @@ class SOP:
             }
         sc = 0
         for obj in self.items.values():
-            if obj.ct_name in self.species:
+            if obj.ct_name in self.sc_species:
                 pn[f'{obj.ct_name}__score'] = float(99999)
                 sc += 1
-        for idx, sc in enumerate(self.scores):
-            pn[f'{self.species[idx]}__score'] = float(sc)
+        for k, v in self.scores.items():
+            pn[f'{k}__score'] = float(v)
         for idx, ep in enumerate(self.epsilons):
             pn[f'__epsi_{idx}'] = float(ep)
         for idx, sig in enumerate(self.sigmas):
@@ -264,12 +278,7 @@ class SOP:
 
         if 'score' in key:
             specie: str = key.split('__')[0]
-            idx: int = self.species.index(specie)
-            # In case scores are not ordered in db for some reason.
-            while len(self.scores) < idx+1:
-                self.scores.append(value)
-            else:
-                self.scores[idx] = value
+            self.scores[specie] = value
             return
         # Energy transfer probability, factor
         elif 'fact' in key:
