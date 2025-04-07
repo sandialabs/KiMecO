@@ -20,6 +20,10 @@ import logging
 from game.logger_config import setup_logger
 
 
+setup_logger()
+glog = logging.getLogger()
+
+
 def main() -> None:
     # if os.path.isfile('game.log'):
     #     for i in range(50):
@@ -27,8 +31,6 @@ def main() -> None:
     #             os.remove('game.log', f'game.log_{i}')
     #             break
     # Call the setup function to configure logging
-    setup_logger()
-    glog = logging.getLogger()
     if len(sys.argv) != 2:
         glog.info("""
     GAME needs various parameters to be set in a JSON input file.
@@ -130,7 +132,8 @@ def main() -> None:
         Element(
             sop=pert.perturb(sop=init_SOP),
             id=id,
-            sf=sf)
+            sf=sf,
+            gen=1)
         for id in range(settings['n_elem'])]
 
     ga = Tournament(settings=settings,
@@ -157,7 +160,7 @@ def main() -> None:
         goat_line += f'{el.gen}_{el.id} '
     goat_line += '\n'
 
-    with open('goat.txt', 'w') as f:
+    with open(location + '/goat.txt', 'w') as f:
         f.write(goat_line)
 
     while not converged and Generation.total() < settings['max_gen']:
@@ -173,35 +176,50 @@ def main() -> None:
                              previous_el=prev_gen
                              )
         new_gen.run()
+
         # Change the number of elements in goats after the first generation
         if len(goat) == 1:
             median = np.median([
                 el.score for el in new_gen.elements
             ])
-        goat: list[Element] = [
-            el for el in new_gen.elements if el.score <= median]
+            goat: list[Element] = [
+                el for el in new_gen.elements if el.score <= median]
+
         # Actualize the list of best elements accross all generations
         old_scores = np.array([el.score for el in goat])
         low_new = np.array([
             el for el in new_gen.elements
-            if el.score < np.max(old_scores)])
+            if el.score < np.max(old_scores) and el not in goat])
+        replaced = 0
         for el in low_new:
             if el.score < np.max([el.score for el in goat]):
                 new_scores: list[float] = [el.score for el in goat]
                 goat[new_scores.index(np.max(new_scores))] = el
+                replaced += 1
+        glog.info(f'Number of goat replaced: {replaced}')
 
         # Add the new line in goat.txt
         goat_line = ''
         for el in goat:
-            goat_line += f'{el.gen}_{el.id} '
+            goat_line += '{:9}'.format(f'{el.gen}_{el.id}')
         goat_line += '\n'
-        with open('goat.txt', 'w') as f:
+        with open(location + '/goat.txt', 'a') as f:
             f.write(goat_line)
 
         means, stds = get_stats(
             elements=goat,
             settings=settings
             )
+        line_tpl = "{name:<25}{mean:>20}{std:>20}"
+        glog.info(line_tpl.format(name='PARAMETER',
+                                  mean='MEAN',
+                                  std='STD'))
+        line_tpl = "{name:<25}{mean:>-20.3E}{std:>-20.3E}"
+        for k in means:
+            glog.info(line_tpl.format(name=k,
+                                      mean=means[k],
+                                      std=stds[k]))
+
         if not isconverged(
            threshold=settings['final_conv'],
            old_means=old_means,
@@ -240,7 +258,7 @@ def isconverged(threshold: float,
         bool: True if all ratios are within user defined %, False otherwise.
     """
     converged = True
-
+    line_format = '   {type:<7}{param:<15}{status:>20}. CHANGE:{ratio:>7.3f}'
     # Check convergence for means
     for key in old_means:
         if key in new_means:
@@ -250,7 +268,19 @@ def isconverged(threshold: float,
                 ratio_mean: float = abs(new_mean - old_mean) / abs(old_mean)
                 if ratio_mean > threshold:
                     converged = False
-                    glog.info(f"MEAN {key} not converged: {ratio_mean}")
+                    glog.info(line_format.format(
+                        type='MEAN',
+                        param=key,
+                        status='NOT CONVERGED',
+                        ratio=ratio_mean
+                    ))
+                else:
+                    glog.info(line_format.format(
+                        type='MEAN',
+                        param=key,
+                        status='CONVERGED',
+                        ratio=ratio_mean
+                    ))
             else:
                 glog.info(f'Warning: {key} skipped (div 0)')
                 glog.info(f'Mean old: {old_mean}')
@@ -265,7 +295,19 @@ def isconverged(threshold: float,
                 ratio_std: float = abs(new_std - old_std) / abs(old_std)
                 if ratio_std > threshold:
                     converged = False
-                    glog.info(f"STD {key} not converged: {ratio_std}")
+                    glog.info(line_format.format(
+                        type='STD',
+                        param=key,
+                        status='NOT CONVERGED',
+                        ratio=ratio_std
+                    ))
+                else:
+                    glog.info(line_format.format(
+                        type='STD',
+                        param=key,
+                        status='CONVERGED',
+                        ratio=ratio_std
+                    ))
             else:
                 glog.info(f'Warning: {key} skipped (div 0)')
                 glog.info(f'StdD old: {old_std}')

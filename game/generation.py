@@ -8,6 +8,9 @@ from game.core import CoreRun
 from game.scoring_f.scoring import Scoring
 from game.Perturbators.perturbator import Perturbator
 from game.parameters import SOP
+import numpy as np
+import numpy.typing as npt
+from numpy import bool_
 import time
 import logging
 from game.logger_config import setup_logger
@@ -90,7 +93,6 @@ class Generation(CoreRun):
         glog.info(f'{message:<65}{runtime:>14.2f}s.')
         glog.info(f"{'Best score:':<65}{self.best_score:>14.2f}")
 
-
     def restore_gen_from_db(self) -> None:
         """Create a complete list of elements from the data in the database.
         """
@@ -106,7 +108,7 @@ class Generation(CoreRun):
             for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
         for el in new_gen:
             not_default: List[bool] = [
-                i != self.sf.default_score for i in el.scores]
+                i != el.sop._default_score for i in el.scores]
             if all(not_default):
                 el.status = ElementStatus.DONE
             for idx, gen_el in enumerate(self.elements):
@@ -114,3 +116,15 @@ class Generation(CoreRun):
                     self.elements[idx] = el
                     break
 
+    # Override the core method to only save new elements from gen_id
+    def finalize_element(self,
+                         el: Element,
+                         idx: int,
+                         finished: npt.NDArray[bool_]) -> None:
+        """Finalize an element after scoring."""
+        # Avoids saving elements in multiple tables
+        if el.gen == self.id:
+            el.prepare_upsert(db=self.sop_db, table=self.name)
+        finished[idx] = True
+        if np.sum(el.scores) < self.best_score:
+            self.best_score = np.sum(el.scores)

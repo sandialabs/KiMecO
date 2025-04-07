@@ -69,6 +69,7 @@ class SOP_DB(Game_db):
             A dictionary with sim_id as keys and lists
             of their corresponding data as values.
         """
+        all_db_rslt = []
         for table in self._select:
             row_ids = self._select[table]
             query = select(
@@ -77,6 +78,6 @@ class SOP_DB(Game_db):
                         self.tables[table].c.id.in_(row_ids))
             with self.eng.begin() as connection:
                 db_rslt: Sequence[Row[Any]] = connection.execute(query).fetchall()
-
+            all_db_rslt.extend(db_rslt)
         self._select = {}  # Clear the _select dictionary after processing
-        return db_rslt
+        return all_db_rslt

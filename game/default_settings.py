@@ -88,8 +88,6 @@ default_settings: dict[str, Any] = {
     "std_sf": 2.0,
     # Name of the scoring function class to use
     "scoring_func": "weighteddif",
-    # Absolute error for all species for all experiments
-    "abs_err": 1e-9,
     # Name of species as in exp profiles header
     # Selected species for scoring
     'score_sp': [],

@@ -2,6 +2,8 @@ from game.database.game_db import Game_db
 from game.parameters import SOP
 from sqlalchemy import select, Row
 from typing import Any, Sequence
+import numpy as np
+from numpy.typing import NDArray
 
 
 class SIM_DB(Game_db):
@@ -91,25 +93,25 @@ class SIM_DB(Game_db):
             A dictionary with sim_id as keys and lists
             of their corresponding data as values.
         """
-        results = {}
+        results: dict[NDArray] = {}
         for table in self._select:
             sim_ids = self._select[table]
             query = select(
                 self.tables[table].c.sim_id,
                 self.tables[table].c.time,
                 *[self.tables[table].c[sp]
-                  for sp in self.columns[4:]]
+                  for sp in self.sv_species]
                     ).where(
                         self.tables[table].c.sim_id.in_(sim_ids))
             with self.eng.begin() as connection:
                 db_rslt: Sequence[Row[Any]] = connection.execute(
                     query
                     ).fetchall()
-            for row in db_rslt:
-                sim_id = int(row.sim_id)
-                if sim_id not in results:
-                    results[sim_id] = []
-                results[sim_id].append(row)
+            times = int(len(db_rslt)/len(sim_ids))
+            results[table] = np.array(db_rslt).reshape([
+                len(sim_ids),
+                times,
+                len(self.sv_species)+2])
 
         self._select = {}  # Clear the _select dictionary after processing
         return results

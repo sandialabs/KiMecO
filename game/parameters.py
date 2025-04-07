@@ -25,8 +25,9 @@ class SOP:
         self.rc_pres: list[float]
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
+        self._default_score = 999999.9
         self.scores: dict[str, float] = {
-            sp: 999999.9 for sp in self.sc_species
+            sp: self._default_score for sp in self.sc_species
             }
 
     @classmethod

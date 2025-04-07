@@ -17,12 +17,11 @@ class Section(ABC):
         self.sim_db: SIM_DB = gapp.sim_db
         self.init_SOP: SOP = gapp.init_SOP
         self.species: list[str] = gapp.species
-        self.layout: html.Div = self._layout
         self.register_callbacks()
 
     @property
     @abstractmethod
-    def _layout(self) -> html.Div:
+    def layout(self) -> html.Div:
         """Create the layout for the section."""
         pass
 

@@ -28,7 +28,7 @@ class Tournament(GeneticAlgorithm):
         """
         # Change the intensity of the perturbation
         self.pert.set_gen_fact(gen=gen.id)
-        next_gen: list[Element] = deepcopy(gen.elements)
+        next_gen: list[Element] = gen.elements
         prev_gen: dict[int, Element] = {}
         random.shuffle(gen.elements)
         half = int(len(gen.elements)/2)
@@ -44,5 +44,6 @@ class Tournament(GeneticAlgorithm):
             next_gen[loser.id] = Element(
                 sop=self.pert.perturb(sop=winner.sop),
                 id=loser.id,
-                sf=self.sf)
+                sf=self.sf,
+                gen=gen.id+1)
         return prev_gen, next_gen

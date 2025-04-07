@@ -16,13 +16,12 @@ from game.logger_config import setup_logger
 
 
 setup_logger()
-glog = logging.getLogger()
 
 
 class GameApp:
     def __init__(self, input_file: str):
         self.settings: dict = check_input(input_file=input_file)
-
+        self.glog = logging.getLogger()
         mr = MessInputReader(settings=self.settings)
         self.init_SOP: SOP
         self.input_tpl: list[str]
@@ -36,6 +35,7 @@ class GameApp:
                 self.settings['project_name']))
             sys.exit()
         os.chdir(self.settings['project_name'])
+        self.loc: str = os.getcwd()
         self.sop_db = SOP_DB(sop=self.init_SOP,
                              name='GAME_DB_SOP')
         self.sop_tot_g: int = len(self.sop_db.tables)
@@ -63,7 +63,8 @@ class GameApp:
                         self.og_names[ct_name] = bimol.name
 
         self.init_vals = self.sop_db.get_table(table='G0000')[0]
-
+        with open(self.loc + '/goat.txt', 'r') as f:
+            self.goats = f.readlines()
         # Initialize app
         external_stylesheets: list[str] = ['~/projects/ethylperoxy/me/file.css']
         self.app = Dash(external_stylesheets=external_stylesheets)

@@ -1,6 +1,7 @@
 from dash import html, dcc, callback, Output, Input, State
 import plotly.graph_objects as go
 import numpy as np
+from numpy.typing import NDArray
 from game.gui.section import Section
 import cantera.with_units as ctu
 ureg = ctu.cantera_units_registry
@@ -8,9 +9,13 @@ Q_ = ureg.Quantity
 
 
 class SIMSection(Section):
+    def __init__(self, gapp) -> None:
+        super().__init__(gapp)
+
+        self.species: list[str] = self.sim_db.columns[4:]
 
     @property
-    def _layout(self) -> html.Div:
+    def layout(self) -> html.Div:
         return html.Div(
             className='row', id='sim',
             style={'display': 'none'},
@@ -40,7 +45,7 @@ class SIMSection(Section):
                 html.Div(
                     className='row',
                     id='sim_plot',
-                    style={'display': 'none'},
+                    style={},
                     children={})])
 
     def register_callbacks(self):
@@ -57,8 +62,8 @@ class SIMSection(Section):
                 return {'display': 'block'}
             else:
                 return {'display': 'none'}
-            
-        @callback(    
+
+        @callback(
             Output(component_id='sim_plot', component_property='style'),
             Output(component_id='sim_plot', component_property='children'),
             Input(component_id='show_sim_plot_button', component_property='n_clicks'),
@@ -82,36 +87,32 @@ class SIMSection(Section):
                         [])
             idx = 0
 
-            gen_arr = [
-                np.array(self.sim_db.get_TP_sim_profiles(
-                    table=f'G{gen_i:04d}',
-                    species=specs,
-                    pres=np.round(Q_(f"{pres} torr").to("Pa").magnitude, 5),
-                    temp=temp))
-                for gen_i in selected_gen]
+            for gen_i in selected_gen:
+                self.gapp.glog.debug(
+                    f'Elements in goat line: {len(self.gapp.goats[gen_i].split())}')
+                for origin in self.gapp.goats[gen_i].split():
+                    gen_id = int(origin.split('_')[0])
+                    el_id = int(origin.split('_')[1])
+                    sim_id = int(el_id * len(self.settings['rc_pres']) *
+                                 len(self.settings['rc_temp']))
+                    self.sim_db.prepare_batch_select(
+                        table=f'G{gen_id:04d}',
+                        sim_id=sim_id
+                    )
+            all_gen_sims = self.sim_db.batch_select()
+
             op: list[float] = [1.0-((i+1)*0.9/len(selected_gen))
                                for i in range(len(selected_gen))]
-            for idx, arr in enumerate(gen_arr):
-                if idx == 0:
-                    # gen_array[generations, elements, columns]
-                    # columns : P (Pa), T (K), sim_id, time, species
-                    # species are in the same order as requested
-                    min_sim_id = arr[:, 2].min()
-                    nsteps: int = int(np.sum(arr[:, 2] == min_sim_id))
-                nel.append(int(len(arr[:, 2])/nsteps))
-                specs_arr = np.reshape(
-                    arr,
-                    newshape=(
-                        nel[-1],
-                        nsteps,
-                        4+len(specs)))
-                specs_arr = specs_arr[:, :, 4:]
+            for idx, arr in enumerate(all_gen_sims.values()):
+                specs_arr = arr[:, :, 2:]
+                tmp_nel, nsteps, nsp = specs_arr.shape
+                nel.append(tmp_nel)
                 for sp_idx, sp in enumerate(specs):
                     for elem in range(len(specs_arr)):
-                        if idx == len(gen_arr)-1 and\
+                        if idx == len(all_gen_sims)-1 and\
                             elem == len(specs_arr)-1:
                             fig.add_trace(go.Scatter(
-                                x=arr[:, 3][:nsteps],
+                                x=arr[elem, :, 1],
                                 y=specs_arr[elem, :, sp_idx].T,
                                 mode='lines',
                                 name=sp,
@@ -120,7 +121,7 @@ class SIMSection(Section):
                                 ))
                         else:
                             fig.add_trace(go.Scatter(
-                                x=arr[:, 3][:nsteps],
+                                x=arr[elem,:,1],
                                 y=specs_arr[elem, :, sp_idx].T,
                                 mode='lines',
                                 name=sp,
@@ -129,7 +130,7 @@ class SIMSection(Section):
                                 # hoveron='fills',
                                 hoverinfo='name'
                                 ))
-                    if idx == len(gen_arr)-1:
+                    if idx == len(all_gen_sims)-1:
                         fig.update_traces(
                             marker=dict(
                                 color=fig.layout['template']['layout']['colorway'][sp_idx]),

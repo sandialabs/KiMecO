@@ -11,7 +11,7 @@ from game.bimolecular import Bimolecular
 class SOPSection(Section):
 
     @property
-    def _layout(self) -> html.Div:
+    def layout(self) -> html.Div:
         return html.Div(
             className='row', id='sop',
             style={'display': 'none'},
@@ -269,22 +269,24 @@ class SOPSection(Section):
                           line_dash='dash',
                           line_width=4,
                           line_color='brown')
-            with open('goat.txt', 'r') as f:
-                lines = f.readlines()
+
             avrg = []
             nel = []
             cols = ['sop_id']
             cols.extend(self.sop_db.columns)
+            all_gen_rows = []
             for gen_i in selected_gen:
-                for origin in lines[gen_i].split():
+                self.gapp.glog.debug(
+                    f'Elements in goat line: {len(self.gapp.goats[gen_i].split())}')
+                for origin in self.gapp.goats[gen_i].split():
                     gen_id = int(origin.split('_')[0])
                     el_id = int(origin.split('_')[1])
                     self.sop_db.prepare_batch_select(
                         table=f'G{gen_id:04d}',
                         row_id=el_id
                     )
-            gen_rows = self.sop_db.batch_select()
-            for idx, gen_rows in enumerate(gen_rows):
+                all_gen_rows.append(self.sop_db.batch_select())
+            for idx, gen_rows in enumerate(all_gen_rows):
                 df = pd.DataFrame(data=gen_rows, columns=cols)
                 avrg.append(f"{df[param_selected].mean():.3f}")
                 nel.append(len(df[param_selected]))

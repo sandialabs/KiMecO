@@ -8,7 +8,7 @@ from plotly.graph_objs._figure import Figure
 class KINSection(Section):
 
     @property
-    def _layout(self) -> html.Div:
+    def layout(self) -> html.Div:
         return html.Div(
             className='row', id='kin',
             style={'display': 'none'},
