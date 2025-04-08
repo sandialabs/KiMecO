@@ -1,0 +1,9 @@
+body {
+    font-family: sans-serif;
+}
+h1 {
+    color: rgb(0, 76, 255);
+    font-style: italic;
+    font-stretch: expanded;
+    text-align: center;
+}

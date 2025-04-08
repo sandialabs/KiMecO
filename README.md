@@ -1,3 +1,3 @@
 # Example Package
 
-This is a Genetic Algorythm Perturbation of Master Equation Quantum Chemical Parameters.
+KiMecO is a kinetic mechanism optimizer. It aims at optimizing chemical kinetic mechanisms' parameters to allow a generalization of their parameters. It is a worflow that starts from a set of Master Equation (ME) parameters assembled in a MESS input. This initial set is perturbed X times to create a generation of elements that all undergo a ME calculation. The resulting rate coefficients and the knowledge of the corresponding reactions are included in a mechanism file. The latter is used in cantera simulations designed to be compared with experimental concentration profiles. The elements are then scored according to the agreement of their simulations with the experimental data. Using a tournament style genetic algorythm, the winners are selected and their set of Master Equation parameters is perturbed to produce the next generation.

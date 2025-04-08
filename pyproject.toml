@@ -15,15 +15,15 @@ build-backend = "setuptools.build_meta"
 exclude = ["build", "dist", "game.egg-info"]
 
 [project]
-name = "game"
-version = "0.0.1"
+name = "kimeco"
+version = "0.0.2"
 authors = [
   { name="Clement Soulie", email="csoulie@sandia.gov" }
 ]
 maintainers = [
   { name="Clement Soulie", email="csoulie@sandia.gov" }
 ]
-description = "GAME"
+description = "KIMECO"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
@@ -38,5 +38,5 @@ classifiers = [
 ]
 
 [project.scripts]
-game = "game.main:main"
-gameUI = "game.gui.gameapp:main"
+kmo = "kimeco.main:main"
+kmoui = "kimeco.gui.kimecoapp:main"

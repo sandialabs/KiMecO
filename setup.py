@@ -1,12 +1,12 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.1'
-DESCRIPTION = 'GAME'
-LONG_DESCRIPTION = 'Genetic Algorythm Master Equation'
+VERSION = '0.0.2'
+DESCRIPTION = 'KiMecO'
+LONG_DESCRIPTION = 'Kinetic Mechanism Optimizer'
 
 # Setting up
 setup(
-        name="game",
+        name="kimeco",
         version=VERSION,
         author="Clement Soulie",
         author_email="<csoulie@sandia.gov>",
@@ -28,10 +28,12 @@ setup(
                           "mess"],  # add any additional packages that
 
         keywords=['python',
-                  'game',
+                  'kimeco',
                   'machine learning',
                   'master equation',
-                  'kinetics'],
+                  'kinetics',
+                  'kinetic mechanism',
+                  'non linear optimizer'],
         classifiers=[
             "Development Status :: 3 - Alpha",
             "Intended Audience :: Research",
