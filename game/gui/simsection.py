@@ -101,12 +101,12 @@ class SIMSection(Section):
                 all_gen_sims.append(self.sim_db.batch_select())
             # Create a figure and associated text for each combination
             # in the user selection
-            sop_plot_children = []
+            sim_plot_children = []
             for p in pres:
                 for t in temp:
                     for TPGenSP, gen_i in zip(all_gen_sims, selected_gen):
                         for sp_idx, sp in enumerate(specs):
-                            sop_plot_children.extend(
+                            sim_plot_children.extend(
                                 self.make_figure(
                                     gen_name=f"G{gen_i:04d}",
                                     TPGenSP=TPGenSP,
@@ -114,7 +114,7 @@ class SIMSection(Section):
                                     sp_idx=sp_idx,
                                     pres=p,
                                     temp=t))
-            return {'display': 'block'}, sop_plot_children
+            return {'display': 'block'}, sim_plot_children
 
     def make_figure(self,
                     gen_name: str,
