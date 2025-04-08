@@ -16,6 +16,7 @@ class Section(ABC):
         self.kin_db: KIN_DB = gapp.kin_db
         self.sim_db: SIM_DB = gapp.sim_db
         self.init_SOP: SOP = gapp.init_SOP
+        self.n_plots = 0
         self.species: list[str] = gapp.species
         self.register_callbacks()
 

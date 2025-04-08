@@ -6,6 +6,7 @@ from game.gui.section import Section
 from game.barrier import Barrier
 from game.well import Well
 from game.bimolecular import Bimolecular
+from dash.exceptions import PreventUpdate
 
 
 class SOPSection(Section):
@@ -45,24 +46,20 @@ class SOPSection(Section):
                                     n_clicks=0,
                                     children='Plot',
                                     )]),
+                # Plotting area
                 html.Div(
                     className='row',
                     id='sop_plot',
-                    style={'display': 'none'},
-                    children=[
-                        html.H3(children={}, id='sop_dist_title'),
-                        html.H5(children={}, id='sop_avrg'),
-                        html.H5(children={}, id='sop_elem'),
-                        dcc.Graph(figure={}, id='param_dist')
-                    ])])
+                    style={'display': 'none'}
+                    )])
 
     def register_callbacks(self):
         # SOP interactions
         # Show parameter selection once the type of parameter has been selected
         @self.app.callback(
-            Output(component_id='param_select_row', component_property='style'),
-            Output(component_id='param_selection', component_property='options'),
-            Input(component_id='ptype', component_property='value')
+            Output('param_select_row', 'style'),
+            Output('param_selection', 'options'),
+            Input('ptype', 'value')
         )
         def update_param_choice(ptype: str
                                 ) -> tuple[dict[str, str], list[dict[str, str]]]:
@@ -123,8 +120,8 @@ class SOPSection(Section):
 
         # Show sop plot button once generation and parameters have been selected
         @self.app.callback(
-            Output(component_id='sop_plot_button', component_property='style'),
-            Input(component_id='param_selection', component_property='value')
+            Output('sop_plot_button', 'style'),
+            Input('param_selection', 'value')
         )
         def show_sop_plot_button(selected_param: str
                                  ) -> dict[str, str]:
@@ -135,15 +132,14 @@ class SOPSection(Section):
 
         # Plot the distribution of the requested parameter
         @self.app.callback(
-            Output(component_id='sop_plot', component_property='style'),
-            Output(component_id='param_dist', component_property='figure'),
-            Output(component_id='sop_dist_title', component_property='children'),
-            Output(component_id='sop_avrg', component_property='children'),
-            Output(component_id='sop_elem', component_property='children'),
-            Input(component_id='sop_plot_b', component_property='n_clicks'),
-            State(component_id='ptype', component_property='value'),
-            State(component_id='param_selection', component_property='value'),
-            State(component_id='gen range slider', component_property='value')
+            Output('sop_plot', 'style'),
+            Output('sop_plot', 'children'),
+            Input('sop_plot_b', 'n_clicks'),
+            State('ptype', 'value'),
+            State('param_selection', 'value'),
+            State('gen range slider', 'value'),
+            prevent_initial_call=True,
+            running=[(Output("sop_plot_b", "disabled"), True, False)]
         )
         def update_sop_figure(clic,
                               ptype: str,
@@ -151,12 +147,9 @@ class SOPSection(Section):
                               selected_gen: list[int]
                               ) \
                 -> tuple[dict[str, str], Figure, str, str, str]:
-            if clic == 0:
-                return ({'display': 'none'},
-                        go.Figure(),
-                        '',
-                        '',
-                        '')
+            if clic == 0 or clic is None:
+                raise PreventUpdate
+
             title: str = param_selected
             std_allowed: float
             fig = go.Figure()
@@ -331,7 +324,10 @@ class SOPSection(Section):
             # Reduce opacity to see both histograms
             fig.update_traces(opacity=0.75)
             return ({'display': 'block'},
-                    fig,
-                    f'Distribution of {param_selected} in generation {selected_gen}',
-                    f"Average: {avrg}",
-                    f'Number of elements: {nel}')
+                    [html.H3(
+                        f'Distribution of {param_selected} in generation {selected_gen}'
+                        ),
+                    html.H5(f"Average: {avrg}"),
+                    html.H5(f'Number of elements: {nel}'),
+                    dcc.Graph(figure=fig)]
+                    )
