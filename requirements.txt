@@ -6,5 +6,4 @@ setuptools>=61.0
 sqlalchemy
 sqlalchemy-utils
 dash,
-pint,
-mess
+pint

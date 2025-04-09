@@ -1,0 +1,56 @@
+Metadata-Version: 2.4
+Name: kimeco
+Version: 0.0.2
+Summary: KIMECO
+Author: Clement Soulie
+Author-email: Clement Soulie <csoulie@sandia.gov>
+Maintainer: Clement Soulie
+Maintainer-email: Clement Soulie <csoulie@sandia.gov>
+License: BSD 3-Clause License
+        
+        Copyright (c) 2018, zadorlab
+        All rights reserved.
+        
+        Redistribution and use in source and binary forms, with or without
+        modification, are permitted provided that the following conditions are met:
+        
+        * Redistributions of source code must retain the above copyright notice, this
+          list of conditions and the following disclaimer.
+        
+        * Redistributions in binary form must reproduce the above copyright notice,
+          this list of conditions and the following disclaimer in the documentation
+          and/or other materials provided with the distribution.
+        
+        * Neither the name of the copyright holder nor the names of its
+          contributors may be used to endorse or promote products derived from
+          this software without specific prior written permission.
+        
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+        AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+        IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+        DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+        FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+        DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+        SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+        CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+        OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+        OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+        
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Science/Research
+Classifier: Natural Language :: English
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Topic :: Scientific/Engineering :: Chemistry
+Requires-Python: >=3.10.14
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: author
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: requires-python
+
+# Example Package
+
+KiMecO is a kinetic mechanism optimizer. It aims at optimizing chemical kinetic mechanisms' parameters to allow a generalization of their parameters. It is a worflow that starts from a set of Master Equation (ME) parameters assembled in a MESS input. This initial set is perturbed X times to create a generation of elements that all undergo a ME calculation. The resulting rate coefficients and the knowledge of the corresponding reactions are included in a mechanism file. The latter is used in cantera simulations designed to be compared with experimental concentration profiles. The elements are then scored according to the agreement of their simulations with the experimental data. Using a tournament style genetic algorythm, the winners are selected and their set of Master Equation parameters is perturbed to produce the next generation.

@@ -24,8 +24,7 @@ setup(
                           "sqlalchemy",
                           "sqlalchemy-utils",
                           "dash",
-                          "pint",
-                          "mess"],  # add any additional packages that
+                          "pint"],  # add any additional packages that
 
         keywords=['python',
                   'kimeco',
