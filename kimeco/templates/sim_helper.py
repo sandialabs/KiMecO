@@ -1,7 +1,7 @@
 sim_helper = """
 import json
 import numpy as np
-from game.database.sim_db import SIM_DB
+from kimeco.database.sim_db import SIM_DB
 import sqlalchemy
 import time
 import os

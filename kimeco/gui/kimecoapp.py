@@ -19,7 +19,7 @@ from kimeco import kimeco_path
 setup_logger()
 
 
-class GameApp:
+class KimecoApp:
     def __init__(self, input_file: str):
         self.settings: dict = check_input(input_file=input_file)
         self.glog = logging.getLogger()
@@ -29,22 +29,22 @@ class GameApp:
         (self.init_SOP, self.input_tpl) = mr.read()
         if not os.path.isdir(self.settings['project_name']):
             print('''
-    GAME graphical interface can only analyse the data
-    of existing database created by a previous GAME run.
-    Run GAME with project_name: {},
+    KIMECO graphical interface can only analyse the data
+    of existing database created by a previous KIMECO run.
+    Run KIMECO with project_name: {},
     and then analyse the results.'''.format(
                 self.settings['project_name']))
             sys.exit()
         os.chdir(self.settings['project_name'])
         self.loc: str = os.getcwd()
         self.sop_db = SOP_DB(sop=self.init_SOP,
-                             name='GAME_DB_SOP')
+                             name='KMO_DB_SOP')
         self.sop_tot_g: int = len(self.sop_db.tables)
         self.kin_db = KIN_DB(sop=self.init_SOP,
-                             name='GAME_DB_KIN')
+                             name='KMO_DB_KIN')
         self.kin_tot_g: int = len(self.kin_db.tables)
         self.sim_db = SIM_DB(sop=self.init_SOP,
-                             name='GAME_DB_SIM')
+                             name='KMO_DB_SIM')
         self.sim_tot_g: int = len(self.sim_db.tables)
 
         # Define which scoring function to use
@@ -190,20 +190,20 @@ class GameApp:
 def main() -> None:
     if len(sys.argv) != 2:
         print("""
-    GAME needs various parameters to be set in a JSON input file.
+    KIMECO needs various parameters to be set in a JSON input file.
     This JSON input file shopuld be supplied as the first and only
     argument.
 
-    Usage:  game path/to/JSON/input/file.json
+    Usage:  kmoui path/to/JSON/input/file.json
     """)
         try:
             input_file: str = sys.argv[1]
         except IndexError:
-            print('To use GAME, supply the input file as argument.')
+            print('To use KIMECO, supply the input file as argument.')
         sys.exit()
     input_file = sys.argv[1]
-    game_app = GameApp(input_file)
-    game_app.run()
+    kmo_app = KimecoApp(input_file)
+    kmo_app.run()
 
 
 if __name__ == "__main__":

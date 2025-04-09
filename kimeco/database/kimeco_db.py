@@ -10,11 +10,11 @@ from typing import Any
 from sqlalchemy.exc import OperationalError
 
 
-class Game_db:
+class Kimeco_db:
     def __init__(self,
                  name: str,
                  path: str = '') -> None:
-        """Class managing the information storage of GAME database.
+        """Class managing the information storage of KIMECO database.
         """
         self.name: str = name
         self._tabls = []

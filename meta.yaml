@@ -11,4 +11,4 @@ build:
     number: 0
     entry_points:
         - kmo = kimeco.main:main
-        - kmoui = kimeco.gui.gameapp:main
+        - kmoui = kimeco.gui.kimecoapp:main

@@ -46,7 +46,7 @@ class QueueingSystem:
         - Do science
         - Write files
 
-        File writting should be done by other instances of GAME, which will be
+        File writting should be done by other instances of KIMECO, which will be
         visited when the ressources are fully used
         or when the work queue is empty.
 

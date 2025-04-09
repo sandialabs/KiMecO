@@ -25,25 +25,25 @@ glog = logging.getLogger()
 
 
 def main() -> None:
-    # if os.path.isfile('game.log'):
+    # if os.path.isfile('kimeco.log'):
     #     for i in range(50):
-    #         if not os.path.isfile(f'game.log_{i}'):
-    #             os.remove('game.log', f'game.log_{i}')
+    #         if not os.path.isfile(f'kimeco.log_{i}'):
+    #             os.remove('kimeco.log', f'kimeco.log_{i}')
     #             break
     # Call the setup function to configure logging
     if len(sys.argv) != 2:
         glog.info("""
-    GAME needs various parameters to be set in a JSON input file.
+    KIMECO needs various parameters to be set in a JSON input file.
     This JSON input file should be supplied as the first and only
     argument.
 
-    Usage:  game path/to/JSON/input/file.json
+    Usage:  kmo path/to/JSON/input/file.json
     """)
         sys.exit()
     try:
         input_file: str = sys.argv[1]
     except IndexError:
-        glog.info('To use GAME, supply the input file as argument.')
+        glog.info('To use KIMECO, supply the input file as argument.')
         sys.exit(-1)
 
     settings: dict = check_input(input_file=input_file)
@@ -59,11 +59,11 @@ def main() -> None:
     location: str = os.getcwd()
 
     sop_db = SOP_DB(sop=init_SOP,
-                    name='GAME_DB_SOP')
+                    name='KMO_DB_SOP')
     kin_db = KIN_DB(sop=init_SOP,
-                    name='GAME_DB_KIN')
+                    name='KMO_DB_KIN')
     sim_db = SIM_DB(sop=init_SOP,
-                    name='GAME_DB_SIM')
+                    name='KMO_DB_SIM')
     glog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
 
     # Define which scoring function to use

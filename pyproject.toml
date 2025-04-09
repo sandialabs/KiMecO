@@ -11,7 +11,7 @@ requires = ["setuptools>=61.0",
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-exclude = ["build", "dist", "game.egg-info"]
+exclude = ["build", "dist", "kimeco.egg-info"]
 
 [project]
 name = "kimeco"

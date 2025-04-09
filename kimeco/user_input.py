@@ -33,7 +33,7 @@ def check_input(input_file: str) -> dict:
 
     # Is JSON file?
     if input_file[-5:].casefold() != '.json':
-        glog.info("The argument given to GAME should be a json file.")
+        glog.info("The argument given to KIMECO should be a json file.")
         sys.exit(-1)
 
     with open(input_file, mode='r') as f:

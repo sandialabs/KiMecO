@@ -113,9 +113,11 @@ class LogNormal(Perturbator):
         self.perturb_energy(item=bar)
         self.perturb_vibrations(well=bar)
         self.perturb_hindered_rotors(well=bar)
-        self.perturb_ifreq(bar=bar)
         if bar.barrierless:
             self.perturb_symmetry_factor(bar=bar)
+        else:
+            self.perturb_ifreq(bar=bar)
+
 
     def perturb_bimolecular(self,
                             bim: Bimolecular) -> None:
@@ -223,10 +225,6 @@ class LogNormal(Perturbator):
         Args:
             bar (Barrier) : Barrier object
         """
-        # Doesn't perturb the frequency of barrierless barrier
-        if 'nobar' in bar.name:
-            return
-
         if f'{bar.name}__if' in self.select:
             # Set trial imaginary frequency out of the boundaries
             try_if: float = self.i_sop.items[bar.name].ifreq\
@@ -243,4 +241,17 @@ class LogNormal(Perturbator):
 
     def perturb_symmetry_factor(self,
                                 bar: Barrier):
-        pass
+        
+        if f'{bar.name}__sf' in self.select:
+            # Set trial imaginary frequency out of the boundaries
+            try_if: float = self.i_sop.items[bar.name].ifreq\
+                - (3*self.settings['max_std']) * self.settings['std_if']
+            while not self.within_boundaries(
+                    perturbed_val=try_if,
+                    ptype='if',
+                    initial_val=self.i_sop.items[bar.name].ifreq):
+                try_if = random.lognormal(
+                    mean=np.log(bar.ifreq),
+                    sigma=self.settings['std_if']*self.gen_fact)
+
+            bar.ifreq = try_if

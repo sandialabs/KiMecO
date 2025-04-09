@@ -1,10 +1,10 @@
-from kimeco.database.game_db import Game_db
+from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
 from sqlalchemy import select, Row
 from typing import Any, Sequence
 
 
-class SOP_DB(Game_db):
+class SOP_DB(Kimeco_db):
     def __init__(self,
                  sop: SOP,
                  name: str,

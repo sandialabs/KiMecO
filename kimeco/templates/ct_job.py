@@ -1,6 +1,6 @@
 ctjobtpl = """import cantera as ct
-from game.cantera.customrate import MessData, MessRate
-from game.database.sim_db import SIM_DB
+from kimeco.cantera.customrate import MessData, MessRate
+from kimeco.database.sim_db import SIM_DB
 import numpy as np
 from numpy import float32
 from pandas import MultiIndex, DataFrame, RangeIndex

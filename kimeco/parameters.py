@@ -8,7 +8,7 @@ from kimeco.barrier import Barrier
 
 class SOP:
     """Set Of Parameters.
-    Main object of the GAME code, to be perturbed and optimized."""
+    Main object of the KIMECO code, to be perturbed and optimized."""
 
     def __init__(self,
                  score_species: list[str]) -> None:

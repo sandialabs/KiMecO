@@ -59,9 +59,9 @@ class SIM:
             id (int):
                 Identifier of the simulation object.
                 Used to calculate the identifier of individual sim(P,T).
-            db (Game_db): Game SIM DB
+            db (Kimeco_db): Kimeco SIM DB
             loc (str): Where the files will be generated
-            q_sys (QueueingSystem): Game Queuing system.
+            q_sys (QueueingSystem): Kimeco Queuing system.
             set (dict[str, Any]): Settings (JSON input file)
             reac_idx (list[int] | None, optional):
                 Indexes of the reactions to change in the mechanism file.

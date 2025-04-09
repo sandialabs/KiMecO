@@ -1,4 +1,4 @@
-from kimeco.database.game_db import Game_db
+from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.parameters import SOP
@@ -63,7 +63,7 @@ class Element:
         of the generation
 
         Args:
-            db (Game_db): KIN Game database
+            db (Kimeco_db): KIN Kimeco database
             table (str): Table name (GX)
         """
         df: DataFrame = self.rateCoef.recover_rslts()
@@ -128,7 +128,7 @@ class Element:
         return np.sum(self.scores)
 
     def prepare_upsert(self,
-                       db: Game_db,
+                       db: Kimeco_db,
                        table: str) -> None:
         db.prepare_batch_upsert(table=table,
                                 id=self.id,

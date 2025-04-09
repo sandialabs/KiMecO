@@ -29,11 +29,11 @@ kimeco/Perturbators/lognormal.py
 kimeco/Perturbators/normal.py
 kimeco/Perturbators/perturbator.py
 kimeco/cantera/customrate.py
-kimeco/database/game_db.py
+kimeco/database/kimeco_db.py
 kimeco/database/kin_db.py
 kimeco/database/sim_db.py
 kimeco/database/sop_db.py
-kimeco/gui/gameapp.py
+kimeco/gui/kimecoapp.py
 kimeco/gui/kinsection.py
 kimeco/gui/section.py
 kimeco/gui/simsection.py

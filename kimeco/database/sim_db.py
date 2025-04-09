@@ -1,4 +1,4 @@
-from kimeco.database.game_db import Game_db
+from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
 from sqlalchemy import select, Row
 from typing import Any, Sequence
@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 
-class SIM_DB(Game_db):
+class SIM_DB(Kimeco_db):
     def __init__(self,
                  name: str,
                  path: str = '',
