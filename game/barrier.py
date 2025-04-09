@@ -16,6 +16,7 @@ class Barrier(Well):
         self.connected: list[Well | Bimolecular] = [lside, rside]
         self._energy: float
         self.ifreq: float
+        self.symFact: float
         self.barrierless: bool = False
 
     @property
@@ -56,7 +57,7 @@ class Barrier(Well):
     def db_dict(self) -> dict[str, Any]:
         # barrierless are not perturbed
         if self.barrierless:
-            return {}
+            return {f"{self.name}__sf": float(self.symFact)}
         db_dict: dict = super(Barrier, self).db_dict
         db_dict.update({f"{self.name}__if": float(self.ifreq)})
 
