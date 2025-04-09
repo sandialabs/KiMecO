@@ -4,6 +4,7 @@ pyproject.toml
 setup.py
 game/barrier.py
 game/bimolecular.py
+game/core.py
 game/default_settings.py
 game/element.py
 game/generation.py
@@ -31,17 +32,16 @@ game/database/game_db.py
 game/database/kin_db.py
 game/database/sim_db.py
 game/database/sop_db.py
-game/gui/analyser.py
 game/gui/gameapp.py
 game/gui/kinsection.py
 game/gui/section.py
 game/gui/simsection.py
 game/gui/sopsection.py
-game/gui/start.py
 game/readers/mess_input.py
 game/readers/mess_output.py
 game/scoring_f/scoring.py
 game/scoring_f/weighteddif.py
+game/sensitivity/linear.py
 game/templates/ct_job.py
 game/templates/ct_reaction_tpl.py
 game/templates/messjob.py

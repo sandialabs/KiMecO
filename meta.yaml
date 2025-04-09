@@ -1,5 +1,5 @@
-{% set name = "game" %}
-{% set version = "0.0.1" %}
+{% set name = "kimeco" %}
+{% set version = "0.0.2" %}
 
 package:
     name: {{ name|lower }}
@@ -10,5 +10,5 @@ build:
     script: {{ PYTHON }} -m pip install . -vv
     number: 0
     entry_points:
-        - game = game.main:main
-        - gameUI = game.gui.gameapp:main
+        - kmo = kimeco.main:main
+        - kmoui = kimeco.gui.gameapp:main

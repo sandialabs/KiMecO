@@ -1,4 +1,5 @@
 {
     "python.defaultInterpreterPath": "/home/csoulie/.conda/envs/game/bin/python",
-    "python.venvPath": "/home/csoulie/.conda/envs/"
+    "python.venvPath": "/home/csoulie/.conda/envs/",
+    "gitlens.advanced.caching.gitPath": true
 }

@@ -1,12 +1,12 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.1'
-DESCRIPTION = 'GAME'
-LONG_DESCRIPTION = 'Genetic Algorythm Master Equation'
+VERSION = '0.0.2'
+DESCRIPTION = 'KiMecO'
+LONG_DESCRIPTION = 'Kinetic Mechanism Optimizer'
 
 # Setting up
 setup(
-        name="game",
+        name="kimeco",
         version=VERSION,
         author="Clement Soulie",
         author_email="<csoulie@sandia.gov>",
@@ -18,16 +18,21 @@ setup(
         packages=find_packages(),
         install_requires=["ase>=3.22.1",
                           "cantera>=3.0.0",
-                          "numpy>=1.22.4",
+                          "numpy>=2",
                           "pandas>=2.2",
-                          "sqlalchemy"],  # add any additional packages that
-        # needs to be installed along with your package. Eg: 'caer'
+                          "setuptools>=61.0",
+                          "sqlalchemy",
+                          "sqlalchemy-utils",
+                          "dash",
+                          "pint"],  # add any additional packages that
 
         keywords=['python',
-                  'game',
-                  'genetic algorythm',
+                  'kimeco',
+                  'machine learning',
                   'master equation',
-                  'kinetics'],
+                  'kinetics',
+                  'kinetic mechanism',
+                  'non linear optimizer'],
         classifiers=[
             "Development Status :: 3 - Alpha",
             "Intended Audience :: Research",

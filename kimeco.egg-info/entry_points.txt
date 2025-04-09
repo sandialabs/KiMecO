@@ -1,0 +1,3 @@
+[console_scripts]
+kmo = kimeco.main:main
+kmoui = kimeco.gui.kimecoapp:main
