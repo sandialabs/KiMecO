@@ -16,8 +16,13 @@ class Barrier(Well):
         self.connected: list[Well | Bimolecular] = [lside, rside]
         self._energy: float
         self.ifreq: float
-        self.symFact: float
+        self._symFact: float
+        self.sf_p: float = 1.0
         self.barrierless: bool = False
+
+    @property
+    def symFact(self):
+        return self._symFact * self.sf_p
 
     @property
     def frequencies(self) -> NDArray[Any]:

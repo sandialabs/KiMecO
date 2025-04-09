@@ -491,7 +491,7 @@ class MessInputReader:
             symFact (float): Symmetry factor of the object in (kcal/mol)
             lnum (int): Line number in input file
         """
-        self.SOP.items[name].symFact = symFact
+        self.SOP.items[name]._symFact = symFact
         new_line: str = f"{self.file[lnum].split()[0]}" \
                         + " {" + f"{name}" \
                         + ".symFact}\n"

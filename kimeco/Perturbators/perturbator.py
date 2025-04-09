@@ -28,6 +28,7 @@ class Perturbator(ABC):
         self.gen_fact: float = 1.0
         self.has_boundaries = False
         self.additive: list[str] = ['e', 'b', 'pow', 'lf_p', 'hf_p']
+        self.multiplicative: list[str] = ['sf']
         self.percent: list[str] = ['if', 'hr', 'sigma', 'epsi', 'fact']
         self.select: list[str] = self.settings['only_perturb']
 
@@ -55,6 +56,9 @@ class Perturbator(ABC):
                     * self.settings[std_p] * self.settings['max_std'],
                     i_val + i_val
                     * self.settings[std_p] * self.settings['max_std']]
+        elif ptype in self.multiplicative:
+            return [i_val / (self.settings[std_p] * self.settings['max_std']),
+                    i_val * (self.settings[std_p] * self.settings['max_std'])]
         else:
             raise NotImplementedError('Parameter not parametrised.')
 
@@ -164,6 +168,7 @@ class Perturbator(ABC):
         """
         pass
 
+    @abstractmethod
     def perturb_symmetry_factor(self,
                                 bar: Barrier):
         pass

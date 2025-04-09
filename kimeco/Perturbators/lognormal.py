@@ -118,7 +118,6 @@ class LogNormal(Perturbator):
         else:
             self.perturb_ifreq(bar=bar)
 
-
     def perturb_bimolecular(self,
                             bim: Bimolecular) -> None:
         self.perturb_energy(item=bim)
@@ -241,17 +240,22 @@ class LogNormal(Perturbator):
 
     def perturb_symmetry_factor(self,
                                 bar: Barrier):
-        
-        if f'{bar.name}__sf' in self.select:
-            # Set trial imaginary frequency out of the boundaries
-            try_if: float = self.i_sop.items[bar.name].ifreq\
-                - (3*self.settings['max_std']) * self.settings['std_if']
-            while not self.within_boundaries(
-                    perturbed_val=try_if,
-                    ptype='if',
-                    initial_val=self.i_sop.items[bar.name].ifreq):
-                try_if = random.lognormal(
-                    mean=np.log(bar.ifreq),
-                    sigma=self.settings['std_if']*self.gen_fact)
+        """Perturb the symmetry factor of a barrierless reaction
 
-            bar.ifreq = try_if
+        Args:
+            bar (Barrier): barrierless reaction.
+        """
+
+        if f'{bar.name}__sf' in self.select:
+            # Set trial symmetry factor out of the boundaries
+            try_sf: float = self.i_sop.items[bar.name].sf_p\
+                / ((3*self.settings['max_std']) * self.settings['std_sf'])
+            while not self.within_boundaries(
+                    perturbed_val=try_sf,
+                    ptype='sf',
+                    initial_val=self.i_sop.items[bar.name].sf_p):
+                try_sf = random.lognormal(
+                    mean=np.log(bar.sf_p),
+                    sigma=self.settings['std_sf']*self.gen_fact)
+
+            bar.sf_p = try_sf

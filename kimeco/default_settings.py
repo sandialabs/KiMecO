@@ -84,7 +84,7 @@ default_settings: dict[str, Any] = {
     "std_epsi": 0.2,
     # Lennard Jones, sigma, percentage
     "std_sigma": 0.2,
-    # Multiplicating/dividing factor for barrierless reactions
+    # Multiplicating/dividing factor for symmetry factor of bl reactions
     "std_sf": 2.0,
     # Name of the scoring function class to use
     "scoring_func": "weighteddif",
