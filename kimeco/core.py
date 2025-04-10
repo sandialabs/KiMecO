@@ -197,13 +197,11 @@ class CoreRun:
         collected: list[int] = []
         to_collect = self.sim_db._select[self.name]
         collecting: dict[int, list[list[Any]]] = self.sim_db.batch_select()
-        for sim_id, rows in collecting.items():
+        for sim_id, db_data in collecting[self.name].items():
             el: Element = self.elements[sim_id // nsim]
             sim: int = sim_id % nsim
             # number of timesteps
             nsteps = len(self.settings['exp_profiles'][sim][0])
-            db_data = np.array(
-                [i[1:] for i in rows])
             # Happens because of data concurrency
             if len(db_data) != nsteps:
                 continue

@@ -42,7 +42,8 @@ def main() -> None:
         sys.exit()
     try:
         input_file: str = sys.argv[1]
-    except IndexError:
+    except IndexError as e:
+        glog.debug(e)
         glog.info('To use KIMECO, supply the input file as argument.')
         sys.exit(-1)
 
@@ -163,6 +164,7 @@ def main() -> None:
     with open(location + '/goat.txt', 'w') as f:
         f.write(goat_line)
 
+    # Main loop
     while not converged and Generation.total() < settings['max_gen']:
         new_gen = Generation(elements=new_elements,
                              settings=settings,
@@ -178,25 +180,32 @@ def main() -> None:
         new_gen.run()
 
         # Change the number of elements in goats after the first generation
-        if len(goat) == 1:
+        if new_gen.id == 1:
             median = np.median([
                 el.score for el in new_gen.elements
             ])
             goat: list[Element] = [
                 el for el in new_gen.elements if el.score <= median]
+        else:
+            # Actualize the list of best elements accross all generations
+            old_scores: list[float] = np.array([el.score for el in goat])
+            low_new: list[Element] = [
+                el for el in new_gen.elements
+                if el.score < np.max(old_scores) and el not in goat]
+            replaced = 0
+            if len(low_new) == 0:
+                converged = True
 
-        # Actualize the list of best elements accross all generations
-        old_scores = np.array([el.score for el in goat])
-        low_new = np.array([
-            el for el in new_gen.elements
-            if el.score < np.max(old_scores) and el not in goat])
-        replaced = 0
-        for el in low_new:
-            if el.score < np.max([el.score for el in goat]):
-                new_scores: list[float] = [el.score for el in goat]
-                goat[new_scores.index(np.max(new_scores))] = el
+            while (not converged and
+                   min([i.score for i in low_new]) <
+                   max([el.score for el in goat])):
+                low_scores: list[float] = [i.score for i in low_new]
+                low_idx: int = low_scores.index(min(low_scores))
+                goat_scores: list[float] = [el.score for el in goat]
+                goat_idx: int = goat_scores.index(max(goat_scores))
+                goat[goat_idx] = low_new.pop(low_idx)
                 replaced += 1
-        glog.info(f'Number of goat replaced: {replaced}')
+            glog.info(f'Number of goat replaced: {replaced}')
 
         # Add the new line in goat.txt
         goat_line = ''
@@ -325,8 +334,7 @@ def set_pert(settings,
         pert = LogNormal(settings=settings,
                          initial_SOP=init_SOP)
     else:
-        raise NotImplementedError('Currently, the only type of perturbator\
-                                   implemented is <normal>')
+        raise NotImplementedError('Unknown type of perturbator.')
     return pert
 
 

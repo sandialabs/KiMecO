@@ -6,6 +6,12 @@ from kimeco.rotor import Rotor
 from ase.symbols import Symbols
 import numpy as np
 from numpy.typing import NDArray
+import logging
+from kimeco.logger_config import setup_logger
+
+
+setup_logger()
+glog = logging.getLogger()
 
 
 class Well:
@@ -45,7 +51,8 @@ class Well:
             try:
                 idx = int(name.split('(')[1].split(')')[0])
                 return self.r_scan(idx)
-            except AttributeError:
+            except AttributeError as e:
+                glog.debug(e)
                 raise AttributeError(
                     f'Well does not have the attribute {name}')
         else:

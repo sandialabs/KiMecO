@@ -42,7 +42,7 @@ class WeightedDif(Scoring):
                     np.abs(
                         (((1/exp_errs[sim_index][1:])**2)
                          / len(exp_prof[sim_index][0])) *
-                        (sim.profiles[sim_index].T[1:] -
+                        (sim.profiles[sim_index].T[2:] -
                          exp_prof[sim_index][1:])**2
                         ),  # Normalize time
                     axis=1

@@ -63,6 +63,7 @@ while trying2connect:
         print(f'Writting {{len(filenames)}} profiles in the db took {{upsert_time}} secondes.')
         break
     # Happens when db is occupied/locked
-    except sqlalchemy.exc.OperationalError:
+    except sqlalchemy.exc.OperationalError as e:
+        print(e)
         time.sleep(5)
             """

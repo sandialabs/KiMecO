@@ -11,18 +11,18 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.gui.sopsection import SOPSection
 from kimeco.gui.kinsection import KINSection
 from kimeco.gui.simsection import SIMSection
+from kimeco import kimeco_path
 import logging
 from kimeco.logger_config import setup_logger
-from kimeco import kimeco_path
 
 
 setup_logger()
+glog = logging.getLogger()
 
 
 class KimecoApp:
     def __init__(self, input_file: str):
         self.settings: dict = check_input(input_file=input_file)
-        self.glog = logging.getLogger()
         mr = MessInputReader(settings=self.settings)
         self.init_SOP: SOP
         self.input_tpl: list[str]
@@ -198,8 +198,9 @@ def main() -> None:
     """)
         try:
             input_file: str = sys.argv[1]
-        except IndexError:
-            print('To use KIMECO, supply the input file as argument.')
+        except IndexError as e:
+            glog.debug(e)
+            glog.info('To use KIMECO, supply the input file as argument.')
         sys.exit()
     input_file = sys.argv[1]
     kmo_app = KimecoApp(input_file)

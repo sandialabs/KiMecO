@@ -1,6 +1,12 @@
 import numpy as np
 from kimeco.parameters import SOP
 import re
+import logging
+from kimeco.logger_config import setup_logger
+
+
+setup_logger()
+glog = logging.getLogger()
 
 
 class MessOutputReader:
@@ -99,10 +105,11 @@ class MessOutputReader:
                 else:
                     try:
                         table[From, To] = float(value)
-                    except ValueError:
+                    except ValueError as e:
                         # Happens when no space between two columns
                         # no space when the right value is very small
                         # and start with a minus sign
+                        glog.debug(e)
                         table[From, To] = float(
                             re.sub(r'-\d+.\d+e-\d\d\d',
                                    ' 0.0 ',

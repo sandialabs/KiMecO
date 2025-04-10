@@ -108,7 +108,8 @@ class Element:
             for idx, k in enumerate(self.sop.scores):
                 self.sop.scores[k] = scores[idx]
             self.status = ElementStatus.DONE
-        except IndexError:
+        except IndexError as e:
+            glog.debug(e)
             # Occurs when a simulation didn't work so profiles were not saved
             self.status = ElementStatus.RESET
             glog.info(f'Resetting element {self.id}: error during scoring.')

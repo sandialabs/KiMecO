@@ -161,7 +161,7 @@ def check_input(input_file: str) -> dict:
                                         clean_profiles[-1][header].append(
                                             float(line[header]))
                                     except TypeError as e:
-                                        glog.warning(e)
+                                        glog.debug(e)
                                         msg = 'Incorrect value detected' +\
                                               f' line{ln} in file {file}' +\
                                               f' column {header}'
@@ -190,7 +190,7 @@ def check_input(input_file: str) -> dict:
                                         clean_errors[-1][header].append(
                                             float(line[header]))
                                     except TypeError as e:
-                                        glog.warning(e)
+                                        glog.debug(e)
                                         msg = 'Incorrect value detected' +\
                                               f' line{ln} in file {file}' +\
                                               f' column {header}'

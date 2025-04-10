@@ -8,6 +8,12 @@ from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
 from typing import Any
 from sqlalchemy.exc import OperationalError
+import logging
+from kimeco.logger_config import setup_logger
+
+
+setup_logger()
+glog = logging.getLogger()
 
 
 class Kimeco_db:
@@ -138,7 +144,8 @@ class Kimeco_db:
 
             with self.eng.begin() as connection:
                 connection.execute(g_upsert)
-        except OperationalError:
+        except OperationalError as e:
+            glog.debug(e)
             # Happens when trying to insert too many values at once
             half: int = len(values) // 2
             val1 = [values[i] for i in range(0, half)]

@@ -308,6 +308,9 @@ class SOP:
         # Imaginary frequencies
         elif 'if' in param_name:
             self.items[item_name].ifreq = value
+        # symmetry factor
+        elif 'sf' in param_name:
+            self.items[item_name].sf_p = value
         # Frequencies
         elif 'hf_p' in param_name:
             self.items[item_name].hf_p = value

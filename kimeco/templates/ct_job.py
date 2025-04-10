@@ -34,6 +34,7 @@ try:
     with open('{sim_name}.pkl', 'rb') as pkl_file:
         wf_gas = pickle.load(pkl_file)
 except EOFError as e:
+    print(e)
     raise KeyError('Unsuccesful opening of {sim_name}.pkl.')
 
 gas = ct.Solution(name=wf_gas.name,
@@ -94,16 +95,7 @@ for idx, id in enumerate(row_ids):
     row_dict = {{}}
     for col in traces:
         row_dict[col] = traces[col][idx]
-#     db.prepare_batch_upsert(table={gen_name},
-#                             id=id,
-#                             values=row_dict)
-# db_wait = np.random.lognormal(mean=np.log(1), sigma=1)
-# time.sleep(db_wait)
 
-# try:
-#     db.batch_upsert()
-# # Happens when db is occupied/locked
-# except sqlalchemy.exc.OperationalError:
 traces['row_ids'] = row_ids
 traces_serializable = \
     {{key: value.tolist() if isinstance(value, np.ndarray)

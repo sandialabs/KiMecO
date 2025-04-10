@@ -61,8 +61,17 @@ class SIM_DB(Kimeco_db):
         return list(db_rslt)
 
     def get_profile_from_id(self,
-                            table,
-                            sim_id) -> list[list[float]]:
+                            table: str,
+                            sim_id: int) -> list[list[float]]:
+        """Query the db for a simulation profile
+
+        Args:
+            table (str): name of the table in the db
+            sim_id (int): id of simulation
+
+        Returns:
+            list[list[float]]: _description_
+        """
         query = select(
             self.tables[table].c.time,
             *[self.tables[table].c[sp]
@@ -85,15 +94,16 @@ class SIM_DB(Kimeco_db):
             self._select[table] = []
         self._select[table].append(sim_id)
 
-    def batch_select(self) -> dict[int, list[list[Any]]]:
+    def batch_select(self) -> dict[str, dict[int, NDArray]]:
         """Execute batch select requests stored in the _select dictionary.
 
         Returns:
-            dict[int, list[list[Any]]]:
-            A dictionary with sim_id as keys and lists
-            of their corresponding data as values.
+            dict[str, dict[int, NDArray]]:
+                str: table name.
+                int: sim_id within this table.
+                NDArray: [rows, [sim_id, time, concentrations]]
         """
-        results: dict[NDArray] = {}
+        results: dict[dict[NDArray]] = {}
         for table in self._select:
             sim_ids = self._select[table]
             query = select(
@@ -104,14 +114,17 @@ class SIM_DB(Kimeco_db):
                     ).where(
                         self.tables[table].c.sim_id.in_(sim_ids))
             with self.eng.begin() as connection:
-                db_rslt: Sequence[Row[Any]] = connection.execute(
-                    query
-                    ).fetchall()
-            times = int(len(db_rslt)/len(sim_ids))
-            results[table] = np.array(db_rslt).reshape([
-                len(sim_ids),
-                times,
-                len(self.sv_species)+2])
+                db_rslt: Sequence[Row[Any]] = np.array(
+                    connection.execute(
+                        query).fetchall()
+                    )
+            results[table] = {}
+            if len(db_rslt) != 0:
+                collected_sim_ids = set(db_rslt[:, 0])
+                for sim_id in collected_sim_ids:
+                    results[table][int(sim_id)] = db_rslt[
+                        db_rslt[:, 0] == sim_id
+                        ]
 
         self._select = {}  # Clear the _select dictionary after processing
         return results

@@ -57,9 +57,6 @@ class SIMSection(Section):
                                  pres: float,
                                  temp: float):
             if specs is None or pres is None or temp is None:
-            #    any([sp is None for sp in specs]) or\
-            #    any([p is None for p in pres]) or\
-            #    any([t is None for t in temp]):
                 raise PreventUpdate
             else:
                 return {'display': 'block'}
@@ -86,32 +83,36 @@ class SIMSection(Section):
             if clic is None:
                 raise PreventUpdate
 
-            all_gen_sims: list[dict[NDArray]] = []
-            for gen_i in selected_gen:
-                for origin in self.gapp.goats[gen_i].split():
-                    gen_id = int(origin.split('_')[0])
-                    el_id = int(origin.split('_')[1])
-                    sim_id = int(el_id *
-                                 len(self.settings['rc_pres']) *
-                                 len(self.settings['rc_temp']))
-                    self.sim_db.prepare_batch_select(
-                        table=f'G{gen_id:04d}',
-                        sim_id=sim_id
-                    )
-                all_gen_sims.append(self.sim_db.batch_select())
-            # Create a figure and associated text for each combination
-            # in the user selection
             sim_plot_children = []
             for p in pres:
+                p_idx = self.settings['rc_pres'].index(p)
                 for t in temp:
+                    t_idx = self.settings['rc_temp'].index(t)
+                    all_gen_sims: list[dict[dict[NDArray]]] = []
+                    for gen_i in selected_gen:
+                        for origin in self.gapp.goats[gen_i].split():
+                            gen_id = int(origin.split('_')[0])
+                            el_id = int(origin.split('_')[1])
+                            sim_id = int(
+                                el_id *
+                                len(self.settings['rc_pres']) *
+                                len(self.settings['rc_temp']) +
+                                p_idx * len(self.settings['rc_temp']) +
+                                t_idx)
+                            self.sim_db.prepare_batch_select(
+                                table=f'G{gen_id:04d}',
+                                sim_id=sim_id
+                            )
+                    all_gen_sims.append(self.sim_db.batch_select())
+                    # Create a figure and associated text for each combination
+                    # in the user selection
                     for TPGenSP, gen_i in zip(all_gen_sims, selected_gen):
-                        for sp_idx, sp in enumerate(specs):
+                        for sp in specs:
                             sim_plot_children.extend(
                                 self.make_figure(
                                     gen_name=f"G{gen_i:04d}",
                                     TPGenSP=TPGenSP,
                                     sp=sp,
-                                    sp_idx=sp_idx,
                                     pres=p,
                                     temp=t))
             return {'display': 'block'}, sim_plot_children
@@ -120,37 +121,35 @@ class SIMSection(Section):
                     gen_name: str,
                     TPGenSP: dict,
                     sp: str,
-                    sp_idx: int,
                     pres: float,
                     temp: float):
         fig = go.Figure()
         has_legend: dict[str, bool] = {}
-        for idx, (origin, arr) in enumerate(TPGenSP.items()):
+        nel = 0
+        sp_idx = self.sim_db.columns.index(sp) - 2
+        for idx, (origin, sim_dict) in enumerate(TPGenSP.items()):
             if origin not in has_legend:
                 has_legend[origin] = False
             name = f'Origin: {origin}'
-            specs_arr = arr[:, :, 2:]
-            nel = specs_arr.shape[0]
-            for elem in range(len(specs_arr)):
+            for sim_id, arr in sim_dict.items():
+                nel += 1
                 if not has_legend[origin]:
                     fig.add_trace(go.Scatter(
-                        x=arr[elem, :, 1],
-                        y=specs_arr[elem, :, sp_idx].T,
+                        x=arr[:, 1],
+                        y=arr[:, sp_idx].T,
                         mode='lines',
                         name=name,
-                        opacity=0.25,
-                        hoverinfo='name'
+                        opacity=0.25
                         ))
                     has_legend[origin] = True
                 else:
                     fig.add_trace(go.Scatter(
-                        x=arr[elem, :, 1],
-                        y=specs_arr[elem, :, sp_idx].T,
+                        x=arr[:, 1],
+                        y=arr[:, sp_idx].T,
                         mode='lines',
                         name=name,
                         showlegend=False,
-                        opacity=0.25,
-                        hoverinfo='name'
+                        opacity=0.25
                         ))
             fig.update_traces(
                 marker=dict(
@@ -164,11 +163,13 @@ class SIMSection(Section):
         exp_p = self.settings['exp_profiles'][eidx]
         fig.add_trace(go.Scatter(
                         x=exp_p[0],
-                        y=exp_p[sp_idx+1],
+                        y=exp_p[sp_idx-1],
+                        error_y={
+                            'array': self.settings['exp_errors'][eidx][sp_idx-1]
+                            },
                         mode='lines',
                         name='Exp. profile',
-                        line=dict(color='black'),
-                        hoverinfo='name'
+                        line=dict(color='black')
                         ))
         # Overlay both histograms
         fig.update_layout(xaxis=dict(
@@ -199,7 +200,8 @@ class SIMSection(Section):
                                 size=12,
                                 color='rgb(0, 0, 0)'),
                         ),
-                        plot_bgcolor='white'
+                        plot_bgcolor='white',
+                        hovermode='closest'
                         )
         figure_block = [
             html.H3(children=[
