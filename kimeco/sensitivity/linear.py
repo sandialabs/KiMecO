@@ -98,39 +98,47 @@ class Linear:
 
         # Iterate through the parameters
         el_id = 0
-        for key in pn:
-            # Check if the parameter should be modified
-            if any(
-               substring in key for substring in
-               ['__score']):
-                self.to_test.append(False)
-                continue
-            # Create a new SOP object with the modified parameter
-            self.to_test.append(True)
-            el_id += 1
-            mol: str = key.split('__')[0]
-            param: str = key.split('__')[1]
-            lin_fact = self.settings['sensi_d']
-            if param == 'e':
-                if isinstance(base_sop.items[mol], Barrier):
-                    modif = self.settings['std_b'] * lin_fact
+        for side in [1, -1]:
+            for key in pn:
+                # Check if the parameter should be modified
+                if any(
+                substring in key for substring in
+                ['__score']):
+                    self.to_test.append(False)
+                    continue
+                # Create a new SOP object with the modified parameter
+                self.to_test.append(True)
+                el_id += 1
+                mol: str = key.split('__')[0]
+                param: str = key.split('__')[1]
+                lin_fact = self.settings['sensi_d']
+                if param == 'e':
+                    if isinstance(base_sop.items[mol], Barrier):
+                        modif = self.settings['std_b'] * lin_fact * side
+                    else:
+                        modif = self.settings['std_e'] * lin_fact * side
+                elif param.startswith('hr'):
+                    modif = self.settings['std_hr'] * lin_fact * side
+                elif param.startswith('epsi'):
+                    modif = self.settings['std_epsi'] * lin_fact * side
+                elif param.startswith('sigma'):
+                    modif = self.settings['std_sigma'] * lin_fact * side
+                elif param.startswith('sf_p'):
+                    if side == 1:
+                        modif = pn[key] * (self.settings['std_sf_p'] - 1) *\
+                              lin_fact
+                    elif side == -1:
+                        modif = (pn[key] / self.settings['std_sf_p']) *\
+                            (self.settings['std_sf_p'] - 1) * lin_fact
                 else:
-                    modif = self.settings['std_e'] * lin_fact
-            elif param.startswith('hr'):
-                modif = self.settings['std_hr'] * lin_fact
-            elif param.startswith('epsi'):
-                modif = self.settings['std_epsi'] * lin_fact
-            elif param.startswith('sigma'):
-                modif = self.settings['std_sigma'] * lin_fact
-            else:
-                modif = self.settings[f'std_{param}'] * lin_fact
-            new_sop = SOP.from_db_row(
-                sop_tpl=base_sop,
-                row=[v+modif if k == key else v for k, v in pn.items()])
-            new_elements.append(
-                Element(
-                    sop=new_sop,
-                    id=el_id))
+                    modif = self.settings[f'std_{param}'] * lin_fact
+                new_sop = SOP.from_db_row(
+                    sop_tpl=base_sop,
+                    row=[v+modif if k == key else v for k, v in pn.items()])
+                new_elements.append(
+                    Element(
+                        sop=new_sop,
+                        id=el_id))
         return new_elements
 
     def run(self) -> None:

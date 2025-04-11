@@ -98,22 +98,18 @@ class Generation(CoreRun):
         """
         # Read the data from the db
         rows = self.sop_db.get_table(table=self.name)
-        # Create the list of elements from the db
-        new_gen: List[Element] = [Element(
-            sop=SOP.from_db_row(sop_tpl=self.elements[0].sop,
-                                row=row[1:]),
-            id=row[0],
-            gen=self.id)
-            for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
-        for el in new_gen:
-            not_default: List[bool] = [
-                i != el.sop._default_score for i in el.scores]
-            if all(not_default):
-                el.status = ElementStatus.DONE
-            for idx, gen_el in enumerate(self.elements):
-                if el.id == gen_el.id:
-                    self.elements[idx] = el
-                    break
+        # IF all elements are saved
+        if len(rows) == len([
+           el for el in self.elements if el.status != ElementStatus.DONE]
+           ):
+            for row in rows:
+                self.elements[row[0]] = Element(
+                    sop=SOP.from_db_row(
+                        sop_tpl=self.elements[0].sop,
+                        row=row[1:]),
+                    id=row[0],
+                    gen=self.id)
+                self.elements[row[0]].status = ElementStatus.DONE
 
     def reset_element(self, el: Element) -> None:
         """Reset a failed element."""

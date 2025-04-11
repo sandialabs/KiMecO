@@ -1,21 +1,13 @@
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
-from kimeco.database.sop_db import SOP_DB
 from kimeco.parameters import SOP
 from kimeco.rate_coef import RateCo
-from kimeco.scoring_f.scoring import Scoring
 from kimeco.simulation import SIM
 from typing import Any
 from pandas import DataFrame
 import numpy as np
 from enum import Enum
-import logging
-from kimeco.logger_config import setup_logger
-
-
-setup_logger()
-glog = logging.getLogger()
 
 
 class ElementStatus(Enum):

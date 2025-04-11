@@ -193,7 +193,7 @@ def main() -> None:
             if len(low_new) == 0:
                 converged = True
 
-            while (not converged and
+            while (len(low_new) != 0 and
                    min([i.score for i in low_new]) <
                    max([el.score for el in goat])):
                 low_scores: list[float] = [i.score for i in low_new]
