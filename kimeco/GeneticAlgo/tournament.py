@@ -1,4 +1,4 @@
-from copy import deepcopy
+import copy
 from kimeco.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.element import Element
 from kimeco.generation import Generation
@@ -29,9 +29,9 @@ class Tournament(GeneticAlgorithm):
         # Change the intensity of the perturbation
         self.pert.set_gen_fact(gen=gen.id)
         next_gen: list[Element] = gen.elements
-        shuffled = deepcopy(gen.elements)
-        prev_gen: dict[int, Element] = {}
+        shuffled = copy.copy(gen.elements)
         random.shuffle(shuffled)
+        prev_gen: dict[int, Element] = {}
         half = int(len(shuffled)/2)
         for idx, el1 in enumerate(shuffled[:half]):
             el2: Element = shuffled[idx+half]
