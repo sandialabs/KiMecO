@@ -28,7 +28,7 @@ class Perturbator(ABC):
         self.gen_fact: float = 1.0
         self.has_boundaries = False
         self.additive: list[str] = ['e', 'b', 'pow', 'lf_p', 'hf_p']
-        self.multiplicative: list[str] = ['sf']
+        self.multiplicative: list[str] = ['sf_p']
         self.percent: list[str] = ['if', 'hr', 'sigma', 'epsi', 'fact']
         self.select: list[str] = self.settings['only_perturb']
 

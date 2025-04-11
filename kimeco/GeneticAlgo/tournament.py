@@ -44,6 +44,5 @@ class Tournament(GeneticAlgorithm):
             next_gen[loser.id] = Element(
                 sop=self.pert.perturb(sop=winner.sop),
                 id=loser.id,
-                sf=self.sf,
                 gen=gen.id+1)
         return prev_gen, next_gen

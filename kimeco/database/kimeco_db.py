@@ -93,9 +93,8 @@ class Kimeco_db:
         Returns:
             bool: is in db or not
         """
-        query: TextClause = text(
-            text=f"SELECT id FROM {table} WHERE id={id+1}"
-            )
+        query = select(
+            self.tables[table]).where(self.tables[table].c.id == id)
         with self.eng.begin() as connection:
             db_rslt: Sequence = connection.execute(query).fetchall()
         if len(db_rslt) == 0:

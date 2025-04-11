@@ -200,12 +200,12 @@ class MessInputReader:
                                             lnum=lnum)
 
             # SYMMETRY FACTOR
-            elif line.lstrip().casefold().startswith('symmetryfactor') \
-            and isinstance(self.SOP.items[name], Barrier) \
-            and self.SOP.items[name].barrierless:
-                sf = float(line.split()[1])
+            elif (line.lstrip().casefold().startswith('symmetryfactor')
+                  and isinstance(self.SOP.items[name], Barrier)
+                  and self.SOP.items[name].barrierless):
+                _sf = float(line.split()[1])
                 self.save_symmetry_factor(name=name,
-                                          symFact=sf,
+                                          symFact=_sf,
                                           lnum=lnum)
             # All other lines
             else:

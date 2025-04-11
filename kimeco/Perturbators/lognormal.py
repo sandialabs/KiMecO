@@ -246,16 +246,16 @@ class LogNormal(Perturbator):
             bar (Barrier): barrierless reaction.
         """
 
-        if f'{bar.name}__sf' in self.select:
+        if f'{bar.name}__sf_p' in self.select:
             # Set trial symmetry factor out of the boundaries
-            try_sf: float = self.i_sop.items[bar.name].sf_p\
-                / ((3*self.settings['max_std']) * self.settings['std_sf'])
+            try_sf_p: float = self.i_sop.items[bar.name].sf_p\
+                / ((3*self.settings['max_std']) * self.settings['std_sf_p'])
             while not self.within_boundaries(
-                    perturbed_val=try_sf,
-                    ptype='sf',
+                    perturbed_val=try_sf_p,
+                    ptype='sf_p',
                     initial_val=self.i_sop.items[bar.name].sf_p):
-                try_sf = random.lognormal(
+                try_sf_p = random.lognormal(
                     mean=np.log(bar.sf_p),
-                    sigma=self.settings['std_sf']*self.gen_fact)
+                    sigma=self.settings['std_sf_p']*self.gen_fact)
 
-            bar.sf_p = try_sf
+            bar.sf_p = try_sf_p

@@ -41,7 +41,6 @@ class CoreRun:
         self.settings: dict[str, Any] = settings
         self.previous_el: dict[int, Element] = previous_el
         self.pert: Perturbator = pert
-        self.best_score: float = np.inf
         self.name: str = name
         # List of species names used by cantera
         self.sc_species: list[str] = self.settings['score_sp']
@@ -113,9 +112,11 @@ class CoreRun:
                 elif el.status == ElementStatus.SIM:
                     self.recover_simulation_data(el)
                 elif el.status == ElementStatus.SCORING:
-                    el.calc_score()
+                    self.calc_score(el)
+                if el.status == ElementStatus.TO_SAVE:
+                    self.finalize_element(el)
                 if el.status == ElementStatus.DONE:
-                    self.finalize_element(el, idx, finished)
+                    finished[idx] = True
             self.sop_db.batch_upsert()
             self.kin_db.batch_upsert()
             self.check_helpers_status()
@@ -127,9 +128,8 @@ class CoreRun:
         rst: int = el.reset
         self.elements[el.id] = Element(
             sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
-            id=el.id,
-            sf=self.sf
-        )
+            id=el.id
+            )
         self.elements[el.id].reset = rst + 1
 
     def calculate_rate_coefficients(self, el: Element) -> None:
@@ -177,14 +177,13 @@ class CoreRun:
                 break
 
     def finalize_element(self,
-                         el: Element,
-                         idx: int,
-                         finished: npt.NDArray[bool_]) -> None:
-        """Finalize an element after scoring."""
-        el.prepare_upsert(db=self.sop_db, table=self.name)
-        finished[idx] = True
-        if np.sum(el.scores) < self.best_score:
-            self.best_score = np.sum(el.scores)
+                         el: Element) -> None:
+        """Make sure element is saved before changing status."""
+        if self.sop_db.entry_exist(table=self.name,
+                                   id=el.id):
+            el.status = ElementStatus.DONE
+        else:
+            el.prepare_upsert(db=self.sop_db, table=self.name)
 
     def collect_sim_profiles(self):
         """Batch recovery of the concentration profiles to avoid
@@ -305,3 +304,29 @@ class CoreRun:
                 self.sim_hlpers[i] = []
             elif self.qs.status(i, 'hlp') == JobStatus.NOT_IN_QUEUE:
                 self.sim_hlpers[i] = []
+    
+    def calc_score(self,
+                   el: Element) -> None:
+        """Calculate the score of the element
+        using the user requested function.
+        If the elif statement for a new scoring function
+        is missing, also add the chosen string to
+        the implemented_sf list in default_settings.py.
+
+        Args:
+            settings (dict[str, Any]): User input + default settings
+        """
+        try:
+            scores = self.sf.score(sim=el.sim)
+            for idx, k in enumerate(el.sop.scores):
+                el.sop.scores[k] = scores[idx]
+            el.status = ElementStatus.TO_SAVE
+        except IndexError as e:
+            glog.debug(e)
+            # Occurs when a simulation didn't work so profiles were not saved
+            el.status = ElementStatus.RESET
+            glog.info(f'Resetting element {el.id}: error during scoring.')
+
+    @property
+    def best_score(self):
+        return min([el.score for el in self.elements])

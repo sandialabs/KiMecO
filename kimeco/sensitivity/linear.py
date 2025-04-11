@@ -90,8 +90,7 @@ class Linear:
         # List to hold the new SOP objects
         new_elements = [
             Element(sop=base_sop,
-                    id=0,
-                    sf=sf)
+                    id=0)
         ]
 
         # Get the parameters names and their current values
@@ -131,8 +130,7 @@ class Linear:
             new_elements.append(
                 Element(
                     sop=new_sop,
-                    id=el_id,
-                    sf=sf))
+                    id=el_id))
         return new_elements
 
     def run(self) -> None:

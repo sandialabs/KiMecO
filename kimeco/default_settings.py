@@ -85,7 +85,7 @@ default_settings: dict[str, Any] = {
     # Lennard Jones, sigma, percentage
     "std_sigma": 0.2,
     # Multiplicating/dividing factor for symmetry factor of bl reactions
-    "std_sf": 2.0,
+    "std_sf_p": 2.0,
     # Name of the scoring function class to use
     "scoring_func": "weighteddif",
     # Name of species as in exp profiles header

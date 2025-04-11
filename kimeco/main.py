@@ -87,8 +87,7 @@ def main() -> None:
         sensitivity = Linear(
             elements=[Element(
                 sop=init_SOP,
-                id=0,
-                sf=sf)],
+                id=0)],
             settings=settings,
             rc_tpl=input_tpl,
             loc=location,
@@ -100,8 +99,7 @@ def main() -> None:
     else:
         f_el = Element(
             sop=init_SOP,
-            id=0,
-            sf=sf)
+            id=0)
     glog.info(f"{'Parameters selected for perturbation:':<65}")
     pp = ''
     for p in settings['only_perturb']:
@@ -133,7 +131,6 @@ def main() -> None:
         Element(
             sop=pert.perturb(sop=init_SOP),
             id=id,
-            sf=sf,
             gen=1)
         for id in range(settings['n_elem'])]
 
@@ -205,7 +202,9 @@ def main() -> None:
                 goat_idx: int = goat_scores.index(max(goat_scores))
                 goat[goat_idx] = low_new.pop(low_idx)
                 replaced += 1
+            goat_avrg = np.sum([el.score for el in goat])/len(goat)
             glog.info(f'Number of goat replaced: {replaced}')
+            glog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.3f}')
 
         # Add the new line in goat.txt
         goat_line = ''

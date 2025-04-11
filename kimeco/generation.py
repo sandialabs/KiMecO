@@ -103,7 +103,6 @@ class Generation(CoreRun):
             sop=SOP.from_db_row(sop_tpl=self.elements[0].sop,
                                 row=row[1:]),
             id=row[0],
-            sf=self.sf,
             gen=self.id)
             for idx, row in enumerate(rows) if idx < self.settings['n_elem']]
         for el in new_gen:
@@ -116,15 +115,12 @@ class Generation(CoreRun):
                     self.elements[idx] = el
                     break
 
-    # Override the core method to only save new elements from gen_id
-    def finalize_element(self,
-                         el: Element,
-                         idx: int,
-                         finished: npt.NDArray[bool_]) -> None:
-        """Finalize an element after scoring."""
-        # Avoids saving elements in multiple tables
-        if el.gen == self.id:
-            el.prepare_upsert(db=self.sop_db, table=self.name)
-        finished[idx] = True
-        if np.sum(el.scores) < self.best_score:
-            self.best_score = np.sum(el.scores)
+    def reset_element(self, el: Element) -> None:
+        """Reset a failed element."""
+        rst: int = el.reset
+        self.elements[el.id] = Element(
+            sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
+            id=el.id,
+            gen=self.id
+        )
+        self.elements[el.id].reset = rst + 1

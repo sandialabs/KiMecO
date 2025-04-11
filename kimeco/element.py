@@ -1,6 +1,7 @@
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
+from kimeco.database.sop_db import SOP_DB
 from kimeco.parameters import SOP
 from kimeco.rate_coef import RateCo
 from kimeco.scoring_f.scoring import Scoring
@@ -22,6 +23,7 @@ class ElementStatus(Enum):
     KIN = 'kin'
     SIM = 'sim'
     SCORING = 'scoring'
+    TO_SAVE = 'to_save'
     DONE = 'DONE'
     RESET = 'reset'
 
@@ -31,7 +33,6 @@ class Element:
     def __init__(self,
                  sop: SOP,
                  id: int,
-                 sf: Scoring,
                  gen: int = 0) -> None:
         """An element is part of a generation and has
         different attributes, such as an id and a status.
@@ -43,6 +44,7 @@ class Element:
         Attributes:
             status (ElementStatus): Status of the element.
             id (int): ID of the element.
+            gen (int): ID of the generation of origin
         """
         self.sop: SOP = sop
         self.gen: int = gen
@@ -51,7 +53,6 @@ class Element:
         self.sop.id = self.id
         self.rateCoef: RateCo
         self.sim: SIM
-        self.sf: Scoring = sf
         # Purely for debugging
         self.reset: int = 0
         self.name: str = f'E{self.id:04d}'
@@ -92,27 +93,6 @@ class Element:
                 db.prepare_batch_select(
                     table=table,
                     sim_id=sim_id)
-
-    def calc_score(self) -> None:
-        """Calculate the score of the element
-        using the user requested function.
-        If the elif statement for a new scoring function
-        is missing, also add the chosen string to
-        the implemented_sf list in default_settings.py.
-
-        Args:
-            settings (dict[str, Any]): User input + default settings
-        """
-        try:
-            scores = self.sf.score(sim=self.sim)
-            for idx, k in enumerate(self.sop.scores):
-                self.sop.scores[k] = scores[idx]
-            self.status = ElementStatus.DONE
-        except IndexError as e:
-            glog.debug(e)
-            # Occurs when a simulation didn't work so profiles were not saved
-            self.status = ElementStatus.RESET
-            glog.info(f'Resetting element {self.id}: error during scoring.')
 
     @property
     def scores(self) -> list[float]:
