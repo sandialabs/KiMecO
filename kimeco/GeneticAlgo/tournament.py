@@ -14,7 +14,7 @@ class Tournament(GeneticAlgorithm):
         else:
             return False
 
-    def next_gen(self,
+    def create_next_gen(self,
                  gen: Generation
                  ) -> tuple[dict[int, Element], list[Element]]:
         """Pair all elements, keep the one with the best score,

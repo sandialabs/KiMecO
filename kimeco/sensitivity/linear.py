@@ -102,8 +102,8 @@ class Linear:
             for key in pn:
                 # Check if the parameter should be modified
                 if any(
-                substring in key for substring in
-                ['__score']):
+                    substring in key for substring in
+                    ['__score']):
                     self.to_test.append(False)
                     continue
                 # Create a new SOP object with the modified parameter
@@ -114,15 +114,15 @@ class Linear:
                 lin_fact = self.settings['sensi_d']
                 if param == 'e':
                     if isinstance(base_sop.items[mol], Barrier):
-                        modif = self.settings['std_b'] * lin_fact * side
+                        modif = self.settings['std_b'] * lin_fact
                     else:
-                        modif = self.settings['std_e'] * lin_fact * side
+                        modif = self.settings['std_e'] * lin_fact
                 elif param.startswith('hr'):
-                    modif = self.settings['std_hr'] * lin_fact * side
+                    modif = self.settings['std_hr'] * lin_fact
                 elif param.startswith('epsi'):
-                    modif = self.settings['std_epsi'] * lin_fact * side
+                    modif = self.settings['std_epsi'] * lin_fact
                 elif param.startswith('sigma'):
-                    modif = self.settings['std_sigma'] * lin_fact * side
+                    modif = self.settings['std_sigma'] * lin_fact
                 elif param.startswith('sf_p'):
                     if side == 1:
                         modif = pn[key] * (self.settings['std_sf_p'] - 1) *\
@@ -134,7 +134,7 @@ class Linear:
                     modif = self.settings[f'std_{param}'] * lin_fact
                 new_sop = SOP.from_db_row(
                     sop_tpl=base_sop,
-                    row=[v+modif if k == key else v for k, v in pn.items()])
+                    row=[v+modif*side if k == key else v for k, v in pn.items()])
                 new_elements.append(
                     Element(
                         sop=new_sop,
@@ -147,19 +147,25 @@ class Linear:
         rslts: NDArray = np.absolute(
             [el.score - zero for el in self.core.elements[1:]]
             )
-        tot = np.sum(rslts)
+        half = int(len(rslts)/2)
+        highest = [
+            num
+            if num > rslts[idx + half]
+            else rslts[idx + half]
+            for idx, num in enumerate(rslts[:half])]
+        tot = np.sum(highest)
         params: list[str] = [
             k for i, k in enumerate(self.elements[0].sop.parameters_names)
             if self.to_test[i]]
 
         # Get the indices that would sort 'rslts' in decreasing order
         indices = sorted(
-            range(len(rslts)),
-            key=lambda i: rslts[i],
+            range(len(highest)),
+            key=lambda i: highest[i],
             reverse=True)
 
         # Reorder 'rslts' and 'params' using the sorted indices
-        rslts_sorted: list[float] = [rslts[i] for i in indices]
+        rslts_sorted: list[float] = [highest[i] for i in indices]
         self.rs: list[float] = rslts_sorted
         params_sorted: list[str] = [params[i] for i in indices]
         self.ps: list[str] = params_sorted
@@ -173,7 +179,7 @@ class Linear:
 
         txt_file = 'Parameters names:   Cum. Percent    Percent      Value\n'
         cumul = 0
-        for idx in range(len(rslts)):
+        for idx in range(len(rslts_sorted)):
             cumul += rslts_sorted[idx]/tot
             txt_file += f'{params_sorted[idx]:19s}'
             txt_file += f' {cumul:-12.2f}'
@@ -183,4 +189,3 @@ class Linear:
 
         with open(f'{self.name}.out', 'w') as f:
             f.write(txt_file)
-

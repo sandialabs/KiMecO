@@ -1,16 +1,12 @@
 import os
-from typing import List, Any
+from typing import Any
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
-from kimeco.element import Element, ElementStatus
+from kimeco.element import Element
 from kimeco.core import CoreRun
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
-from kimeco.parameters import SOP
-import numpy as np
-import numpy.typing as npt
-from numpy import bool_
 import time
 import logging
 from kimeco.logger_config import setup_logger
@@ -74,9 +70,6 @@ class Generation(CoreRun):
         os.makedirs(gen_dir, exist_ok=True)
         os.chdir(gen_dir)
 
-        if settings['restart'] == 'default':
-            self.restore_gen_from_db()
-
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
         """
@@ -92,24 +85,6 @@ class Generation(CoreRun):
         message = f'Generation {self.id} completed. RUNTIME:'
         glog.info(f'{message:<65}{runtime:>14.2f}s.')
         glog.info(f"{'Best score:':<65}{self.best_score:>14.2f}")
-
-    def restore_gen_from_db(self) -> None:
-        """Create a complete list of elements from the data in the database.
-        """
-        # Read the data from the db
-        rows = self.sop_db.get_table(table=self.name)
-        # IF all elements are saved
-        if len(rows) == len([
-           el for el in self.elements if el.status != ElementStatus.DONE]
-           ):
-            for row in rows:
-                self.elements[row[0]] = Element(
-                    sop=SOP.from_db_row(
-                        sop_tpl=self.elements[0].sop,
-                        row=row[1:]),
-                    id=row[0],
-                    gen=self.id)
-                self.elements[row[0]].status = ElementStatus.DONE
 
     def reset_element(self, el: Element) -> None:
         """Reset a failed element."""

@@ -136,7 +136,8 @@ def main() -> None:
 
     ga = Tournament(settings=settings,
                     sf=sf,
-                    pert=pert)
+                    pert=pert,
+                    sop_db=sop_db)
 
     # Passed to new generations in the loop
     # in case an element fails and needs to be reset.
@@ -161,6 +162,13 @@ def main() -> None:
     with open(location + '/goat.txt', 'w') as f:
         f.write(goat_line)
 
+    score_line_tpl = '{gen_id:>10s}{best_score:>15s}{score_avrg:>15s}'
+    with open(location + '/score_info.txt', 'w') as f:
+        f.write(score_line_tpl.format(
+            gen_id='GEN_ID',
+            best_score='BEST SCORE',
+            score_avrg='GOAT AVERAGE'))
+
     # Main loop
     while not converged and Generation.total() < settings['max_gen']:
         new_gen = Generation(elements=new_elements,
@@ -183,6 +191,7 @@ def main() -> None:
             ])
             goat: list[Element] = [
                 el for el in new_gen.elements if el.score <= median]
+            goat_avrg = np.sum([el.score for el in goat])/len(goat)
         else:
             # Actualize the list of best elements accross all generations
             old_scores: list[float] = np.array([el.score for el in goat])
@@ -205,6 +214,12 @@ def main() -> None:
             goat_avrg = np.sum([el.score for el in goat])/len(goat)
             glog.info(f'Number of goat replaced: {replaced}')
             glog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.3f}')
+
+        with open(location + '/score_info.txt', 'a') as f:
+            f.write(score_line_tpl.format(
+                gen_id=f"G{new_gen.id:04d}",
+                best_score=f"{new_gen.best_score}",
+                score_avrg=f"{goat_avrg}"))
 
         # Add the new line in goat.txt
         goat_line = ''
@@ -234,7 +249,7 @@ def main() -> None:
            old_stds=old_stds,
            new_means=means,
            new_stds=stds):
-            prev_gen, new_elements = ga.next_gen(gen=new_gen)
+            prev_gen, new_elements = ga.get_next_gen(gen=new_gen)
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
         else:

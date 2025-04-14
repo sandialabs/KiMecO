@@ -301,8 +301,8 @@ class SOPSection(Section):
         cols.extend(self.sop_db.columns)
         all_gen_rows = []
         for gen_i in selected_gen:
-            self.gapp.glog.debug(
-                f'Elements in goat line: {len(self.gapp.goats[gen_i].split())}')
+            # self.gapp.glog.debug(
+            #     f'Elements in goat line: {len(self.gapp.goats[gen_i].split())}')
             for origin in self.gapp.goats[gen_i].split():
                 gen_id = int(origin.split('_')[0])
                 el_id = int(origin.split('_')[1])

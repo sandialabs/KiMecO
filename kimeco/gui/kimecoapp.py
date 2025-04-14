@@ -62,8 +62,12 @@ class KimecoApp:
                 for bimol in self.init_SOP.bimolecular:
                     if name in bimol.frag_names:
                         self.og_names[ct_name] = bimol.name
-
-        self.init_vals = self.sop_db.get_table(table='G0000')[0]
+        if os.path.isfile('SA_DB_SOP.db'):
+            SA_db = SOP_DB(sop=self.init_SOP,
+                           name='SA_DB_SOP')
+            self.init_vals = SA_db.get_table(table='SA')[0]
+        else:
+            self.init_vals = self.sop_db.get_table(table='G0000')[0]
         with open(self.loc + '/goat.txt', 'r') as f:
             self.goats = f.readlines()
         # Initialize app
