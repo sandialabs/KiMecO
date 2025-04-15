@@ -3,11 +3,13 @@ import os
 import math
 import numpy as np
 from typing import Any, Dict
+from kimeco.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.GeneticAlgo.tournament import Tournament
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
-from kimeco.element import Element
+from kimeco.element import Element, ElementStatus
+from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.generation import Generation
 from kimeco.Perturbators.normal import Normal
 from kimeco.Perturbators.lognormal import LogNormal
@@ -47,6 +49,7 @@ def main() -> None:
         glog.info('To use KIMECO, supply the input file as argument.')
         sys.exit(-1)
 
+    # Initialize the settings and first SOP
     settings: dict = check_input(input_file=input_file)
     glog.info(f"{'Input reading...':<65}{'PASSED':>15}")
     mr = MessInputReader(settings=settings)
@@ -54,11 +57,13 @@ def main() -> None:
     input_tpl: list[str]
     (init_SOP, input_tpl) = mr.read()
 
+    # Create the workidir folder
     if not os.path.isdir(settings['project_name']):
         os.mkdir(settings['project_name'])
     os.chdir(settings['project_name'])
     location: str = os.getcwd()
 
+    # Create the databases
     sop_db = SOP_DB(sop=init_SOP,
                     name='KMO_DB_SOP')
     kin_db = KIN_DB(sop=init_SOP,
@@ -75,13 +80,14 @@ def main() -> None:
         sf = WeightedDif(settings=settings)
     glog.info(f"{'Scoring function:':<65}{sf.name:>15}")
 
+    # Initialize the perturbator
     pert: Normal | LogNormal = set_pert(
         settings=settings,
         init_SOP=init_SOP)
     pert.set_gen_fact(0)
     glog.info(f"{'Perturbator:':<65}{pert.name:>15}")
 
-    # Sensitivity analysis
+    # Perform sensitivity analysis if requested
     if len(settings['only_perturb']) == 0:
         glog.info(f"{'Running sensitivity analysis':<65}")
         sensitivity = Linear(
@@ -97,9 +103,27 @@ def main() -> None:
         settings['only_perturb'] = sensitivity.selected
         f_el = sensitivity.elements[0]
     else:
-        f_el = Element(
-            sop=init_SOP,
-            id=0)
+        # Check DB for restart if not SA
+        if sop_db.table_exists('G0000'):
+            rows = sop_db.get_table(table='G0000')
+            if len(rows) == 1:
+                db_sop = SOP.from_db_row(
+                    sop_tpl=init_SOP,
+                    row=rows[0][1:]
+                    )
+                f_el = Element(
+                    sop=db_sop,
+                    id=0)
+                f_el.status = ElementStatus.DONE
+        # Otherwise initialize the first Element from scratch
+            else:
+                f_el = Element(
+                    sop=init_SOP,
+                    id=0)
+        else:
+            f_el = Element(
+                sop=init_SOP,
+                id=0)
     glog.info(f"{'Parameters selected for perturbation:':<65}")
     pp = ''
     for p in settings['only_perturb']:
@@ -113,7 +137,8 @@ def main() -> None:
         init_SOP=init_SOP)
     glog.info(f"{'Selected parameters transmitted to perturbator':<65}")
 
-    first_gen = Generation(
+    # Everything is initialized, create gen_0
+    gen_0 = Generation(
         elements=[f_el],
         settings=settings,
         rc_tpl=input_tpl,
@@ -123,33 +148,20 @@ def main() -> None:
         sim_db=sim_db,
         sf=sf,
         pert=pert)
-    first_gen.run()
+    gen_0.run()
 
     converged = False
-
-    new_elements: list[Element] = [
-        Element(
-            sop=pert.perturb(sop=init_SOP),
-            id=id,
-            gen=1)
-        for id in range(settings['n_elem'])]
 
     ga = Tournament(settings=settings,
                     sf=sf,
                     pert=pert,
                     sop_db=sop_db)
 
-    # Passed to new generations in the loop
-    # in case an element fails and needs to be reset.
-    prev_gen: dict[int, Element] = {}
-    for id in range(settings['n_elem']):
-        prev_gen[id] = first_gen.elements[0]
-
     median = np.median([
-        el.score for el in first_gen.elements
+        el.score for el in gen_0.elements
         ])
     goat: list[Element] = [
-        el for el in first_gen.elements if el.score <= median]
+        el for el in gen_0.elements if el.score <= median]
     old_means, old_stds = get_stats(
         elements=goat,
         settings=settings
@@ -162,15 +174,23 @@ def main() -> None:
     with open(location + '/goat.txt', 'w') as f:
         f.write(goat_line)
 
-    score_line_tpl = '{gen_id:>10s}{best_score:>15s}{score_avrg:>15s}'
+    score_line_tpl = '{gen_id:>10s}{best_score:>15s}{score_avrg:>15s}\n'
     with open(location + '/score_info.txt', 'w') as f:
         f.write(score_line_tpl.format(
-            gen_id='GEN_ID',
-            best_score='BEST SCORE',
-            score_avrg='GOAT AVERAGE'))
+                gen_id='GEN_ID',
+                best_score='BEST SCORE',
+                score_avrg='GOAT AVERAGE'))
 
-    # Main loop
+    new_gen = gen_0
+    # MAIN LOOP
     while not converged and Generation.total() < settings['max_gen']:
+        prev_gen, new_elements = get_next_gen(gen=new_gen,
+                                              sop_db=sop_db,
+                                              settings=settings,
+                                              ga=ga,
+                                              pert=pert,
+                                              )
+
         new_gen = Generation(elements=new_elements,
                              settings=settings,
                              rc_tpl=input_tpl,
@@ -249,7 +269,6 @@ def main() -> None:
            old_stds=old_stds,
            new_means=means,
            new_stds=stds):
-            prev_gen, new_elements = ga.get_next_gen(gen=new_gen)
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
         else:
@@ -257,6 +276,118 @@ def main() -> None:
     glog.info('Run Sucessful.')
     glog.info(f'Termination at generation {new_gen.id}')
     glog.info(f'Final score: {new_gen.best_score}')
+
+
+def get_gen_one(settings: dict[str, Any],
+                pert: Perturbator,
+                gen_0: Generation,
+                sop_db: SOP_DB
+                ) -> tuple[dict[int, Element], list[Element]]:
+    """Perturb the first generation from the initial element
+
+    Args:
+        settings (dict[str, Any]): user defined settings + defaults
+        pert (Perturbator): perturbator object
+        gen_0 (Generation): initial generation only containing unperturbed data
+
+    Returns:
+        tuple[dict[int, Element], list[Element]]: _description_
+    """
+    next_gen: list[Element] = []
+    prev_gen: dict[int, Element] = {}
+    # Look in the db
+    if sop_db.table_exists(f"G{gen_0.id+1:04d}"):
+        rows = np.array(sop_db.get_table(f"G{gen_0.id+1:04d}"))
+        # Restart if db is complete
+        if len(rows) == settings['n_elem'] and\
+           settings['restart'] == 'default':
+            for id in range(settings['n_elem']):
+                next_gen.append(
+                    Element(
+                        sop=SOP.from_db_row(
+                            sop_tpl=gen_0.elements[0].sop,
+                            row=rows[rows[:, 0] == id][0, 1:]
+                        ),
+                        id=id,
+                        gen=1)
+                    )
+                next_gen[-1].status = ElementStatus.DONE
+        else:
+            next_gen: list[Element] = [
+                Element(
+                    sop=pert.perturb(sop=gen_0.elements[0].sop),
+                    id=id,
+                    gen=1)
+                for id in range(settings['n_elem'])]
+    else:
+        next_gen: list[Element] = [
+            Element(
+                sop=pert.perturb(sop=gen_0.elements[0].sop),
+                id=id,
+                gen=1)
+            for id in range(settings['n_elem'])]
+
+    for id in range(settings['n_elem']):
+        prev_gen[id] = gen_0.elements[0]
+    return prev_gen, next_gen
+
+
+def get_next_gen(gen: Generation,
+                 sop_db: SOP_DB,
+                 settings: dict[str, Any],
+                 ga: GeneticAlgorithm,
+                 pert: Perturbator
+                 ) -> tuple[dict[int, Element], list[Element]]:
+    """Returns the elements of the next generation.
+    If they are already in db, does not trigger the GA,
+    and restart from the db.
+
+    Args:
+        gen (Generation): Kimeco generation object
+        sop_db (SOP_DB): SOP database
+        settings (dict[str, Any]): user input
+        ga (GeneticAlgorithm): Chosen genetic algorithm
+        pert (Perturbator): perturbator
+
+    Returns:
+        tuple[dict[int, Element], list[Element]]: _description_
+    """
+    if sop_db.table_exists(f"G{gen.id+1:04d}"):
+        rows = sop_db.get_table(table=f"G{gen.id+1:04d}")
+        if len(rows) == int(len(gen.elements)/2) and\
+           settings['restart'] == 'default':
+            next_gen: list[Element] = []
+            prev_gen: dict[int, Element] = {}
+            losers = np.array(rows)
+            for el in gen.elements:
+                if el.id in losers[:, 0]:
+                    next_gen.append(Element(
+                        sop=SOP.from_db_row(
+                            sop_tpl=gen.elements[0].sop,
+                            row=losers[losers[:, 0] == el.id][0, 1:]),
+                        id=el.id,
+                        gen=gen.id+1
+                            )
+                            )
+                    next_gen[-1].status = ElementStatus.DONE
+                else:
+                    next_gen.append(el)
+        else:
+            if Generation.total() > 1:
+                prev_gen, next_gen = ga.create_next_gen(gen)
+            else:
+                prev_gen, next_gen = get_gen_one(gen_0=gen,
+                                                 settings=settings,
+                                                 pert=pert,
+                                                 sop_db=sop_db)
+    else:
+        if Generation.total() > 1:
+            prev_gen, next_gen = ga.create_next_gen(gen)
+        else:
+            prev_gen, next_gen = get_gen_one(gen_0=gen,
+                                             settings=settings,
+                                             pert=pert)
+    return prev_gen, next_gen
 
 
 def isconverged(threshold: float,
