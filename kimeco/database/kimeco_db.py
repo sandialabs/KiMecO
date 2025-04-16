@@ -45,6 +45,7 @@ class Kimeco_db:
             # list: ARRAY
         }
         self._upsert = {}
+        self._select = {}
 
     def get_table_names(self):
         query: TextClause = text(
@@ -211,6 +212,9 @@ class Kimeco_db:
         self._upsert[table][id] = values
 
     def batch_upsert(self) -> None:
+        """Upsert entries perpapred with the
+        prepare_batch_upsert() method
+        """
         if len(self._upsert) == 0:
             return
         for table in self._upsert:

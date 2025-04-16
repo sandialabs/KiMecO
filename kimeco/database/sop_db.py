@@ -12,7 +12,6 @@ class SOP_DB(Kimeco_db):
                  tbl_name: str = 'G0000') -> None:
         super().__init__(name=name,
                          path=path)
-        self._select = {}
 
         self.columns: list[str] = \
             [key for key in sop.parameters_names.keys()]

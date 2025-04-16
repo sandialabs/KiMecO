@@ -57,22 +57,21 @@ class Element:
 
         Args:
             db (Kimeco_db): KIN Kimeco database
-            table (str): Table name (GX)
+            table (str): Generation name
         """
-        df: DataFrame = self.rateCoef.recover_rslts()
+        rows = np.array(self.rateCoef.recover_rslts())
         # Happens if the ME calculation didn't converge
-        if len(df) == 0:
+        if len(rows) == 0:
             self.status = ElementStatus.RESET
             return
         else:
             self.status = ElementStatus.KIN
-        ids = [i for i in df.index]
-        for db_id in ids:
-            vals: dict[str, Any] = df.loc[[db_id]].to_dict()
-            for k, v in vals.items():
-                vals[k] = v[db_id]
+        for row in rows:
+            vals: dict[str, Any] = {}
+            for idx, col in enumerate(db.columns):
+                vals[col] = row[idx+1]
             db.prepare_batch_upsert(table=table,
-                                    id=db_id,
+                                    id=row[0],
                                     values=vals)
 
     def request_sim_profiles(self,

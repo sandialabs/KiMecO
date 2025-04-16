@@ -14,7 +14,6 @@ class SIM_DB(Kimeco_db):
                  tbl_name: str = 'G0000') -> None:
         super().__init__(name=name,
                          path=path)
-        self._select = {}
 
         if isinstance(sop, SOP):
             self.sv_species: list[str] = sop.sc_species

@@ -385,6 +385,7 @@ def get_next_gen(gen: Generation,
             prev_gen, next_gen = ga.create_next_gen(gen)
         else:
             prev_gen, next_gen = get_gen_one(gen_0=gen,
+                                             sop_db=sop_db,
                                              settings=settings,
                                              pert=pert)
     return prev_gen, next_gen

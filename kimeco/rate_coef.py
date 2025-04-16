@@ -65,7 +65,7 @@ class RateCo:
 
 
         Args:
-            table (int): Generation id
+            table (str): Generation's name
 
         Returns:
             bool: Wether data in db correspond to this object.
@@ -118,7 +118,8 @@ class RateCo:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")
 
-    def recover_rslts(self) -> DataFrame:
+    def recover_rslts(self
+                      ) -> list[tuple[Any]]:
         """Wait for the results of the Kinetic constants calculations
         """
         if self.software == 'mess':
@@ -140,48 +141,30 @@ class RateCo:
             glog.info(f'Resetting KIN job {self.id}')
             self.status = JobStatus.FAILED
 
+        rows = []
+        # Happens with convergence issues in Mess calculation
+        if self.tbl_map == {}:
+            return rows
+
         for k, v in self.tbl_map.items():
             names[v] = k
 
-        # Happens with convergence issues in Mess calculation
-        if self.tbl_map == {}:
-            data = []
-            df = DataFrame(data)
-            return df
-
-        row_ids: list[int] = [i for i in RangeIndex(
-            start=(self.id *
-                   len(self.set['rc_pres']) *
-                   len(self.set['rc_temp']) *
-                   len(names)),
-            stop=(self.id *
-                  len(self.set['rc_pres']) *
-                  len(self.set['rc_temp']) *
-                  len(names) +
-                  len(self.set['rc_pres']) *
-                  len(self.set['rc_temp']) *
-                  len(names)),
-            step=1)]
-
-        indexes: MultiIndex = MultiIndex.from_product([
-            self.set['rc_pres'],
-            self.set['rc_temp'],
-            [self.id],
-            names,],
-            names=['P', 'T', 'kin_id', 'specie'])
-        db_data = np.reshape(
-            self.rc,
-            shape=(
-                len(self.set['rc_pres']) *
-                len(self.set['rc_temp']) *
-                len(names),
-                len(names))
-                   )
-        df = DataFrame(data=db_data,
-                       index=indexes,
-                       columns=names)
-        df.reset_index(inplace=True)
-        df.index = Index(row_ids)
-        df.index.name = 'id'
-
-        return df
+        row_id = int(
+            self.id *
+            len(self.set['rc_pres']) *
+            len(self.set['rc_temp']) *
+            len(names))
+        for pidx, p in enumerate(self.set['rc_pres']):
+            for tidx, t in enumerate(self.set['rc_temp']):
+                for From, specie in enumerate(names):
+                    rows.append(
+                        (row_id,
+                         p,
+                         t,
+                         self.id,
+                         specie,
+                         *[self.rc[pidx, tidx, From, To]
+                           for To in range(len(names))])
+                    )
+                    row_id += 1
+        return rows
