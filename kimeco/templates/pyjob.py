@@ -1,2 +1,4 @@
 pytpl = """
-python {filename}.py"""
+python {filename}.py
+
+echo `date`"""
