@@ -1,7 +1,6 @@
 from dash import html, dcc, callback, Output, Input, State
 import plotly.graph_objects as go
 import numpy as np
-from numpy.typing import NDArray
 from kimeco.gui.section import Section
 from plotly.graph_objs._figure import Figure
 from dash.exceptions import PreventUpdate
@@ -46,8 +45,7 @@ class KINSection(Section):
                                     )]),
                 html.Div(
                     className='row',
-                    id='kin_plot',
-                    style={'display': 'none'})])
+                    id='kin_plot')])
 
     def register_callbacks(self):
         @callback(
@@ -71,6 +69,7 @@ class KINSection(Section):
 
         # Plot and print the distribution of the requested rate coefficients
         @callback(
+            Output('kin_plot', 'style'),
             Output('kin_plot', 'children'),
             Input('kin_plot_button', 'n_clicks'),
             State('rc_from', 'value'),
@@ -137,7 +136,7 @@ class KINSection(Section):
                                     )
                 all_gen_rates.append(self.kin_db.batch_select())
             all_figs = []
-            for rates, gen_i in zip(selected_gen, all_gen_rates):
+            for gen_i, rates in zip(selected_gen, all_gen_rates):
                 for p in pres:
                     for t in temp:
                         for to in To:
@@ -150,10 +149,7 @@ class KINSection(Section):
                                     From=frm,
                                     rates=rates
                                 ))
-            return [
-                {'display': 'block'},
-                all_figs
-            ]
+            return {'display': 'block'}, all_figs
 
     def make_figure(self,
                     gen_name: str,
@@ -162,14 +158,40 @@ class KINSection(Section):
                     To: str,
                     From: str,
                     rates: dict[dict[dict[tuple, float]]]):
-        cond = (p, t, To, From)
+        # Find the names as saved in the kin db
+        for k, v in self.settings['ct_names'].items():
+            if v == To:
+                tmp_to = k
+                break
+        if tmp_to in self.init_SOP.wells_names:
+            to = tmp_to
+        else:
+            for bim in self.init_SOP.bimolecular:
+                if tmp_to in bim.frag_names:
+                    to = bim.name
+                    break
+        for k, v in self.settings['ct_names'].items():
+            if v == From:
+                tmp_frm = k
+                break
+        if tmp_frm in self.init_SOP.wells_names:
+            frm = tmp_frm
+            unit = 's<sup>-1</sup> '
+        else:
+            unit = 'cm<sup>3</sup> s<sup>-1</sup> molecule<sup>-1</sup>'
+            for bim in self.init_SOP.bimolecular:
+                if tmp_frm in bim.frag_names:
+                    frm = bim.name
+                    break
+        cond = (p, t, to, frm)
+
         fig = go.Figure()
         nbinsx = 30
         # Overlay both histograms
         fig.update_layout(
             barmode='overlay',
             xaxis=dict(
-                title='Rate coefficient',
+                title=f'Rate coefficient ({unit})',
                 #   type="log",
                 showline=True,
                 showgrid=True,
@@ -208,7 +230,7 @@ class KINSection(Section):
         fig.add_trace(go.Histogram(
             histfunc="count",
             x=p_t_to_frm,
-            nbinsx=nbinsx,
+            nbinsx=min(len(p_t_to_frm), nbinsx),
             autobinx=False,
             name=f'Gen {gen_name}',
             bingroup=1))
@@ -216,9 +238,9 @@ class KINSection(Section):
         pres = f"P={p} Torr"
         temp = f"P={t} K"
 
-        return [fig,
-                html.H3(title),
+        return [html.H3(title),
                 html.H3(pres),
                 html.H3(temp),
-                html.H5(f'Average: {avrg}'),
-                html.H5(f'Number of elements: {nel}')]
+                html.H5(f'Average: {avrg:.3E}'),
+                html.H5(f'Number of elements: {nel}'),
+                dcc.Graph(figure=fig)]

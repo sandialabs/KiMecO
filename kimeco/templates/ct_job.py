@@ -108,5 +108,7 @@ with open(
     f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json", "w"
     ) as outfile:
     outfile.write(json_object)
+while not os.path.exists(f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json"):
+    time.sleep(0.1)
 
 """

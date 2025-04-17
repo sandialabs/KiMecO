@@ -28,9 +28,7 @@ class Kimeco_db:
             self.path = os.getcwd()
         else:
             self.path: str = path
-        self.eng: Engine = create_engine(f'sqlite:///{self.path}/{name}.db',
-                                         pool_size=1,
-                                         max_overflow=2000)
+        self.eng: Engine = create_engine(f'sqlite:///{self.path}/{name}.db')
         if not database_exists(self.eng.url):
             create_database(self.eng.url)
         self.metadata = MetaData()

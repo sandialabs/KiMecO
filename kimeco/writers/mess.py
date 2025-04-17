@@ -1,14 +1,20 @@
-
+from kimeco.parameters import SOP
 class MessWriter:
     """Object that writes a set of parameters into
     a Mess file input.
     """
-    def __init__(self, SOP, tpl) -> None:
+    def __init__(self,
+                 SOP: SOP,
+                 tpl) -> None:
         self.SOP = SOP
         self.tpl = tpl
 
     def write(self, filename) -> None:
         lines = []
+        for k, v in self.SOP.parameters_names.items():
+            lines.append(
+                f"!{k}: {v}" + "\n"
+            )
         for line in self.tpl:
             if '{' in line:
                 new_line = line

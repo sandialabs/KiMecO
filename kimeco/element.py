@@ -5,7 +5,6 @@ from kimeco.parameters import SOP
 from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
 from typing import Any
-from pandas import DataFrame
 import numpy as np
 from enum import Enum
 

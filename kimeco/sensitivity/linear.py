@@ -96,9 +96,10 @@ class Linear:
         # Get the parameters names and their current values
         pn: dict[str, Any] = base_sop.parameters_names
 
-        # Iterate through the parameters
         el_id = 0
+        # direction of the derivative
         for side in [1, -1]:
+            # Iterate through the parameters
             for key in pn:
                 # Check if the parameter should be modified
                 if any(
@@ -117,12 +118,15 @@ class Linear:
                         modif = self.settings['std_b'] * lin_fact
                     else:
                         modif = self.settings['std_e'] * lin_fact
+                elif param.startswith('fact'):
+                    modif = pn[key] * (self.settings['std_fact'] - 1) *\
+                            lin_fact
                 elif param.startswith('hr'):
-                    modif = self.settings['std_hr'] * lin_fact
+                    modif = pn[key] * self.settings['std_hr'] * lin_fact
                 elif param.startswith('epsi'):
-                    modif = self.settings['std_epsi'] * lin_fact
+                    modif = pn[key] * self.settings['std_epsi'] * lin_fact
                 elif param.startswith('sigma'):
-                    modif = self.settings['std_sigma'] * lin_fact
+                    modif = pn[key] * self.settings['std_sigma'] * lin_fact
                 elif param.startswith('sf_p'):
                     if side == 1:
                         modif = pn[key] * (self.settings['std_sf_p'] - 1) *\
@@ -131,10 +135,11 @@ class Linear:
                         modif = (pn[key] / self.settings['std_sf_p']) *\
                             (self.settings['std_sf_p'] - 1) * lin_fact
                 else:
-                    modif = self.settings[f'std_{param}'] * lin_fact
+                    modif = pn[key] * self.settings[f'std_{param}'] * lin_fact
                 new_sop = SOP.from_db_row(
                     sop_tpl=base_sop,
-                    row=[v+modif*side if k == key else v for k, v in pn.items()])
+                    row=[v+(modif*side) if k == key else v
+                         for k, v in pn.items()])
                 new_elements.append(
                     Element(
                         sop=new_sop,

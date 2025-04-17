@@ -354,8 +354,16 @@ def get_next_gen(gen: Generation,
     """
     if sop_db.table_exists(f"G{gen.id+1:04d}"):
         rows = sop_db.get_table(table=f"G{gen.id+1:04d}")
-        if len(rows) == int(len(gen.elements)/2) and\
-           settings['restart'] == 'default':
+        if len(rows) == 0:
+            if Generation.total() > 1:
+                prev_gen, next_gen = ga.create_next_gen(gen)
+            else:
+                prev_gen, next_gen = get_gen_one(gen_0=gen,
+                                                 sop_db=sop_db,
+                                                 settings=settings,
+                                                 pert=pert)
+        elif (len(rows) == int(len(gen.elements)/2) and
+              settings['restart'] == 'default'):
             next_gen: list[Element] = []
             prev_gen: dict[int, Element] = {}
             losers = np.array(rows)

@@ -11,6 +11,7 @@ import getpass
 import os
 import logging
 from kimeco.logger_config import setup_logger
+import time
 
 
 setup_logger()
@@ -108,16 +109,22 @@ class QueueingSystem:
 
     @property
     def av_cpu(self):
-        cpu_sum = np.sum(self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['cpu'])
-        cpu_sum += np.sum(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['cpu'])
-        cpu_sum += np.sum(self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['cpu'])
+        cpu_sum = np.sum(
+            self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['cpu'])
+        cpu_sum += np.sum(
+            self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['cpu'])
+        cpu_sum += np.sum(
+            self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['cpu'])
         return self._max_cpu - cpu_sum
 
     @property
     def av_mem(self):
-        mem_sum = np.sum(self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['mem'])
-        mem_sum += np.sum(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['mem'])
-        mem_sum += np.sum(self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['mem'])
+        mem_sum = np.sum(
+            self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['mem'])
+        mem_sum += np.sum(
+            self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['mem'])
+        mem_sum += np.sum(
+            self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['mem'])
         return self._max_mem - mem_sum
 
     @property
@@ -196,8 +203,9 @@ class QueueingSystem:
         file: str = f"{job['loc']}/{job['name']}"
         if (jtype == 'kin' and os.path.exists(f"{file}.out")) or\
            jtype == 'sim':
-            if ((os.path.exists(f"{file}.err") and
-               os.stat(f"{file}.err").st_size > 0)):
+            while not (os.path.exists(f"{file}.err")):
+                time.sleep(0.1)
+            if os.stat(f"{file}.err").st_size > 0:
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
                 glog.warning(
@@ -246,6 +254,11 @@ class QueueingSystem:
                         stderr=PIPE)
         out, err = process.communicate()
         outstr: str = out.decode()
+        if process.returncode != 0:
+            msg = f"Failed to submit {job['name']}" +\
+                f": {err.decode().strip()}"
+            glog.error(msg)
+            return  # Handle the error appropriately
         slurm_id: int = int(outstr.split()[-1])
         job['sub_id'] = np.int32(slurm_id)
         job['status'] = JobStatus.RUNNING.value
@@ -277,19 +290,21 @@ class QueueingSystem:
         """
         slurm_ids: NDArray[int32] = self.get_all_running()
         for q in self.queues:
-            running = q['status'] == JobStatus.RUNNING.value
-            finished_jobs: ndarray = (
+            was_running = q['status'] == JobStatus.RUNNING.value
+            # sub_ids that are not in the slurm_ids
+            not_in_q: ndarray = (
                 np.isin(element=q['sub_id'],
                         test_elements=slurm_ids,
                         assume_unique=True,
                         invert=True)
                 )
             mask = np.logical_and(
-                running, finished_jobs
+                was_running, not_in_q
                 )
             q['status'][mask] = JobStatus.FINISHED.value
 
-            pu_jobs: ndarray = np.isin(
+            # Jobs to be picked up
+            pu_jobs: NDArray = np.isin(
                 q['status'],
                 [JobStatus.PICKED_UP.value, JobStatus.FAILED.value])
             q['status'][pu_jobs] = JobStatus.NOT_IN_QUEUE.value

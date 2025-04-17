@@ -1,6 +1,7 @@
 
 from typing import Any
 import os
+import glob
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
@@ -10,12 +11,10 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element, ElementStatus
 from kimeco.scoring_f.scoring import Scoring
-import numpy as np
-import numpy.typing as npt
-from numpy import bool_
 from kimeco.templates.sim_helper import sim_helper
 import logging
 from kimeco.logger_config import setup_logger
+import time
 
 
 # Call the setup function to configure logging
@@ -71,6 +70,15 @@ class CoreRun:
             nhlp=self.settings['max_helpers']
             )
         self.name = name
+        self.clean_files()
+
+    def clean_files(self):
+        for el in self.elements:
+            if el.status != ElementStatus.DONE:
+                for file in glob.glob(
+                    f"{self.name}{el.name}*"
+                ):
+                    os.remove(file)
 
     def create_tables(self) -> None:
         """Create the tables in all databases
@@ -93,14 +101,20 @@ class CoreRun:
                 name=tbl_name
                 )
 
+    @property
+    def finished(self):
+        return all([el.status == ElementStatus.DONE
+                    for el in self.elements])
+
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
         """
-        finished: npt.NDArray[bool_] = np.full(shape=(len(self.elements), 1),
-                                               fill_value=False)
-        while not all(finished):
-            for idx, el in enumerate(self.elements):
-                if finished[idx]:
+        while not self.finished:
+            for el in self.elements:
+                # Safeguard
+                if self.elements[el.id].id != el.id:
+                    raise IndexError('Incorrect ordering of the elements.')
+                if el.status == ElementStatus.DONE:
                     continue
                 if el.status == ElementStatus.RESET:
                     self.reset_element(el)
@@ -115,8 +129,6 @@ class CoreRun:
                     self.calc_score(el)
                 if el.status == ElementStatus.TO_SAVE:
                     self.finalize_element(el)
-                if el.status == ElementStatus.DONE:
-                    finished[idx] = True
             self.sop_db.batch_upsert()
             self.kin_db.batch_upsert()
             self.check_helpers_status()
@@ -130,6 +142,8 @@ class CoreRun:
             sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
             id=el.id
             )
+        for file in glob.glob(f"{self.name}{el.name}*"):
+            os.remove(file)
         self.elements[el.id].reset = rst + 1
 
     def calculate_rate_coefficients(self, el: Element) -> None:
@@ -204,15 +218,13 @@ class CoreRun:
             # Happens because of data concurrency
             if len(db_data) != nsteps:
                 continue
+            # The data are correct, free the queuing system
             el.sim.profiles[sim] = db_data
             self.qs.pickUp(id=sim_id,
                            jtype='sim')
-            go2scoring = True
-            for prof in el.sim.profiles:
-                if prof is None:
-                    go2scoring = False
-                    break
-            if go2scoring:
+
+            # Scoring needs all the profiles
+            if all([prof is not None for prof in el.sim.profiles]):
                 el.status = ElementStatus.SCORING
             collected.append(sim_id)
         if collected == to_collect:
@@ -241,28 +253,24 @@ class CoreRun:
             assigned_ids.update(hlp)
 
         # Filter need_helper to remove any sim_ids that are already assigned
-        unique_need_helper = []
         for sim_id in need_helper:
-            if len(unique_need_helper) < 30:
-                if sim_id not in assigned_ids:
-                    unique_need_helper.append(sim_id)
-            else:
-                break
-        if len(unique_need_helper) == 0:
-            return
-
-        self.sim_hlpers[hlp_idx] = unique_need_helper
-        for sim_id in self.sim_hlpers[hlp_idx]:
             el: Element = self.elements[sim_id // nsim]
             sim: int = sim_id % nsim
-            flnm: str = f'{self.loc}/{self.name}/{self.name}{el.name}S{sim:02d}.json'
+            flnm: str = \
+                f'{self.loc}/{self.name}/{self.name}{el.name}S{sim:02d}.json'
+            # Happens because of long write times
             if os.path.isfile(f'{flnm}'):
-                filenames.append(f'{flnm}')
+                if len(self.sim_hlpers[hlp_idx]) < 30:
+                    if sim_id not in assigned_ids:
+                        self.sim_hlpers[hlp_idx].append(sim_id)
+                        filenames.append(f'{flnm}')
+                else:
+                    break
             else:
-                # Bug during SIM submission, resubmit
-                el.status = ElementStatus.KIN
-        if len(filenames) == 0:
+                continue
+        if len(self.sim_hlpers[hlp_idx]) == 0:
             return
+
         self.submit_helper(hlp_idx=hlp_idx,
                            filenames=filenames)
 
@@ -304,7 +312,7 @@ class CoreRun:
                 self.sim_hlpers[i] = []
             elif self.qs.status(i, 'hlp') == JobStatus.NOT_IN_QUEUE:
                 self.sim_hlpers[i] = []
-    
+
     def calc_score(self,
                    el: Element) -> None:
         """Calculate the score of the element

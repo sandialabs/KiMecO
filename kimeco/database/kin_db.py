@@ -4,6 +4,7 @@ from sqlalchemy import select, Row
 from typing import Any, Sequence
 from numpy.typing import NDArray
 import numpy as np
+from numpy import int32, str_, float64
 
 
 class KIN_DB(Kimeco_db):
@@ -131,11 +132,19 @@ class KIN_DB(Kimeco_db):
             temp = set(tmp_temp)
             To = set(tmp_To)
             From = set(tmp_From)
+            
+            db_row = np.dtype(dtype=[
+                ('kin_id', int32),
+                ('p', float64),
+                ('t', float64),
+                ('specie', str_, (30)),
+                *[(to, float64) for to in To]])
 
             query = select(
                 self.tables[table].c.kin_id,
                 self.tables[table].c.P,
                 self.tables[table].c.T,
+                self.tables[table].c.specie,
                 *[self.tables[table].c[to]
                   for to in To]
             ).where(
@@ -144,33 +153,30 @@ class KIN_DB(Kimeco_db):
                 self.tables[table].c.T.in_(temp),
                 self.tables[table].c.specie.in_(From))
             with self.eng.begin() as connection:
-                db_rslt: Sequence[Row[Any]] = np.array(
-                    connection.execute(
+                db_rslt: Sequence[Row[Any]] = connection.execute(
                         query).fetchall()
-                    )
+            db_arr = np.empty(shape=(len(db_rslt)), dtype=db_row)
+            for idx, row in enumerate(db_rslt):
+                # Structured numpy array must be set with imutable
+                db_arr[idx] = tuple(row)
             results[table] = {}
-            if len(db_rslt) != 0:
-                collected_kin_ids = set(db_rslt[:, 0])
-                for kin_id in collected_kin_ids:
-                    if str(kin_id) not in results[table]:
-                        results[table][str(kin_id)] = {}
+            if len(db_arr) != 0:
+                for kin_id in set(db_arr['kin_id']):
+                    if int(kin_id) not in results[table]:
+                        results[table][int(kin_id)] = {}
                         for p in pres:
                             for t in temp:
                                 for to in To:
-                                    for idx, frm in enumerate(From):
-                                        key = (str(p), str(t), str(to), str(frm))
-                                        results[table][str(kin_id)][key] = db_rslt[
-                                            db_rslt[:, 0] == int(kin_id)
-                                        ][db_rslt[:, 0] == int(kin_id)[
-                                            db_rslt[:, 1] == p]
-                                        ][db_rslt[:, 0] == int(kin_id)[
-                                            db_rslt[:, 1] == p][
-                                            db_rslt[:, 2] == t]
-                                        ][db_rslt[:, 0] == int(kin_id)[
-                                            db_rslt[:, 1] == p][
-                                            db_rslt[:, 2] == t][
-                                            db_rslt[:, 3] == to]
-                                        ][0, idx+3]
+                                    for frm in From:
+                                        condition = \
+                                            (db_arr['kin_id'] ==
+                                             int(kin_id)) &\
+                                            (db_arr['p'] == p) &\
+                                            (db_arr['t'] == t) &\
+                                            (db_arr['specie'] == frm)
+                                        key = (p, t, to, frm)
+                                        results[table][int(kin_id)][key] =\
+                                            db_arr[condition][to][0]
 
         self._select = {}  # Clear the _select dictionary after processing
         return results

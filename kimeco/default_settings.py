@@ -63,27 +63,27 @@ default_settings: dict[str, Any] = {
     "max_std": 4,
     # Standard deviation of energy (kcal/mol) perturbation for wells
     # and bimolecular species
-    "std_e": 1.0,
+    "std_e": 0.5,
     # Standard deviation of energy (kcal/mol) perturbation for barriers
-    "std_b": 1.0,
+    "std_b": 0.5,
     # Standard deviation percentage perturbation for wells
     # and bimolecular vibrations
-    "std_hf_p": 0.05,
+    "std_hf_p": 0.025,
     # Standard deviation percentage perturbation for wells
     # and bimolecular vibrations
-    "std_lf_p": 0.2,
+    "std_lf_p": 0.1,
     # Standard deviation percentage perturbation for hindered rotors
-    "std_hr": 0.2,
+    "std_hr": 0.1,
     # Standard deviation percentage perturbation for imaginary frequencies
-    "std_if": 0.2,
+    "std_if": 0.1,
     # Energy transfer probability, factor, percentage
-    "std_fact": 0.5,
+    "std_fact": 0.25,
     # Energy transfer probability, exponent, absolute
-    "std_pow": 0.15,
+    "std_pow": 0.075,
     # Lennard Jones, epsilon, percentage
-    "std_epsi": 0.2,
+    "std_epsi": 0.1,
     # Lennard Jones, sigma, percentage
-    "std_sigma": 0.2,
+    "std_sigma": 0.1,
     # Multiplicating/dividing factor for symmetry factor of bl reactions
     "std_sf_p": 2.0,
     # Name of the scoring function class to use
