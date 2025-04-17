@@ -238,8 +238,8 @@ def main() -> None:
         with open(location + '/score_info.txt', 'a') as f:
             f.write(score_line_tpl.format(
                 gen_id=f"G{new_gen.id:04d}",
-                best_score=f"{new_gen.best_score}",
-                score_avrg=f"{goat_avrg}"))
+                best_score=f"{new_gen.best_score:.3f}",
+                score_avrg=f"{goat_avrg:.3f}"))
 
         # Add the new line in goat.txt
         goat_line = ''
