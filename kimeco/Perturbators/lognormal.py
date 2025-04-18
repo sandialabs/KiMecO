@@ -134,12 +134,12 @@ class LogNormal(Perturbator):
             item (Well | Bimolecular): Object to perturb the energy of.
         """
 
-        if isinstance(item, (Well, Bimolecular)):
-            value: float = self.settings['std_e']
-            ptype = 'e'
-        elif isinstance(item, Barrier):
+        if isinstance(item, Barrier):
             value = self.settings['std_b']
             ptype = 'b'
+        elif isinstance(item, (Well, Bimolecular)):
+            value: float = self.settings['std_e']
+            ptype = 'e'
         else:
             raise TypeError('Unknown item type')
 
@@ -155,7 +155,10 @@ class LogNormal(Perturbator):
                     loc=item.energy,
                     scale=value*self.gen_fact)
 
-            item.energy = try_e
+            if ptype == 'b':
+                item._energy = try_e
+            else:
+                item.energy = try_e
 
     def perturb_vibrations(self,
                            well: Well) -> None:

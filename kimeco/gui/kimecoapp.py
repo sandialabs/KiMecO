@@ -46,6 +46,9 @@ class KimecoApp:
         self.sim_db = SIM_DB(sop=self.init_SOP,
                              name='KMO_DB_SIM')
         self.sim_tot_g: int = len(self.sim_db.tables)
+        if os.path.isfile('SA_DB_SOP.db'):
+            self.sa_db = SOP_DB(sop=self.init_SOP,
+                                name='SA_DB_SOP')
 
         # Define which scoring function to use
         if self.settings['scoring_func'].casefold() == 'weighteddif':
@@ -63,9 +66,7 @@ class KimecoApp:
                     if name in bimol.frag_names:
                         self.og_names[ct_name] = bimol.name
         if os.path.isfile('SA_DB_SOP.db'):
-            SA_db = SOP_DB(sop=self.init_SOP,
-                           name='SA_DB_SOP')
-            self.init_vals = SA_db.get_table(table='SA')[0]
+            self.init_vals = self.sa_db.get_table(table='SA')[0]
         else:
             self.init_vals = self.sop_db.get_table(table='G0000')[0]
         with open(self.loc + '/goat.txt', 'r') as f:

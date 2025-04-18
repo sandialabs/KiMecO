@@ -41,7 +41,7 @@ class Barrier(Well):
     @property
     def energy(self):
         if self.barrierless:
-            return max(self.connected[0].energy,
+            return abs(self.connected[0].energy -
                        self.connected[1].energy)
         else:
             return self._energy

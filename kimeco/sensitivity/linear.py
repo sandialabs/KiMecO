@@ -33,13 +33,13 @@ class Linear:
             )
         # Create generation directory
         SA_dir: str = f'{loc}/{self.name}'
-        sop_db = SOP_DB(sop=self.elements[0].sop,
-                        name='SA_DB_SOP')
-        kin_db = KIN_DB(sop=self.elements[0].sop,
-                        name='SA_DB_KIN')
-        sim_db = SIM_DB(sop=self.elements[0].sop,
-                        name='SA_DB_SIM',
-                        tbl_name=self.name)
+        self.sop_db = SOP_DB(sop=self.elements[0].sop,
+                             name='SA_DB_SOP')
+        self.kin_db = KIN_DB(sop=self.elements[0].sop,
+                             name='SA_DB_KIN')
+        self.sim_db = SIM_DB(sop=self.elements[0].sop,
+                             name='SA_DB_SIM',
+                             tbl_name=self.name)
         os.makedirs(SA_dir, exist_ok=True)
         os.chdir(SA_dir)
         self.core = CoreRun(
@@ -47,9 +47,9 @@ class Linear:
             settings=self.settings,
             rc_tpl=rc_tpl,
             loc=loc,
-            sop_db=sop_db,
-            kin_db=kin_db,
-            sim_db=sim_db,
+            sop_db=self.sop_db,
+            kin_db=self.kin_db,
+            sim_db=self.sim_db,
             sf=sf,
             pert=pert,
             name=self.name
