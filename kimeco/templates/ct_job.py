@@ -7,6 +7,7 @@ from pandas import MultiIndex, DataFrame, RangeIndex
 from scipy.constants import Avogadro
 import pickle
 import os
+import copy
 import time
 import cantera.with_units as ctu
 import sqlalchemy
@@ -78,15 +79,32 @@ for idx, i in enumerate(spec):
         traces[i.name] = np.full(tot_steps, gas.X[idx])
         names.append(i.name)
 
+# For instrument response function
+cumul_zero = copy.deepcopy(traces)
+cumul = copy.deepcopy(cumul_zero)
+current_time = -10
+
 for idx, t in enumerate(times):
-    if idx == 0:
-        # First time should be 0, hence initial concentration
-        continue
-    net.advance(t)
+    # Instrument response function
+    if idx < len(times)-1:
+        # avoid error for last time
+        dt = times[idx+1] - times[idx]
+    cumul = copy.deepcopy(cumul_zero)
+    count = 0
+    for micro_step in np.arange(t-dt/2, t+dt/2, dt/10):
+        if micro_step <= 0:
+            continue
+        count += 1
+        if micro_step > current_time:
+            current_time = micro_step
+            net.advance(current_time)
+        for snum, i in enumerate(spec):
+            if i.name in to_watch:
+                cumul[i.name][idx] += gas.X[snum] * ntot * Avogadro
     for snum, i in enumerate(spec):
         if i.name in to_watch:
             # density (molecules/cm^3)
-            traces[i.name][idx] = gas.X[snum] * ntot * Avogadro
+            traces[i.name][idx] = cumul[i.name][idx]/count
 # unique ids of rows in the DB
 row_ids = [i for i in range({el_num}*block_size+start_idx,
                             {el_num}*block_size+start_idx+len(times),

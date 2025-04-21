@@ -301,6 +301,7 @@ class QueueingSystem:
             mask = np.logical_and(
                 was_running, not_in_q
                 )
+            # Jobs that just finished, may have failed
             q['status'][mask] = JobStatus.FINISHED.value
 
             # Jobs to be picked up

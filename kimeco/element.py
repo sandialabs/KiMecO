@@ -4,6 +4,7 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.parameters import SOP
 from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
+from kimeco.q_sys import JobStatus
 from typing import Any
 import numpy as np
 from enum import Enum
@@ -76,7 +77,6 @@ class Element:
     def request_sim_profiles(self,
                              db: SIM_DB,
                              table) -> None:
-
         for sim in range(len(self.sim.simulations)):
             sim_id: int = self.id * len(self.sim.simulations) + sim
             if self.sim.profiles[sim] is None:

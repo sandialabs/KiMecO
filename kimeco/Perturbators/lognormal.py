@@ -95,10 +95,11 @@ class LogNormal(Perturbator):
 
         for well in p_sop.wells:
             self.perturb_well(well)
-        for bar in p_sop.barriers:
-            self.perturb_barrier(bar)
         for bim in p_sop.bimolecular:
             self.perturb_bimolecular(bim)
+        # Barriers must alway be after W and BM
+        for bar in p_sop.barriers:
+            self.perturb_barrier(bar)
 
         return p_sop
 
@@ -110,7 +111,7 @@ class LogNormal(Perturbator):
 
     def perturb_barrier(self,
                         bar: Barrier) -> None:
-        self.perturb_energy(item=bar)
+        self.perturb_barrier_energy(bar=bar)
         self.perturb_vibrations(well=bar)
         self.perturb_hindered_rotors(well=bar)
         if bar.barrierless:
@@ -134,36 +135,49 @@ class LogNormal(Perturbator):
             item (Well | Bimolecular): Object to perturb the energy of.
         """
 
-        if isinstance(item, Barrier):
-            value = self.settings['std_b']
-            ptype = 'b'
-        elif isinstance(item, (Well, Bimolecular)):
-            value: float = self.settings['std_e']
-            ptype = 'e'
-        else:
-            raise TypeError('Unknown item type')
-
         if f'{item.name}__e' in self.select:
             # Set trial energy out of the boundaries
             try_e: float = self.i_sop.items[item.name].energy\
-                - (3*self.settings['max_std']) * value
+                - (3*self.settings['max_std']) * self.settings['std_e']
             while not self.within_boundaries(
                   perturbed_val=try_e,
-                  ptype=ptype,
+                  ptype='e',
                   initial_val=self.i_sop.items[item.name].energy):
                 try_e = random.normal(
                     loc=item.energy,
-                    scale=value*self.gen_fact)
+                    scale=self.settings['std_e']*self.gen_fact)
 
-            if ptype == 'b':
-                item._energy = try_e
-            else:
-                item.energy = try_e
+            item.energy = try_e
+
+    def perturb_barrier_energy(self,
+                               bar: Barrier) -> None:
+        """Perturb the energy of a Well or Bimolecular object.
+        Calculate the perturbation and add it to the energy of the object.
+
+        Args:
+            item (Well | Bimolecular): Object to perturb the energy of.
+        """
+
+        if f'{bar.name}__e' in self.select:
+            # Set trial energy out of the boundaries
+            try_e: float = -np.inf
+            # The barrier must always be above the energy of both fragments
+            while (try_e <= max(
+                    bar.connected[0].energy,
+                    bar.connected[1].energy) and
+                   not self.within_boundaries(
+                   perturbed_val=try_e,
+                   ptype='b',
+                   initial_val=self.i_sop.items[bar.name].energy)):
+                try_e = random.normal(
+                    loc=bar.energy,
+                    scale=self.settings['std_b']*self.gen_fact)
+
+            bar._energy = try_e
 
     def perturb_vibrations(self,
                            well: Well) -> None:
-        """Perturb the vibrations of a well by a given percentage.
-        The percentage is the same for all frequencies.
+        """Change the perturbation factors
 
         Args:
             well (Well) : Well object
@@ -215,10 +229,10 @@ class LogNormal(Perturbator):
                       ptype='hr',
                       initial_val=1):
                     try_r = random.normal(
-                        loc=well.rotors[num].pert,
+                        loc=rot.pert,
                         scale=self.settings['std_hr']*self.gen_fact)
 
-                well.rotors[num].pert = try_r
+                rot.pert = try_r
 
     def perturb_ifreq(self,
                       bar: Barrier) -> None:
@@ -229,9 +243,8 @@ class LogNormal(Perturbator):
         """
         if f'{bar.name}__if' in self.select:
             # Set trial imaginary frequency out of the boundaries
-            try_if: float = self.i_sop.items[bar.name].ifreq\
-                - (3*self.settings['max_std']) * self.settings['std_if']
-            while not self.within_boundaries(
+            try_if: float = -1
+            while try_if < 0 or not self.within_boundaries(
                     perturbed_val=try_if,
                     ptype='if',
                     initial_val=self.i_sop.items[bar.name].ifreq):

@@ -185,10 +185,24 @@ class CoreRun:
     def recover_simulation_data(self,
                                 el: Element) -> None:
         """Recover simulation data for an element."""
-        for prof in el.sim.profiles:
-            if prof is None:
-                el.request_sim_profiles(db=self.sim_db, table=self.name)
-                break
+        for sim_idx, prof in enumerate(el.sim.profiles):
+            sim_id: int = el.id * len(el.sim.simulations) + sim_idx
+            # Change status from RUNNING to FINISHED (may have failed)
+            el.sim.set_status(sim_idx)
+            # Check if failed
+            if el.sim.status[sim_idx] == JobStatus.FINISHED:
+                self.qs.pickUp(id=sim_id,
+                               jtype='sim')
+                el.sim.set_status(sim_idx)
+            # If successful, do the request
+            if el.sim.status[sim_idx] == JobStatus.PICKED_UP or\
+               el.sim.status[sim_idx] == JobStatus.NOT_IN_QUEUE:
+                if prof is None:
+                    el.request_sim_profiles(db=self.sim_db, table=self.name)
+                    break
+            # Reset Element if simulation had an error
+            elif el.sim.status[sim_idx] == JobStatus.FAILED:
+                el.status = ElementStatus.RESET
 
     def finalize_element(self,
                          el: Element) -> None:
@@ -220,8 +234,6 @@ class CoreRun:
                 continue
             # The data are correct, free the queuing system
             el.sim.profiles[sim] = db_data
-            self.qs.pickUp(id=sim_id,
-                           jtype='sim')
 
             # Scoring needs all the profiles
             if all([prof is not None for prof in el.sim.profiles]):

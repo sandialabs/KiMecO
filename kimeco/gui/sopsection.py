@@ -239,8 +239,13 @@ class SOPSection(Section):
             std_allowed = self.settings['std_hr'] *\
                     self.settings['max_std']
             plot_settings['title'] = f'Rotor perturbation {param} of {molec}'
-        elif ptype == 'f_p' and 'f_p' in param:
+        elif ptype == 'f_p' and 'hf_p' in param:
             std_allowed = self.settings['std_hf_p'] *\
+                    self.settings['max_std']
+            plot_settings['title'] = \
+                f'Frequency perturbation {param} of {molec}'
+        elif ptype == 'f_p' and 'lf_p' in param:
+            std_allowed = self.settings['std_lf_p'] *\
                     self.settings['max_std']
             plot_settings['title'] = \
                 f'Frequency perturbation {param} of {molec}'
