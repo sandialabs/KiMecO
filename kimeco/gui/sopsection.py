@@ -1,7 +1,9 @@
-from dash import html, dcc, Output, Input, State
+from dash import html, dcc, Output, Input, State, MATCH
+import dash_bootstrap_components as dbc
 from plotly.graph_objs._figure import Figure
 import plotly.graph_objects as go
 import pandas as pd
+from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.gui.section import Section
 from kimeco.barrier import Barrier
 from kimeco.well import Well
@@ -11,6 +13,9 @@ from typing import Any
 
 
 class SOPSection(Section):
+    def __init__(self, gapp) -> None:
+        super().__init__(gapp)
+        self.pert: Perturbator = gapp.pert
 
     @property
     def layout(self) -> html.Div:
@@ -153,27 +158,91 @@ class SOPSection(Section):
                 raise PreventUpdate
 
             sop_plot_children = []
+            index = 0
             for col in param_selected:
-                std_allowed, plot_settings = self.get_plot_options(
+                boundaries = self.get_boundaries(col)
+                plot_settings = self.get_plot_options(
                     col,
                     ptype)
                 sop_plot_children.extend(
                     self.make_figure(
-                        std_allowed,
+                        boundaries,
                         plot_settings,
                         col,
-                        selected_gen
+                        selected_gen,
+                        index=index
                     )
                 )
+                index += 1
             return ({'display': 'block'},
                     sop_plot_children
                     )
 
+        @self.app.callback(
+            Output({'type': 'sop_figure', 'index': MATCH}, 'figure'),
+            Input({'type': 'nbin_sop', 'index': MATCH}, 'value'),
+            State({'type': 'sop_figure', 'index': MATCH}, 'figure'),
+        )
+        def update_fig_nbin(nbin,
+                            fig):
+            
+            # Create a new figure object based on the existing figure
+            new_fig = go.Figure(data=fig['data'], layout=fig['layout'])
+
+            # Update the nbinsx for each histogram trace
+            if nbin is not None:
+                new_fig.update_traces(nbinsx=nbin)
+
+            return new_fig
+            
+    def get_boundaries(self,
+                       col: str) -> list[str]:
+        """Get the boundary conditions directly from the perturbator
+
+        Args:
+            col (str): parameter's name
+
+        Returns:
+            list[str]: [min, max]
+        """
+        idx = self.sop_db.columns.index(col)
+        init_val: float = self.gapp.init_vals[idx+1]
+        raw_molec: str = col.split('__')[0]
+        param: str = col.split('__')[1]
+        if 'score' in col:
+            return [0.0, 0.0]
+        for substr in self.pert.ptypes:
+            if substr in param:
+                if substr == 'e' and\
+                   isinstance(self.init_SOP.items[raw_molec], Barrier):
+                    ptype = 'b'
+                else:
+                    ptype = substr
+                break
+
+        return self.pert.get_boundaries(
+            ptype=ptype,
+            i_val=init_val)
+
     def get_plot_options(self,
                          col: str,
                          ptype: str
-                         ):
-        std_allowed: float = 0.0
+                         ) -> dict[str, Any]:
+        """Setup the figure ploting options depending on
+        the parameter to plot.
+
+        Args:
+            col (str): parameter's name
+            ptype (str): parameter's type
+
+        Raises:
+            NotImplementedError: _description_
+            NotImplementedError: _description_
+            KeyError: _description_
+
+        Returns:
+            dict[str, Any]: dictionary of options settings
+        """
         plot_settings: dict[str, Any] = {
             'title': col
         }
@@ -189,16 +258,7 @@ class SOPSection(Section):
             plot_settings['tickformat'] = 'e'
         elif ptype == 'e' and param == 'e':
             plot_settings['title'] = f'Energy of {molec} (kcal/mol)'
-            if not isinstance(
-               self.init_SOP.items[raw_molec], Barrier):
-                std_allowed = self.settings['std_e'] *\
-                        self.settings['max_std']
-            else:
-                std_allowed = self.settings['std_b'] *\
-                        self.settings['max_std']
         elif ptype == 'if' and param == 'if':
-            std_allowed = self.settings['std_if'] *\
-                    self.settings['max_std']
             bar: Barrier = self.init_SOP.items[raw_molec]
             if isinstance(bar.connected[0], Well):
                 if bar.connected[0].name in self.settings['ct_names']:
@@ -236,49 +296,32 @@ class SOPSection(Section):
                 raise NotImplementedError('Unknown reactant object.')
             plot_settings['title'] = f'I. frequency from {From} to {To} (1/cm)'
         elif ptype == 'hr' and 'hr' in param:
-            std_allowed = self.settings['std_hr'] *\
-                    self.settings['max_std']
             plot_settings['title'] = f'Rotor perturbation {param} of {molec}'
         elif ptype == 'f_p' and 'hf_p' in param:
-            std_allowed = self.settings['std_hf_p'] *\
-                    self.settings['max_std']
             plot_settings['title'] = \
                 f'Frequency perturbation {param} of {molec}'
         elif ptype == 'f_p' and 'lf_p' in param:
-            std_allowed = self.settings['std_lf_p'] *\
-                    self.settings['max_std']
             plot_settings['title'] = \
                 f'Frequency perturbation {param} of {molec}'
+        elif ptype == 'f_p' and 'sf_p' in param:
+            plot_settings['title'] = \
+                f'Symmetry factor {param} of {molec}'
         elif (ptype == 'lj' and
                 ('epsi' in param or 'sigma' in param)):
-            if 'epsi' in param:
-                std_allowed = self.settings['std_epsi'] *\
-                        self.settings['max_std']
-            elif 'sigma' in param:
-                std_allowed = self.settings['std_sigma'] *\
-                        self.settings['max_std']
-            else:
-                raise KeyError('Unknown parameter in Lennard-Jones.')
             plot_settings['title'] = f"{param}"
         elif (ptype == 'me' and
                 (param == 'pow' or param == 'fact')):
-            if param == 'pow':
-                std_allowed = self.settings['std_pow'] *\
-                        self.settings['max_std']
-            elif param == 'fact':
-                std_allowed = self.settings['std_fact'] *\
-                        self.settings['max_std']
-            else:
-                raise KeyError('Unknown parameter in ME collison.')
+            plot_settings['title'] = f"{param}"
         else:
             raise KeyError('Unknown type of parameter selected.')
-        return std_allowed, plot_settings
+        return plot_settings
 
     def make_figure(self,
-                    std_allowed: float,
+                    boundaries: float,
                     plot_settings: dict,
                     col: str,
-                    selected_gen: list[int]):
+                    selected_gen: list[int],
+                    index: int):
 
         fig = go.Figure()
         # Add line for initial value to the graph
@@ -289,25 +332,25 @@ class SOPSection(Section):
                       line_width=2,
                       line_color='black')
 
-        lb: float = init_val - std_allowed
-        ub: float = init_val + std_allowed
-        fig.add_vline(x=lb,
-                      line_dash='dash',
-                      line_width=4,
-                      line_color='brown')
-        fig.add_vline(x=ub,
-                      line_dash='dash',
-                      line_width=4,
-                      line_color='brown')
+        lb: float = min(boundaries)
+        ub: float = max(boundaries)
+        if lb != ub:
+            fig.add_vline(x=lb,
+                          line_dash='dash',
+                          line_width=4,
+                          line_color='brown')
+            fig.add_vline(x=ub,
+                          line_dash='dash',
+                          line_width=4,
+                          line_color='brown')
 
         avrg = []
         nel = []
         cols = ['sop_id']
         cols.extend(self.sop_db.columns)
         all_gen_rows = []
+        def_n_bin = 30
         for gen_i in selected_gen:
-            # self.gapp.glog.debug(
-            #     f'Elements in goat line: {len(self.gapp.goats[gen_i].split())}')
             for origin in self.gapp.goats[gen_i].split():
                 gen_id = int(origin.split('_')[0])
                 el_id = int(origin.split('_')[1])
@@ -323,7 +366,7 @@ class SOPSection(Section):
             fig.add_trace(go.Histogram(
                 histfunc="count",
                 x=df[col],
-                nbinsx=30,
+                nbinsx=def_n_bin,
                 name=f'Gen {selected_gen[idx]}',
                 bingroup=1))
         # Overlay both histograms
@@ -360,9 +403,27 @@ class SOPSection(Section):
             )
         # Reduce opacity to see both histograms
         fig.update_traces(opacity=0.75)
-        return [html.H3(
+        return [html.Div(children=[
+            html.Div(children=[
+                dcc.Input(
+                    type='number',
+                    value=def_n_bin,  # Default number of bins
+                    min=1,
+                    step=1,
+                    style={'margin': '10px'},
+                    id={"type": "nbin_sop", "index": index}
+                )
+            ], style={'flex': '0 0 20%', 'margin': '10px'}),
+            html.Div(children=[
+                html.H3(
                     f'Distribution of {col} in generation {selected_gen}'
                     ),
                 html.H5(f"Average: {avrg}"),
                 html.H5(f'Number of elements: {nel}'),
-                dcc.Graph(figure=fig)]
+                dcc.Graph(
+                    figure=fig,
+                    id={"type": "sop_figure", "index": index}
+                    )
+            ], style={'flex': '1', 'margin': '10px'})
+        ], style={'display': 'flex', 'flexDirection': 'row'}
+        )]

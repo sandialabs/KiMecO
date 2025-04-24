@@ -103,7 +103,7 @@ class SIMSection(Section):
                                 table=f'G{gen_id:04d}',
                                 sim_id=sim_id
                             )
-                    all_gen_sims.append(self.sim_db.batch_select())
+                        all_gen_sims.append(self.sim_db.batch_select())
                     # Create a figure and associated text for each combination
                     # in the user selection
                     for TPGenSP, gen_i in zip(all_gen_sims, selected_gen):

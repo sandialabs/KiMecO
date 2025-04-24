@@ -50,9 +50,12 @@ class LogNormal(Perturbator):
                                            ptype='fact',
                                            initial_val=self.i_sop.factor):
                 # Truncate distribution at 0 to have positive factor
-                try_fact: float = p_sop.factor * random.normal(
-                    loc=1,
-                    scale=self.settings['std_fact']*self.gen_fact)
+                try_fact: float = random.normal(
+                    loc=p_sop.factor,
+                    # Scale is percentage of initial value
+                    scale=self.i_sop.factor *
+                    self.settings['std_fact'] *
+                    self.gen_fact)
             p_sop.factor = try_fact
 
         if '__pow' in self.select:
@@ -64,6 +67,7 @@ class LogNormal(Perturbator):
                 # Truncate distribution at 0 to have positive power
                 try_pow: float = random.normal(
                     loc=p_sop.power,
+                    # Scale is absolute value
                     scale=self.settings['std_pow']*self.gen_fact)
             p_sop.power = try_pow
 
@@ -77,7 +81,8 @@ class LogNormal(Perturbator):
                         initial_val=self.i_sop.sigmas[i]):
                     try_sig = random.normal(
                         loc=p_sop.sigmas[i],
-                        scale=self.settings['std_sigma']*self.gen_fact)
+                        # Scale is percentage of initial value
+                        scale=self.i_sop.sigmas[i]*self.settings['std_sigma']*self.gen_fact)
                 p_sop.sigmas[i] = try_sig
 
         for i in range(len(p_sop.epsilons)):
@@ -90,7 +95,10 @@ class LogNormal(Perturbator):
                         initial_val=self.i_sop.epsilons[i]):
                     try_eps = random.normal(
                         loc=p_sop.epsilons[i],
-                        scale=self.settings['std_epsi']*self.gen_fact)
+                        # Scale is percentage of initial value
+                        scale=self.i_sop.epsilons[i] *
+                        self.settings['std_epsi'] *
+                        self.gen_fact)
                 p_sop.epsilons[i] = try_eps
 
         for well in p_sop.wells:
@@ -164,7 +172,7 @@ class LogNormal(Perturbator):
             # The barrier must always be above the energy of both fragments
             while (try_e <= max(
                     bar.connected[0].energy,
-                    bar.connected[1].energy) and
+                    bar.connected[1].energy) or
                    not self.within_boundaries(
                    perturbed_val=try_e,
                    ptype='b',
@@ -192,7 +200,9 @@ class LogNormal(Perturbator):
                     ptype='lf_p',
                     initial_val=1):
                 try_lf_p = random.lognormal(
+                    # Mean is np.log(loc)
                     mean=np.log(well.lf_p),
+                    # Sigma is std/loc; loc initial = 1
                     sigma=self.settings['std_lf_p']*self.gen_fact)
             well.lf_p = try_lf_p
 
@@ -206,7 +216,9 @@ class LogNormal(Perturbator):
                     ptype='hf_p',
                     initial_val=1):
                 try_hf_p = random.lognormal(
+                    # Mean is np.log(loc)
                     mean=np.log(well.hf_p),
+                    # Sigma is std/loc; loc initial = 1
                     sigma=self.settings['std_hf_p']*self.gen_fact)
             well.hf_p = try_hf_p
 
@@ -228,9 +240,11 @@ class LogNormal(Perturbator):
                       perturbed_val=try_r,
                       ptype='hr',
                       initial_val=1):
-                    try_r = random.normal(
-                        loc=rot.pert,
-                        scale=self.settings['std_hr']*self.gen_fact)
+                    try_r = random.lognormal(
+                        # Mean is np.log(loc)
+                        mean=np.log(rot.pert),
+                        # Sigma is std/loc; loc initial = 1
+                        sigma=self.settings['std_hr']*self.gen_fact)
 
                 rot.pert = try_r
 
@@ -249,8 +263,11 @@ class LogNormal(Perturbator):
                     ptype='if',
                     initial_val=self.i_sop.items[bar.name].ifreq):
                 try_if = random.lognormal(
+                    # Mean is np.log(loc)
                     mean=np.log(bar.ifreq),
-                    sigma=self.settings['std_if']*self.gen_fact)
+                    # Sigma is std/loc; loc initial = 1
+                    sigma=(self.settings['std_if']/bar.ifreq) *
+                    self.gen_fact)
 
             bar.ifreq = try_if
 
@@ -264,14 +281,14 @@ class LogNormal(Perturbator):
 
         if f'{bar.name}__sf_p' in self.select:
             # Set trial symmetry factor out of the boundaries
-            try_sf_p: float = self.i_sop.items[bar.name].sf_p\
-                / ((3*self.settings['max_std']) * self.settings['std_sf_p'])
-            while not self.within_boundaries(
+            try_sf_p: float = -1
+            while (try_sf_p <= 0 or
+                   not self.within_boundaries(
                     perturbed_val=try_sf_p,
                     ptype='sf_p',
-                    initial_val=self.i_sop.items[bar.name].sf_p):
-                try_sf_p = random.lognormal(
-                    mean=np.log(bar.sf_p),
-                    sigma=self.settings['std_sf_p']*self.gen_fact)
+                    initial_val=self.i_sop.items[bar.name].sf_p)):
+                try_sf_p = random.normal(
+                    loc=bar.sf_p,
+                    scale=self.settings['std_sf_p']*self.gen_fact)
 
             bar.sf_p = try_sf_p

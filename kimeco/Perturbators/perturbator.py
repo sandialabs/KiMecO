@@ -30,6 +30,13 @@ class Perturbator(ABC):
         self.additive: list[str] = ['e', 'b', 'pow', 'lf_p', 'hf_p']
         self.multiplicative: list[str] = ['sf_p']
         self.percent: list[str] = ['if', 'hr', 'sigma', 'epsi', 'fact']
+        tmp: list[str] = []
+        tmp.extend(self.percent)
+        tmp.extend(self.additive)
+        tmp.extend(self.multiplicative)
+        # ordered so that largest substrings are first
+        self.ptypes = sorted(tmp, key=len, reverse=True)
+
         self.select: list[str] = self.settings['only_perturb']
 
     def get_boundaries(self,
