@@ -178,7 +178,7 @@ class KINSection(Section):
             frm = tmp_frm
             unit = 's<sup>-1</sup> '
         else:
-            unit = 'cm<sup>3</sup> s<sup>-1</sup> molecule<sup>-1</sup>'
+            unit = 'cm<sup>3</sup> molecule<sup>-1</sup> s<sup>-1</sup>'
             for bim in self.init_SOP.bimolecular:
                 if tmp_frm in bim.frag_names:
                     frm = bim.name
@@ -186,7 +186,7 @@ class KINSection(Section):
         cond = (p, t, to, frm)
 
         fig = go.Figure()
-        nbinsx = 30
+        nbinsx = 60
         # Overlay both histograms
         fig.update_layout(
             barmode='overlay',

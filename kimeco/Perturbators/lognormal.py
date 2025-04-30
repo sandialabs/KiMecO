@@ -266,8 +266,11 @@ class LogNormal(Perturbator):
                     # Mean is np.log(loc)
                     mean=np.log(bar.ifreq),
                     # Sigma is std/loc; loc initial = 1
-                    sigma=(self.settings['std_if']/bar.ifreq) *
-                    self.gen_fact)
+                    sigma=(
+                        self.settings['std_if'] *
+                        self.i_sop.items[bar.name].ifreq *
+                        self.gen_fact)
+                    )
 
             bar.ifreq = try_if
 
