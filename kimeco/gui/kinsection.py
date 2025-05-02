@@ -136,28 +136,27 @@ class KINSection(Section):
                                     )
                 all_gen_rates.append(self.kin_db.batch_select())
             all_figs = []
-            for gen_i, rates in zip(selected_gen, all_gen_rates):
-                for p in pres:
-                    for t in temp:
-                        for to in To:
-                            for frm in From:
-                                all_figs.extend(self.make_figure(
-                                    gen_name=f'G{gen_i:04d}',
-                                    p=p,
-                                    t=t,
-                                    To=to,
-                                    From=frm,
-                                    rates=rates
-                                ))
+            for p in pres:
+                for t in temp:
+                    for to in To:
+                        for frm in From:
+                            all_figs.extend(self.make_figure(
+                                generations=selected_gen,
+                                p=p,
+                                t=t,
+                                To=to,
+                                From=frm,
+                                rates=all_gen_rates
+                            ))
             return {'display': 'block'}, all_figs
 
     def make_figure(self,
-                    gen_name: str,
+                    generations: list[int],
                     p: float,
                     t: float,
                     To: str,
                     From: str,
-                    rates: dict[dict[dict[tuple, float]]]):
+                    rates: list[dict[dict[dict[tuple, float]]]]):
         # Find the names as saved in the kin db
         for k, v in self.settings['ct_names'].items():
             if v == To:
@@ -221,22 +220,28 @@ class KINSection(Section):
                 ),
             plot_bgcolor='white'
             )
-        p_t_to_frm = []
-        for origin in rates:
-            for kin_id in rates[origin]:
-                p_t_to_frm.append(rates[origin][kin_id][cond])
-        avrg = np.average(p_t_to_frm)
-        nel = len(p_t_to_frm)
-        fig.add_trace(go.Histogram(
-            histfunc="count",
-            x=p_t_to_frm,
-            nbinsx=min(len(p_t_to_frm), nbinsx),
-            autobinx=False,
-            name=f'Gen {gen_name}',
-            bingroup=1))
-        title = f"Rate coefficients from {From} to {To} in {gen_name}"
+
+        for rc, gen_i in zip(rates, generations):
+            gen_name = f'Gen {gen_i:04d}'
+            p_t_to_frm = []
+            for origin in rc:
+                for kin_id in rc[origin]:
+                    p_t_to_frm.append(rc[origin][kin_id][cond])
+            avrg = np.average(p_t_to_frm)
+            nel = len(p_t_to_frm)
+            fig.add_trace(go.Histogram(
+                histfunc="count",
+                x=p_t_to_frm,
+                nbinsx=min(len(p_t_to_frm), nbinsx),
+                autobinx=False,
+                name=gen_name,
+                bingroup=1))
+        title = f"Rate coefficients from {From} to {To} in {generations}"
         pres = f"P={p} Torr"
         temp = f"P={t} K"
+        # Overlay both histograms
+        fig.update_layout(
+            barmode='overlay')
 
         return [html.H3(title),
                 html.H3(pres),

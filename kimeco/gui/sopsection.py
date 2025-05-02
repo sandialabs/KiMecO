@@ -1,5 +1,4 @@
 from dash import html, dcc, Output, Input, State, MATCH
-import dash_bootstrap_components as dbc
 from plotly.graph_objs._figure import Figure
 import plotly.graph_objects as go
 import pandas as pd
@@ -10,6 +9,7 @@ from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from dash.exceptions import PreventUpdate
 from typing import Any
+from kimeco.gui.histogram import Histogram
 
 
 class SOPSection(Section):
@@ -158,7 +158,6 @@ class SOPSection(Section):
                 raise PreventUpdate
 
             sop_plot_children = []
-            index = 0
             for col in param_selected:
                 boundaries = self.get_boundaries(col)
                 plot_settings = self.get_plot_options(
@@ -169,11 +168,9 @@ class SOPSection(Section):
                         boundaries,
                         plot_settings,
                         col,
-                        selected_gen,
-                        index=index
+                        selected_gen
                     )
                 )
-                index += 1
             return ({'display': 'block'},
                     sop_plot_children
                     )
@@ -185,7 +182,7 @@ class SOPSection(Section):
         )
         def update_fig_nbin(nbin,
                             fig):
-            
+
             # Create a new figure object based on the existing figure
             new_fig = go.Figure(data=fig['data'], layout=fig['layout'])
 
@@ -244,7 +241,9 @@ class SOPSection(Section):
             dict[str, Any]: dictionary of options settings
         """
         plot_settings: dict[str, Any] = {
-            'title': col
+            'title': col,
+            'tickformat': '.2f',
+            'unit': ''
         }
         raw_molec: str = col.split('__')[0]
         if raw_molec in self.settings['ct_names']:
@@ -252,13 +251,15 @@ class SOPSection(Section):
         else:
             molec = raw_molec
         param: str = col.split('__')[1]
-        plot_settings['tickformat'] = '.2f'
         if ptype == 'score' and param == 'score':
-            plot_settings['title'] = fr'{ptype}'
+            plot_settings['title'] = ptype
             plot_settings['tickformat'] = 'e'
         elif ptype == 'e' and param == 'e':
-            plot_settings['title'] = f'Energy of {molec} (kcal/mol)'
+            plot_settings['title'] = \
+                f'Energy of {molec} (kcal mol<sup>-1</sup>)'
+            plot_settings['unit'] = ' (kcal mol<sup>-1</sup>)'
         elif ptype == 'if' and param == 'if':
+            plot_settings['unit'] = ' (cm<sup>-1</sup>)'
             bar: Barrier = self.init_SOP.items[raw_molec]
             if isinstance(bar.connected[0], Well):
                 if bar.connected[0].name in self.settings['ct_names']:
@@ -294,7 +295,8 @@ class SOPSection(Section):
                         To += frag
             else:
                 raise NotImplementedError('Unknown reactant object.')
-            plot_settings['title'] = f'I. frequency from {From} to {To} (1/cm)'
+            plot_settings['title'] = \
+                f'I. frequency from {From} to {To} (cm<sup>-1</sup>)'
         elif ptype == 'hr' and 'hr' in param:
             plot_settings['title'] = f'Rotor perturbation {param} of {molec}'
         elif ptype == 'f_p' and 'hf_p' in param:
@@ -309,8 +311,11 @@ class SOPSection(Section):
         elif (ptype == 'lj' and
                 ('epsi' in param or 'sigma' in param)):
             plot_settings['title'] = f"{param}"
-        elif (ptype == 'me' and
-                (param == 'pow' or param == 'fact')):
+        elif (ptype == 'me' and param == 'fact'):
+            plot_settings['title'] = \
+                "dE<sup>(0)</sup><sub>down</sub> (cm<sup>-1</sup>)"
+            plot_settings['unit'] = ' (cm<sup>-1</sup>)'
+        elif (ptype == 'me' and param == 'pow'):
             plot_settings['title'] = f"{param}"
         else:
             raise KeyError('Unknown type of parameter selected.')
@@ -320,36 +325,12 @@ class SOPSection(Section):
                     boundaries: float,
                     plot_settings: dict,
                     col: str,
-                    selected_gen: list[int],
-                    index: int):
-
-        fig = go.Figure()
+                    selected_gen: list[int]):
         # Add line for initial value to the graph
         idx = self.sop_db.columns.index(col)
         init_val: float = self.gapp.init_vals[idx+1]
-        fig.add_vline(x=init_val,
-                      line_dash='dash',
-                      line_width=2,
-                      line_color='black')
 
-        lb: float = min(boundaries)
-        ub: float = max(boundaries)
-        if lb != ub:
-            fig.add_vline(x=lb,
-                          line_dash='dash',
-                          line_width=4,
-                          line_color='brown')
-            fig.add_vline(x=ub,
-                          line_dash='dash',
-                          line_width=4,
-                          line_color='brown')
-
-        avrg = []
-        nel = []
-        cols = ['sop_id']
-        cols.extend(self.sop_db.columns)
-        all_gen_rows = []
-        def_n_bin = 30
+        all_gen_rows = {}
         for gen_i in selected_gen:
             for origin in self.gapp.goats[gen_i].split():
                 gen_id = int(origin.split('_')[0])
@@ -358,72 +339,23 @@ class SOPSection(Section):
                     table=f'G{gen_id:04d}',
                     row_id=el_id
                 )
-            all_gen_rows.append(self.sop_db.batch_select())
-        for idx, gen_rows in enumerate(all_gen_rows):
-            df = pd.DataFrame(data=gen_rows, columns=cols)
-            avrg.append(f"{df[col].mean():.3f}")
-            nel.append(len(df[col]))
-            fig.add_trace(go.Histogram(
-                histfunc="count",
-                x=df[col],
-                nbinsx=def_n_bin,
-                name=f'Gen {selected_gen[idx]}',
-                bingroup=1))
-        # Overlay both histograms
-        fig.update_layout(
-            barmode='overlay',
-            xaxis=dict(
-                title=plot_settings['title'],
-                showline=True,
-                showgrid=True,
-                showticklabels=True,
-                linecolor='rgb(0, 0, 0)',
-                linewidth=2,
-                ticks='inside',
-                tickformat=plot_settings['tickformat'],
-                tickfont=dict(
-                    family='Arial',
-                    size=12,
-                    color='rgb(0, 0, 0)')
-            ),
-            yaxis=dict(
-                title='Count of elements',
-                showline=True,
-                showgrid=True,
-                showticklabels=True,
-                linecolor='rgb(0, 0, 0)',
-                linewidth=2,
-                ticks='inside',
-                tickfont=dict(
-                    family='Arial',
-                    size=12,
-                    color='rgb(0, 0, 0)')
-            ),
-            plot_bgcolor='white'
-            )
-        # Reduce opacity to see both histograms
-        fig.update_traces(opacity=0.75)
-        return [html.Div(children=[
-            html.Div(children=[
-                dcc.Input(
-                    type='number',
-                    value=def_n_bin,  # Default number of bins
-                    min=1,
-                    step=1,
-                    style={'margin': '10px'},
-                    id={"type": "nbin_sop", "index": index}
-                )
-            ], style={'flex': '0 0 20%', 'margin': '10px'}),
-            html.Div(children=[
-                html.H3(
-                    f'Distribution of {col} in generation {selected_gen}'
-                    ),
-                html.H5(f"Average: {avrg}"),
-                html.H5(f'Number of elements: {nel}'),
-                dcc.Graph(
-                    figure=fig,
-                    id={"type": "sop_figure", "index": index}
-                    )
-            ], style={'flex': '1', 'margin': '10px'})
-        ], style={'display': 'flex', 'flexDirection': 'row'}
-        )]
+            all_gen_rows[gen_i] = self.sop_db.batch_select(col)
+        hist = Histogram(
+            data=all_gen_rows,
+            settings=plot_settings
+        )
+        hist.add_vline(x=init_val,
+                       line_width=2,
+                       line_color='black')
+
+        lb: float = min(boundaries)
+        ub: float = max(boundaries)
+        if lb != ub:
+            hist.add_vline(x=lb,
+                           line_width=4,
+                           line_color='brown')
+            hist.add_vline(x=ub,
+                           line_width=4,
+                           line_color='brown')
+
+        return hist.layout()
