@@ -123,43 +123,72 @@ class Kimeco_db:
                 values are list of values to update,
                     given in same order as ids
         """
+        # Number of values in a chunk
+        max_var = 20000
+        total_entries = len(values)
         try:
-            for i in range(len(values)):
-                values[i]['id'] = ids[i]
-            g_insert: Insert = (
-                insert(table=self.tables[table]).
-                values(values))
-
-            g_upsert: Insert = g_insert.on_conflict_do_update(
-                    index_elements=[self.tables[table].c.id],
-                    set_=g_insert.excluded
-                )
-
-            with self.eng.begin() as connection:
-                connection.execute(g_upsert)
-        except OperationalError as e:
-            glog.debug(e)
-            # Happens when trying to insert too many values at once
-            half: int = len(values) // 2
-            val1 = [values[i] for i in range(0, half)]
-            val2 = [values[i] for i in range(half, len(values))]
-            half: int = len(ids) // 2
-            ids1 = [ids[i] for i in range(0, half)]
-            ids2 = [ids[i] for i in range(half, len(ids))]
-            for val, rids in zip([val1, val2], [ids1, ids2]):
-                for i in range(len(val)):
-                    val[i]['id'] = rids[i]
+            while total_entries > 0:
+                # values[0] is the number of columns
+                chunk_size = min(max_var // (len(values[0]) + 1),
+                                 total_entries)
+                # Create chunks of ids and values
+                val_chunk = values[:chunk_size]
+                id_chunk = ids[:chunk_size]
+                for i in range(len(val_chunk)):
+                    val_chunk[i]['id'] = id_chunk[i]
                 g_insert: Insert = (
                     insert(table=self.tables[table]).
-                    values(val))
+                    values(val_chunk))
 
                 g_upsert: Insert = g_insert.on_conflict_do_update(
                         index_elements=[self.tables[table].c.id],
                         set_=g_insert.excluded
                     )
-
                 with self.eng.begin() as connection:
                     connection.execute(g_upsert)
+                # Update the lists to process the remaining entries
+                values = values[chunk_size:]
+                ids = ids[chunk_size:]
+                total_entries -= chunk_size
+        except OperationalError as e:
+            glog.debug(e)
+        # try:
+        #     for i in range(len(values)):
+        #         values[i]['id'] = ids[i]
+        #     g_insert: Insert = (
+        #         insert(table=self.tables[table]).
+        #         values(values))
+
+        #     g_upsert: Insert = g_insert.on_conflict_do_update(
+        #             index_elements=[self.tables[table].c.id],
+        #             set_=g_insert.excluded
+        #         )
+
+        #     with self.eng.begin() as connection:
+        #         connection.execute(g_upsert)
+        # except OperationalError as e:
+        #     glog.debug(e)
+        #     # Happens when trying to insert too many values at once
+        #     half: int = len(values) // 2
+        #     val1 = [values[i] for i in range(0, half)]
+        #     val2 = [values[i] for i in range(half, len(values))]
+        #     half: int = len(ids) // 2
+        #     ids1 = [ids[i] for i in range(0, half)]
+        #     ids2 = [ids[i] for i in range(half, len(ids))]
+        #     for val, rids in zip([val1, val2], [ids1, ids2]):
+        #         for i in range(len(val)):
+        #             val[i]['id'] = rids[i]
+        #         g_insert: Insert = (
+        #             insert(table=self.tables[table]).
+        #             values(val))
+
+        #         g_upsert: Insert = g_insert.on_conflict_do_update(
+        #                 index_elements=[self.tables[table].c.id],
+        #                 set_=g_insert.excluded
+        #             )
+
+        #         with self.eng.begin() as connection:
+        #             connection.execute(g_upsert)
 
     def manual_upsert_entries(self,
                               table: str,

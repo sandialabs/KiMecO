@@ -85,26 +85,28 @@ cumul = copy.deepcopy(cumul_zero)
 current_time = -10
 
 for idx, t in enumerate(times):
-    # Instrument response function
-    if idx < len(times)-1:
-        # avoid error for last time
-        dt = times[idx+1] - times[idx]
-    cumul = copy.deepcopy(cumul_zero)
-    count = 0
-    for micro_step in np.arange(t-dt/2, t+dt/2, dt/10):
-        if micro_step <= 0:
-            continue
-        count += 1
-        if micro_step > current_time:
-            current_time = micro_step
-            net.advance(current_time)
-        for snum, i in enumerate(spec):
-            if i.name in to_watch:
-                cumul[i.name][idx] += gas.X[snum] * ntot * Avogadro
+    # # Instrument response function  # Uncoment if response on
+    # if idx < len(times)-1:
+    #     # avoid error for last time
+    #     dt = times[idx+1] - times[idx]
+    # cumul = copy.deepcopy(cumul_zero)
+    # count = 0
+    # for micro_step in np.arange(t-dt/2, t+dt/2, dt/10):
+    #     if micro_step <= 0:
+    #         continue
+    #     count += 1
+    #     if micro_step > current_time:
+    #         current_time = micro_step
+    #         net.advance(current_time)
+    #     for snum, i in enumerate(spec):
+    #         if i.name in to_watch:
+    #             cumul[i.name][idx] += gas.X[snum] * ntot * Avogadro
+    net.advance(t) # Remove if response on
     for snum, i in enumerate(spec):
         if i.name in to_watch:
             # density (molecules/cm^3)
-            traces[i.name][idx] = cumul[i.name][idx]/count
+            traces[i.name][idx] = gas.X[snum] * ntot * Avogadro  # Remove if response on
+            # traces[i.name][idx] = cumul[i.name][idx]/count  # Uncoment if response on
 # unique ids of rows in the DB
 row_ids = [i for i in range({el_num}*block_size+start_idx,
                             {el_num}*block_size+start_idx+len(times),
