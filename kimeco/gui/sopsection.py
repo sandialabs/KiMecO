@@ -1,7 +1,6 @@
 from dash import html, dcc, Output, Input, State, MATCH
 from plotly.graph_objs._figure import Figure
 import plotly.graph_objects as go
-import pandas as pd
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.gui.section import Section
 from kimeco.barrier import Barrier
@@ -20,7 +19,7 @@ class SOPSection(Section):
     @property
     def layout(self) -> html.Div:
         return html.Div(
-            className='row', id='sop',
+            id='sop',
             style={'display': 'none'},
             children=[
                 html.H3('Type of parameter to plot:'),
@@ -191,7 +190,7 @@ class SOPSection(Section):
                 new_fig.update_traces(nbinsx=nbin)
 
             return new_fig
-            
+
     def get_boundaries(self,
                        col: str) -> list[str]:
         """Get the boundary conditions directly from the perturbator
@@ -257,9 +256,9 @@ class SOPSection(Section):
         elif ptype == 'e' and param == 'e':
             plot_settings['title'] = \
                 f'Energy of {molec} (kcal mol<sup>-1</sup>)'
-            plot_settings['unit'] = ' (kcal mol<sup>-1</sup>)'
+            plot_settings['unit'] = u' (kcal mol\u207B\u00B9)'
         elif ptype == 'if' and param == 'if':
-            plot_settings['unit'] = ' (cm<sup>-1</sup>)'
+            plot_settings['unit'] = u' (cm\u207B\u00B9)'
             bar: Barrier = self.init_SOP.items[raw_molec]
             if isinstance(bar.connected[0], Well):
                 if bar.connected[0].name in self.settings['ct_names']:
@@ -314,7 +313,7 @@ class SOPSection(Section):
         elif (ptype == 'me' and param == 'fact'):
             plot_settings['title'] = \
                 "dE<sup>(0)</sup><sub>down</sub> (cm<sup>-1</sup>)"
-            plot_settings['unit'] = ' (cm<sup>-1</sup>)'
+            plot_settings['unit'] = u' (cm\u207B\u00B9)'
         elif (ptype == 'me' and param == 'pow'):
             plot_settings['title'] = f"{param}"
         else:
@@ -339,7 +338,7 @@ class SOPSection(Section):
                     table=f'G{gen_id:04d}',
                     row_id=el_id
                 )
-            all_gen_rows[gen_i] = self.sop_db.batch_select(col)
+            all_gen_rows[gen_i] = self.sop_db.batch_select_col(col)
         hist = Histogram(
             data=all_gen_rows,
             settings=plot_settings

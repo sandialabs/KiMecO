@@ -1,4 +1,5 @@
 from dash import Dash, html, dcc, Output, Input, State
+from dash.exceptions import PreventUpdate
 import sys
 import os
 from kimeco.readers.mess_input import MessInputReader
@@ -11,6 +12,7 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.gui.sopsection import SOPSection
 from kimeco.gui.kinsection import KINSection
 from kimeco.gui.simsection import SIMSection
+from kimeco.gui.correl_section import CORSection
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.Perturbators.normal import Normal
 from kimeco.Perturbators.lognormal import LogNormal
@@ -92,7 +94,8 @@ class KimecoApp:
                 dcc.RadioItems(options=[
                     {'label': 'Set of parameters', 'value': 'SOP'},
                     {'label': 'Rate coefficients', 'value': 'KIN'},
-                    {'label': 'Concentration profiles', 'value': 'SIM'}
+                    {'label': 'Concentration profiles', 'value': 'SIM'},
+                    {'label': 'Correlation plots', 'value': 'COR'}
                     ],
                             value='Set of parameters',
                             inline=True,
@@ -134,7 +137,8 @@ class KimecoApp:
                     ]),
             SOPSection(self).layout,
             KINSection(self).layout,
-            SIMSection(self).layout]
+            SIMSection(self).layout,
+            CORSection(self).layout]
 
     def register_callbacks(self):
         # GENERATION CONTROL
@@ -172,6 +176,7 @@ class KimecoApp:
             Output(component_id='sop', component_property='style'),
             Output(component_id='kin', component_property='style'),
             Output(component_id='sim', component_property='style'),
+            Output(component_id='cor', component_property='style'),
             Input(component_id='rb_start', component_property='value')
         )
         def update_layout(data_type):
@@ -179,19 +184,25 @@ class KimecoApp:
                 sop_style = {'display': 'block'}
                 kin_style = {'display': 'none'}
                 sim_style = {'display': 'none'}
+                cor_style = {'display': 'none'}
             elif data_type == 'KIN':
                 sop_style = {'display': 'none'}
                 kin_style = {'display': 'block'}
                 sim_style = {'display': 'none'}
+                cor_style = {'display': 'none'}
             elif data_type == 'SIM':
                 sop_style = {'display': 'none'}
                 kin_style = {'display': 'none'}
                 sim_style = {'display': 'block'}
-            else:
+                cor_style = {'display': 'none'}
+            elif data_type == 'COR':
                 sop_style = {'display': 'none'}
                 kin_style = {'display': 'none'}
                 sim_style = {'display': 'none'}
-            return sop_style, kin_style, sim_style
+                cor_style = {'display': 'block'}
+            else:
+                raise PreventUpdate
+            return sop_style, kin_style, sim_style, cor_style
 
     def set_pert(self,
                  settings,

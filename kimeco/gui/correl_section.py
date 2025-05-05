@@ -1,0 +1,280 @@
+from kimeco.gui.section import Section
+from dash import html, dcc, Output, Input, State, MATCH
+from dash.dash_table import DataTable
+from dash.exceptions import PreventUpdate
+from sqlalchemy import Row
+import numpy as np
+from typing import Any
+import plotly.graph_objects as go
+
+
+class CORSection(Section):
+    def __init__(self, gapp) -> None:
+        super().__init__(gapp)
+        self.corr_tables: list[DataTable]
+        self.sop_tables = {}
+        # Key is generation id
+        self.cor_data = {}
+        self.col_names = {}
+
+    @property
+    def layout(self) -> html.Div:
+        return html.Div(
+            id='cor',
+            style={'display': 'none'},
+            children=[
+                html.Div(
+                    id='cor_plot_button',
+                    style={'display': 'block'},
+                    children=[
+                        html.Button(id='cor_plot_b',
+                                    children='Plot',
+                                    )]),
+                html.Div(
+                    id='cor content'
+                )])
+
+    def register_callbacks(self):
+        # COR interactions
+        # Create correlation table for each generation selected
+        @self.app.callback(
+            Output('cor content', 'children'),
+            Input('cor_plot_b', 'n_clicks'),
+            State('rb_start', 'value'),
+            State('gen range slider', 'value')
+        )
+        def create_cor_plots(n_clicks,
+                             start: str,
+                             selected_gen: list[int]
+                             ):
+            self.corr_tables = []
+            if start != 'COR' or n_clicks is None:
+                raise PreventUpdate
+            for gen_i in selected_gen:
+                if gen_i not in self.sop_tables:
+                    for origin in self.gapp.goats[gen_i].split():
+                        gen_id = int(origin.split('_')[0])
+                        el_id = int(origin.split('_')[1])
+                        self.sop_db.prepare_batch_select(
+                            table=f'G{gen_id:04d}',
+                            row_id=el_id
+                        )
+                    self.sop_tables[gen_i] = self.sop_db.batch_select()
+                self.create_cor_table(
+                    table=np.array(self.sop_tables[gen_i])[:, 1:],
+                    id=gen_i)
+            return self.corr_tables
+
+        @self.app.callback(
+            Output({'type': 'cor_plt', 'index': MATCH}, 'children'),
+            Input({'type': 'cor_table', 'index': MATCH}, 'selected_cells'),
+            State({'type': 'cor_table', 'index': MATCH}, 'id'),
+            prevent_initial_call=True
+        )
+        def on_cell_click(selected_cells: list[dict[str, Any]],
+                          tbl_id: dict[str, Any]):
+            if len(selected_cells) == 0:
+                raise PreventUpdate
+            gen_id = tbl_id['index']
+            cor_plots = []
+            scores = []
+            for cell in selected_cells:
+                row = cell['row']
+                column = cell['column']
+                if row == 0 or column == 0:
+                    continue
+                px = self.col_names[gen_id][row]
+                py = self.col_names[gen_id][column-1]
+                x = self.cor_data[gen_id][row]
+                y = self.cor_data[gen_id][column-1]
+                scores: list[float] = []  # Used for color mapping
+                score_cols = [
+                    idx+1 for idx, col in enumerate(self.sop_db.columns)
+                    if 'score' in col]
+                for row in self.sop_tables[gen_id]:
+                    sc = 0
+                    for idx in score_cols:
+                        sc += row[idx]
+                    scores.append(sc)
+                # Create a heatmap
+                fig = go.Figure(data=go.Scatter(
+                    x=x,
+                    y=y,
+                    mode='markers',
+                    marker=dict(
+                        size=10,
+                        color=scores,
+                        colorscale='jet',
+                        colorbar=dict(title='Score'),
+                        showscale=True
+                    )
+                ))
+
+                # Update layout
+                fig.update_layout(
+                    title=f'Correlation heatmap in G{gen_id:04d}',
+                    xaxis_title=px,
+                    yaxis_title=py,
+                )
+
+                # # Add correlation line
+                # # Calculate the slope and intercept manually
+                # x_mean = np.mean(x)
+                # y_mean = np.mean(y)
+
+                # # Calculate the slope (m) and intercept (b)
+                # numerator = np.sum((x - x_mean) * (y - y_mean))
+                # denominator = np.sum((x - x_mean) ** 2)
+                # slope = numerator / denominator
+                # intercept = y_mean - slope * x_mean
+
+                # # Calculate R^2 value
+                # y_pred = slope * x + intercept
+                # ss_total = np.sum((y - y_mean) ** 2)
+                # ss_residual = np.sum((y - y_pred) ** 2)
+                # r_squared = 1 - (ss_residual / ss_total)
+                # cor_plots.append(dcc.Graph(
+                #     figure=fig,
+                #     # id={"type": "cor_plot", "index": self.id}
+                #     ))
+                # # Create trendline data
+                # x_trendline = np.linspace(min(x), max(x), 100)
+                # y_trendline = slope * x_trendline + intercept
+
+                # # Add trendline to the plot
+                # fig.add_trace(go.Scatter(
+                #     x=x_trendline,
+                #     y=y_trendline,
+                #     mode='lines',
+                #     line=dict(color='red', width=2),
+                #     name='R²'
+                # ))
+
+                # # Add R^2 value annotation
+                # fig.add_annotation(
+                #     x=0.5,  # Position of the annotation (x-axis)
+                #     y=0.9,  # Position of the annotation (y-axis)
+                #     xref='paper',  # Reference to the paper coordinates
+                #     yref='paper',
+                #     text=f'R² = {r_squared:.2f}',  # Format R² value
+                #     showarrow=False,
+                #     font=dict(size=16)
+                # )
+                cor_plots.append(dcc.Graph(figure=fig))
+            return cor_plots
+
+    def create_cor_table(self,
+                         table: list[Row],
+                         id: int):
+        # Calculate the correlation matrix
+        stds = np.std(table, axis=0)
+        # Filter out non-perturbed parameters
+        non_constant_data = table[:, stds > 1e-10]
+        perturbed_cols = [
+            i for idx, i in enumerate(self.sop_db.columns)
+            if stds[idx] > 1e-10]
+        self.col_names[id] = perturbed_cols
+        self.cor_data[id] = non_constant_data
+        cor = np.corrcoef(non_constant_data, rowvar=False)
+        r2 = cor**2
+        # Prepare the data for the DataTable
+        data = [
+            {**{'Header': col_name}, **{p: float(f'{v:.2f}')
+                                        for p, v in zip(perturbed_cols, row)}}
+            for col_name, row in zip(perturbed_cols, r2)
+        ]
+
+        header = [{'name': f'G{id:04d}', 'id': 'Header', 'type': 'text'}] + [
+            {'name': col, 'id': col, 'type': 'numeric'}
+            for col in perturbed_cols
+        ]
+        cond_style = self.get_cond_style(perturbed_cols)
+        self.corr_tables.append(html.Div(children=[
+            DataTable(
+                columns=header,
+                data=data,
+                style_cell=dict(textAlign='center'),
+                id={"type": "cor_table", "index": id},
+                editable=False,
+                style_table={'overflowX': 'auto'},
+                style_header={'backgroundColor': 'lightgrey'},
+                style_data_conditional=cond_style,
+                cell_selectable=True,  # Enable cell selection
+                selected_cells=[],  # Initialize as empty
+            ),
+            html.Div(id={"type": "cor_plt", "index": id})],
+            style={"padding": "15px"})
+        )
+
+    # def score_to_color(self,
+    #                    score: float) -> str:
+    #     """return a color depending on r2 value
+
+    #     Args:
+    #         r2_value (float): correlation
+
+    #     Returns:
+    #         str: color in rgba format
+    #     """
+    #     if r2_value < 0:
+    #         return 'white'  # Out of bounds
+    #     elif r2_value <= 0.5:
+    #         # Interpolate from white to orange
+    #         r = int(255 * (r2_value / 0.5))
+    #         g = 165  # Orange
+    #         b = 0
+    #     elif r2_value <= 1:
+    #         # Interpolate from orange to red
+    #         r = 255  # Red
+    #         g = int(165 * (1 - (r2_value - 0.5) / 0.5))
+    #         b = 0
+    #     else:
+    #         return 'red'  # Out of bounds
+    #     return f'rgba({r}, {g}, {b}, 1)'
+
+    def get_cond_style(self,
+                       cols: list[str]):
+        cond = [
+            {
+                'if': {
+                    'column_id': 'Header',
+                },
+                'backgroundColor': 'lightgrey'
+            }]
+        cond.extend(
+            [{
+                'if': {
+                    'filter_query': '{{{}}} >= 0 && {{{}}} < 0.25'.format(
+                        col, col),
+                    'column_id': col
+                },
+                'backgroundColor': 'green'
+            } for col in cols])
+        cond.extend(
+            [{
+                'if': {
+                    'filter_query': '{{{}}} >= 0.25 && {{{}}} < 0.5'.format(
+                        col, col),
+                    'column_id': col
+                },
+                'backgroundColor': 'yellow'
+            } for col in cols])
+        cond.extend(
+            [{
+                'if': {
+                    'filter_query': '{{{}}} >= 0.5 && {{{}}} < 0.75'.format(
+                        col, col),
+                    'column_id': col
+                },
+                'backgroundColor': 'orange'
+            } for col in cols])
+        cond.extend(
+            [{
+                'if': {
+                    'filter_query': '{{{}}} >= 0.75 && {{{}}} <= 1'.format(
+                        col, col),
+                    'column_id': col
+                },
+                'backgroundColor': 'red'
+            } for col in cols])
+        return cond

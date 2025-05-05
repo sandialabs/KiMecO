@@ -11,7 +11,7 @@ class KINSection(Section):
     @property
     def layout(self) -> html.Div:
         return html.Div(
-            className='row', id='kin',
+            id='kin',
             style={'display': 'none'},
             children=[
                 html.H3('Select which rate coefficients to plot:'),

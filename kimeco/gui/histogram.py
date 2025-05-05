@@ -135,9 +135,13 @@ class Histogram:
             columns=header,
             data=self.make_stats(data),
             style_cell=dict(textAlign='center'),
-            style_header=dict(backgroundColor="white"),
             style_data=dict(backgroundColor="white"),
-            id={"type": "stat_table", "index": self.id}
+            id={"type": "stat_table", "index": self.id},
+            editable=False,
+            row_selectable=False,
+            row_deletable=False,
+            style_table={'overflowX': 'auto'},
+            style_header={'backgroundColor': 'lightgrey'}
         )
 
     def make_stats(self,

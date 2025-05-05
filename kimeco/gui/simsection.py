@@ -16,7 +16,7 @@ class SIMSection(Section):
     @property
     def layout(self) -> html.Div:
         return html.Div(
-            className='row', id='sim',
+            id='sim',
             style={'display': 'none'},
             children=[
                 html.H4('Species to visualize'),
