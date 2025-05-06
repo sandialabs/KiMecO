@@ -175,8 +175,8 @@ class Well:
             axis=axis,
             symmetry=symmetry,
             scan=scan,
-            fexp,
-            fcoef))
+            fexp=fexp,
+            fcoef=fcoef))
 
     def add_mrotor(self,
                    sf: float,
