@@ -12,7 +12,7 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.gui.sopsection import SOPSection
 from kimeco.gui.kinsection import KINSection
 from kimeco.gui.simsection import SIMSection
-from kimeco.gui.correl_section import CORSection
+from kimeco.gui.corsection import CORSection
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.Perturbators.normal import Normal
 from kimeco.Perturbators.lognormal import LogNormal

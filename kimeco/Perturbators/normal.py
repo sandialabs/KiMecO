@@ -180,7 +180,7 @@ class Normal(Perturbator):
             well (Well) : Well object
         """
 
-        for num, rot in enumerate(well.rotors):
+        for num, rot in enumerate(well.h_rotors):
             # Set trial rotor perturbation out of the boundaries
             try_r: float = 1 -\
                 (1+self.settings['max_std']) * self.settings['std_hr']
@@ -192,7 +192,7 @@ class Normal(Perturbator):
                     loc=1,
                     scale=self.settings['std_hr']*self.gen_fact)
 
-            well.rotors[num].pert = try_r
+            well.h_rotors[num].pert = try_r
 
     def perturb_ifreq(self,
                       bar: Barrier) -> None:

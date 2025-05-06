@@ -3,6 +3,7 @@ from uu import Error
 
 from kimeco.parameters import SOP
 from kimeco.barrier import Barrier
+from kimeco.rotors.internalrotation import InternalRotation
 
 import os
 
@@ -23,6 +24,7 @@ class MessInputReader:
         self.SOP.rc_temp = settings["rc_temp"]
         self.SOP.rc_pres = settings["rc_pres"]
         self.SOP.ct_names = settings["ct_names"]
+        self.files2copy: list[str] = []
 
         if os.path.isfile(path=self.filename):
             with open(file=self.filename, mode='r') as f:
@@ -111,10 +113,19 @@ class MessInputReader:
                 new_line += " {" + f"{lside}.name" + "}"
                 new_line += " {" + f"{rside}.name" + "}\n"
                 self.template.append(new_line)
-            # Set barrierless to save symmetry factor
-            elif line.lstrip().casefold().startswith('core phasespacetheory'):
+            # Different types of barrierless
+            elif (line.lstrip().casefold().startswith('core')
+                  and line.lstrip().casefold().split()[1] == 'phasespacetheory'
+                  and isinstance(self.SOP.items[name], Barrier)):
                 self.SOP.items[name].barrierless = True
                 self.template.append(line)
+                skip += self.save_phasespacetheory(name, lnum)
+            elif (line.lstrip().casefold().startswith('core')
+                  and line.lstrip().casefold().split()[1] == 'rotd'
+                  and isinstance(self.SOP.items[name], Barrier)):
+                self.SOP.items[name].barrierless = True
+                self.template.append(line)
+                skip += self.save_rotd(name, lnum)
             # FRAGMENT
             elif line.lstrip().casefold().startswith('fragment')\
                     and 'geom' not in line.casefold():
@@ -131,6 +142,11 @@ class MessInputReader:
                     + f"{fname}.name" \
                     + "}\n"
                 self.template.append(new_line)
+
+            # Dummy
+            elif line.lstrip().casefold().startswith('dummy'):
+                self.template.append(line)
+                self.SOP.items[name].dummy = True
 
             # Add parameters to items
 
@@ -172,6 +188,17 @@ class MessInputReader:
                 else:
                     skip += self.save_rotor(name=name,
                                             lnum=lnum)
+                    
+            # MULTI ROTOR
+            elif (line.lstrip().casefold().startswith('core') and
+                  line.split()[1].casefold() == 'multirotor'):
+                self.template.append(line)
+                if last_item == 'frag':
+                    skip += self.save_multirotor(name=fname,
+                                                 lnum=lnum)
+                else:
+                    skip += self.save_multirotor(name=name,
+                                                 lnum=lnum)
 
             # ENERGY
             elif line.lstrip().casefold().startswith('zeroenergy'):
@@ -199,19 +226,84 @@ class MessInputReader:
                                             tun_type=tun_type,
                                             lnum=lnum)
 
-            # SYMMETRY FACTOR
-            elif (line.lstrip().casefold().startswith('symmetryfactor')
-                  and isinstance(self.SOP.items[name], Barrier)
-                  and self.SOP.items[name].barrierless):
-                _sf = float(line.split()[1])
-                self.save_symmetry_factor(name=name,
-                                          symFact=_sf,
-                                          lnum=lnum)
             # All other lines
             else:
                 self.template.append(line)
 
+        self.SOP.files2copy = self.files2copy
         return (self.SOP, self.template)
+
+    def save_phasespacetheory(self,
+                              name: str,
+                              lnum: int):
+        """Save the barierless parameters in case of a phasespacetheory core
+
+        Args:
+            name (str): name of the barrier
+            lnum (int): line number from wich to record this core
+
+        Returns:
+            int: number of line to skip to not double read this core
+        """
+        bar: Barrier = self.SOP.items[name]
+        skip = 0
+        # Read the file
+        for lnum2, line in enumerate(self.file[lnum+1:]):
+            if line.lstrip().casefold().startswith('symmetryfactor'):
+                bar._symFact = float(line.split()[1])
+                new_line: str = f"{line.split()[0]}" \
+                                + " {" + f"{name}" \
+                                + ".symFact}\n"
+                skip += 1
+                self.template.append(new_line)
+            elif line.lstrip().casefold().startswith('potentialprefactor'):
+                bar.pp = float(line.split()[1])
+                skip += 1
+                self.template.append(line)
+            elif line.lstrip().casefold().startswith('potentialpowerexponent'):
+                bar.ppe = float(line.split()[1])
+                skip += 1
+                self.template.append(line)
+            elif line.lstrip().casefold().startswith('end'):
+                return skip
+            else:
+                skip += 1
+                self.template.append(line)
+
+    def save_rotd(self,
+                  name: str,
+                  lnum: int) -> int:
+        """Save the barierless parameters in case of a rotd core
+
+        Args:
+            name (str): name of the barrier
+            lnum (int): line number from wich to record this core
+
+        Returns:
+            int: number of line to skip to not double read this core
+        """
+        bar: Barrier = self.SOP.items[name]
+        skip = 0
+        # Read the file
+        for lnum2, line in enumerate(self.file[lnum+1:]):
+            if line.lstrip().casefold().startswith('symmetryfactor'):
+                bar._symFact = float(line.split()[1])
+                new_line: str = f"{line.split()[0]}" \
+                                + " {" + f"{name}" \
+                                + ".symFact}\n"
+                skip += 1
+                self.template.append(new_line)
+            elif line.lstrip().casefold().startswith('file'):
+                bar.file = line.split()[1]
+                if bar.file not in self.files2copy:
+                    self.files2copy.append(bar.file)
+                skip += 1
+                self.template.append(line)
+            elif line.lstrip().casefold().startswith('end'):
+                return skip
+            else:
+                skip += 1
+                self.template.append(line)
 
     def save_temperatures(self, lnum: int) -> None:
         """Save temperatures to be used for RC calculation,
@@ -305,6 +397,8 @@ class MessInputReader:
         """
 
         scan = []
+        fexp = []
+        fcoef = []
         npot = 0
         skip = 0
         symmetry = 0
@@ -328,6 +422,19 @@ class MessInputReader:
                     raise TypeError("Error in Messfile: wrong number of pot\
                                      for hindered rotor")
                 skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('fourierexpansion'):
+                self.template.append(line)
+                nexp = int(line.split()[1])
+                fexp = [
+                    exp_line.split()[0]
+                    for exp_line in self.file[lnum2+1:lnum2+nexp]]
+                fcoef = [
+                    exp_line.split()[1]
+                    for exp_line in self.file[lnum2+1:lnum2+nexp]]
+                for li in self.file[lnum2+1:lnum2+nexp]:
+                    self.template.append(li)
+                skip += 1 + nexp
                 continue
 
             # Other keys
@@ -363,12 +470,121 @@ class MessInputReader:
                 continue
             # END
             elif line.lstrip().casefold().startswith('end'):
-                rot_num: int = self.SOP.set_rotor(name,
-                                                  thermalpowermax,
-                                                  group,
-                                                  axis,
-                                                  symmetry,
-                                                  scan)
+                rot_num: int = self.SOP.set_hrotor(
+                    name,
+                    thermalpowermax,
+                    group,
+                    axis,
+                    symmetry,
+                    scan,
+                    fexp,
+                    fcoef)
+                if len(scan) != 0:
+                    new_line: str = " {" \
+                        + f"{name}" \
+                        + ".r_scan" \
+                        + f"({rot_num})" \
+                        + "}\n"
+                    self.template.append(new_line)
+                self.template.append(line)
+                skip += 1
+                return skip
+            else:
+                raise Error(f'Incorrect termination of rotor for {name}')
+        return 0
+
+    def save_multirotor(self,
+                        name: str,
+                        lnum: int) -> int:
+        """Save the next hindered rotor encountered in Mess in
+        the last structure dictionary.
+
+        Args:
+            name (str): Object's (well, bimol, barrier) name
+            lnum (int): Line number in input file
+
+        Raises:
+            TypeError: error in input file
+            TypeError: error in input file
+            TypeError: error in input file
+            Error: unknown error
+
+        Returns:
+            int: number of line to skip readinding in the read method.
+        """
+
+        skip = 0
+        rot_idx = len(self.SOP.items[name].m_rotors)
+        irs: list[InternalRotation] = []
+        ir_skip: int = 0
+
+        for lnum2, line in enumerate(self.file[lnum+1:]):
+            # Skip through the lines of internal rotation
+            if ir_skip != 0:
+                ir_skip -= 1
+                continue
+            # SymmetryFactor
+            if line.lstrip().casefold().startswith('symmetryfactor'):
+                sf = float(line.split()[1])
+                new_line: str = f"{self.file[lnum].split()[0]}" \
+                                + " {" + f"{name}.m_rotors[{rot_idx}]" \
+                                + ".symFact}\n"
+                self.template.append(new_line)
+                skip += 1
+                continue
+
+            # InterpolationEnergyMax
+            elif line.lstrip().casefold().startswith('interpolationenergymax'):
+                iem = float(line.split()[1])
+                new_line: str = f"{self.file[lnum].split()[0]}" \
+                                + " {" + f"{name}.m_rotors[{rot_idx}]" \
+                                + ".iem}\n"
+                self.template.append(new_line)
+                skip += 1
+                continue
+
+            # PotentialEnergySurface
+            elif line.lstrip().casefold().startswith('potentialenergysurface'):
+                pes = line.split()[1]
+                if pes not in self.files2copy:
+                    self.files2copy.append(pes)
+                new_line: str = f"{self.file[lnum].split()[0]}" \
+                                + " {" + f"{name}.m_rotors[{rot_idx}]" \
+                                + ".file}\n"
+                self.template.append(new_line)
+                skip += 1
+                continue
+
+            # QuantumLevelEnergyMax
+            elif line.lstrip().casefold().startswith('quantumlevelenergymax'):
+                qlem = float(line.split()[1])
+                new_line: str = f"{self.file[lnum].split()[0]}" \
+                                + " {" + f"{name}.m_rotors[{rot_idx}]" \
+                                + ".qlem}\n"
+                self.template.append(new_line)
+                skip += 1
+                continue
+
+            # InternalRotation
+            elif line.lstrip().casefold().startswith('internalrotation'):
+                self.template.append(line)
+                skip += 1
+                ir_skip, ir = self.create_internal_rotation(
+                    name=name,
+                    lnum=lnum2)
+                irs.append(ir)
+                skip += ir_skip
+                continue
+            # END
+            elif line.lstrip().casefold().startswith('end'):
+                rot_num: int = self.SOP.set_mrotor(
+                    name,
+                    sf,
+                    iem,
+                    pes,
+                    qlem,
+                    irs
+                    )
                 new_line: str = " {" \
                     + f"{name}" \
                     + ".r_scan" \
@@ -381,6 +597,98 @@ class MessInputReader:
             else:
                 raise Error(f'Incorrect termination of rotor for {name}')
         return 0
+
+    def create_internal_rotation(self,
+                                 name: str,
+                                 lnum: int):
+        """Create an InternalRotation Object
+
+        Args:
+            name (str): name of the SOP item
+            lnum (int): line number to start to read after
+
+        Raises:
+            TypeError: not int in group
+            TypeError: not int in axis
+            AttributeError: unknown attribute
+
+        Returns:
+            tuple(int, InternalRotation):
+                int: lines to skip
+                ir object to be added to MultiRotor
+        """
+        skip = 0
+        for lnum2, line in enumerate(self.file[lnum+1:]):
+            if line.lstrip().casefold().startswith('group'):
+                group: list[int] = []
+                for nmbr in line.split()[1:]:
+                    if isdigit(nmbr):
+                        group.append(int(nmbr))
+                    else:
+                        raise TypeError('Incorrect type for rotor group.')
+                self.template.append(line)
+                skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('axis'):
+                axis: list[int] = []
+                for nmbr in line.split()[1:]:
+                    if isdigit(nmbr):
+                        axis.append(int(nmbr))
+                    else:
+                        raise TypeError('Incorrect type for rotor axis.')
+                self.template.append(line)
+                skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('symmetry'):
+                symmetry = int(line.split()[1])
+                self.template.append(line)
+                skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('massexpansionsize'):
+                mes = int(line.split()[1])
+                self.template.append(line)
+                skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('potentialexpansionsize'):
+                pes = int(line.split()[1])
+                self.template.append(line)
+                skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('hamiltonsizemin'):
+                hamiltonsizemin = int(line.split()[1])
+                self.template.append(line)
+                skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('hamiltonsizemax'):
+                hamiltonsizemax = int(line.split()[1])
+                self.template.append(line)
+                skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('gridsize'):
+                gridsize = int(line.split()[1])
+                self.template.append(line)
+                skip += 1
+                continue
+            elif line.lstrip().casefold().startswith('end'):
+                ir = InternalRotation(
+                    group=group,
+                    axis=axis,
+                    symmetry=symmetry,
+                    massexpansionsize=mes,
+                    potentialexpansionsize=pes,
+                    hamiltonsizemax=hamiltonsizemax,
+                    hamiltonsizemin=hamiltonsizemin,
+                    gridsize=gridsize
+                )
+                self.template.append(line)
+                skip += 1
+                return (skip, ir)
+            elif line.lstrip()[0] == '#' or line.lstrip()[0] == '!':
+                self.template.append(line)
+                skip += 1
+                continue
+            else:
+                raise AttributeError('Unknown keyword for InternalRotation')
 
     def save_geom(self,
                   name: str,
@@ -475,24 +783,6 @@ class MessInputReader:
                 well_idx += 1
                 skip += 1
             elif line.lstrip().casefold().startswith('end'):
-                break
-        # self.SOP.save_tunnelling(name, ifreq, coff, well_depth)
-        return skip
-
-    def save_symmetry_factor(self,
-                             name: str,
-                             symFact: float,
-                             lnum: int) -> None:
-        """Save the symmetry factor of the object 'name'
-        in the SOP object.
-
-        Args:
-            name (str): Object's (well, bimol, barrier) name
-            symFact (float): Symmetry factor of the object in (kcal/mol)
-            lnum (int): Line number in input file
-        """
-        self.SOP.items[name]._symFact = symFact
-        new_line: str = f"{self.file[lnum].split()[0]}" \
-                        + " {" + f"{name}" \
-                        + ".symFact}\n"
-        self.template.append(new_line)
+                return skip
+            else:
+                self.template.append(line)

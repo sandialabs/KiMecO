@@ -14,7 +14,6 @@ from kimeco.scoring_f.scoring import Scoring
 from kimeco.templates.sim_helper import sim_helper
 import logging
 from kimeco.logger_config import setup_logger
-import time
 
 
 # Call the setup function to configure logging

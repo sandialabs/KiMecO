@@ -81,12 +81,12 @@ class CORSection(Section):
             for cell in selected_cells:
                 row = cell['row']
                 column = cell['column']
-                if row == 0 or column == 0:
+                if column == 0:
                     continue
                 px = self.col_names[gen_id][row]
                 py = self.col_names[gen_id][column-1]
-                x = self.cor_data[gen_id][row]
-                y = self.cor_data[gen_id][column-1]
+                x = self.cor_data[gen_id][:, row]
+                y = self.cor_data[gen_id][:, column-1]
                 scores: list[float] = []  # Used for color mapping
                 score_cols = [
                     idx+1 for idx, col in enumerate(self.sop_db.columns)
@@ -110,56 +110,59 @@ class CORSection(Section):
                     )
                 ))
 
+                # Add correlation line
+                # Calculate the slope and intercept manually
+                x_mean = np.mean(x)
+                y_mean = np.mean(y)
+
+                # Calculate the slope (m) and intercept (b)
+                numerator = np.sum((x - x_mean) * (y - y_mean))
+                denominator = np.sum((x - x_mean) ** 2)
+                slope = numerator / denominator
+                intercept = y_mean - slope * x_mean
+
+                # Calculate R^2 value
+                y_pred = slope * x + intercept
+                ss_total = np.sum((y - y_mean) ** 2)
+                ss_residual = np.sum((y - y_pred) ** 2)
+                r_squared = 1 - (ss_residual / ss_total)
+
+                # Create trendline data
+                x_trendline = np.linspace(min(x), max(x), 100)
+                y_trendline = slope * x_trendline + intercept
+
+                # Add trendline to the plot
+                fig.add_trace(go.Scatter(
+                    x=x_trendline,
+                    y=y_trendline,
+                    mode='lines',
+                    line=dict(color='red', width=2),
+                    name='R²'
+                ))
+
+                # Add R^2 value annotation
+                fig.add_annotation(
+                    x=0.1,  # Position of the annotation (x-axis)
+                    y=0.92,  # Position of the annotation (y-axis)
+                    xref='paper',  # Reference to the paper coordinates
+                    yref='paper',
+                    text=f'R² = {r_squared:.2f}',  # Format R² value
+                    showarrow=False,
+                    font=dict(size=16)
+                )
                 # Update layout
                 fig.update_layout(
                     title=f'Correlation heatmap in G{gen_id:04d}',
                     xaxis_title=px,
                     yaxis_title=py,
+                    showlegend=False,
+                    width=600,
+                    height=600,
+                    plot_bgcolor='white',  # plot area
+                    paper_bgcolor='white'  # entire figure
                 )
-
-                # # Add correlation line
-                # # Calculate the slope and intercept manually
-                # x_mean = np.mean(x)
-                # y_mean = np.mean(y)
-
-                # # Calculate the slope (m) and intercept (b)
-                # numerator = np.sum((x - x_mean) * (y - y_mean))
-                # denominator = np.sum((x - x_mean) ** 2)
-                # slope = numerator / denominator
-                # intercept = y_mean - slope * x_mean
-
-                # # Calculate R^2 value
-                # y_pred = slope * x + intercept
-                # ss_total = np.sum((y - y_mean) ** 2)
-                # ss_residual = np.sum((y - y_pred) ** 2)
-                # r_squared = 1 - (ss_residual / ss_total)
-                # cor_plots.append(dcc.Graph(
-                #     figure=fig,
-                #     # id={"type": "cor_plot", "index": self.id}
-                #     ))
-                # # Create trendline data
-                # x_trendline = np.linspace(min(x), max(x), 100)
-                # y_trendline = slope * x_trendline + intercept
-
-                # # Add trendline to the plot
-                # fig.add_trace(go.Scatter(
-                #     x=x_trendline,
-                #     y=y_trendline,
-                #     mode='lines',
-                #     line=dict(color='red', width=2),
-                #     name='R²'
-                # ))
-
-                # # Add R^2 value annotation
-                # fig.add_annotation(
-                #     x=0.5,  # Position of the annotation (x-axis)
-                #     y=0.9,  # Position of the annotation (y-axis)
-                #     xref='paper',  # Reference to the paper coordinates
-                #     yref='paper',
-                #     text=f'R² = {r_squared:.2f}',  # Format R² value
-                #     showarrow=False,
-                #     font=dict(size=16)
-                # )
+                fig.update_xaxes(showgrid=True, gridcolor='black')
+                fig.update_yaxes(showgrid=True, gridcolor='black')
                 cor_plots.append(dcc.Graph(figure=fig))
             return cor_plots
 

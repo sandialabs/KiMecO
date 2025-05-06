@@ -231,7 +231,7 @@ class LogNormal(Perturbator):
             well (Well) : Well object
         """
 
-        for num, rot in enumerate(well.rotors):
+        for num, rot in enumerate(well.h_rotors):
             if f'{well.name}__hr{num}' in self.select:
                 # Set trial rotor perturbation out of the boundaries
                 try_r: float = 1 -\
@@ -247,6 +247,32 @@ class LogNormal(Perturbator):
                         sigma=self.settings['std_hr']*self.gen_fact)
 
                 rot.pert = try_r
+
+    def perturb_multi_rotors(self,
+                             well: Well) -> None:
+        """Perturb all multi rotors symmetry factor by a different
+        percentage.
+
+        Args:
+            well (Well) : Well object
+        """
+
+        for num, rot in enumerate(well.m_rotors):
+            if f'{well.name}__mr{num}' in self.select:
+                # Set trial rotor perturbation out of the boundaries
+                try_r: float = 1 -\
+                    (3*self.settings['max_std']) * self.settings['std_hr']
+                while not self.within_boundaries(
+                      perturbed_val=try_r,
+                      ptype='hr',
+                      initial_val=1):
+                    try_r = random.lognormal(
+                        # Mean is np.log(loc)
+                        mean=np.log(rot.sf_p),
+                        # Sigma is std/loc; loc initial = 1
+                        sigma=self.settings['std_hr']*self.gen_fact)
+
+                rot.sf_p = try_r
 
     def perturb_ifreq(self,
                       bar: Barrier) -> None:

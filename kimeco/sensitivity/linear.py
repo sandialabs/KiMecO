@@ -123,6 +123,8 @@ class Linear:
                             lin_fact
                 elif param.startswith('hr'):
                     modif = pn[key] * self.settings['std_hr'] * lin_fact
+                elif param.startswith('mr'):
+                    modif = pn[key] * self.settings['std_hr'] * lin_fact
                 elif param.startswith('epsi'):
                     modif = pn[key] * self.settings['std_epsi'] * lin_fact
                 elif param.startswith('sigma'):

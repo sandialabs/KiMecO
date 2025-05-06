@@ -4,6 +4,7 @@ from typing import Any
 from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from kimeco.barrier import Barrier
+from kimeco.rotors.internalrotation import InternalRotation
 
 
 class SOP:
@@ -25,6 +26,7 @@ class SOP:
         self.rc_pres: list[float]
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
+        self.files2copy: list[str] = []
         self._default_score = 999999.9
         self.scores: dict[str, float] = {
             sp: self._default_score for sp in self.sc_species
@@ -173,10 +175,16 @@ class SOP:
         for idx, sig in enumerate(self.sigmas):
             pn[f'__sigma_{idx}'] = float(sig)
         for well in self.wells:
+            if well.dummy:
+                continue
             pn.update(well.db_dict)
         for bar in self.barriers:
+            if bar.dummy:
+                continue
             pn.update(bar.db_dict)
         for bim in self.bimolecular:
+            if bim.dummy:
+                continue
             pn.update(bim.db_dict)
 
         return pn
@@ -211,13 +219,57 @@ class SOP:
         else:
             self.items[name].set_frequencies(freqs)
 
-    def set_rotor(self,
-                  name: str,
-                  thermalpowermax: float,
-                  group: list[int],
-                  axis: list[int],
-                  symmetry: int,
-                  scan: list[float]) -> int:
+    def set_hrotor(self,
+                   name: str,
+                   thermalpowermax: float,
+                   group: list[int],
+                   axis: list[int],
+                   symmetry: int,
+                   scan: list[float],
+                   fexp: list[int],
+                   fcoef: list[float]) -> int:
+        """Create a new rotor object for a well
+
+        Args:
+            name (str): name of the well
+            thermalpowermax (float): thermalpowermax
+            group (list[int]): group
+            axis (list[int]): axis
+            symmetry (int): symmetry
+            scan (list[float]): list of energies (kcal/mol) describing the
+                                rotor's rotation
+            fexp: (list[int]): list of exponents for fourrier expansion
+            fcoef: (list[float]): list of coefficients for fourrier expansion
+
+        Returns:
+            int: Index of the last rotor of the well
+        """
+        if isinstance(self.items[name], Bimolecular):
+            self.items[name].fragments[-1].add_hrotor(thermalpowermax,
+                                                      group,
+                                                      axis,
+                                                      symmetry,
+                                                      scan,
+                                                      fexp,
+                                                      fcoef)
+            return len(self.items[name].fragments[-1].h_rotors)-1
+        else:
+            self.items[name].add_hrotor(thermalpowermax,
+                                        group,
+                                        axis,
+                                        symmetry,
+                                        scan,
+                                        fexp,
+                                        fcoef)
+            return len(self.items[name].h_rotors)-1
+
+    def set_mrotor(self,
+                   name: str,
+                   sf: float,
+                   iem: float,
+                   pes: str,
+                   qlem: float,
+                   irs: list[InternalRotation]) -> int:
         """Create a new rotor object for a well
 
         Args:
@@ -233,19 +285,21 @@ class SOP:
             int: Index of the last rotor of the well
         """
         if isinstance(self.items[name], Bimolecular):
-            self.items[name].fragments[-1].add_rotor(thermalpowermax,
-                                                     group,
-                                                     axis,
-                                                     symmetry,
-                                                     scan)
-            return len(self.items[name].fragments[-1].rotors)-1
+            self.items[name].fragments[-1].add_mrotor(
+                sf,
+                iem,
+                pes,
+                qlem,
+                irs)
+            return len(self.items[name].fragments[-1].m_rotors)-1
         else:
-            self.items[name].add_rotor(thermalpowermax,
-                                       group,
-                                       axis,
-                                       symmetry,
-                                       scan)
-            return len(self.items[name].rotors)-1
+            self.items[name].add_mrotor(
+                sf,
+                iem,
+                pes,
+                qlem,
+                irs)
+            return len(self.items[name].m_rotors)-1
 
     def set_structure(self,
                       name: str,
@@ -316,9 +370,15 @@ class SOP:
             self.items[item_name].hf_p = value
         elif 'lf_p' in param_name:
             self.items[item_name].lf_p = value
-        elif 'r' in param_name:
-            idx = int(param_name.split('r')[-1])
+        # Hindered rotors
+        elif 'hr' in param_name:
+            idx = int(param_name.split('hr')[-1])
             # Reset the rotor's scan
-            self.items[item_name].rotors[idx].pert = value
+            self.items[item_name].h_rotors[idx].pert = value
+        # Multi rotors
+        elif 'mr' in param_name:
+            idx = int(param_name.split('mr')[-1])
+            # Reset the rotor's scan
+            self.items[item_name].h_rotors[idx].sf_p = value
         else:
             raise KeyError('Trying to restore unknown parameter.')

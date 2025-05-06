@@ -27,7 +27,7 @@ class SOPSection(Section):
                     {'label': 'Energies', 'value': 'e'},
                     {'label': 'Frequencies', 'value': 'f_p'},
                     {'label': 'Imaginary freq', 'value': 'if'},
-                    {'label': 'Rotor perturbation', 'value': 'hr'},
+                    {'label': 'Rotor perturbation', 'value': 'r'},
                     {'label': 'Lennard-Jones', 'value': 'lj'},
                     {'label': 'Score', 'value': 'score'},
                     {'label': 'ME collision', 'value': 'me'}],
@@ -97,7 +97,7 @@ class SOPSection(Section):
                     filtered_param.append({
                         'label': f"{molec}",
                         'value': col})
-                elif ptype == 'hr' and 'hr' in param:
+                elif ptype == 'r' and ('hr' in param or 'mr' in param):
                     filtered_param.append({
                         'label': f"{molec} {param}",
                         'value': col})
@@ -296,8 +296,9 @@ class SOPSection(Section):
                 raise NotImplementedError('Unknown reactant object.')
             plot_settings['title'] = \
                 f'I. frequency from {From} to {To} (cm<sup>-1</sup>)'
-        elif ptype == 'hr' and 'hr' in param:
-            plot_settings['title'] = f'Rotor perturbation {param} of {molec}'
+        elif ptype == 'r' and ('hr' in param or 'mr' in param):
+            plot_settings['title'] = \
+                f'Rotor perturbation {param} of {molec}'
         elif ptype == 'f_p' and 'hf_p' in param:
             plot_settings['title'] = \
                 f'Frequency perturbation {param} of {molec}'

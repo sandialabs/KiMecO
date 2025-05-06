@@ -16,9 +16,13 @@ class Barrier(Well):
         self.connected: list[Well | Bimolecular] = [lside, rside]
         self._energy: float
         self.ifreq: float
+        # Barrierless parameters
         self._symFact: float
         self.sf_p: float = 1.0
         self.barrierless: bool = False
+        pp: float  # PotentialPrefactor
+        ppe: float  # PotentialPowerExponent
+        file: str  # Rotd filename
 
     @property
     def symFact(self):

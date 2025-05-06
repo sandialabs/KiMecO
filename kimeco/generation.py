@@ -10,6 +10,7 @@ from kimeco.Perturbators.perturbator import Perturbator
 import time
 import logging
 from kimeco.logger_config import setup_logger
+import shutil
 
 
 # Call the setup function to configure logging
@@ -69,6 +70,9 @@ class Generation(CoreRun):
         gen_dir: str = f'{self.loc}/{self.name}'
         os.makedirs(gen_dir, exist_ok=True)
         os.chdir(gen_dir)
+        # Copy files necessary for MESS calculation
+        for file in self.elements[0].sop.files2copy:
+            shutil.copyfile(f'{self.loc}/{file}', gen_dir)
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
