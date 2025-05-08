@@ -3,7 +3,9 @@ from uu import Error
 
 from kimeco.parameters import SOP
 from kimeco.barrier import Barrier
+from kimeco.bimolecular import Bimolecular
 from kimeco.rotors.internalrotation import InternalRotation
+from kimeco.rotors.mrotor import MultiRotor
 
 import os
 
@@ -67,20 +69,27 @@ class MessInputReader:
                 self.template.append(line.split()[0] + " {SOP.power}\n")
                 continue
             elif line.lstrip().casefold().startswith('epsilons'):
-                self.template.append(line.split()[0] + "{SOP.r_epsilons}")
+                self.template.append(line.split()[0] + " {SOP.r_epsilons}\n")
                 for arg in line.split()[1:]:
-                    self.SOP.epsilons.append(float(arg))
+                    if arg.replace('.', '').replace('-', '').isnumeric():  # Avoid reading comments
+                        self.SOP.epsilons.append(float(arg))
+                    else:
+                        break
                 continue
             elif line.lstrip().casefold().startswith('sigmas'):
-                self.template.append(line.split()[0] + "{SOP.r_sigmas}")
+                self.template.append(line.split()[0] + " {SOP.r_sigmas}\n")
                 for arg in line.split()[1:]:
-                    self.SOP.sigmas.append(float(arg))
+                    if arg.replace('.', '').replace('-', '').isnumeric():  # Avoid reading comments
+                        self.SOP.sigmas.append(float(arg))
+                    else:
+                        break
                 continue
 
             # Set the name of the current item
 
             # WELL
-            elif line.lstrip().casefold().startswith('well '):
+            elif (line.lstrip().casefold().startswith('well') and
+                  line.lstrip().casefold().split()[0] == 'well'):
                 last_item = 'well'
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
@@ -90,8 +99,9 @@ class MessInputReader:
                     + f"{name}.name" \
                     + "}\n"
                 self.template.append(new_line)
+                continue
             # BIMOLECULAR
-            elif line.lstrip().casefold().startswith('bimolecular '):
+            elif line.lstrip().casefold().startswith('bimolecular'):
                 last_item = 'bimo'
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
@@ -101,8 +111,9 @@ class MessInputReader:
                     + f"{name}.name" \
                     + "}\n"
                 self.template.append(new_line)
+                continue
             # BARRIER
-            elif line.lstrip().casefold().startswith('barrier '):
+            elif line.lstrip().casefold().startswith('barrier'):
                 last_item = 'barr'
                 name, lside, rside = line.split()[1:4]
                 if name not in self.SOP.items:
@@ -113,6 +124,7 @@ class MessInputReader:
                 new_line += " {" + f"{lside}.name" + "}"
                 new_line += " {" + f"{rside}.name" + "}\n"
                 self.template.append(new_line)
+                continue
             # Different types of barrierless
             elif (line.lstrip().casefold().startswith('core')
                   and line.lstrip().casefold().split()[1] == 'phasespacetheory'
@@ -120,18 +132,20 @@ class MessInputReader:
                 self.SOP.items[name].barrierless = True
                 self.template.append(line)
                 skip += self.save_phasespacetheory(name, lnum)
+                continue
             elif (line.lstrip().casefold().startswith('core')
                   and line.lstrip().casefold().split()[1] == 'rotd'
                   and isinstance(self.SOP.items[name], Barrier)):
                 self.SOP.items[name].barrierless = True
                 self.template.append(line)
                 skip += self.save_rotd(name, lnum)
+                continue
             # FRAGMENT
             elif line.lstrip().casefold().startswith('fragment')\
                     and 'geom' not in line.casefold():
                 last_item = 'frag'
                 fname: str = line.split()[1]
-                if not isinstance(self.SOP.items[name], Barrier):
+                if isinstance(self.SOP.items[name], Bimolecular):
                     if fname not in self.SOP.items[name].frag_names:
                         self.SOP.items[name].add_new_frag(fname)
                         if fname not in self.SOP.items:
@@ -142,11 +156,13 @@ class MessInputReader:
                     + f"{fname}.name" \
                     + "}\n"
                 self.template.append(new_line)
+                continue
 
             # Dummy
             elif line.lstrip().casefold().startswith('dummy'):
                 self.template.append(line)
                 self.SOP.items[name].dummy = True
+                continue
 
             # Add parameters to items
 
@@ -159,10 +175,12 @@ class MessInputReader:
                     self.save_geom(fname, lnum, natom)
                 else:
                     self.save_geom(name, lnum, natom)
+                continue
             elif line.lstrip().casefold().startswith('fragmentgeometry'):
                 natom = int(line.split()[1])
                 self.template.append(line)
                 self.save_geom(fname, lnum, natom)
+                continue
 
             # FREQUENCIES
             elif line.lstrip().casefold().startswith('frequencies'):
@@ -177,6 +195,7 @@ class MessInputReader:
                                                  lnum=lnum,
                                                  nfreq=nfreq)
                 skip += nlines
+                continue
 
             # HINDERED ROTOR
             elif line.lstrip().casefold().startswith('rotor') and\
@@ -188,6 +207,7 @@ class MessInputReader:
                 else:
                     skip += self.save_rotor(name=name,
                                             lnum=lnum)
+                continue
                     
             # MULTI ROTOR
             elif (line.lstrip().casefold().startswith('core') and
@@ -199,6 +219,7 @@ class MessInputReader:
                 else:
                     skip += self.save_multirotor(name=name,
                                                  lnum=lnum)
+                continue
 
             # ENERGY
             elif line.lstrip().casefold().startswith('zeroenergy'):
@@ -211,12 +232,14 @@ class MessInputReader:
                     self.save_energy(name=name,
                                      energy=energy,
                                      lnum=lnum)
+                continue
             elif line.lstrip().casefold().startswith('groundenergy'):
                 # for bimolec
                 energy = float(line.split()[1])
                 self.save_energy(name=name,
                                  energy=energy,
                                  lnum=lnum)
+                continue
 
             # TUNNELING
             elif line.lstrip().casefold().startswith('tunneling'):
@@ -225,11 +248,17 @@ class MessInputReader:
                 skip += self.save_tunneling(name=name,
                                             tun_type=tun_type,
                                             lnum=lnum)
+                continue
 
             # All other lines
             else:
                 self.template.append(line)
 
+        for bar in self.SOP.barriers:
+            for well_idx in range(len(bar.connected)):
+                if bar.connected[well_idx].dummy:
+                    bar.connected[well_idx].energy = \
+                        bar.energy - bar._well_depth[well_idx]
         self.SOP.files2copy = self.files2copy
         return (self.SOP, self.template)
 
@@ -396,29 +425,46 @@ class MessInputReader:
             int: number of line to skip readinding in the read method.
         """
 
-        scan = []
-        fexp = []
-        fcoef = []
-        npot = 0
-        skip = 0
-        symmetry = 0
+        # default
+        thermalpowermax = 0.0
+        scan: list[float] = []
+        fexp: list[float] = []
+        fcoef: list[float] = []
+        npot: int = 0
+        skip: int = 0
+        symmetry: int = 0
+        local_skip: int = 0
+        rot_num: int = len(self.SOP.items[name].h_rotors)
         # Read the file
         for lnum2, line in enumerate(self.file[lnum+1:]):
             # SCAN
+            if local_skip:
+                local_skip -= 1
+                self.template.append(line)
+                continue
+
             if line.lstrip().casefold().startswith('potential'):
                 npot = int(line.split()[1])
                 self.template.append(line)
+                new_line: str = " {" \
+                    + f"{name}" \
+                    + ".r_scan" \
+                    + f"({rot_num})" \
+                    + "}\n"
+                self.template.append(new_line)
                 skip += 1
+                saved_f = 0
                 continue
-            elif npot != 0 and npot != len(scan):
+            elif npot != 0 and saved_f < npot:
                 args: list[str] = line.split()
                 arg_n = 0
-                while arg_n < len(args) and args[arg_n].replace(".", "")\
-                                                       .replace("-", "")\
-                                                       .isnumeric():
+                while (arg_n < len(args) and
+                       args[arg_n].replace(".", "").replace("-", "")
+                                                   .isnumeric()):
                     scan.append(float(args[arg_n]))
                     arg_n += 1
-                if lnum2 > npot:
+                    saved_f += 1
+                if saved_f > npot:
                     raise TypeError("Error in Messfile: wrong number of pot\
                                      for hindered rotor")
                 skip += 1
@@ -463,6 +509,11 @@ class MessInputReader:
                 self.template.append(line)
                 skip += 1
                 continue
+            elif line.lstrip().casefold().startswith('geometry'):
+                local_skip += int(line.split()[1])
+                skip += int(line.split()[1]) + 1
+                self.template.append(line)
+                continue
             elif line.lstrip().casefold().startswith('symmetry'):
                 symmetry = int(line.split()[1])
                 self.template.append(line)
@@ -470,25 +521,26 @@ class MessInputReader:
                 continue
             # END
             elif line.lstrip().casefold().startswith('end'):
-                rot_num: int = self.SOP.set_hrotor(
-                    name,
-                    thermalpowermax,
-                    group,
-                    axis,
-                    symmetry,
-                    scan,
-                    fexp,
-                    fcoef)
-                if len(scan) != 0:
-                    new_line: str = " {" \
-                        + f"{name}" \
-                        + ".r_scan" \
-                        + f"({rot_num})" \
-                        + "}\n"
-                    self.template.append(new_line)
+                if saved_f != npot:
+                    raise TypeError("Error in Messfile: wrong number of pot\
+                                     for hindered rotor")
+                self.SOP.set_hrotor(
+                    name=name,
+                    thermalpowermax=thermalpowermax,
+                    group=group,
+                    axis=axis,
+                    symmetry=symmetry,
+                    scan=scan,
+                    fexp=fexp,
+                    fcoef=fcoef)
                 self.template.append(line)
                 skip += 1
                 return skip
+            elif (line.lstrip()[0] == '#' or line.lstrip()[0] == '!'
+                  or line.lstrip().startswith('+++')):
+                self.template.append(line)
+                skip += 1
+                continue
             else:
                 raise Error(f'Incorrect termination of rotor for {name}')
         return 0
@@ -526,7 +578,7 @@ class MessInputReader:
             # SymmetryFactor
             if line.lstrip().casefold().startswith('symmetryfactor'):
                 sf = float(line.split()[1])
-                new_line: str = f"{self.file[lnum].split()[0]}" \
+                new_line: str = f"{self.file[lnum+lnum2+1].split()[0]}" \
                                 + " {" + f"{name}.m_rotors[{rot_idx}]" \
                                 + ".symFact}\n"
                 self.template.append(new_line)
@@ -536,7 +588,7 @@ class MessInputReader:
             # InterpolationEnergyMax
             elif line.lstrip().casefold().startswith('interpolationenergymax'):
                 iem = float(line.split()[1])
-                new_line: str = f"{self.file[lnum].split()[0]}" \
+                new_line: str = f"{self.file[lnum+lnum2+1].split()[0]}" \
                                 + " {" + f"{name}.m_rotors[{rot_idx}]" \
                                 + ".iem}\n"
                 self.template.append(new_line)
@@ -548,7 +600,7 @@ class MessInputReader:
                 pes = line.split()[1]
                 if pes not in self.files2copy:
                     self.files2copy.append(pes)
-                new_line: str = f"{self.file[lnum].split()[0]}" \
+                new_line: str = f"{self.file[lnum+lnum2+1].split()[0]}" \
                                 + " {" + f"{name}.m_rotors[{rot_idx}]" \
                                 + ".file}\n"
                 self.template.append(new_line)
@@ -558,7 +610,7 @@ class MessInputReader:
             # QuantumLevelEnergyMax
             elif line.lstrip().casefold().startswith('quantumlevelenergymax'):
                 qlem = float(line.split()[1])
-                new_line: str = f"{self.file[lnum].split()[0]}" \
+                new_line: str = f"{self.file[lnum+lnum2+1].split()[0]}" \
                                 + " {" + f"{name}.m_rotors[{rot_idx}]" \
                                 + ".qlem}\n"
                 self.template.append(new_line)
@@ -571,29 +623,35 @@ class MessInputReader:
                 skip += 1
                 ir_skip, ir = self.create_internal_rotation(
                     name=name,
-                    lnum=lnum2)
+                    lnum=lnum2+lnum+1)
                 irs.append(ir)
                 skip += ir_skip
                 continue
             # END
             elif line.lstrip().casefold().startswith('end'):
-                rot_num: int = self.SOP.set_mrotor(
-                    name,
-                    sf,
-                    iem,
-                    pes,
-                    qlem,
-                    irs
+                self.SOP.items[name].m_rotors.append(
+                    MultiRotor(
+                        symmetryFactor=sf,
+                        interpolationEnergyMax=iem,
+                        potentialEnergySurface=pes,
+                        quantumLevelEnergyMax=qlem,
+                        internal_rot=irs
                     )
-                new_line: str = " {" \
-                    + f"{name}" \
-                    + ".r_scan" \
-                    + f"({rot_num})" \
-                    + "}\n"
-                self.template.append(new_line)
+                )
                 self.template.append(line)
                 skip += 1
                 return skip
+            elif (line.lstrip().casefold().startswith('#') or
+                  line.lstrip().casefold().startswith('!') or
+                  line.lstrip().casefold().startswith('+++')):
+                self.template.append(line)
+                skip += 1
+                continue  # ignore comments
+            elif (line.lstrip()[0] == '#' or line.lstrip()[0] == '!'
+                  or line.lstrip().startswith('+++')):
+                self.template.append(line)
+                skip += 1
+                continue
             else:
                 raise Error(f'Incorrect termination of rotor for {name}')
         return 0
@@ -683,7 +741,8 @@ class MessInputReader:
                 self.template.append(line)
                 skip += 1
                 return (skip, ir)
-            elif line.lstrip()[0] == '#' or line.lstrip()[0] == '!':
+            elif (line.lstrip()[0] == '#' or line.lstrip()[0] == '!'
+                  or line.lstrip().startswith('+++')):
                 self.template.append(line)
                 skip += 1
                 continue
@@ -746,17 +805,18 @@ class MessInputReader:
         Returns:
             int: number of line to skip readinding in the read method.
         """
-        # well_depth: list[float] = [np.inf, np.inf]
+        well_depth: list[float] = [-1.0, -1.0]
+        bar: Barrier = self.SOP.items[name]
         well_idx = 0
         skip = 0
-        for line in self.file[lnum:]:
+        for line in self.file[lnum+1:]:
             if line.lstrip().casefold().startswith('imaginaryfrequency'):
                 ifreq = float(line.split()[1])
                 new_line: str = f"{line.split()[0]}" \
                     + " {" \
                     + f"{name}" \
                     + ".ifreq}\n"
-                self.SOP.items[name].ifreq = ifreq
+                bar.ifreq = ifreq
                 self.template.append(new_line)
                 skip += 1
             elif line.lstrip().casefold().startswith('cutoffenergy'):
@@ -768,7 +828,7 @@ class MessInputReader:
                 self.template.append(new_line)
                 skip += 1
             elif line.lstrip().casefold().startswith('welldepth'):
-                # well_depth[well_idx] = float(line.split()[1])
+                well_depth[well_idx] = float(line.split()[1])
                 if well_idx == 0:
                     new_line: str = f"{line.split()[0]}" \
                         + " {" \
@@ -779,6 +839,7 @@ class MessInputReader:
                         + " {" \
                         + f"{name}" \
                         + ".r_renergy}\n"
+                bar._well_depth = well_depth
                 self.template.append(new_line)
                 well_idx += 1
                 skip += 1
@@ -786,3 +847,4 @@ class MessInputReader:
                 return skip
             else:
                 self.template.append(line)
+                skip += 1

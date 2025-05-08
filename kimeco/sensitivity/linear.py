@@ -1,5 +1,6 @@
 from typing import Any
 import os
+import shutil
 import numpy as np
 from numpy.typing import NDArray
 from kimeco.barrier import Barrier
@@ -42,6 +43,9 @@ class Linear:
                              tbl_name=self.name)
         os.makedirs(SA_dir, exist_ok=True)
         os.chdir(SA_dir)
+        # Copy files necessary for MESS calculation
+        for file in self.elements[0].sop.files2copy:
+            shutil.copyfile(f'{loc}/{file}', f'{SA_dir}/{file}')
         self.core = CoreRun(
             elements=self.elements,
             settings=self.settings,

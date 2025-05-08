@@ -2,6 +2,7 @@ import sys
 import os
 import math
 import numpy as np
+import shutil
 from typing import Any, Dict
 from kimeco.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.GeneticAlgo.tournament import Tournament
@@ -58,10 +59,17 @@ def main() -> None:
     (init_SOP, input_tpl) = mr.read()
 
     # Create the workidir folder
+    init_loc = os.getcwd()
     if not os.path.isdir(settings['project_name']):
         os.mkdir(settings['project_name'])
     os.chdir(settings['project_name'])
     location: str = os.getcwd()
+    with open('mess_tpl', 'w') as f:
+        f.writelines(input_tpl)
+    
+    # Copy files necessary for MESS calculation
+    for file in init_SOP.files2copy:
+        shutil.copyfile(f'{init_loc}/{file}', f'{location}/{file}')
 
     # Create the databases
     sop_db = SOP_DB(sop=init_SOP,

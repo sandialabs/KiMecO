@@ -57,6 +57,8 @@ class SOP:
         for well in self.wells:
             species.append(well.ct_name)
         for bm in self.bimolecular:
+            if bm.dummy:
+                continue
             if bm.fragments[0].ct_name not in species:
                 species.append(bm.fragments[0].ct_name)
             if bm.fragments[1].ct_name not in species:
@@ -68,7 +70,6 @@ class SOP:
         eps = ''
         for ep in self.epsilons:
             eps += f" {ep: 7.4f}"
-        eps += '\n'
         return eps
 
     @property
@@ -76,7 +77,6 @@ class SOP:
         sigs = ''
         for sig in self.sigmas:
             sigs += f" {sig: 7.4f}"
-        sigs += '\n'
         return sigs
 
     @property
@@ -227,7 +227,7 @@ class SOP:
                    symmetry: int,
                    scan: list[float],
                    fexp: list[int],
-                   fcoef: list[float]) -> int:
+                   fcoef: list[float]) -> None:
         """Create a new rotor object for a well
 
         Args:
@@ -252,7 +252,6 @@ class SOP:
                                                       scan,
                                                       fexp,
                                                       fcoef)
-            return len(self.items[name].fragments[-1].h_rotors)-1
         else:
             self.items[name].add_hrotor(thermalpowermax,
                                         group,
@@ -261,7 +260,6 @@ class SOP:
                                         scan,
                                         fexp,
                                         fcoef)
-            return len(self.items[name].h_rotors)-1
 
     def set_mrotor(self,
                    name: str,
@@ -379,6 +377,6 @@ class SOP:
         elif 'mr' in param_name:
             idx = int(param_name.split('mr')[-1])
             # Reset the rotor's scan
-            self.items[item_name].h_rotors[idx].sf_p = value
+            self.items[item_name].m_rotors[idx].sf_p = value
         else:
             raise KeyError('Trying to restore unknown parameter.')

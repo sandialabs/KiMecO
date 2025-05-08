@@ -72,7 +72,7 @@ class Generation(CoreRun):
         os.chdir(gen_dir)
         # Copy files necessary for MESS calculation
         for file in self.elements[0].sop.files2copy:
-            shutil.copyfile(f'{self.loc}/{file}', gen_dir)
+            shutil.copyfile(f'{self.loc}/{file}', f'{gen_dir}/{file}')
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.

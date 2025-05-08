@@ -20,6 +20,8 @@ class Barrier(Well):
         self._symFact: float
         self.sf_p: float = 1.0
         self.barrierless: bool = False
+        # Only used to retroactively set energy of a side if dummy
+        self._well_depth: list[float]
         pp: float  # PotentialPrefactor
         ppe: float  # PotentialPowerExponent
         file: str  # Rotd filename

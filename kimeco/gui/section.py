@@ -12,7 +12,6 @@ class Section(ABC):
         self.gapp = gapp
         self.settings = gapp.settings
         self.app: Dash = gapp.app
-        self.sa_db: SOP_DB = gapp.sa_db
         self.sop_db: SOP_DB = gapp.sop_db
         self.kin_db: KIN_DB = gapp.kin_db
         self.sim_db: SIM_DB = gapp.sim_db
