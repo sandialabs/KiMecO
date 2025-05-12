@@ -351,17 +351,41 @@ class SIM:
         """
         cpu: int = self.settings['cpu_sim']
         mem: int = self.settings['mem_sim']
-        for i, sim in enumerate(self.simulations):
-            sim_id: int = i + self.id * len(self.simulations)
+        for idx, sim in enumerate(self.simulations):
+            sim_id: int = idx + self.id * len(self.simulations)
             self.serialize(sim=sim,
-                           name=self.name+f'S{i:02d}',
+                           name=self.name+f'S{idx:02d}',
                            sim_id=sim_id)
-            self.q_sys.add_to_q(name=self.name+f'S{i:02d}',
+            self.q_sys.add_to_q(name=self.name+f'S{idx:02d}',
                                 idx=sim_id,
                                 location=self.loc,
                                 jtype='sim',
                                 ressources=(cpu, mem))
-            self.set_status(i)
+            self.set_status(idx)
+
+    def requeue(self,
+                idx: int,
+                sim_id: int) -> None:
+        """Resend a specific simulation to the queuing system.
+
+        Args:
+            sim (int): index of the simulation in this object
+            sim_id (int):
+                index of the simulation in queing system
+        """
+        cpu: int = self.settings['cpu_sim']
+        mem: int = self.settings['mem_sim']
+        sim = self.simulations[idx]
+        sim_id: int = idx + self.id * len(self.simulations)
+        self.serialize(sim=sim,
+                       name=self.name+f'S{idx:02d}',
+                       sim_id=sim_id)
+        self.q_sys.add_to_q(name=self.name+f'S{idx:02d}',
+                            idx=sim_id,
+                            location=self.loc,
+                            jtype='sim',
+                            ressources=(cpu, mem))
+        self.set_status(idx)
 
     def serialize(self,
                   sim: ct.Solution,

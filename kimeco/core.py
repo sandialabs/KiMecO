@@ -14,6 +14,7 @@ from kimeco.scoring_f.scoring import Scoring
 from kimeco.templates.sim_helper import sim_helper
 import logging
 from kimeco.logger_config import setup_logger
+import time
 
 
 # Call the setup function to configure logging
@@ -70,6 +71,8 @@ class CoreRun:
             )
         self.name = name
         self.clean_files()
+        # Contain the time when a sim_id was first queried
+        self.requeue_timer = {}
 
 
     def clean_files(self):
@@ -276,9 +279,22 @@ class CoreRun:
                     if sim_id not in assigned_ids:
                         self.sim_hlpers[hlp_idx].append(sim_id)
                         filenames.append(f'{flnm}')
+                # The job has finished without error, but didn't write
+                # json file
                 else:
                     break
             else:
+                if sim_id not in self.requeue_timer:
+                    self.requeue_timer[sim_id] = time.time()
+                # Wait maximum 30 sec for file to be written
+                elif time.time() - self.requeue_timer[sim_id] < 30.0:
+                    continue
+                # or resubmit
+                else:
+                    msg = f'Missing file: {el.name}S{sim:02d}.json'
+                    msg += 'Sim resubmitted.\n'
+                    glog.info(msg)
+                    el.sim.requeue(idx=sim, sim_id=sim_id)
                 continue
         if len(self.sim_hlpers[hlp_idx]) == 0:
             return
@@ -303,7 +319,7 @@ class CoreRun:
                  idx=hlp_idx,
                  location=f'{self.loc}/{self.name}',
                  jtype='hlp',
-                 ressources=(1, 300)
+                 ressources=(1, self.settings['mem_hlp'])
                  )
 
     def check_helpers_status(self) -> None:
