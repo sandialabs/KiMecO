@@ -354,9 +354,9 @@ class SIM:
         for i, sim in enumerate(self.simulations):
             sim_id: int = i + self.id * len(self.simulations)
             self.serialize(sim=sim,
-                           name=self.name+f'S{i}',
+                           name=self.name+f'S{i:02d}',
                            sim_id=sim_id)
-            self.q_sys.add_to_q(name=self.name+f'S{i}',
+            self.q_sys.add_to_q(name=self.name+f'S{i:02d}',
                                 idx=sim_id,
                                 location=self.loc,
                                 jtype='sim',

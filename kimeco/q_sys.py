@@ -212,6 +212,14 @@ class QueueingSystem:
                     f"Resetting job {job['name']} because an error occurred.")
                 if jtype == 'kin':
                     os.remove(f"{file}.out")
+            elif jtype == 'sim' and not (os.path.exists(f"{file}.json")):
+                # For some reason, some jobs that are submitted
+                # don't run and finish.
+                # Simply resubmit them, their files are here
+                job['status'] = JobStatus.READY.value
+                msg = f'Previous SIM submission failed for simid {id}.'
+                msg += ' Resubmitting'
+                glog.info(msg)
             else:
                 job['status'] = JobStatus.PICKED_UP.value
         elif jtype == 'hlp':
@@ -225,18 +233,23 @@ class QueueingSystem:
                 job['status'] = JobStatus.PICKED_UP.value
         self.clean_files(job, clear_err=clear_err)
 
-    def clean_files(self, job: NDArray[Any], clear_err: bool) -> None:
+    def clean_files(self,
+                    job: NDArray[Any],
+                    clear_err: bool) -> None:
         """Erase all files except the output
         if the job finished without error.
 
         Args:
             job (NDArray[Any]): Array of the job with custom datatype.
         """
+        # Don't delete files for jobs that need to be resubmitted
+        if job['status'] == JobStatus.READY.value:
+            return
         for ext in ['log', 'err', 'inp', 'stdout', 'aux', 'slurm', 'pkl']:
             if ext == 'err' and not clear_err:
                 continue
-            if os.path.exists(f"{job['loc'][0]}/{job['name'][0]}.{ext}"):
-                os.remove(f"{job['loc'][0]}/{job['name'][0]}.{ext}")
+            if os.path.exists(f"{job['loc']}/{job['name']}.{ext}"):
+                os.remove(f"{job['loc']}/{job['name']}.{ext}")
 
     def submit(self, job) -> None:
         """Submit the job, and return the slurm's job id.

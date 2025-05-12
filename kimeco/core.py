@@ -109,9 +109,9 @@ class CoreRun:
         """Run a generation until all of its elements are scored.
         """
         while not self.finished:
-            for el in self.elements:
+            for idx, el in enumerate(self.elements):
                 # Safeguard
-                if self.elements[el.id].id != el.id:
+                if self.elements[idx].id != el.id:
                     raise IndexError('Incorrect ordering of the elements.')
                 if el.status == ElementStatus.DONE:
                     continue

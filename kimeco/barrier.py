@@ -47,7 +47,7 @@ class Barrier(Well):
     @property
     def energy(self):
         if self.barrierless:
-            return abs(self.connected[0].energy -
+            return max(self.connected[0].energy,
                        self.connected[1].energy)
         else:
             return self._energy
@@ -66,9 +66,8 @@ class Barrier(Well):
 
     @property
     def db_dict(self) -> dict[str, Any]:
-        # barrierless are not perturbed
         if self.barrierless:
-            return {f"{self.name}__sf_p": float(self.symFact)}
+            return {f"{self.name}__sf_p": float(self.sf_p)}
         db_dict: dict = super(Barrier, self).db_dict
         db_dict.update({f"{self.name}__if": float(self.ifreq)})
 

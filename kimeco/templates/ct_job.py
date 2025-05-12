@@ -12,6 +12,7 @@ import time
 import cantera.with_units as ctu
 import sqlalchemy
 import json
+import psutil
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 
@@ -84,6 +85,15 @@ cumul_zero = copy.deepcopy(traces)
 cumul = copy.deepcopy(cumul_zero)
 current_time = -10
 
+# Get the current process
+process = psutil.Process()
+
+# Get memory info
+memory_info = process.memory_info()
+
+# Print memory usage in bytes
+print(f"RSS: {{memory_info.rss / (1024 ** 2):.2f}} MB")  # Resident Set Size in MB
+print(f"VMS: {{memory_info.vms / (1024 ** 2):.2f}} MB")  # Virtual Memory Size in MB
 for idx, t in enumerate(times):
     # # Instrument response function  # Uncoment if response on
     # if idx < len(times)-1:
@@ -130,5 +140,13 @@ with open(
     outfile.write(json_object)
 while not os.path.exists(f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json"):
     time.sleep(0.1)
+# Get the current process
+process = psutil.Process()
 
+# Get memory info
+memory_info = process.memory_info()
+
+# Print memory usage in bytes
+print(f"RSS: {{memory_info.rss / (1024 ** 2):.2f}} MB")  # Resident Set Size in MB
+print(f"VMS: {{memory_info.vms / (1024 ** 2):.2f}} MB")  # Virtual Memory Size in MB
 """

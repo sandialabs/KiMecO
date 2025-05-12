@@ -536,8 +536,10 @@ class MessInputReader:
                 self.template.append(line)
                 skip += 1
                 return skip
-            elif (line.lstrip()[0] == '#' or line.lstrip()[0] == '!'
-                  or line.lstrip().startswith('+++')):
+            elif (line.lstrip().startswith('#') or
+                  line.lstrip().startswith('!') or
+                  line.lstrip().startswith('') or
+                  line.lstrip().startswith('+++')):
                 self.template.append(line)
                 skip += 1
                 continue
@@ -643,15 +645,11 @@ class MessInputReader:
                 return skip
             elif (line.lstrip().casefold().startswith('#') or
                   line.lstrip().casefold().startswith('!') or
+                  line.lstrip().casefold().startswith('') or
                   line.lstrip().casefold().startswith('+++')):
                 self.template.append(line)
                 skip += 1
                 continue  # ignore comments
-            elif (line.lstrip()[0] == '#' or line.lstrip()[0] == '!'
-                  or line.lstrip().startswith('+++')):
-                self.template.append(line)
-                skip += 1
-                continue
             else:
                 raise Error(f'Incorrect termination of rotor for {name}')
         return 0
@@ -741,8 +739,10 @@ class MessInputReader:
                 self.template.append(line)
                 skip += 1
                 return (skip, ir)
-            elif (line.lstrip()[0] == '#' or line.lstrip()[0] == '!'
-                  or line.lstrip().startswith('+++')):
+            elif (line.lstrip().startswith('#') or
+                  line.lstrip().startswith('!') or
+                  line.lstrip().startswith('') or
+                  line.lstrip().startswith('+++')):
                 self.template.append(line)
                 skip += 1
                 continue
