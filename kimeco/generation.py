@@ -73,6 +73,9 @@ class Generation(CoreRun):
         # Copy files necessary for MESS calculation
         for file in self.elements[0].sop.files2copy:
             shutil.copyfile(f'{self.loc}/{file}', f'{gen_dir}/{file}')
+        # Clean the SIM database
+        if not self.finished and self.sim_db.table_exists(self.name):
+            self.sim_db.wipe_table(self.name)
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.

@@ -58,6 +58,9 @@ class Linear:
             pert=pert,
             name=self.name
         )
+        # Clean the SIM database
+        if not self.core.finished and self.sim_db.table_exists(self.name):
+            self.sim_db.wipe_table(self.name)
 
     def average(self,
                 sop_list: list[SOP]) -> SOP:

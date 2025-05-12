@@ -212,14 +212,6 @@ class QueueingSystem:
                     f"Resetting job {job['name']} because an error occurred.")
                 if jtype == 'kin':
                     os.remove(f"{file}.out")
-            elif jtype == 'sim' and not (os.path.exists(f"{file}.json")):
-                # For some reason, some jobs that are submitted
-                # don't run and finish.
-                # Simply resubmit them, their files are here
-                job['status'] = JobStatus.READY.value
-                msg = f'Previous SIM submission failed for simid {id}.'
-                msg += ' Resubmitting'
-                glog.info(msg)
             else:
                 job['status'] = JobStatus.PICKED_UP.value
         elif jtype == 'hlp':

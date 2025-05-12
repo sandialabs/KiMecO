@@ -3,6 +3,7 @@ from typing import Literal, Sequence
 from sqlalchemy import create_engine, MetaData, Table, Column, Row
 from sqlalchemy import Engine, Insert, update, Update, select
 from sqlalchemy import Float, Integer, String, text, TextClause
+from sqlalchemy import delete
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
@@ -59,6 +60,21 @@ class Kimeco_db:
                 return True
             else:
                 return False
+
+    def wipe_table(self,
+                   table: str):
+        delete_query = delete(self.tables[table])
+        with self.eng.begin() as connection:
+            connection.execute(delete_query)
+
+    def load_table(self,
+                   name: str) -> None:
+        # Currently not used: May cause a slowdown for db
+        # with many tables
+        self.tables[name] = Table(
+            name,
+            self.metadata,
+            autoload_with=self.eng)
 
     def create_table(self,
                      name: str,
@@ -152,43 +168,6 @@ class Kimeco_db:
                 total_entries -= chunk_size
         except OperationalError as e:
             glog.debug(e)
-        # try:
-        #     for i in range(len(values)):
-        #         values[i]['id'] = ids[i]
-        #     g_insert: Insert = (
-        #         insert(table=self.tables[table]).
-        #         values(values))
-
-        #     g_upsert: Insert = g_insert.on_conflict_do_update(
-        #             index_elements=[self.tables[table].c.id],
-        #             set_=g_insert.excluded
-        #         )
-
-        #     with self.eng.begin() as connection:
-        #         connection.execute(g_upsert)
-        # except OperationalError as e:
-        #     glog.debug(e)
-        #     # Happens when trying to insert too many values at once
-        #     half: int = len(values) // 2
-        #     val1 = [values[i] for i in range(0, half)]
-        #     val2 = [values[i] for i in range(half, len(values))]
-        #     half: int = len(ids) // 2
-        #     ids1 = [ids[i] for i in range(0, half)]
-        #     ids2 = [ids[i] for i in range(half, len(ids))]
-        #     for val, rids in zip([val1, val2], [ids1, ids2]):
-        #         for i in range(len(val)):
-        #             val[i]['id'] = rids[i]
-        #         g_insert: Insert = (
-        #             insert(table=self.tables[table]).
-        #             values(val))
-
-        #         g_upsert: Insert = g_insert.on_conflict_do_update(
-        #                 index_elements=[self.tables[table].c.id],
-        #                 set_=g_insert.excluded
-        #             )
-
-        #         with self.eng.begin() as connection:
-        #             connection.execute(g_upsert)
 
     def manual_upsert_entries(self,
                               table: str,

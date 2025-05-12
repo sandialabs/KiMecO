@@ -71,6 +71,7 @@ class CoreRun:
         self.name = name
         self.clean_files()
 
+
     def clean_files(self):
         for el in self.elements:
             if el.status != ElementStatus.DONE:

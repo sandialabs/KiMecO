@@ -42,7 +42,7 @@ default_settings: dict[str, Any] = {
     # CPU used per master equation job
     "cpu_kin": 4,
     # Memory (Mb) used per master equation job
-    "mem_kin": 1500,
+    "mem_kin": 4000,
     # CPU used per simulation job
     "cpu_sim": 1,
     # Memory (Mb) used per simulation job
