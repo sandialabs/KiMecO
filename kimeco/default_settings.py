@@ -32,6 +32,8 @@ default_settings: dict[str, Any] = {
     "rc_temp": [],
     # List of pressures in Torr
     "rc_pres": [],
+    # User input unit of pressure
+    "pres_unit": 'torr',
     # Keys: name of species in the initial mess file
     # Values: name of the species in the mechanism file
     "ct_names": {},

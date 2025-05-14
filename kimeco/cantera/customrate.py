@@ -38,7 +38,7 @@ class MessRate(ct.ExtensibleRate):
                        units) -> None:
 
         for idx, p in enumerate(params['Pgrid']):
-            if isinstance(p, str) and 'torr' in p:
+            if isinstance(p, str) :  # and 'torr' in p
                 params['Pgrid'][idx] = f'{Q_(p).to("Pa").magnitude} Pa'
 
         self.Pgrid = params.convert("Pgrid", 'Pa')

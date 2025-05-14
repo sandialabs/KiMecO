@@ -25,7 +25,7 @@ class KINSection(Section):
                     sp for sp in self.species],
                     multi=True,
                     id='rc_to'),
-                html.H4('Pressure (Torr):'),
+                html.H4(f'Pressure ({self.settings["pres_unit"]}):'),
                 dcc.Dropdown(options=[
                     p for p in self.settings['rc_pres']],
                     multi=True,

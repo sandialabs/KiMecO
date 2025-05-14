@@ -6,13 +6,21 @@ from kimeco.default_settings import default_settings, mandatory_keys
 import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
-from scipy.constants import Avogadro
+from scipy.constants import gas_constant
+import cantera.with_units as ctu
 import logging
 from kimeco.logger_config import setup_logger
 
 
 setup_logger()
 glog = logging.getLogger()
+
+
+ureg = ctu.cantera_units_registry
+Q_ = ureg.Quantity
+
+R = Q_(gas_constant, 'J mol^-1 K^-1')
+Vol = Q_(1, 'cm^3')
 
 
 def check_input(input_file: str) -> dict:
@@ -42,19 +50,72 @@ def check_input(input_file: str) -> dict:
     # Has mandatory keys?
     for key, value in mandatory_keys.items():
         if key not in json_file:
+            if key == 'initial_C':
+                if 'initial_X' not in json_file:
+                    glog.info(f"{key} or initial_X is a mandatory keyword.")
+                    continue
+                else:
+                    # The initial composition was given as a percentage
+                    continue
             glog.info(f"{key} is a mandatory keyword.")
             cancel_run = True
         elif not isinstance(json_file[key], type(value)):
             glog.info(f"{key} has incorrect type. Type should be {type(value)}")
             cancel_run = True
 
+    if 'pres_unit' not in json_file:
+        json_file['pres_unit'] = default_settings['pres_unit']
+    glog.info(f"Pressure unit in input assumed in {json_file['pres_unit']}")
+
     # Check if initial concentrations are correct:
     # May fail if mandatory key is missing
+    n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
+    base_key = 'n2'
+    base_given = False
+
+    if 'initial_X' in json_file:
+        if not isinstance(json_file['initial_X'], list)\
+           or len(json_file['initial_X']) != n_exp:
+            msg: str = 'initial_X: Should be a list of dictionaries.\n'
+            msg += 'Each dict should have for key '
+            msg += 'the specie name in the ct mechanism.\n'
+            msg += 'The value should be the ratio of that specie.'
+            glog.info(msg)
+            cancel_run = True
+        else:
+            for exp in json_file['initial_X']:
+                sum = 0.0
+                for k, v in exp.items():
+                    if not isinstance(k, str):
+                        glog.info('initial_X keys should be ct species names.')
+                        cancel_run = True
+                        break
+                    # Set the base
+                    if isinstance(v, str) and v.casefold() == 'base':
+                        if not base_given:
+                            glog.info(f"Base specie: {k}.")
+                            base_key: str = k
+                            base_given = True
+                        else:
+                            glog.info(
+                                "Two base are given for an experiment.")
+                            cancel_run = True
+                    # Check total composition
+                    elif isinstance(v, float):
+                        sum += v
+                    if sum > 1:
+                        glog.info("An initial composition exceeds 100%.")
+                        cancel_run = True
+                        break
+                    else:
+                        if not base_given:
+                            glog.info("No base given, using n2.")
+                        exp[base_key] = 1 - sum
 
     # Calculate total number of mol in 1 cm3
     # n = PV/RT
-    json_file['initial_X'] = []
     if 'initial_C' in json_file:
+        json_file['initial_X'] = []
         sum = 0.0
         base_key = 'n2'
         base_given = False
@@ -72,27 +133,41 @@ def check_input(input_file: str) -> dict:
                         f"{key} cannot be the base. It is already {base_key}.")
                     cancel_run = True
             elif isinstance(value, float):
-                n = value/Avogadro
+                n = Q_(value, 'molecule')
                 exp = 0
                 # Setup molar fraction for each experiment for 1cm^3
-                for p in json_file['rc_pres']:
-                    for t in json_file['rc_temp']:
+                for a in json_file['rc_pres']:
+                    try:
+                        p = Q_(a, json_file['pres_unit']).to('torr')
+                    except ValueError as e:
+                        cancel_run = True
+                        glog.info('pres_unit was not recognised.')
+                        glog.info(e)
+                    for b in json_file['rc_temp']:
+                        t = Q_(b, 'K')
                         if len(json_file['initial_X']) <= exp:
                             json_file['initial_X'].append({})
-                        ntot = p*0.001/(62.363577*t)
-                        json_file['initial_X'][exp][key] = n/ntot
+                        ntot = (p*Vol/(R*t)).to('molecule')
+                        json_file['initial_X'][exp][key] = (n/ntot).magnitude
                         exp += 1
-                sum += n/ntot
+                sum += (n/ntot).magnitude
                 if sum > 1:
                     glog.info(
                         "The sum of initial C exeeds the total pressure.")
                     cancel_run = True
             else:
-                glog.info('Values of initial_X should be floats.')
+                glog.info('Values of initial_C should be floats.')
                 cancel_run = True
                 break
         for exp in json_file['initial_X']:
             exp[base_key] = 1 - sum
+
+    for idx, exp in enumerate(json_file['initial_X']):
+        glog.info(f"Initial composition for experiment {idx}:")
+        for k, v in exp.items():
+            msg = '\t'
+            msg += '{k}: {v:-.2e}'
+            glog.info(msg)
 
     # Has unknown keys?
     for key in json_file:
@@ -114,7 +189,6 @@ def check_input(input_file: str) -> dict:
     clean_errors = []
     species = []
     exp_headers = []
-    n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
     if len(json_file['exp_profiles']) != n_exp:
         glog.info(
             "There should be one csv profile file for each TP condition.")

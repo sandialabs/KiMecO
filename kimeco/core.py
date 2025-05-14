@@ -286,13 +286,14 @@ class CoreRun:
             else:
                 if sim_id not in self.requeue_timer:
                     self.requeue_timer[sim_id] = time.time()
-                # Wait maximum 30 sec for file to be written
-                elif time.time() - self.requeue_timer[sim_id] < 30.0:
+                # Wait maximum 60 sec for file to be written
+                elif time.time() - self.requeue_timer[sim_id] < 60.0:
                     continue
                 # or resubmit
                 else:
+                    self.requeue_timer.pop(sim_id, None)
                     msg = f'Missing file: {el.name}S{sim:02d}.json'
-                    msg += 'Sim resubmitted.\n'
+                    msg += ' Sim re-submitted.'
                     glog.info(msg)
                     el.sim.requeue(idx=sim, sim_id=sim_id)
                 continue

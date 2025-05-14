@@ -45,7 +45,7 @@ gas = ct.Solution(name=wf_gas.name,
                        species=wf_gas.species(),
                        reactions=wf_gas.reactions())
 gas.X = {initial_X}
-gas.TP = wf_gas.T, np.round(Q_(f"{{wf_gas.P}} torr").to("Pa").magnitude, 5)
+gas.TP = wf_gas.T, np.round(Q_(f"{{wf_gas.P}} {pres_unit}").to("Pa").magnitude, 5)
 # number of mol of gas in 1 cm^3
 ntot = wf_gas.P*0.001/(62.363577*wf_gas.T)
 

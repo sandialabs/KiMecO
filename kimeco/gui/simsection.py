@@ -24,7 +24,7 @@ class SIMSection(Section):
                     sp for sp in self.species],
                     multi=True,
                     id='selected species'),
-                html.H4('Pressure (Torr):'),
+                html.H4(f'Pressure ({self.settings["pres_unit"]}):'),
                 dcc.Dropdown(options=[
                     p for p in self.settings['rc_pres']],
                     multi=True,

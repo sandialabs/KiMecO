@@ -159,8 +159,8 @@ class SIM:
                                                        product=product,
                                                        units=units)
         p_yaml: str = ''
-        for p in self.KIN.set["rc_pres"]:
-            p_yaml += f'  - {round(p, 5)} torr' + '\n'
+        for p in self.settings["rc_pres"]:
+            p_yaml += f'  - {round(p, 5)} {self.settings["pres_unit"]}' + '\n'
         t_yaml: str = ''
         for t in self.KIN.set["rc_temp"]:
             t_yaml += f'  - {round(t, 5)} K' + '\n'
@@ -343,6 +343,9 @@ class SIM:
                                       kinetics='gas',
                                       species=species,
                                       reactions=reactions)
+                # The pressure given to this simulation is
+                # likely in the wrong unit (unless Pa),
+                # but is converted in the cantera job
                 new_sim.TP = t, p
                 self.simulations.append(new_sim)
 
@@ -411,7 +414,8 @@ class SIM:
             all_tsteps=time_steps,
             gen_name=self.gen_name,
             to_watch=self.sv_species,
-            initial_X=self.settings['initial_X'][exp]
+            initial_X=self.settings['initial_X'][exp],
+            pres_unit=self.settings['pres_unit']
             )
         with open(f'{self.loc}/{name}.py', 'w') as f:
             f.write(ct_job)

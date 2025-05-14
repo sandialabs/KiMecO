@@ -26,6 +26,7 @@ class MessInputReader:
         self.SOP.rc_temp = settings["rc_temp"]
         self.SOP.rc_pres = settings["rc_pres"]
         self.SOP.ct_names = settings["ct_names"]
+        self.SOP.pres_unit = settings["pres_unit"]
         self.files2copy: list[str] = []
 
         if os.path.isfile(path=self.filename):
@@ -58,7 +59,8 @@ class MessInputReader:
                 continue
             elif line.lstrip().casefold().startswith('pressurelist'):
                 self.save_pressures(lnum=lnum)
-                self.template.append(line.split()[0] + " {SOP.r_rc_pres}\n")
+                self.template.append(
+                    "PressureList[{SOP.pres_unit}] {SOP.r_rc_pres}\n")
                 continue
             elif line.lstrip().casefold().startswith('factor'):
                 self.SOP.factor = float(line.split()[1])
