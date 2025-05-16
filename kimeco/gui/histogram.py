@@ -25,7 +25,7 @@ class Histogram:
         data analysis and controls.
 
         Args:
-            data (list[list[float]]): The histograms to overlay
+            data (dict[int, list[float]]): The histograms to overlay
             histfunc (str, optional): The type of histogram.
                                       Defaults to "count".
             title (str, optional): The title of the histogram.

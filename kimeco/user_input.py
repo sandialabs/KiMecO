@@ -71,7 +71,6 @@ def check_input(input_file: str) -> dict:
     # May fail if mandatory key is missing
     n_exp: int = len(json_file['rc_pres'])*len(json_file['rc_temp'])
     base_key = 'n2'
-    base_given = False
 
     if 'initial_X' in json_file:
         if not isinstance(json_file['initial_X'], list)\
@@ -84,6 +83,7 @@ def check_input(input_file: str) -> dict:
             cancel_run = True
         else:
             for exp in json_file['initial_X']:
+                base_given = False
                 sum = 0.0
                 for k, v in exp.items():
                     if not isinstance(k, str):
@@ -103,14 +103,14 @@ def check_input(input_file: str) -> dict:
                     # Check total composition
                     elif isinstance(v, float):
                         sum += v
-                    if sum > 1:
-                        glog.info("An initial composition exceeds 100%.")
-                        cancel_run = True
-                        break
-                    else:
-                        if not base_given:
-                            glog.info("No base given, using n2.")
-                        exp[base_key] = 1 - sum
+                if sum > 1:
+                    glog.info("An initial composition exceeds 100%.")
+                    cancel_run = True
+                    break
+                else:
+                    if not base_given:
+                        glog.info("No base given, using n2.")
+                exp[base_key] = 1 - sum
 
     # Calculate total number of mol in 1 cm3
     # n = PV/RT
@@ -166,7 +166,7 @@ def check_input(input_file: str) -> dict:
         glog.info(f"Initial composition for experiment {idx}:")
         for k, v in exp.items():
             msg = '\t'
-            msg += '{k}: {v:-.2e}'
+            msg += f'{k}: {v:-.2e}'
             glog.info(msg)
 
     # Has unknown keys?

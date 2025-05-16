@@ -4,7 +4,7 @@ from kimeco.database.sim_db import SIM_DB
 import numpy as np
 from numpy import float32
 from pandas import MultiIndex, DataFrame, RangeIndex
-from scipy.constants import Avogadro
+from scipy.constants import gas_constant
 import pickle
 import os
 import copy
@@ -15,6 +15,9 @@ import json
 import psutil
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
+
+R = Q_(gas_constant, 'J mol^-1 K^-1')
+Vol = Q_(1, 'cm^3')
 
 db = SIM_DB(name='{db.name}',
              path='{db.path}')
@@ -45,9 +48,12 @@ gas = ct.Solution(name=wf_gas.name,
                        species=wf_gas.species(),
                        reactions=wf_gas.reactions())
 gas.X = {initial_X}
-gas.TP = wf_gas.T, np.round(Q_(f"{{wf_gas.P}} {pres_unit}").to("Pa").magnitude, 5)
+pres = Q_(f"{{wf_gas.P}} {pres_unit}")
+temp = Q_(f"{{wf_gas.T}} K")
+# Total number of molecules
+ntot = (pres*Vol/(R*temp)).to('molecule')
+gas.TP = wf_gas.T, np.round(pres.to("Pa").magnitude, 5)
 # number of mol of gas in 1 cm^3
-ntot = wf_gas.P*0.001/(62.363577*wf_gas.T)
 
 reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
 net = ct.ReactorNet([reactor])
@@ -110,12 +116,12 @@ for idx, t in enumerate(times):
     #         net.advance(current_time)
     #     for snum, i in enumerate(spec):
     #         if i.name in to_watch:
-    #             cumul[i.name][idx] += gas.X[snum] * ntot * Avogadro
+    #             cumul[i.name][idx] += gas.X[snum] * ntot.magnitude
     net.advance(t) # Remove if response on
     for snum, i in enumerate(spec):
         if i.name in to_watch:
             # density (molecules/cm^3)
-            traces[i.name][idx] = gas.X[snum] * ntot * Avogadro  # Remove if response on
+            traces[i.name][idx] = gas.X[snum] * ntot.magnitude  # Remove if response on
             # traces[i.name][idx] = cumul[i.name][idx]/count  # Uncoment if response on
 # unique ids of rows in the DB
 row_ids = [i for i in range({el_num}*block_size+start_idx,
