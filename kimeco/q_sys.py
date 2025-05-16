@@ -29,16 +29,10 @@ class JobStatus(Enum):
 
 class QueueingSystem:
     def __init__(self,
-                 max_jobs: int,
-                 max_cpu: int,
-                 max_mem: int,
+                 settings: dict[str, Any],
                  nkin: int,
                  nsim: int,
                  nhlp: int,
-                 cpu_kin: int,
-                 cpu_sim: int,
-                 mem_kin: int,
-                 mem_sim: int,
                  q_type: str = 'slurm',
                  q_name: str = 'day-long-cpu') -> None:
         """The queueing system is only meant to manage the number of jobs
@@ -64,19 +58,26 @@ class QueueingSystem:
             location (str, optional): Where jobs should be submitted from.
                                       Defaults to local.
         """
-        self._max_jobs: int = max_jobs
-        self._max_cpu: int = max_cpu
-        self._max_mem: int = max_mem
-        self.cpu_kin: int = cpu_kin
-        self.cpu_sim: int = cpu_sim
-        self.mem_kin: int = mem_kin
-        self.mem_sim: int = mem_sim
+        self.settings: dict[str, Any] = settings
+        self._max_jobs: int = self.settings['max_jobs']
+        self._max_cpu: int = self.settings['max_cpu']
+        self._max_mem: int = self.settings['max_mem']
+        self.cpu_kin: int = self.settings['cpu_kin']
+        self.cpu_sim: int = self.settings['cpu_sim']
+        self.mem_kin: int = self.settings['mem_kin']
+        self.mem_sim: int = self.settings['mem_sim']
 
         if q_type.casefold() == 'slurm':
             self.subtpl: str = slurmtpl
             self.ext: str = 'slurm'
+            exclude_substr = 'exclude'
         else:
             raise NotImplementedError('Slurm is the only q_type available.')
+        if len(self.settings['exclude_nodes']) == 0:
+            for l in self.subtpl.split('\n'):
+                if exclude_substr in l:
+                    break
+            self.subtpl = self.subtpl.replace(l, '')
 
         self.pytpl: str = pytpl
         self.messtpl: str = messtpl
@@ -168,6 +169,7 @@ class QueueingSystem:
                         job: NDArray[Any]) -> None:
         """Create the submission script for the job."""
         sub_cmd: str = self.subtpl.format(
+            exclude_nodes=self.settings['exclude_nodes'],
             nprocs=job['cpu'][0],
             filename=str(job['name'][0]),
             sub_queue=self.q_name,

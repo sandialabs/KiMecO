@@ -3,6 +3,7 @@ slurmtpl = """#! /bin/bash -f
 #SBATCH -N 1
 #SBATCH -c {nprocs}
 #SBATCH -q medium
+#SBATCH --exclude={exclude_nodes}
 #SBATCH -o {filename}.stdout
 #SBATCH -e {filename}.err
 

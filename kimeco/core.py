@@ -56,13 +56,7 @@ class CoreRun:
         self.sim_db: SIM_DB = sim_db
         self.create_tables()
         self.qs = QueueingSystem(
-            max_jobs=self.settings['max_jobs'],
-            max_cpu=self.settings['max_cpu'],
-            max_mem=self.settings['max_mem'],
-            cpu_kin=self.settings['cpu_kin'],
-            mem_kin=self.settings['mem_kin'],
-            cpu_sim=self.settings['cpu_sim'],
-            mem_sim=self.settings['mem_sim'],
+            settings=self.settings,
             nkin=len(self.elements),
             nsim=len(self.elements) *
             len(self.settings['rc_temp']) *

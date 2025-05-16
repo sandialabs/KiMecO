@@ -57,6 +57,8 @@ default_settings: dict[str, Any] = {
     "max_cpu": 2000,
     # Maximum number of jobs submitted per generation
     "max_jobs": 1000,
+    # Nodes to exclude from the SLURM submission list
+    "exclude_nodes": "",
     # Username for the server hosting the db
     "db_user": getpass.getuser(),
     # IP address of the database host.
