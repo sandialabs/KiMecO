@@ -9,6 +9,7 @@ from kimeco.bimolecular import Bimolecular
 from dash.exceptions import PreventUpdate
 from typing import Any
 from kimeco.gui.histogram import Histogram
+import numpy as np
 
 
 class SOPSection(Section):
@@ -339,7 +340,9 @@ class SOPSection(Section):
                     table=f'G{gen_id:04d}',
                     row_id=el_id
                 )
-            all_gen_rows[gen_i] = self.sop_db.batch_select_col(col)
+            all_gen_rows[gen_i] = \
+                np.concatenate(self.sop_db.batch_select_col(col))
+
         hist = Histogram(
             data=all_gen_rows,
             settings=plot_settings

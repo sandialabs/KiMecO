@@ -56,7 +56,6 @@ class Histogram:
             histfunc (str): type of histogram
         """
         for gen_id, trace in data.items():
-            trace = np.concatenate(trace).tolist()
             self.hist.add_trace(
                 go.Histogram(
                     histfunc=histfunc,
@@ -109,7 +108,7 @@ class Histogram:
                 ticks='inside',
                 tickfont=dict(
                     family=self.font,
-                    size=14,
+                    size=18,
                     color='rgb(0, 0, 0)')
             ),
             plot_bgcolor='white'

@@ -132,7 +132,7 @@ class KIN_DB(Kimeco_db):
             temp = set(tmp_temp)
             To = set(tmp_To)
             From = set(tmp_From)
-            
+
             db_row = np.dtype(dtype=[
                 ('kin_id', int32),
                 ('p', float64),

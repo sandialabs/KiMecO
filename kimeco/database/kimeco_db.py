@@ -43,8 +43,8 @@ class Kimeco_db:
             # dict: JSON,
             # list: ARRAY
         }
-        self._upsert = {}
-        self._select = {}
+        self._upsert: dict = {}
+        self._select: dict = {}
 
     def get_table_names(self):
         query: TextClause = text(

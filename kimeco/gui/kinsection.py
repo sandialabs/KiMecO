@@ -1,9 +1,11 @@
 from dash import html, dcc, callback, Output, Input, State
-import plotly.graph_objects as go
 import numpy as np
+from typing import Any
+from numpy.typing import NDArray
 from kimeco.gui.section import Section
 from plotly.graph_objs._figure import Figure
 from dash.exceptions import PreventUpdate
+from kimeco.gui.histogram import Histogram
 
 
 class KINSection(Section):
@@ -93,7 +95,6 @@ class KINSection(Section):
             if clic is None:
                 raise PreventUpdate
 
-            all_gen_rates = []
             for gen_i in selected_gen:
                 for p in pres:
                     for t in temp:
@@ -101,10 +102,10 @@ class KINSection(Section):
                             # Find the corresponding name in db
                             for k, v in self.settings['ct_names'].items():
                                 if v == _to:
-                                    tmp_to = k
+                                    tmp_to: str = k
                                     break
                             if tmp_to in self.init_SOP.wells_names:
-                                to = tmp_to
+                                to: str = tmp_to
                             else:
                                 for bim in self.init_SOP.bimolecular:
                                     if tmp_to in bim.frag_names:
@@ -114,10 +115,10 @@ class KINSection(Section):
                                 # Find the corresponding name in db
                                 for k, v in self.settings['ct_names'].items():
                                     if v == _frm:
-                                        tmp_frm = k
+                                        tmp_frm: str = k
                                         break
                                 if tmp_frm in self.init_SOP.wells_names:
-                                    frm = tmp_frm
+                                    frm: str = tmp_frm
                                 else:
                                     for bim in self.init_SOP.bimolecular:
                                         if tmp_frm in bim.frag_names:
@@ -134,8 +135,10 @@ class KINSection(Section):
                                         From=frm,
                                         To=to
                                     )
-                all_gen_rates.append(self.kin_db.batch_select())
-            all_figs = []
+            # Only do one request for all gen
+            all_gen_rates: dict[str, dict[int, NDArray]] = \
+                self.kin_db.batch_select()
+            all_figs: list[Histogram] = []
             for p in pres:
                 for t in temp:
                     for to in To:
@@ -157,6 +160,11 @@ class KINSection(Section):
                     To: str,
                     From: str,
                     rates: list[dict[dict[dict[tuple, float]]]]):
+        plot_settings: dict[str, Any] = {
+            'title': '',
+            'tickformat': '.2e',
+            'unit': ''
+        }
         # Find the names as saved in the kin db
         for k, v in self.settings['ct_names'].items():
             if v == To:
@@ -176,76 +184,33 @@ class KINSection(Section):
         if tmp_frm in self.init_SOP.wells_names:
             frm = tmp_frm
             unit = 's<sup>-1</sup> '
+            plot_settings['unit'] = u's\u207B\u00B9'
         else:
             unit = 'cm<sup>3</sup> molecule<sup>-1</sup> s<sup>-1</sup>'
+            plot_settings['unit'] = \
+                u'cm\u00B3 molecule\u207B\u00B9 s\u207B\u00B9'
             for bim in self.init_SOP.bimolecular:
                 if tmp_frm in bim.frag_names:
                     frm = bim.name
                     break
         cond = (p, t, to, frm)
 
-        fig = go.Figure()
-        nbinsx = 60
-        # Overlay both histograms
-        fig.update_layout(
-            barmode='overlay',
-            xaxis=dict(
-                title=f'Rate coefficient ({unit})',
-                #   type="log",
-                showline=True,
-                showgrid=True,
-                showticklabels=True,
-                linecolor='rgb(0, 0, 0)',
-                linewidth=2,
-                ticks='inside',
-                tickformat='.2e',
-                tickfont=dict(
-                    family='Arial',
-                    size=12,
-                    color='rgb(0, 0, 0)')
-                ),
-            yaxis=dict(
-                title='Count of elements',
-                showline=True,
-                showgrid=True,
-                showticklabels=True,
-                linecolor='rgb(0, 0, 0)',
-                linewidth=2,
-                ticks='inside',
-                # tickformat='.2e',
-                tickfont=dict(
-                    family='Arial',
-                    size=12,
-                    color='rgb(0, 0, 0)')
-                ),
-            plot_bgcolor='white'
-            )
+        all_gen_rows: dict[int, list[float]] = {}
+        for gen_i in generations:
+            all_gen_rows[gen_i] = np.empty(
+                len(self.gapp.goats[gen_i].split()))
+            for idx, origin in enumerate(self.gapp.goats[gen_i].split()):
+                gen_id = int(origin.split('_')[0])
+                kin_id = int(origin.split('_')[1])
+                all_gen_rows[gen_i][idx] = \
+                    rates[f"G{gen_id:04d}"][kin_id][cond]
 
-        for rc, gen_i in zip(rates, generations):
-            gen_name = f'Gen {gen_i:04d}'
-            p_t_to_frm = []
-            for origin in rc:
-                for kin_id in rc[origin]:
-                    p_t_to_frm.append(rc[origin][kin_id][cond])
-            avrg = np.average(p_t_to_frm)
-            nel = len(p_t_to_frm)
-            fig.add_trace(go.Histogram(
-                histfunc="count",
-                x=p_t_to_frm,
-                nbinsx=min(len(p_t_to_frm), nbinsx),
-                autobinx=False,
-                name=gen_name,
-                bingroup=1))
-        title = f"Rate coefficients from {From} to {To} in {generations}"
-        pres = f"P={p} Torr"
-        temp = f"P={t} K"
-        # Overlay both histograms
-        fig.update_layout(
-            barmode='overlay')
-
-        return [html.H3(title),
-                html.H3(pres),
-                html.H3(temp),
-                html.H5(f'Average: {avrg:.3E}'),
-                html.H5(f'Number of elements: {nel}'),
-                dcc.Graph(figure=fig)]
+        plot_settings['title'] = \
+            f"Rate coefficients ({unit}) from {From} to {To} at"
+        plot_settings['title'] += \
+            f" {p} {self.settings['pres_unit']}/{t} K"
+        hist = Histogram(
+            data=all_gen_rows,
+            settings=plot_settings
+        )
+        return hist.layout()

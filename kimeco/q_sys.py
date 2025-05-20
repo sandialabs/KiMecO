@@ -74,10 +74,10 @@ class QueueingSystem:
         else:
             raise NotImplementedError('Slurm is the only q_type available.')
         if len(self.settings['exclude_nodes']) == 0:
-            for l in self.subtpl.split('\n'):
-                if exclude_substr in l:
+            for line in self.subtpl.split('\n'):
+                if exclude_substr in line:
                     break
-            self.subtpl = self.subtpl.replace(l, '')
+            self.subtpl = self.subtpl.replace(line, '')
 
         self.pytpl: str = pytpl
         self.messtpl: str = messtpl
