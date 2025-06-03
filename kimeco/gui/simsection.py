@@ -124,37 +124,28 @@ class SIMSection(Section):
                     pres: float,
                     temp: float):
         fig = go.Figure()
-        has_legend: dict[str, bool] = {}
+        # has_legend: dict[str, bool] = {}
         nel = 0
-        sp_idx = self.sim_db.columns.index(sp) - 2
-        for idx, (origin, sim_dict) in enumerate(TPGenSP.items()):
-            if origin not in has_legend:
-                has_legend[origin] = False
-            name = f'Origin: {origin}'
-            for sim_id, arr in sim_dict.items():
+        sp_idx: int = self.sim_db.columns.index(sp) - 2
+        traces: list[go.Scatter] = []
+        # for idx, (origin, sim_dict) in enumerate(TPGenSP.items()):
+        for origin, sim_dict in TPGenSP.items():
+            # if origin not in has_legend:
+            #     has_legend[origin] = False
+            name: str = f'Origin: {origin}'
+            for arr in sim_dict.values():
                 nel += 1
-                if not has_legend[origin]:
-                    fig.add_trace(go.Scatter(
-                        x=arr[:, 1],
-                        y=arr[:, sp_idx].T,
-                        mode='lines',
-                        name=name,
-                        opacity=0.25
-                        ))
-                    has_legend[origin] = True
-                else:
-                    fig.add_trace(go.Scatter(
-                        x=arr[:, 1],
-                        y=arr[:, sp_idx].T,
-                        mode='lines',
-                        name=name,
-                        showlegend=False,
-                        opacity=0.25
-                        ))
-            fig.update_traces(
-                marker=dict(
-                    color=fig.layout['template']['layout']['colorway'][0]),
-                selector=dict(name=name))
+                traces.append(go.Scatter(
+                    x=arr[:, 1],
+                    y=arr[:, sp_idx].T,
+                    mode='lines',
+                    name=name,
+                    showlegend=False,
+                    opacity=0.25,
+                    line=dict(color='#1E90FF')
+                    ))
+        # Add all traces to the figure at once
+        fig.add_traces(traces)
 
         # Add experimental profiles
         tidx: int = self.settings['rc_temp'].index(temp)
@@ -207,8 +198,8 @@ class SIMSection(Section):
             html.H3(children=[
                 f'Concentration profiles of {sp}',
                 f' in generations {gen_name}']),
-            html.H5(f'T (K): {temp}'),
-            html.H5(f'P (Torr): {pres}'),
+            html.H4(f'T (K): {temp}'),
+            html.H4(f"P ({self.settings['pres_unit']}): {pres}"),
             html.H5(f'Number of elements: {nel}'),
             dcc.Graph(figure=fig)
             ]

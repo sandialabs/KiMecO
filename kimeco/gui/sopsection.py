@@ -328,10 +328,10 @@ class SOPSection(Section):
                     col: str,
                     selected_gen: list[int]):
         # Add line for initial value to the graph
-        idx = self.sop_db.columns.index(col)
+        idx: int = self.sop_db.columns.index(col)
         init_val: float = self.gapp.init_vals[idx+1]
 
-        all_gen_rows = {}
+        all_gen_rows: dict[int, list[float]] = {}
         for gen_i in selected_gen:
             for origin in self.gapp.goats[gen_i].split():
                 gen_id = int(origin.split('_')[0])

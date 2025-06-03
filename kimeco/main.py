@@ -66,7 +66,7 @@ def main() -> None:
     location: str = os.getcwd()
     with open('mess_tpl', 'w') as f:
         f.writelines(input_tpl)
-    
+
     # Copy files necessary for MESS calculation
     for file in init_SOP.files2copy:
         shutil.copyfile(f'{init_loc}/{file}', f'{location}/{file}')
