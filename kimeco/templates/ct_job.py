@@ -2,15 +2,12 @@ ctjobtpl = """import cantera as ct
 from kimeco.cantera.customrate import MessData, MessRate
 from kimeco.database.sim_db import SIM_DB
 import numpy as np
-from numpy import float32
-from pandas import MultiIndex, DataFrame, RangeIndex
 from scipy.constants import gas_constant
 import pickle
 import os
 import copy
 import time
 import cantera.with_units as ctu
-import sqlalchemy
 import json
 import psutil
 ureg = ctu.cantera_units_registry
@@ -33,10 +30,11 @@ try:
     # Happens if the file is being written
     while True:
         if os.path.getsize('{sim_name}.pkl') == 0:
-            time.sleep(0.2)
+            time.sleep(1)
         else:
             break
     with open('{sim_name}.pkl', 'rb') as pkl_file:
+        time.sleep(1)
         wf_gas = pickle.load(pkl_file)
 except EOFError as e:
     print(e)
@@ -145,7 +143,7 @@ with open(
     ) as outfile:
     outfile.write(json_object)
 while not os.path.exists(f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json"):
-    time.sleep(0.1)
+    time.sleep(3)
 # Get the current process
 process = psutil.Process()
 
