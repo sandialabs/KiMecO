@@ -29,7 +29,6 @@ while not all(collected):
             with open(fn, 'r') as f:
                 sim = json.load(f)
             sims.append(sim)
-            os.remove(fn)
             collected[idx] = True
         # Helpers should not try to collect data from failed sims.
         else:
@@ -66,4 +65,8 @@ while trying2connect:
     except sqlalchemy.exc.OperationalError as e:
         print(e)
         time.sleep(5)
+# Only clean JSON file after data are saved
+for idx, fn in enumerate(filenames):
+    os.remove(fn)
+
             """

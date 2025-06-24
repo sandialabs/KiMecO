@@ -44,13 +44,13 @@ default_settings: dict[str, Any] = {
     # CPU used per master equation job
     "cpu_kin": 4,
     # Memory (Mb) used per master equation job
-    "mem_kin": 2000,
+    "mem_kin": 1000,
     # CPU used per simulation job
     "cpu_sim": 1,
     # Memory (Mb) used per simulation job
-    "mem_sim": 3500,
+    "mem_sim": 1000,
     # Memory (Mb) used per simulation job
-    "mem_hlp": 10000,
+    "mem_hlp": 500,
     # Maximum number of memory (Mb) used per generation
     "max_mem": 1000000,
     # Maximum number of cpu used per generation
