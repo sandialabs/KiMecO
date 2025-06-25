@@ -70,6 +70,7 @@ class Generation(CoreRun):
         gen_dir: str = f'{self.loc}/{self.name}'
         os.makedirs(gen_dir, exist_ok=True)
         os.chdir(gen_dir)
+        os.mkdir('logs')
         # Copy files necessary for MESS calculation
         for file in self.elements[0].sop.files2copy:
             shutil.copyfile(f'{self.loc}/{file}', f'{gen_dir}/{file}')

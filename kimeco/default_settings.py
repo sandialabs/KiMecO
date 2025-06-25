@@ -48,7 +48,7 @@ default_settings: dict[str, Any] = {
     # CPU used per simulation job
     "cpu_sim": 1,
     # Memory (Mb) used per simulation job
-    "mem_sim": 1000,
+    "mem_sim": 600,
     # Memory (Mb) used per simulation job
     "mem_hlp": 500,
     # Maximum number of memory (Mb) used per generation
@@ -56,7 +56,7 @@ default_settings: dict[str, Any] = {
     # Maximum number of cpu used per generation
     "max_cpu": 2000,
     # Maximum number of jobs submitted per generation
-    "max_jobs": 1000,
+    "max_jobs": 600,
     # Nodes to exclude from the SLURM submission list
     "exclude_nodes": "",
     # Username for the server hosting the db
@@ -126,5 +126,7 @@ default_settings: dict[str, Any] = {
     # important parameters to perturb
     "cumul_sensi": 0.95,
     # User given list of parameters to perturb. All if empty.
-    "only_perturb": []
+    "only_perturb": [],
+    # Frequency of the sensitivity analysis
+    "SA_freq": 1000
 }

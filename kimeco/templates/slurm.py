@@ -4,8 +4,8 @@ slurmtpl = """#! /bin/bash -f
 #SBATCH -c {nprocs}
 #SBATCH -q medium
 #SBATCH --exclude={exclude_nodes}
-#SBATCH -o {filename}.stdout
-#SBATCH -e {filename}.err
+#SBATCH -o logs/{filename}.stdout
+#SBATCH -e logs/{filename}.err
 
 #SBATCH -p {sub_queue}
 #SBATCH --mem={mem_mb}

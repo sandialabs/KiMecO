@@ -109,7 +109,7 @@ def main() -> None:
             pert=pert)
         sensitivity.run()
         settings['only_perturb'] = sensitivity.selected
-        f_el = sensitivity.elements[0]
+        f_el: Element = sensitivity.elements[0]
     else:
         # Check DB for restart if not SA
         if sop_db.table_exists('G0000'):
@@ -189,7 +189,7 @@ def main() -> None:
                 best_score='BEST SCORE',
                 score_avrg='GOAT AVERAGE'))
 
-    new_gen = gen_0
+    new_gen: Generation = gen_0
     # MAIN LOOP
     while not converged and Generation.total() < settings['max_gen']:
         prev_gen, new_elements = get_next_gen(gen=new_gen,
@@ -279,6 +279,18 @@ def main() -> None:
            new_stds=stds):
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
+            sensitivity = Linear(
+                elements=new_gen.elements,
+                settings=settings,
+                rc_tpl=input_tpl,
+                loc=location,
+                sf=sf,
+                pert=pert)
+            sensitivity.run()
+            if new_gen.id % settings['SA_freq'] == 0:
+                for p in sensitivity.selected:
+                    if p not in settings['only_perturb']:
+                        settings['only_perturb'].append(p)
         else:
             converged = True
     glog.info('Run Sucessful.')

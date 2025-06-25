@@ -203,11 +203,12 @@ class QueueingSystem:
 
         clear_err = True
         file: str = f"{job['loc']}/{job['name']}"
+        lfile: str = f"{job['loc']}/logs/{job['name']}"
         if (jtype == 'kin' and os.path.exists(f"{file}.out")) or\
            jtype == 'sim':
-            while not (os.path.exists(f"{file}.err")):
+            while not (os.path.exists(f"{lfile}.err")):
                 time.sleep(0.1)
-            if os.stat(f"{file}.err").st_size > 0:
+            if os.stat(f"{lfile}.err").st_size > 0:
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
                 glog.warning(
@@ -217,9 +218,9 @@ class QueueingSystem:
             else:
                 job['status'] = JobStatus.PICKED_UP.value
         elif jtype == 'hlp':
-            if (os.path.exists(f"{file}.err") and
+            if (os.path.exists(f"{lfile}.err") and
                     os.stat(
-                        f"{file}.err").st_size > 0):
+                        f"{lfile}.err").st_size > 0):
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
                 glog.info(f"Helper {job['name'][0]} failed.")
@@ -239,7 +240,7 @@ class QueueingSystem:
         # Don't delete files for jobs that need to be resubmitted
         if job['status'] == JobStatus.READY.value:
             return
-        for ext in ['log', 'err', 'inp', 'stdout', 'aux', 'slurm', 'pkl']:
+        for ext in ['log', 'inp', 'aux', 'slurm', 'pkl']:
             if ext == 'err' and not clear_err:
                 continue
             if os.path.exists(f"{job['loc']}/{job['name']}.{ext}"):

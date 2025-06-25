@@ -43,6 +43,7 @@ class Linear:
                              tbl_name=self.name)
         os.makedirs(SA_dir, exist_ok=True)
         os.chdir(SA_dir)
+        os.mkdir('logs')
         # Copy files necessary for MESS calculation
         for file in self.elements[0].sop.files2copy:
             shutil.copyfile(f'{loc}/{file}', f'{SA_dir}/{file}')
