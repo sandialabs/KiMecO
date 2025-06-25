@@ -279,17 +279,19 @@ def main() -> None:
            new_stds=stds):
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
-            sensitivity = Linear(
-                elements=new_gen.elements,
-                settings=settings,
-                rc_tpl=input_tpl,
-                loc=location,
-                sf=sf,
-                pert=pert)
-            sensitivity.run()
             if new_gen.id % settings['SA_freq'] == 0:
+                glog.info('On-the-fly sensitivity analysis.')
+                sensitivity = Linear(
+                    elements=new_gen.elements,
+                    settings=settings,
+                    rc_tpl=input_tpl,
+                    loc=location,
+                    sf=sf,
+                    pert=pert)
+                sensitivity.run()
                 for p in sensitivity.selected:
                     if p not in settings['only_perturb']:
+                        glog.info(f'New parameter to perturb: {p}')
                         settings['only_perturb'].append(p)
         else:
             converged = True
