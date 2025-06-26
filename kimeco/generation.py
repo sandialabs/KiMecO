@@ -68,8 +68,9 @@ class Generation(CoreRun):
                  name=f'G{self.id:04d}')
         # Create generation directory
         gen_dir: str = f'{self.loc}/{self.name}'
-        os.makedirs(gen_dir, exist_ok=True)
         os.makedirs(gen_dir + '/logs', exist_ok=True)
+        for subfolder in range(len(self.elements)//50+1):
+            os.makedirs(gen_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
         os.chdir(gen_dir)
         # Copy files necessary for MESS calculation
         for file in self.elements[0].sop.files2copy:

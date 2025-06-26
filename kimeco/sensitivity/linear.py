@@ -32,6 +32,7 @@ class Linear:
             elements=elements,
             sf=sf
             )
+        n_param: int = len(elements[0].sop.parameters_names)
         # Create generation directory
         SA_dir: str = f'{loc}/{self.name}'
         self.sop_db = SOP_DB(sop=self.elements[0].sop,
@@ -41,8 +42,9 @@ class Linear:
         self.sim_db = SIM_DB(sop=self.elements[0].sop,
                              name='SA_DB_SIM',
                              tbl_name=self.name)
-        os.makedirs(SA_dir, exist_ok=True)
         os.makedirs(SA_dir + '/logs', exist_ok=True)
+        for subfolder in range((2*n_param+1)//50+1):
+            os.makedirs(SA_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
         os.chdir(SA_dir)
         # Copy files necessary for MESS calculation
         for file in self.elements[0].sop.files2copy:

@@ -10,12 +10,13 @@ from typing import Any
 import getpass
 import os
 import logging
+from logging import Logger
 from kimeco.logger_config import setup_logger
 import time
 
 
 setup_logger()
-glog = logging.getLogger()
+glog: Logger = logging.getLogger()
 
 
 class JobStatus(Enum):
@@ -254,7 +255,10 @@ class QueueingSystem:
             job: Numpy structured array. dtype = jobdata
 
         """
-        command: list[str] = ['sbatch', str(job['name']) + '.' + self.ext]
+        if os.getcwd() != str(job['loc']):
+            os.chdir(str(job['loc']))
+        command: list[str] = [
+            'sbatch', str(job['name']) + '.' + self.ext]
         process = Popen(args=command,
                         shell=False,
                         stdout=PIPE,
@@ -275,6 +279,7 @@ class QueueingSystem:
         """Run all jobs of the workflow in parallel
         as long as ressources are available.
         """
+        here = os.getcwd()
         for q in self.queues:
             for idx, rdy in enumerate(q['status'] == JobStatus.READY.value):
                 if rdy:
@@ -285,6 +290,7 @@ class QueueingSystem:
                         break
         if self.n_ready <= self.av_jobs:
             self.actualize()
+        os.chdir(here)
 
     def enough_resources_for(self, job) -> bool:
         """Check if remaining resources are enough to send the job."""

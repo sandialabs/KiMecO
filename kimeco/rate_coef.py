@@ -1,3 +1,5 @@
+from genericpath import isfile
+import time
 from typing import Any
 
 from pandas import Index, MultiIndex, DataFrame, RangeIndex
@@ -39,7 +41,7 @@ class RateCo:
         self.software_tpl: list[str] = software_tpl
         self.name: str = name
         self.set: dict[str, Any] = settings
-        self.loc: str = loc
+        self.loc: str = loc + f'/{(self.id)//50:02d}'
         self.q_sys: QueueingSystem = q_sys
         self.db: KIN_DB = db
         # Modulable if something else than mess is used.
@@ -113,7 +115,8 @@ class RateCo:
         """
         if self.software == 'mess':
             mw = MessWriter(SOP=self.sop, tpl=self.software_tpl)
-            mw.write(filename=f'{self.name}.inp')
+            mw.write(loc=self.loc,
+                     filename=f'{self.name}.inp')
         else:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")
@@ -122,13 +125,16 @@ class RateCo:
                       ) -> list[tuple[Any]]:
         """Wait for the results of the Kinetic constants calculations
         """
+        if isfile(self.output_name):
+            while not os.stat(self.output_name).st_size > 0:
+                time.sleep(2)
         if self.software == 'mess':
             mor = MessOutputReader(filename=self.output_name,
                                    settings=self.set,
                                    sop=self.sop)
             mor.read()
         self.rc: np.ndarray = mor.rc
-        self.rc[self.rc < 1.e-17] = 0.0
+        self.rc[self.rc < 1.e-19] = 0.0
         # self.hp_rc: np.ndarray = mor.hp_rc  # Not used for now
         self.tbl_map: dict[str, int] = mor.tbl_map
         names: NDArray[Any] = np.full(shape=(len(self.tbl_map)),

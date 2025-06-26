@@ -266,13 +266,14 @@ class CoreRun:
             el: Element = self.elements[sim_id // nsim]
             sim: int = sim_id % nsim
             flnm: str = \
-                f'{self.loc}/{self.name}/{self.name}{el.name}S{sim:02d}.json'
+                f'{self.loc}/{self.name}/{el.id//50:02d}' +\
+                f'/{self.name}{el.name}S{sim:02d}.json'
             # Happens because of long write times
-            if os.path.isfile(f'{flnm}'):
+            if os.path.isfile(flnm):
                 if len(self.sim_hlpers[hlp_idx]) < 30:
                     if sim_id not in assigned_ids:
                         self.sim_hlpers[hlp_idx].append(sim_id)
-                        filenames.append(f'{flnm}')
+                        filenames.append(flnm)
                 # The job has finished without error, but didn't write
                 # json file
                 else:
@@ -280,8 +281,8 @@ class CoreRun:
             else:
                 if sim_id not in self.requeue_timer:
                     self.requeue_timer[sim_id] = time.time()
-                # Wait maximum 60 sec for file to be written
-                elif time.time() - self.requeue_timer[sim_id] < 60.0:
+                # Wait maximum 5 sec for file to be written
+                elif time.time() - self.requeue_timer[sim_id] < 5.0:
                     continue
                 # or resubmit
                 else:

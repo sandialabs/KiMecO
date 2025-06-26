@@ -9,7 +9,9 @@ class MessWriter:
         self.SOP = SOP
         self.tpl = tpl
 
-    def write(self, filename) -> None:
+    def write(self,
+              loc: str,
+              filename: str) -> None:
         lines = []
         for k, v in self.SOP.parameters_names.items():
             lines.append(
@@ -44,5 +46,5 @@ class MessWriter:
             else:
                 lines.append(line)
 
-        with open(filename, 'w') as f:
+        with open(loc + '/' + filename, 'w') as f:
             f.writelines(lines)

@@ -100,7 +100,7 @@ class SIM:
         self.id: int = id
         self.el_name: str = f'E{id:04d}'
         self.name: str = f'{gen_name}{self.el_name}'
-        self.loc: str = loc
+        self.loc: str = loc + f'/{(self.id)//50:02d}'
         self.q_sys: QueueingSystem = q_sys
         self.ctjobtpl: str = ctjobtpl
         self.db: SIM_DB = db
