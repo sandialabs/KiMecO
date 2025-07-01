@@ -2,7 +2,7 @@ from genericpath import isfile
 import time
 from typing import Any
 
-from pandas import Index, MultiIndex, DataFrame, RangeIndex
+from pandas import RangeIndex
 from kimeco.database.kin_db import KIN_DB
 from kimeco.parameters import SOP
 from kimeco.q_sys import QueueingSystem, JobStatus
@@ -11,12 +11,7 @@ from kimeco.readers.mess_output import MessOutputReader
 import os
 import numpy as np
 from numpy.typing import NDArray
-import logging
-from kimeco.logger_config import setup_logger
-
-
-setup_logger()
-glog = logging.getLogger()
+from logging import Logger
 
 
 class RateCo:
@@ -31,9 +26,10 @@ class RateCo:
                  name: str,
                  loc: str,
                  q_sys: QueueingSystem,
-                 db: KIN_DB
+                 db: KIN_DB,
+                 klog: Logger
                  ) -> None:
-
+        self.klog: Logger = klog
         self.status: JobStatus = JobStatus.NOT_IN_QUEUE
         self.id: int = id
         self.sop: SOP = sop
@@ -125,13 +121,23 @@ class RateCo:
                       ) -> list[tuple[Any]]:
         """Wait for the results of the Kinetic constants calculations
         """
-        if isfile(self.output_name):
+        rows = []
+        i = 0
+        while not isfile(self.output_name):
+            if i == 10:
+                self.klog.info(f'{self.output_name} not found after 20s.')
+                return rows
+            time.sleep(2)
+            i += 1
+        else:
             while not os.stat(self.output_name).st_size > 0:
                 time.sleep(2)
+        
         if self.software == 'mess':
             mor = MessOutputReader(filename=self.output_name,
                                    settings=self.set,
-                                   sop=self.sop)
+                                   sop=self.sop,
+                                   klog=self.klog)
             mor.read()
         self.rc: np.ndarray = mor.rc
         self.rc[self.rc < 1.e-19] = 0.0
@@ -144,10 +150,9 @@ class RateCo:
                           jtype='kin')
         if (self.q_sys.status(id=self.id, jtype='kin')
            == JobStatus.FAILED):
-            glog.info(f'Resetting KIN job {self.id}')
+            self.klog.info(f'Resetting KIN job {self.id}')
             self.status = JobStatus.FAILED
 
-        rows = []
         # Happens with convergence issues in Mess calculation
         if self.tbl_map == {}:
             return rows

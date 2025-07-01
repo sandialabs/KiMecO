@@ -2,6 +2,7 @@ from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
 from sqlalchemy import select, Row
 from typing import Any, Sequence
+from logging import Logger
 
 
 class SOP_DB(Kimeco_db):

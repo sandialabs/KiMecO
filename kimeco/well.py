@@ -8,17 +8,14 @@ from kimeco.rotors.internalrotation import InternalRotation
 from ase.symbols import Symbols
 import numpy as np
 from numpy.typing import NDArray
-import logging
+from logging import Logger
 from kimeco.logger_config import setup_logger
 
 
-setup_logger()
-glog = logging.getLogger()
-
-
 class Well:
-    """Well object. Has a name (id), and a ct_name used in cantera.
-       It also has a structure (ASE Atoms), and can have an energy.
+    """Well object.
+    Has a name (from MESS input), and a ct_name used in cantera.
+    It also has a structure (ASE Atoms), and can have an energy.
     """
     def __init__(self,
                  name: str,
@@ -56,7 +53,8 @@ class Well:
                 idx = int(name.split('(')[1].split(')')[0])
                 return self.r_scan(idx)
             except AttributeError as e:
-                glog.debug(e)
+                klog: Logger = setup_logger(name='Well.log')
+                klog.debug(e)
                 raise AttributeError(
                     f'Well does not have the attribute {name}')
         else:

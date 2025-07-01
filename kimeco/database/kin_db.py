@@ -5,7 +5,7 @@ from typing import Any, Sequence
 from numpy.typing import NDArray
 import numpy as np
 from numpy import int32, str_, float64
-
+from logging import Logger
 
 class KIN_DB(Kimeco_db):
     def __init__(self,

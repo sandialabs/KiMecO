@@ -12,6 +12,7 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
+from logging import Logger
 
 
 class Linear:
@@ -22,8 +23,10 @@ class Linear:
                  loc: str,
                  sf: Scoring,
                  pert: Perturbator,
+                 klog: Logger
                  ) -> None:
 
+        self.klog: Logger = klog
         self.settings: dict[str, Any] = settings
         self.name = 'SA'
         self.to_test = []
@@ -59,7 +62,8 @@ class Linear:
             sim_db=self.sim_db,
             sf=sf,
             pert=pert,
-            name=self.name
+            name=self.name,
+            klog=self.klog
         )
         # Clean the SIM database
         if not self.core.finished and self.sim_db.table_exists(self.name):
@@ -93,12 +97,12 @@ class Linear:
 
     def prepare_elements(self,
                          elements: list[Element],
-                         sf: Scoring):
+                         sf: Scoring) -> list[Element]:
 
         base_sop: SOP = self.average(
                 sop_list=[e.sop for e in elements])
         # List to hold the new SOP objects
-        new_elements = [
+        new_elements: list[Element] = [
             Element(sop=base_sop,
                     id=0)
         ]

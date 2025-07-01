@@ -13,6 +13,7 @@ from kimeco.well import Well
 from kimeco.templates.ct_reaction_tpl import reaction_yaml
 from kimeco.templates.ct_job import ctjobtpl
 from scipy.constants import Avogadro
+from logging import Logger
 import pickle
 
 
@@ -28,6 +29,7 @@ class SIM:
                  loc: str,
                  q_sys: QueueingSystem,
                  set: dict[str, Any],
+                 klog: Logger,
                  reac_idx:  list[int] | None = None,
                  species_sim: None | ct.Solution = None) -> None:
         """Cantera simulation object.
@@ -71,7 +73,7 @@ class SIM:
                 mechanism species are already combined.
                 Defaults to None.
         """
-
+        self.klog: Logger = klog
         self.status: list[JobStatus] = [
             JobStatus.NOT_IN_QUEUE]\
             * len(set['rc_pres'])\
@@ -79,6 +81,7 @@ class SIM:
         self.gen_name: str = gen_name
         self.SOP: SOP = sop
         self.KIN: RateCo = kin
+        self.id: int = id
         self.initial_sim: ct.Solution = ct.Solution(f"../../{set['ct_yaml']}")
         self.species_sim: None | ct.Solution = species_sim
         self.reac_idx: list[int] | None = reac_idx
@@ -97,7 +100,6 @@ class SIM:
         self.set_species()
         self.set_reactions()
         self.init_sims()
-        self.id: int = id
         self.el_name: str = f'E{id:04d}'
         self.name: str = f'{gen_name}{self.el_name}'
         self.loc: str = loc + f'/{(self.id)//50:02d}'
@@ -125,6 +127,9 @@ class SIM:
         """Add the missing species from the SOP
         to the cantera Simulation.
         """
+        msg: str = 'Species added to the mechanism:\n'
+        msg += f'{workflow2mech}'
+        self.klog.debug(msg)
         new_species: list[ct.Species] = []
         species: list[ct.Species] = [s for s in self.initial_sim.species()]
         thermo = ct.NasaPoly2(species[0].thermo.min_temp,
@@ -223,6 +228,11 @@ class SIM:
                     if reac.reactants == new_reac.reactants and\
                        reac.products == new_reac.products:
                         self.reac_idx.append(idx)
+            if self.id == 0:
+                msg: str = \
+                    'Redundant reactions removed from kinetic mechanism:\n'
+                msg += f'{self.reac_idx}'
+                self.klog.debug(msg)
 
         for idx in reversed(self.reac_idx):
             reactions.pop(idx)

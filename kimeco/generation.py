@@ -8,14 +8,8 @@ from kimeco.core import CoreRun
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
 import time
-import logging
-from kimeco.logger_config import setup_logger
+from logging import Logger
 import shutil
-
-
-# Call the setup function to configure logging
-setup_logger()
-glog = logging.getLogger()
 
 
 class Generation(CoreRun):
@@ -36,6 +30,7 @@ class Generation(CoreRun):
                  sim_db: SIM_DB,
                  sf: Scoring,
                  pert: Perturbator,
+                 klog: Logger,
                  previous_el: dict[int, Element] = {}
                  ) -> None:
         """Generation object manages the worflow of
@@ -64,6 +59,7 @@ class Generation(CoreRun):
                  sim_db=sim_db,
                  sf=sf,
                  pert=pert,
+                 klog=klog,
                  previous_el=previous_el,
                  name=f'G{self.id:04d}')
         # Create generation directory
@@ -83,17 +79,17 @@ class Generation(CoreRun):
         """Run a generation until all of its elements are scored.
         """
         start_time: float = time.time()
-        glog.info(f'Running generation {self.id} ...')
+        self.klog.info(f'Running generation {self.id} ...')
         super().run()
         self.end_run(start_time)
 
     def end_run(self, start_time: float) -> None:
         """Report the runtime of the generation."""
-        end_time = time.time()
-        runtime = end_time - start_time
-        message = f'Generation {self.id} completed. RUNTIME:'
-        glog.info(f'{message:<65}{runtime:>14.2f}s.')
-        glog.info(f"{'Best score:':<65}{self.best_score:>14.2f}")
+        end_time: float = time.time()
+        runtime: float = end_time - start_time
+        message: str = f'Generation {self.id} completed. RUNTIME:'
+        self.klog.info(f'{message:<65}{runtime:>14.2f}s.')
+        self.klog.info(f"{'Best score:':<65}{self.best_score:>14.2f}")
 
     def reset_element(self, el: Element) -> None:
         """Reset a failed element."""

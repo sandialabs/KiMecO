@@ -9,12 +9,9 @@ from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
 from typing import Any
 from sqlalchemy.exc import OperationalError
-import logging
+from logging import Logger
 from kimeco.logger_config import setup_logger
-
-
-setup_logger()
-glog = logging.getLogger()
+import numpy
 
 
 class Kimeco_db:
@@ -39,6 +36,7 @@ class Kimeco_db:
             str: String,
             int: Integer,
             float: Float,
+            numpy.float64: Float,
             # bool: Boolean,
             # dict: JSON,
             # list: ARRAY
@@ -62,7 +60,7 @@ class Kimeco_db:
                 return False
 
     def wipe_table(self,
-                   table: str):
+                   table: str) -> None:
         delete_query = delete(self.tables[table])
         with self.eng.begin() as connection:
             connection.execute(delete_query)
@@ -141,15 +139,15 @@ class Kimeco_db:
         """
         # Number of values in a chunk
         max_var = 20000
-        total_entries = len(values)
+        total_entries: int = len(values)
         try:
             while total_entries > 0:
                 # values[0] is the number of columns
                 chunk_size = min(max_var // (len(values[0]) + 1),
                                  total_entries)
                 # Create chunks of ids and values
-                val_chunk = values[:chunk_size]
-                id_chunk = ids[:chunk_size]
+                val_chunk: list[dict[str, Any]] = values[:chunk_size]
+                id_chunk: list[int] = ids[:chunk_size]
                 for i in range(len(val_chunk)):
                     val_chunk[i]['id'] = id_chunk[i]
                 g_insert: Insert = (
@@ -167,7 +165,9 @@ class Kimeco_db:
                 ids = ids[chunk_size:]
                 total_entries -= chunk_size
         except OperationalError as e:
-            glog.debug(e)
+            klog: Logger = setup_logger(name='db.log')
+            klog.warning('An error occured in the database:')
+            klog.warning(e)
 
     def manual_upsert_entries(self,
                               table: str,

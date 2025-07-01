@@ -17,23 +17,23 @@ from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.Perturbators.normal import Normal
 from kimeco.Perturbators.lognormal import LogNormal
 from kimeco import kimeco_path
-import logging
+from logging import Logger
 from kimeco.logger_config import setup_logger
 
 
-setup_logger()
-glog = logging.getLogger()
-
-
 class KimecoApp:
-    def __init__(self, input_file: str):
+    def __init__(self,
+                 input_file: str,
+                 klog: Logger) -> None:
+
+        self.klog: Logger = klog
         self.settings: dict = check_input(input_file=input_file)
         mr = MessInputReader(settings=self.settings)
         self.init_SOP: SOP
         self.input_tpl: list[str]
         (self.init_SOP, self.input_tpl) = mr.read()
         if not os.path.isdir(self.settings['project_name']):
-            print('''
+            self.klog.info('''
     KIMECO graphical interface can only analyse the data
     of existing database created by a previous KIMECO run.
     Run KIMECO with project_name: {},
@@ -234,11 +234,12 @@ def main() -> None:
 
     Usage:  kmoui path/to/JSON/input/file.json
     """)
+        klog: Logger = setup_logger(name='KiMecO_GUI.log')
         try:
             input_file: str = sys.argv[1]
         except IndexError as e:
-            glog.debug(e)
-            glog.info('To use KIMECO, supply the input file as argument.')
+            klog.debug(e)
+            klog.info('To use KIMECO, supply the input file as argument.')
         sys.exit()
     input_file = sys.argv[1]
     kmo_app = KimecoApp(input_file)

@@ -1,4 +1,5 @@
 from enum import Enum
+from genericpath import isfile
 from kimeco.templates.pyjob import pytpl
 from kimeco.templates.messjob import messtpl
 from kimeco.templates.slurm import slurmtpl
@@ -9,14 +10,8 @@ from numpy import int16, int32, ndarray, str_
 from typing import Any
 import getpass
 import os
-import logging
 from logging import Logger
-from kimeco.logger_config import setup_logger
 import time
-
-
-setup_logger()
-glog: Logger = logging.getLogger()
 
 
 class JobStatus(Enum):
@@ -34,6 +29,7 @@ class QueueingSystem:
                  nkin: int,
                  nsim: int,
                  nhlp: int,
+                 klog: Logger,
                  q_type: str = 'slurm',
                  q_name: str = 'day-long-cpu') -> None:
         """The queueing system is only meant to manage the number of jobs
@@ -59,6 +55,7 @@ class QueueingSystem:
             location (str, optional): Where jobs should be submitted from.
                                       Defaults to local.
         """
+        self.klog: Logger = klog
         self.settings: dict[str, Any] = settings
         self._max_jobs: int = self.settings['max_jobs']
         self._max_cpu: int = self.settings['max_cpu']
@@ -212,7 +209,7 @@ class QueueingSystem:
             if os.stat(f"{lfile}.err").st_size > 0:
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
-                glog.warning(
+                self.klog.warning(
                     f"Resetting job {job['name']} because an error occurred.")
                 if jtype == 'kin':
                     os.remove(f"{file}.out")
@@ -224,7 +221,7 @@ class QueueingSystem:
                         f"{lfile}.err").st_size > 0):
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
-                glog.info(f"Helper {job['name'][0]} failed.")
+                self.klog.info(f"Helper {job['name'][0]} failed.")
             else:
                 job['status'] = JobStatus.PICKED_UP.value
         self.clean_files(job, clear_err=clear_err)
@@ -257,8 +254,29 @@ class QueueingSystem:
         """
         if os.getcwd() != str(job['loc']):
             os.chdir(str(job['loc']))
+        sub_file: str = str(job['name']) + '.' + self.ext
+        i = 0
+        # Make sure the submission file is created
+        while not isfile(sub_file):
+            if i > 10:
+                self.klog.warning(
+                    f'SLURM submission script missing for {sub_file}')
+                return
+            time.sleep(1)
+            i += 1
+        else:
+            if not os.stat(sub_file).st_size > 0:
+                time.sleep(1)
+        # Make sure all necessary files for the job are created
+            i = 0
+        while not self.factually_ready(job):
+            if i > 10:
+                self.klog.warning(f'Missing files for {sub_file}')
+                return
+            time.sleep(1)
+            i += 1
         command: list[str] = [
-            'sbatch', str(job['name']) + '.' + self.ext]
+            'sbatch', sub_file]
         process = Popen(args=command,
                         shell=False,
                         stdout=PIPE,
@@ -267,9 +285,9 @@ class QueueingSystem:
         out, err = process.communicate()
         outstr: str = out.decode()
         if process.returncode != 0:
-            msg = f"Failed to submit {job['name']}" +\
+            msg: str = f"Failed to submit {job['name']}" +\
                 f": {err.decode().strip()}"
-            glog.error(msg)
+            self.klog.error(msg)
             return  # Handle the error appropriately
         slurm_id: int = int(outstr.split()[-1])
         job['sub_id'] = np.int32(slurm_id)
@@ -279,7 +297,7 @@ class QueueingSystem:
         """Run all jobs of the workflow in parallel
         as long as ressources are available.
         """
-        here = os.getcwd()
+        here: str = os.getcwd()
         for q in self.queues:
             for idx, rdy in enumerate(q['status'] == JobStatus.READY.value):
                 if rdy:
@@ -356,3 +374,29 @@ class QueueingSystem:
                     else JobStatus.NOT_IN_QUEUE)
         else:
             raise NotImplementedError('Unknown type of job')
+
+    def factually_ready(self,
+                        job) -> bool:
+        """Check if the files necessary for the job
+        have finished being written before submitting.
+        Args:
+            job: Numpy structured array. dtype = jobdata
+
+        Returns:
+            bool: All necessary files are there.
+        """
+        # Helpers only need JSON, and their existence is checked elsewhere.
+        base: str = str(job['loc']) + '/' + str(job['name'])
+        if job['type'] == 'hlp':
+            return (isfile(base + '.py')
+                    and os.stat(base + '.py').st_size > 0)
+        elif job['type'] == 'kin':
+            return (isfile(base + '.inp')
+                    and os.stat(base + '.inp').st_size > 0)
+        elif job['type'] == 'sim':
+            return (isfile(base + '.py')
+                    and os.stat(base + '.py').st_size > 0 and
+                    isfile(base + '.pkl')
+                    and os.stat(base + '.pkl').st_size > 0)
+        else:
+            raise NotImplementedError('Unknown file type')

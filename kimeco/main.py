@@ -19,12 +19,11 @@ from kimeco.sensitivity.linear import Linear
 from kimeco.user_input import check_input
 from kimeco.parameters import SOP
 from kimeco.scoring_f.weighteddif import WeightedDif
-import logging
 from kimeco.logger_config import setup_logger
+from logging import Logger
 
 
-setup_logger()
-glog = logging.getLogger()
+klog: Logger = setup_logger('KiMecO.log')
 
 
 def main() -> None:
@@ -35,7 +34,7 @@ def main() -> None:
     #             break
     # Call the setup function to configure logging
     if len(sys.argv) != 2:
-        glog.info("""
+        klog.info("""
     KIMECO needs various parameters to be set in a JSON input file.
     This JSON input file should be supplied as the first and only
     argument.
@@ -46,20 +45,22 @@ def main() -> None:
     try:
         input_file: str = sys.argv[1]
     except IndexError as e:
-        glog.debug(e)
-        glog.info('To use KIMECO, supply the input file as argument.')
+        klog.debug(e)
+        klog.info('To use KIMECO, supply the input file as argument.')
         sys.exit(-1)
 
     # Initialize the settings and first SOP
-    settings: dict = check_input(input_file=input_file)
-    glog.info(f"{'Input reading...':<65}{'PASSED':>15}")
+    settings: dict = check_input(input_file=input_file,
+                                 klog=klog)
+    klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
+
     mr = MessInputReader(settings=settings)
     init_SOP: SOP
     input_tpl: list[str]
     (init_SOP, input_tpl) = mr.read()
 
     # Create the workidir folder
-    init_loc = os.getcwd()
+    init_loc: str = os.getcwd()
     if not os.path.isdir(settings['project_name']):
         os.mkdir(settings['project_name'])
     os.chdir(settings['project_name'])
@@ -78,7 +79,7 @@ def main() -> None:
                     name='KMO_DB_KIN')
     sim_db = SIM_DB(sop=init_SOP,
                     name='KMO_DB_SIM')
-    glog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
+    klog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
 
     # Define which scoring function to use
     if settings['scoring_func'].casefold() == 'weighteddif':
@@ -86,18 +87,18 @@ def main() -> None:
     else:
         # Default scoring function
         sf = WeightedDif(settings=settings)
-    glog.info(f"{'Scoring function:':<65}{sf.name:>15}")
+    klog.info(f"{'Scoring function:':<65}{sf.name:>15}")
 
     # Initialize the perturbator
     pert: Normal | LogNormal = set_pert(
         settings=settings,
         init_SOP=init_SOP)
     pert.set_gen_fact(0)
-    glog.info(f"{'Perturbator:':<65}{pert.name:>15}")
+    klog.info(f"{'Perturbator:':<65}{pert.name:>15}")
 
     # Perform sensitivity analysis if requested
     if len(settings['only_perturb']) == 0:
-        glog.info(f"{'Running sensitivity analysis':<65}")
+        klog.info(f"{'Running sensitivity analysis':<65}")
         sensitivity = Linear(
             elements=[Element(
                 sop=init_SOP,
@@ -132,18 +133,18 @@ def main() -> None:
             f_el = Element(
                 sop=init_SOP,
                 id=0)
-    glog.info(f"{'Parameters selected for perturbation:':<65}")
+    klog.info(f"{'Parameters selected for perturbation:':<65}")
     pp = ''
     for p in settings['only_perturb']:
         pp += f'{p} '
-    glog.info(f"{pp:<65}")
+    klog.info(f"{pp:<65}")
 
     # Reinitialize the perturbator once the list of parameters to perturb
     # has been reduced
     pert: Normal | LogNormal = set_pert(
         settings=settings,
         init_SOP=init_SOP)
-    glog.info(f"{'Selected parameters transmitted to perturbator':<65}")
+    klog.info(f"{'Selected parameters transmitted to perturbator':<65}")
 
     # Everything is initialized, create gen_0
     gen_0 = Generation(
@@ -155,7 +156,8 @@ def main() -> None:
         kin_db=kin_db,
         sim_db=sim_db,
         sf=sf,
-        pert=pert)
+        pert=pert,
+        klog=klog)
     gen_0.run()
 
     converged = False
@@ -208,6 +210,7 @@ def main() -> None:
                              sim_db=sim_db,
                              sf=sf,
                              pert=pert,
+                             klog=klog,
                              previous_el=prev_gen
                              )
         new_gen.run()
@@ -240,8 +243,8 @@ def main() -> None:
                 goat[goat_idx] = low_new.pop(low_idx)
                 replaced += 1
             goat_avrg = np.sum([el.score for el in goat])/len(goat)
-            glog.info(f'Number of goat replaced: {replaced}')
-            glog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.3f}')
+            klog.info(f'Number of goat replaced: {replaced}')
+            klog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.3f}')
 
         with open(location + '/score_info.txt', 'a') as f:
             f.write(score_line_tpl.format(
@@ -262,12 +265,12 @@ def main() -> None:
             settings=settings
             )
         line_tpl = "{name:<25}{mean:>20}{std:>20}"
-        glog.info(line_tpl.format(name='PARAMETER',
+        klog.info(line_tpl.format(name='PARAMETER',
                                   mean='MEAN',
                                   std='STD'))
         line_tpl = "{name:<25}{mean:>-20.3E}{std:>-20.3E}"
         for k in means:
-            glog.info(line_tpl.format(name=k,
+            klog.info(line_tpl.format(name=k,
                                       mean=means[k],
                                       std=stds[k]))
 
@@ -280,24 +283,25 @@ def main() -> None:
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
             if new_gen.id % settings['SA_freq'] == 0:
-                glog.info('On-the-fly sensitivity analysis.')
+                klog.info('On-the-fly sensitivity analysis.')
                 sensitivity = Linear(
                     elements=new_gen.elements,
                     settings=settings,
                     rc_tpl=input_tpl,
                     loc=location,
                     sf=sf,
-                    pert=pert)
+                    pert=pert,
+                    klog=klog)
                 sensitivity.run()
                 for p in sensitivity.selected:
                     if p not in settings['only_perturb']:
-                        glog.info(f'New parameter to perturb: {p}')
+                        klog.info(f'New parameter to perturb: {p}')
                         settings['only_perturb'].append(p)
         else:
             converged = True
-    glog.info('Run Sucessful.')
-    glog.info(f'Termination at generation {new_gen.id}')
-    glog.info(f'Final score: {new_gen.best_score}')
+    klog.info('Run Sucessful.')
+    klog.info(f'Termination at generation {new_gen.id}')
+    klog.info(f'Final score: {new_gen.best_score}')
 
 
 def get_gen_one(settings: dict[str, Any],
@@ -453,23 +457,23 @@ def isconverged(threshold: float,
                 ratio_mean: float = abs(new_mean - old_mean) / abs(old_mean)
                 if ratio_mean > threshold:
                     converged = False
-                    glog.info(line_format.format(
+                    klog.info(line_format.format(
                         type='MEAN',
                         param=key,
                         status='NOT CONVERGED',
                         ratio=ratio_mean
                     ))
                 else:
-                    glog.info(line_format.format(
+                    klog.info(line_format.format(
                         type='MEAN',
                         param=key,
                         status='CONVERGED',
                         ratio=ratio_mean
                     ))
             else:
-                glog.info(f'Warning: {key} skipped (div 0)')
-                glog.info(f'Mean old: {old_mean}')
-                glog.info(f'Mean new: {new_mean}')
+                klog.info(f'Warning: {key} skipped (div 0)')
+                klog.info(f'Mean old: {old_mean}')
+                klog.info(f'Mean new: {new_mean}')
 
     # Check convergence for standard deviations
     for key in old_stds:
@@ -480,23 +484,23 @@ def isconverged(threshold: float,
                 ratio_std: float = abs(new_std - old_std) / abs(old_std)
                 if ratio_std > threshold:
                     converged = False
-                    glog.info(line_format.format(
+                    klog.info(line_format.format(
                         type='STD',
                         param=key,
                         status='NOT CONVERGED',
                         ratio=ratio_std
                     ))
                 else:
-                    glog.info(line_format.format(
+                    klog.info(line_format.format(
                         type='STD',
                         param=key,
                         status='CONVERGED',
                         ratio=ratio_std
                     ))
             else:
-                glog.info(f'Warning: {key} skipped (div 0)')
-                glog.info(f'StdD old: {old_std}')
-                glog.info(f'StdD new: {new_std}')
+                klog.info(f'Warning: {key} skipped (div 0)')
+                klog.info(f'StdD old: {old_std}')
+                klog.info(f'StdD new: {new_std}')
 
     return converged
 

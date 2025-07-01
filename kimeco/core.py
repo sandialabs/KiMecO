@@ -12,14 +12,8 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element, ElementStatus
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.templates.sim_helper import sim_helper
-import logging
-from kimeco.logger_config import setup_logger
+from logging import Logger
 import time
-
-
-# Call the setup function to configure logging
-setup_logger()
-glog = logging.getLogger()
 
 
 class CoreRun:
@@ -33,9 +27,11 @@ class CoreRun:
                  sim_db: SIM_DB,
                  sf: Scoring,
                  pert: Perturbator,
+                 klog: Logger,
                  previous_el: dict[int, Element] = {},
                  name: str = 'core') -> None:
 
+        self.klog: Logger = klog
         self.elements: list[Element] = elements
         self.settings: dict[str, Any] = settings
         self.previous_el: dict[int, Element] = previous_el
@@ -61,15 +57,15 @@ class CoreRun:
             nsim=len(self.elements) *
             len(self.settings['rc_temp']) *
             len(self.settings['rc_pres']),
-            nhlp=self.settings['max_helpers']
+            nhlp=self.settings['max_helpers'],
+            klog=self.klog
             )
         self.name = name
         self.clean_files()
         # Contain the time when a sim_id was first queried
         self.requeue_timer = {}
 
-
-    def clean_files(self):
+    def clean_files(self) -> None:
         for el in self.elements:
             if el.status != ElementStatus.DONE:
                 for file in glob.glob(
@@ -153,7 +149,8 @@ class CoreRun:
             name=f'{self.name}{el.name}',
             loc=f'{self.loc}/{self.name}',
             q_sys=self.qs,
-            db=self.kin_db
+            db=self.kin_db,
+            klog=self.klog
         )
         el.rateCoef.set_status(table=self.name)
         if el.rateCoef.status == JobStatus.NOT_IN_QUEUE:
@@ -174,7 +171,8 @@ class CoreRun:
             species=self.elements[0].sop.species,
             loc=f'{self.loc}/{self.name}',
             q_sys=self.qs,
-            set=self.settings
+            set=self.settings,
+            klog=self.klog
         )
         el.sim.q_up()
         el.status = ElementStatus.SIM
@@ -287,9 +285,9 @@ class CoreRun:
                 # or resubmit
                 else:
                     self.requeue_timer.pop(sim_id, None)
-                    msg = f'Missing file: {el.name}S{sim:02d}.json'
+                    msg: str = f'Missing file: {el.name}S{sim:02d}.json'
                     msg += ' Sim re-submitted.'
-                    glog.info(msg)
+                    self.klog.info(msg)
                     el.sim.requeue(idx=sim, sim_id=sim_id)
                 continue
         if len(self.sim_hlpers[hlp_idx]) == 0:
@@ -328,8 +326,8 @@ class CoreRun:
                 self.qs.pickUp(id=i,
                                jtype='hlp')
             if self.qs.status(i, 'hlp') == JobStatus.FAILED:
-                glog.warning(f'Helper {i} failed to collect sim profiles.')
-                glog.warning('Corresponding sim_ids are reset')
+                self.klog.warning(f'Helper {i} failed to collect sim profiles.')
+                self.klog.warning('Corresponding sim_ids are reset')
                 for sim_id in self.sim_hlpers[i]:
                     el: Element = self.elements[sim_id // nsim]
                     el.status = ElementStatus.RESET
@@ -354,10 +352,10 @@ class CoreRun:
                 el.sop.scores[k] = scores[idx]
             el.status = ElementStatus.TO_SAVE
         except IndexError as e:
-            glog.debug(e)
+            self.klog.debug(e)
             # Occurs when a simulation didn't work so profiles were not saved
             el.status = ElementStatus.RESET
-            glog.info(f'Resetting element {el.id}: error during scoring.')
+            self.klog.info(f'Resetting element {el.id}: error during scoring.')
 
     @property
     def best_score(self):

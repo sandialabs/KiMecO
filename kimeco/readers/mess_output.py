@@ -1,19 +1,19 @@
 import numpy as np
 from kimeco.parameters import SOP
 import re
-import logging
-from kimeco.logger_config import setup_logger
-
-
-setup_logger()
-glog = logging.getLogger()
+from logging import Logger
 
 
 class MessOutputReader:
     """Class that read a mess output file and transforms it into
      a set of (T/P dependent) rate constants."""
-    def __init__(self, filename: str, settings: dict, sop: SOP):
+    def __init__(self,
+                 filename: str,
+                 settings: dict,
+                 sop: SOP,
+                 klog: Logger) -> None:
 
+        self.klog: Logger = klog
         with open(file=filename, mode='r') as f:
             self.file: list[str] = f.readlines()
 
@@ -109,7 +109,7 @@ class MessOutputReader:
                         # Happens when no space between two columns
                         # no space when the right value is very small
                         # and start with a minus sign
-                        glog.debug(e)
+                        self.klog.warning(e)
                         table[From, To] = float(
                             re.sub(r'-\d+.\d+e-\d\d\d',
                                    ' 0.0 ',
