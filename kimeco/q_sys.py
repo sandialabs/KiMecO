@@ -206,13 +206,21 @@ class QueueingSystem:
            jtype == 'sim':
             while not (os.path.exists(f"{lfile}.err")):
                 time.sleep(0.1)
-            if os.stat(f"{lfile}.err").st_size > 0:
+            if os.stat(f"{lfile}.err").st_size > 0 :
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
                 self.klog.warning(
                     f"Resetting job {job['name']} because an error occurred.")
                 if jtype == 'kin':
                     os.remove(f"{file}.out")
+            elif (jtype == 'kin' and
+                  os.path.exists(f"{file}.err") and
+                  os.stat(f"{file}.err").st_size > 0):
+                job['status'] = JobStatus.FAILED.value
+                clear_err = False
+                self.klog.warning(
+                    f"Resetting job {job['name']} because an error occurred.")
+                os.remove(f"{file}.out")
             else:
                 job['status'] = JobStatus.PICKED_UP.value
         elif jtype == 'hlp':

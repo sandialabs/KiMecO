@@ -37,10 +37,6 @@ default_settings: dict[str, Any] = {
     # Keys: name of species in the initial mess file
     # Values: name of the species in the mechanism file
     "ct_names": {},
-    # Time of a simulation in seconds
-    "sim_time": 0.1,
-    # Timestep length during the simulation
-    "sim_tstep": 0.0001,
     # CPU used per master equation job
     "cpu_kin": 4,
     # Memory (Mb) used per master equation job
@@ -74,7 +70,7 @@ default_settings: dict[str, Any] = {
     "std_b": 0.5,
     # Standard deviation percentage perturbation for wells
     # and bimolecular vibrations
-    "std_hf_p": 0.025,
+    "std_hf_p": 0.05,
     # Standard deviation percentage perturbation for wells
     # and bimolecular vibrations
     "std_lf_p": 0.1,
@@ -118,7 +114,7 @@ default_settings: dict[str, Any] = {
     # Percentage of deviation of means and stds of parameters to converge
     "final_conv": 0.01,
     # Numbers of helpers to save the simulations profiles
-    "max_helpers": 5,
+    "max_helpers": 4,
     # Multiplicating factors of std parameters for derivative in
     # sensitivity analysis
     "sensi_d": 0.1,

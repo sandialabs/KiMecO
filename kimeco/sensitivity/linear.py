@@ -48,10 +48,11 @@ class Linear:
         os.makedirs(SA_dir + '/logs', exist_ok=True)
         for subfolder in range((2*n_param+1)//50+1):
             os.makedirs(SA_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
+            # Copy files necessary for MESS calculation
+            for file in self.elements[0].sop.files2copy:
+                shutil.copyfile(f'{loc}/{file}',
+                                f'{SA_dir}/{subfolder:02d}/{file}')
         os.chdir(SA_dir)
-        # Copy files necessary for MESS calculation
-        for file in self.elements[0].sop.files2copy:
-            shutil.copyfile(f'{loc}/{file}', f'{SA_dir}/{file}')
         self.core = CoreRun(
             elements=self.elements,
             settings=self.settings,

@@ -26,7 +26,11 @@ def check_input(input_file: str,
     If a user input error can be detected here, check it here.
 
     Args:
-        input_file (str): path to input file
+        input_file (str): Path to JSON file
+        klog (Logger): Logger
+
+    Returns:
+        dict: settings
     """
     cancel_run = False
 
@@ -56,6 +60,8 @@ def check_input(input_file: str,
             klog.info(f"{key} is a mandatory keyword.")
             cancel_run = True
         elif not isinstance(json_file[key], type(value)):
+            if isinstance(value, float) and isinstance(json_file[key], int):
+                continue
             klog.info(f"{key} has incorrect type. Type should be {type(value)}")
             cancel_run = True
 
@@ -177,6 +183,8 @@ def check_input(input_file: str,
         if key not in json_file:
             json_file[key] = value
         elif not isinstance(json_file[key], type(value)):
+            if isinstance(value, float) and isinstance(json_file[key], int):
+                continue
             klog.info(f"{key} has incorrect type. It should be {type(value)}")
             cancel_run = True
 

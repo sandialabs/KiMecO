@@ -116,6 +116,7 @@ class LogNormal(Perturbator):
         self.perturb_energy(item=well)
         self.perturb_vibrations(well=well)
         self.perturb_hindered_rotors(well=well)
+        self.perturb_multi_rotors(well=well)
 
     def perturb_barrier(self,
                         bar: Barrier) -> None:

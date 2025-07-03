@@ -107,7 +107,8 @@ def main() -> None:
             rc_tpl=input_tpl,
             loc=location,
             sf=sf,
-            pert=pert)
+            pert=pert,
+            klog=klog)
         sensitivity.run()
         settings['only_perturb'] = sensitivity.selected
         f_el: Element = sensitivity.elements[0]

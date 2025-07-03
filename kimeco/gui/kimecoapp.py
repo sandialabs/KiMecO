@@ -27,7 +27,8 @@ class KimecoApp:
                  klog: Logger) -> None:
 
         self.klog: Logger = klog
-        self.settings: dict = check_input(input_file=input_file)
+        self.settings: dict = check_input(input_file=input_file,
+                                          klog=klog)
         mr = MessInputReader(settings=self.settings)
         self.init_SOP: SOP
         self.input_tpl: list[str]
@@ -226,6 +227,7 @@ class KimecoApp:
 
 
 def main() -> None:
+    klog: Logger = setup_logger(name='KiMecO_GUI.log')
     if len(sys.argv) != 2:
         print("""
     KIMECO needs various parameters to be set in a JSON input file.
@@ -234,7 +236,6 @@ def main() -> None:
 
     Usage:  kmoui path/to/JSON/input/file.json
     """)
-        klog: Logger = setup_logger(name='KiMecO_GUI.log')
         try:
             input_file: str = sys.argv[1]
         except IndexError as e:
@@ -242,7 +243,7 @@ def main() -> None:
             klog.info('To use KIMECO, supply the input file as argument.')
         sys.exit()
     input_file = sys.argv[1]
-    kmo_app = KimecoApp(input_file)
+    kmo_app = KimecoApp(input_file, klog=klog)
     kmo_app.run()
 
 

@@ -1,9 +1,9 @@
 import os
 from typing import Literal, Sequence
-from sqlalchemy import create_engine, MetaData, Table, Column, Row
+from sqlalchemy import Text, create_engine, MetaData, Table, Column, Row
 from sqlalchemy import Engine, Insert, update, Update, select
 from sqlalchemy import Float, Integer, String, text, TextClause
-from sqlalchemy import delete
+from sqlalchemy import delete, event
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
@@ -43,6 +43,10 @@ class Kimeco_db:
         }
         self._upsert: dict = {}
         self._select: dict = {}
+
+    def defragmentate(self) -> None:
+        with self.eng.connect() as conn:
+            conn.execute(text('VACUUM'))
 
     def get_table_names(self):
         query: TextClause = text(

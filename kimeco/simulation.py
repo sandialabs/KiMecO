@@ -200,6 +200,19 @@ class SIM:
                                                         product=product)
                 new_reactions.append(forward)
                 new_reactions.append(reverse)
+        # Create bimolecular to bimolecular reactions
+        for idx, reactant in enumerate(self.SOP.bimolecular[:-1]):
+            for product in self.SOP.bimolecular[idx+1:]:
+                forward, reverse = self.create_reaction(reactant=reactant,
+                                                        product=product)
+                new_reactions.append(forward)
+                new_reactions.append(reverse)
+        if self.id == 0:
+            msg = \
+                'The k(T,P) of the following reactions will be updated:' + '\n'
+            for reac in new_reactions:
+                msg += f'{reac}' + '\n'
+            self.klog.info(msg)
         reactions: list[ct.Reaction] = \
             [r for r in self.species_sim.reactions()]
         self.remove_redundant_reactions(reactions=reactions,
@@ -223,16 +236,18 @@ class SIM:
         """
         if self.reac_idx is None:
             self.reac_idx: list[int] = []
+            reac_log = ''
             for idx, reac in enumerate(reactions):
                 for new_reac in new_reactions:
                     if reac.reactants == new_reac.reactants and\
                        reac.products == new_reac.products:
                         self.reac_idx.append(idx)
+                        reac_log += f'{reac}' + '\n'
             if self.id == 0:
                 msg: str = \
                     'Redundant reactions removed from kinetic mechanism:\n'
-                msg += f'{self.reac_idx}'
-                self.klog.debug(msg)
+                msg += f'{self.reac_idx}:' + '\n' + reac_log
+                self.klog.info(msg)
 
         for idx in reversed(self.reac_idx):
             reactions.pop(idx)

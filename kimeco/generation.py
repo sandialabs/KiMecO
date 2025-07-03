@@ -66,14 +66,20 @@ class Generation(CoreRun):
         gen_dir: str = f'{self.loc}/{self.name}'
         os.makedirs(gen_dir + '/logs', exist_ok=True)
         for subfolder in range(len(self.elements)//50+1):
-            os.makedirs(gen_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
+            os.makedirs(
+                gen_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
+            # Copy files necessary for MESS calculation
+            for file in self.elements[0].sop.files2copy:
+                shutil.copyfile(f'{self.loc}/{file}',
+                                f'{gen_dir}/{subfolder:02d}/{file}')
         os.chdir(gen_dir)
-        # Copy files necessary for MESS calculation
-        for file in self.elements[0].sop.files2copy:
-            shutil.copyfile(f'{self.loc}/{file}', f'{gen_dir}/{file}')
         # Clean the SIM database
         if not self.finished and self.sim_db.table_exists(self.name):
             self.sim_db.wipe_table(self.name)
+        if self.id % 10 == 0:
+            self.sop_db.defragmentate()
+            self.kin_db.defragmentate()
+            self.sim_db.defragmentate()
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
