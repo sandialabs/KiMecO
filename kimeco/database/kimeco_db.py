@@ -1,9 +1,9 @@
 import os
 from typing import Literal, Sequence
-from sqlalchemy import Text, create_engine, MetaData, Table, Column, Row
+from sqlalchemy import create_engine, MetaData, Table, Column, Row
 from sqlalchemy import Engine, Insert, update, Update, select
 from sqlalchemy import Float, Integer, String, text, TextClause
-from sqlalchemy import delete, event
+from sqlalchemy import delete
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd

@@ -56,10 +56,12 @@ while trying2connect:
         )
     try:
         upsert_start = time.time()
+        wait_time = upsert_start - now
         db.batch_upsert()
         upsert_stop = time.time()
         upsert_time = upsert_stop - upsert_start
-        print(f'Writting {{len(filenames)}} profiles in the db took {{upsert_time}} secondes.')
+        print(f'Helper waited {{wait_time}} s to start writting.')
+        print(f'Helper wrote {{len(filenames)}} profiles in the db in {{upsert_time}} s.')
         break
     # Happens when db is occupied/locked
     except sqlalchemy.exc.OperationalError as e:

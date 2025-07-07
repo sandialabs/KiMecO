@@ -212,10 +212,14 @@ class SOPSection(Section):
             if substr in param:
                 if substr == 'e' and\
                    isinstance(self.init_SOP.items[raw_molec], Barrier):
-                    ptype = 'b'
+                    ptype: str = 'b'
                 else:
                     ptype = substr
                 break
+            # MultiRotors are called mrX
+            # but get their symmetry factor modified
+            elif 'mr' in param:
+                ptype = 'sf_p'
 
         return self.pert.get_boundaries(
             ptype=ptype,

@@ -123,6 +123,7 @@ class LogNormal(Perturbator):
         self.perturb_barrier_energy(bar=bar)
         self.perturb_vibrations(well=bar)
         self.perturb_hindered_rotors(well=bar)
+        self.perturb_multi_rotors(well=bar)
         if bar.barrierless:
             self.perturb_symmetry_factor(bar=bar)
         else:
@@ -134,6 +135,7 @@ class LogNormal(Perturbator):
         for well in bim.fragments:
             self.perturb_vibrations(well=well)
             self.perturb_hindered_rotors(well=well)
+            self.perturb_multi_rotors(well=well)
 
     def perturb_energy(self,
                        item: Well | Bimolecular | Barrier) -> None:
@@ -262,16 +264,14 @@ class LogNormal(Perturbator):
             if f'{well.name}__mr{num}' in self.select:
                 # Set trial rotor perturbation out of the boundaries
                 try_r: float = 1 -\
-                    (3*self.settings['max_std']) * self.settings['std_hr']
+                    (3*self.settings['max_std']) * self.settings['std_sf_p']
                 while not self.within_boundaries(
                       perturbed_val=try_r,
-                      ptype='hr',
+                      ptype='sf_p',
                       initial_val=1):
-                    try_r = random.lognormal(
-                        # Mean is np.log(loc)
-                        mean=np.log(rot.sf_p),
-                        # Sigma is std/loc; loc initial = 1
-                        sigma=self.settings['std_hr']*self.gen_fact)
+                    try_r = random.normal(
+                        loc=rot.sf_p,
+                        scale=self.settings['std_sf_p']*self.gen_fact)
 
                 rot.sf_p = try_r
 
