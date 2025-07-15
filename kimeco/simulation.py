@@ -428,7 +428,7 @@ class SIM:
         """
         time_steps: list[int] = \
             [len(i[0]) for i in self.settings['exp_profiles']]
-        exp = sim_id % len(self.simulations)
+        exp: int = sim_id % len(self.simulations)
         ct_job: str = self.ctjobtpl.format(
             db=self.db,
             sim_name=name,

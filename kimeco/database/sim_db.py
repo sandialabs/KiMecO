@@ -4,7 +4,7 @@ from sqlalchemy import select, Row
 from typing import Any, Sequence
 import numpy as np
 from numpy.typing import NDArray
-from logging import Logger
+
 
 class SIM_DB(Kimeco_db):
     def __init__(self,

@@ -15,7 +15,7 @@ db = SIM_DB(name='{db.name}',
 filenames = {filenames}
 
 collected = np.full(len(filenames), False)
-sims = []
+sims = [None for i in range(len(filenames))]
 
 while not all(collected):
     for idx, fn in enumerate(filenames):
@@ -28,7 +28,7 @@ while not all(collected):
                     break
             with open(fn, 'r') as f:
                 sim = json.load(f)
-            sims.append(sim)
+            sims[idx] = sim
             collected[idx] = True
         # Helpers should not try to collect data from failed sims.
         else:

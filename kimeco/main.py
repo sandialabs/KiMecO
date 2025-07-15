@@ -97,7 +97,9 @@ def main() -> None:
     klog.info(f"{'Perturbator:':<65}{pert.name:>15}")
 
     # Perform sensitivity analysis if requested
+    first_sensi = False
     if len(settings['only_perturb']) == 0:
+        first_sensi = True
         klog.info(f"{'Running sensitivity analysis':<65}")
         sensitivity = Linear(
             elements=[Element(
@@ -159,6 +161,14 @@ def main() -> None:
         sf=sf,
         pert=pert,
         klog=klog)
+    # If the sensitivity analysis was run,
+    # copy results of unperturbed element for generation 0
+    if first_sensi:
+        sensitivity.save_initial_element(
+            sop_db,
+            kin_db,
+            sim_db
+        )
     gen_0.run()
 
     converged = False

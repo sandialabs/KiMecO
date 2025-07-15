@@ -1,3 +1,4 @@
+from mimetypes import init
 from typing import Any
 import os
 import shutil
@@ -211,3 +212,26 @@ class Linear:
 
         with open(f'{self.name}.out', 'w') as f:
             f.write(txt_file)
+
+    def save_initial_element(self,
+                             sop_db: SOP_DB,
+                             kin_db: KIN_DB,
+                             sim_db: SIM_DB) -> None:
+        """Save the initial unperturbed element of the sensitivity analysis
+        in G0000 table of each database.
+
+        Args:
+            sop_db (SOP_DB): Main run sop database
+            kin_db (KIN_DB): Main run kin database
+            sim_db (SIM_DB): Main run sim database
+        """
+        initial_element: Element = self.core.elements[0]
+        initial_element.save_kin(db=kin_db, table='G0000')
+        for sim_num in range(len(initial_element.sim.simulations)):
+            initial_element.save_sim(db=sim_db,
+                                     table='G0000',
+                                     sim_num=sim_num)
+        initial_element.prepare_upsert(db=sop_db, table='G0000')
+        sop_db.batch_upsert()
+        kin_db.batch_upsert()
+        sim_db.batch_upsert()

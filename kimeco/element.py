@@ -1,6 +1,8 @@
+from flask.config import T
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
+from kimeco.database.sop_db import SOP_DB
 from kimeco.parameters import SOP
 from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
@@ -101,6 +103,56 @@ class Element:
     def prepare_upsert(self,
                        db: Kimeco_db,
                        table: str) -> None:
+        """Save the SOP of this element in the given database.
+
+        Args:
+            db (Kimeco_db): SOP_DB
+            table (str): table name
+        """
         db.prepare_batch_upsert(table=table,
                                 id=self.id,
                                 values=self.sop.parameters_names)
+    
+    def save_sim(self,
+                 db: SIM_DB,
+                 table: str,
+                 sim_num: int) -> None:
+        """Save the given simulation in the corresponding db
+
+        Args:
+            db (SIM_DB): Kimeco SIM database object
+            sim_num (int): index of the simulation for this element
+        """
+
+        sim_id: int = sim_num + self.id * len(self.sim.simulations)
+        all_tsteps = np.array(
+            [len(i[0]) for i in self.sim.settings['exp_profiles']])
+        block_size = np.sum(all_tsteps)
+        start_idx = np.sum(all_tsteps[:sim_num])
+        tot_steps = all_tsteps[sim_num]
+
+        p: float = self.sop.rc_pres[sim_id // len(self.sop.rc_temp)]
+        t: float = self.sop.rc_temp[sim_id % len(self.sop.rc_temp)]
+
+        to_watch: list[str] = self.sim.sv_species
+        traces: dict[str, Any] = {}
+        traces['P'] = np.full(tot_steps, p)
+        traces['T'] = np.full(tot_steps, t)
+        traces['sim_id'] = np.full(tot_steps, sim_id)
+        traces['time'] = self.sim.settings['exp_profiles'][sim_num][0]
+        row_ids: list[int] = [i for i in range(self.id*block_size+start_idx,
+                              self.id*block_size+start_idx+len(traces['time']),
+                              1)]
+        names = []
+
+        # Arrays to hold the datas
+        for idx, i in enumerate(to_watch):
+            traces[i] = np.full(tot_steps, self.sim.profiles[sim_num][:, idx+2])
+            names.append(i)
+        for idx, id in enumerate(row_ids):
+            row_dict = {}
+            for col in traces:
+                row_dict[col] = traces[col][idx]
+            db.prepare_batch_upsert(table=table,
+                                    id=id,
+                                    values=row_dict)
