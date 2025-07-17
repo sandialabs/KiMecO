@@ -5,15 +5,17 @@ from typing import Any, Sequence
 from numpy.typing import NDArray
 import numpy as np
 from numpy import int32, str_, float64
-from logging import Logger
+
 
 class KIN_DB(Kimeco_db):
     def __init__(self,
                  sop: SOP,
                  name: str,
-                 path: str = '',) -> None:
+                 path: str = '',
+                 thread: int = 1) -> None:
         super().__init__(name=name,
-                         path=path)
+                         path=path,
+                         thread=thread)
 
         self.columns: list[str] = ['P', 'T', 'kin_id', 'specie']
         self.columns.extend(sop.wells_names)
@@ -59,8 +61,8 @@ class KIN_DB(Kimeco_db):
                 self.tables[table].c.P == pres,
                 self.tables[table].c.T == temp,
                 self.tables[table].c.specie == From)
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
+        with self.eng.begin() as conn:
+            db_rslt: Sequence = conn.execute(query).fetchall()
         return list(db_rslt)
 
     def get_ids_from_kin_id(self,
@@ -71,8 +73,8 @@ class KIN_DB(Kimeco_db):
             self.tables[table].c.id
             ).where(
                 self.tables[table].c.kin_id == kin_id)
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
+        with self.eng.begin() as conn:
+            db_rslt: Sequence = conn.execute(query).fetchall()
         return list(db_rslt)
 
     def prepare_batch_select(self,
@@ -152,8 +154,8 @@ class KIN_DB(Kimeco_db):
                 self.tables[table].c.P.in_(pres),
                 self.tables[table].c.T.in_(temp),
                 self.tables[table].c.specie.in_(From))
-            with self.eng.begin() as connection:
-                db_rslt: Sequence[Row[Any]] = connection.execute(
+            with self.eng.begin() as conn:
+                db_rslt: Sequence[Row[Any]] = conn.execute(
                         query).fetchall()
             db_arr = np.empty(shape=(len(db_rslt)), dtype=db_row)
             for idx, row in enumerate(db_rslt):

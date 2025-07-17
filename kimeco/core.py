@@ -14,6 +14,7 @@ from kimeco.scoring_f.scoring import Scoring
 from kimeco.templates.sim_helper import sim_helper
 from logging import Logger
 import time
+import concurrent.futures
 
 
 class CoreRun:
@@ -103,25 +104,40 @@ class CoreRun:
         """Run a generation until all of its elements are scored.
         """
         while not self.finished:
-            for idx, el in enumerate(self.elements):
-                # Safeguard
-                if self.elements[idx].id != el.id:
-                    raise IndexError('Incorrect ordering of the elements.')
-                if el.status == ElementStatus.DONE:
-                    continue
-                if el.status == ElementStatus.RESET:
-                    self.reset_element(el)
-                    continue
-                if el.status == ElementStatus.SOP:
-                    self.calculate_rate_coefficients(el)
-                elif el.status == ElementStatus.KIN:
-                    self.run_simulation(el)
-                elif el.status == ElementStatus.SIM:
-                    self.recover_simulation_data(el)
-                elif el.status == ElementStatus.SCORING:
-                    self.calc_score(el)
-                if el.status == ElementStatus.TO_SAVE:
-                    self.finalize_element(el)
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.settings['thread']) as exec:
+                futures = []
+                for idx, el in enumerate(self.elements):
+                    # Safeguard
+                    if self.elements[idx].id != el.id:
+                        raise IndexError('Incorrect ordering of the elements.')
+                    if el.status == ElementStatus.DONE:
+                        continue
+                    if el.status == ElementStatus.RESET:
+                        # self.reset_element(el)
+                        futures.append(exec.submit(self.reset_element, el))
+                        continue
+                    if el.status == ElementStatus.SOP:
+                        # self.calculate_rate_coefficients(el)
+                        futures.append(
+                            exec.submit(
+                                self.calculate_rate_coefficients, el))
+                    elif el.status == ElementStatus.KIN:
+                        # self.run_simulation(el)
+                        futures.append(
+                            exec.submit(self.run_simulation, el))
+                    elif el.status == ElementStatus.SIM:
+                        # self.recover_simulation_data(el)
+                        futures.append(
+                            exec.submit(self.recover_simulation_data, el))
+                    elif el.status == ElementStatus.SCORING:
+                        # self.calc_score(el)
+                        futures.append(exec.submit(self.calc_score, el))
+                    if el.status == ElementStatus.TO_SAVE:
+                        # self.finalize_element(el)
+                        futures.append(exec.submit(self.finalize_element, el))
+                # Wait for all futures to complete
+                concurrent.futures.wait(futures)
             self.sop_db.batch_upsert()
             self.kin_db.batch_upsert()
             self.check_helpers_status()
@@ -180,6 +196,11 @@ class CoreRun:
     def recover_simulation_data(self,
                                 el: Element) -> None:
         """Recover simulation data for an element."""
+        # Avoid large batch_select causing I/O errors
+        if len(self.sim_db._select) > 2000:
+            self.klog.info(f'Already {len(self.sim_db._select)} selected')
+            return
+
         for sim_idx, prof in enumerate(el.sim.profiles):
             sim_id: int = el.id * len(el.sim.simulations) + sim_idx
             # Change status from RUNNING to FINISHED (may have failed)
@@ -193,7 +214,8 @@ class CoreRun:
             if el.sim.status[sim_idx] == JobStatus.PICKED_UP or\
                el.sim.status[sim_idx] == JobStatus.NOT_IN_QUEUE:
                 if prof is None:
-                    el.request_sim_profiles(db=self.sim_db, table=self.name)
+                    el.request_sim_profiles(sim_db=self.sim_db,
+                                            table=self.name)
                     break
             # Reset Element if simulation had an error
             elif el.sim.status[sim_idx] == JobStatus.FAILED:
@@ -268,7 +290,7 @@ class CoreRun:
                 f'/{self.name}{el.name}S{sim:02d}.json'
             # Happens because of long write times
             if os.path.isfile(flnm):
-                if len(self.sim_hlpers[hlp_idx]) < 30:
+                if len(self.sim_hlpers[hlp_idx]) < 50:
                     if sim_id not in assigned_ids:
                         self.sim_hlpers[hlp_idx].append(sim_id)
                         filenames.append(flnm)

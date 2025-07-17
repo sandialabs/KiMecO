@@ -11,9 +11,11 @@ class SIM_DB(Kimeco_db):
                  name: str,
                  path: str = '',
                  sop: SOP | None = None,
+                 thread: int = 1,
                  tbl_name: str = 'G0000') -> None:
         super().__init__(name=name,
-                         path=path)
+                         path=path,
+                         thread=thread)
 
         if isinstance(sop, SOP):
             self.sv_species: list[str] = sop.sc_species
@@ -112,9 +114,9 @@ class SIM_DB(Kimeco_db):
                   for sp in self.sv_species]
                     ).where(
                         self.tables[table].c.sim_id.in_(sim_ids))
-            with self.eng.begin() as connection:
+            with self.eng.begin() as conn:
                 db_rslt: Sequence[Row[Any]] = np.array(
-                    connection.execute(
+                    conn.execute(
                         query).fetchall()
                     )
             results[table] = {}

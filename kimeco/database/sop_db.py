@@ -2,7 +2,6 @@ from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
 from sqlalchemy import select, Row
 from typing import Any, Sequence
-from logging import Logger
 
 
 class SOP_DB(Kimeco_db):
@@ -10,9 +9,10 @@ class SOP_DB(Kimeco_db):
                  sop: SOP,
                  name: str,
                  path: str = '',
-                 tbl_name: str = 'G0000') -> None:
+                 thread: int = 1) -> None:
         super().__init__(name=name,
-                         path=path)
+                         path=path,
+                         thread=thread)
 
         self.columns: list[str] = \
             [key for key in sop.parameters_names.keys()]
@@ -46,8 +46,8 @@ class SOP_DB(Kimeco_db):
         """
         query = select(
             self.tables[table]).where(self.tables[table].c.id == id)
-        with self.eng.begin() as connection:
-            rslt: list[float] = list(connection.execute(query).fetchall()[0])
+        with self.eng.begin() as conn:
+            rslt: list[float] = list(conn.execute(query).fetchall()[0])
         return rslt
 
     def prepare_batch_select(self,
@@ -79,9 +79,9 @@ class SOP_DB(Kimeco_db):
                 self.tables[table]
                     ).where(
                         self.tables[table].c.id.in_(row_ids))
-            with self.eng.begin() as connection:
+            with self.eng.begin() as conn:
                 db_rslt: Sequence[Row[Any]] = \
-                    connection.execute(query).fetchall()
+                    conn.execute(query).fetchall()
             all_db_rslt.extend(db_rslt)
         self._select = {}  # Clear the _select dictionary after processing
         return all_db_rslt
@@ -102,9 +102,9 @@ class SOP_DB(Kimeco_db):
                 self.tables[table].c[col]
                     ).where(
                         self.tables[table].c.id.in_(row_ids))
-            with self.eng.begin() as connection:
+            with self.eng.begin() as conn:
                 db_rslt: Sequence[Row[Any]] = \
-                    connection.execute(query).fetchall()
+                    conn.execute(query).fetchall()
             all_db_rslt.extend(db_rslt)
         self._select = {}  # Clear the _select dictionary after processing
         return all_db_rslt

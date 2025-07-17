@@ -114,7 +114,7 @@ default_settings: dict[str, Any] = {
     # Percentage of deviation of means and stds of parameters to converge
     "final_conv": 0.01,
     # Numbers of helpers to save the simulations profiles
-    "max_helpers": 4,
+    "max_helpers": 10,
     # Multiplicating factors of std parameters for derivative in
     # sensitivity analysis
     "sensi_d": 0.1,
@@ -124,5 +124,7 @@ default_settings: dict[str, Any] = {
     # User given list of parameters to perturb. All if empty.
     "only_perturb": [],
     # Frequency of the sensitivity analysis
-    "SA_freq": 1000
+    "SA_freq": 1000,
+    # Number of thread in the main process for I/O operations
+    "thread": 5
 }

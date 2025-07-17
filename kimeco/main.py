@@ -74,11 +74,14 @@ def main() -> None:
 
     # Create the databases
     sop_db = SOP_DB(sop=init_SOP,
-                    name='KMO_DB_SOP')
+                    name='KMO_DB_SOP',
+                    thread=settings['thread'])
     kin_db = KIN_DB(sop=init_SOP,
-                    name='KMO_DB_KIN')
+                    name='KMO_DB_KIN',
+                    thread=settings['thread'])
     sim_db = SIM_DB(sop=init_SOP,
-                    name='KMO_DB_SIM')
+                    name='KMO_DB_SIM',
+                    thread=settings['thread'])
     klog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
 
     # Define which scoring function to use
@@ -247,13 +250,17 @@ def main() -> None:
             while (len(low_new) != 0 and
                    min([i.score for i in low_new]) <
                    max([el.score for el in goat])):
-                low_scores: list[float] = [i.score for i in low_new]
-                low_idx: int = low_scores.index(min(low_scores))
-                goat_scores: list[float] = [el.score for el in goat]
-                goat_idx: int = goat_scores.index(max(goat_scores))
-                goat[goat_idx] = low_new.pop(low_idx)
+                low_scores: list[float] = np.array([i.score for i in low_new])
+                low_idx: int = np.argmin(low_scores)
+                goat_scores: list[float] = np.array([el.score for el in goat])
+                goat_idx: int = np.argmax(goat_scores)
+                if goat[goat_idx].score > low_new[low_idx].score:
+                    goat[goat_idx] = low_new.pop(low_idx)
+                else:
+                    msg = 'Bad replacement in goat list'
+                    raise ValueError(msg)
                 replaced += 1
-            goat_avrg = np.sum([el.score for el in goat])/len(goat)
+            goat_avrg = np.average([el.score for el in goat])
             klog.info(f'Number of goat replaced: {replaced}')
             klog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.3f}')
 

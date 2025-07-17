@@ -1,4 +1,6 @@
 import os
+from time import sleep
+from token import OP
 from typing import Literal, Sequence
 from sqlalchemy import create_engine, MetaData, Table, Column, Row
 from sqlalchemy import Engine, Insert, update, Update, select
@@ -17,7 +19,8 @@ import numpy
 class Kimeco_db:
     def __init__(self,
                  name: str,
-                 path: str = '') -> None:
+                 path: str = '',
+                 thread: int = 1) -> None:
         """Class managing the information storage of KIMECO database.
         """
         self.name: str = name
@@ -26,7 +29,12 @@ class Kimeco_db:
             self.path = os.getcwd()
         else:
             self.path: str = path
-        self.eng: Engine = create_engine(f'sqlite:///{self.path}/{name}.db')
+        self.eng: Engine = create_engine(f'sqlite:///{self.path}/{name}.db',
+                                         pool_size=thread,
+                                         max_overflow=0,
+                                         connect_args={'timeout': thread})
+                                        #  isolation_level='AUTOCOMMIT'
+                                         #)
         if not database_exists(self.eng.url):
             create_database(self.eng.url)
         self.metadata = MetaData()
@@ -43,16 +51,21 @@ class Kimeco_db:
         }
         self._upsert: dict = {}
         self._select: dict = {}
+        # Set PRAGMA statements for db stability
+        # with self.eng.begin() as conn:
+        #     conn.execute(text("PRAGMA journal_mode=WAL;"))
+        #     conn.execute(text("PRAGMA synchronous=FULL;"))
+        #     conn.execute(text("PRAGMA busy_timeout=10000;"))
 
     def defragmentate(self) -> None:
-        with self.eng.connect() as conn:
+        with self.eng.begin() as conn:
             conn.execute(text('VACUUM'))
 
     def get_table_names(self):
         query: TextClause = text(
             "SELECT name FROM sqlite_master WHERE type='table'")
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
+        with self.eng.begin() as conn:
+            db_rslt: Sequence = conn.execute(query).fetchall()
         return db_rslt
 
     def table_exists(self,
@@ -66,8 +79,8 @@ class Kimeco_db:
     def wipe_table(self,
                    table: str) -> None:
         delete_query = delete(self.tables[table])
-        with self.eng.begin() as connection:
-            connection.execute(delete_query)
+        with self.eng.begin() as conn:
+            conn.execute(delete_query)
 
     def load_table(self,
                    name: str) -> None:
@@ -107,8 +120,8 @@ class Kimeco_db:
         """
         query = select(
             self.tables[table]).where(self.tables[table].c.id == id)
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
+        with self.eng.begin() as conn:
+            db_rslt: Sequence = conn.execute(query).fetchall()
         if len(db_rslt) == 0:
             return False
         else:
@@ -123,8 +136,8 @@ class Kimeco_db:
             where(self.tables[table].c.id == id).
             values(**values)
             )
-        with self.eng.begin() as connection:
-            connection.execute(query)
+        with self.eng.begin() as conn:
+            conn.execute(query)
 
     def upsert_entries(self,
                        table: str,
@@ -142,36 +155,49 @@ class Kimeco_db:
                     given in same order as ids
         """
         # Number of values in a chunk
-        max_var = 20000
+        max_var = 30000
         total_entries: int = len(values)
-        try:
-            while total_entries > 0:
-                # values[0] is the number of columns
-                chunk_size = min(max_var // (len(values[0]) + 1),
-                                 total_entries)
-                # Create chunks of ids and values
-                val_chunk: list[dict[str, Any]] = values[:chunk_size]
-                id_chunk: list[int] = ids[:chunk_size]
-                for i in range(len(val_chunk)):
-                    val_chunk[i]['id'] = id_chunk[i]
-                g_insert: Insert = (
-                    insert(table=self.tables[table]).
-                    values(val_chunk))
+        while total_entries > 0:
+            # values[0] is the number of columns
+            chunk_size: int = min(max_var // (len(values[0]) + 1),
+                                  total_entries)
+            # Create chunks of ids and values
+            val_chunk: list[dict[str, Any]] = values[:chunk_size]
+            id_chunk: list[int] = ids[:chunk_size]
+            for i in range(len(val_chunk)):
+                val_chunk[i]['id'] = id_chunk[i]
+            g_insert: Insert = (
+                insert(table=self.tables[table]).
+                values(val_chunk))
 
-                g_upsert: Insert = g_insert.on_conflict_do_update(
-                        index_elements=[self.tables[table].c.id],
-                        set_=g_insert.excluded
-                    )
-                with self.eng.begin() as connection:
-                    connection.execute(g_upsert)
-                # Update the lists to process the remaining entries
-                values = values[chunk_size:]
-                ids = ids[chunk_size:]
-                total_entries -= chunk_size
-        except OperationalError as e:
-            klog: Logger = setup_logger(name='db.log')
-            klog.warning('An error occured in the database:')
-            klog.warning(e)
+            g_upsert: Insert = g_insert.on_conflict_do_update(
+                    index_elements=[self.tables[table].c.id],
+                    set_=g_insert.excluded
+                )
+            try2connect = 0
+            while try2connect < 24:
+                try:
+                    with self.eng.begin() as conn:
+                        conn.execute(g_upsert)
+                        break
+                except OperationalError as e:
+                    if 'database is locked' in str(e):
+                        try2connect += 1
+                        sleep(5)
+                    else:
+                        klog: Logger = setup_logger(name='db.log')
+                        klog.warning('An OperationalError occured in the db:')
+                        klog.warning(e)
+                except Exception as e:
+                    klog: Logger = setup_logger(name='db.log')
+                    klog.warning('An error occured in the database:')
+                    klog.warning(e)
+            else:
+                klog.warning('Database locked for more than 2 minutes.')
+            # Update the lists to process the remaining entries
+            values = values[chunk_size:]
+            ids = ids[chunk_size:]
+            total_entries -= chunk_size
 
     def manual_upsert_entries(self,
                               table: str,
@@ -198,15 +224,14 @@ class Kimeco_db:
             upsert_txt += f" '{c}' = excluded.'{c}',"
         upsert_txt = upsert_txt[:-1]
         query: TextClause = text(insert_txt + upsert_txt)
-        with self.eng.begin() as connection:
-            connection.execute(query)
+        with self.eng.begin() as conn:
+            conn.execute(query)
 
     def prepare_batch_upsert(self,
                              table: str,
                              id: int,
                              values: dict[str, Any]) -> None:
         """Actualize the upsert variable to prepare a batch upsert.
-1
         Args:
             table (str): name of table
             id (int): row id
@@ -264,8 +289,8 @@ class Kimeco_db:
             table (str): _description_
         """
         query: TextClause = text(f"PRAGMA table_info('{table}')")
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
+        with self.eng.begin() as conn:
+            db_rslt: Sequence = conn.execute(query).fetchall()
         return list(db_rslt)
 
     def get_table(self,
@@ -280,8 +305,8 @@ class Kimeco_db:
             list[Any]: List of values in the row
         """
         query: TextClause = text(f"SELECT * FROM {table}")
-        with self.eng.begin() as connection:
-            db_rslt: Sequence = connection.execute(query).fetchall()
+        with self.eng.begin() as conn:
+            db_rslt: Sequence = conn.execute(query).fetchall()
         return db_rslt
 
     def get_data(self,
@@ -298,6 +323,6 @@ class Kimeco_db:
         """
         query = select(
             self.tables[table]).where(self.tables[table].c.id.in_(ids))
-        with self.eng.begin() as connection:
-            rslt: Sequence[Row[Any]] = connection.execute(query).fetchall()
+        with self.eng.begin() as conn:
+            rslt: Sequence[Row[Any]] = conn.execute(query).fetchall()
         return rslt

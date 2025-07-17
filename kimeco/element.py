@@ -77,12 +77,12 @@ class Element:
                                     values=vals)
 
     def request_sim_profiles(self,
-                             db: SIM_DB,
+                             sim_db: SIM_DB,
                              table) -> None:
         for sim in range(len(self.sim.simulations)):
             sim_id: int = self.id * len(self.sim.simulations) + sim
             if self.sim.profiles[sim] is None:
-                db.prepare_batch_select(
+                sim_db.prepare_batch_select(
                     table=table,
                     sim_id=sim_id)
 
