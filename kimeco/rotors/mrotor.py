@@ -12,7 +12,7 @@ class MultiRotor:
                  internal_rot: list[InternalRotation]) -> None:
 
         self._sf: float = symmetryFactor
-        self.sf_p: float = 1.0
+        self.sfc: float = 1.0
         self.iem: float = interpolationEnergyMax
         self.file: str = potentialEnergySurface
         self.qlem: float = quantumLevelEnergyMax
@@ -20,4 +20,4 @@ class MultiRotor:
 
     @property
     def symFact(self):
-        return self._sf * self.sf_p
+        return self._sf * self.sfc

@@ -12,8 +12,6 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element, ElementStatus
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.generation import Generation
-from kimeco.Perturbators.normal import Normal
-from kimeco.Perturbators.lognormal import LogNormal
 from kimeco.readers.mess_input import MessInputReader
 from kimeco.sensitivity.linear import Linear
 from kimeco.user_input import check_input
@@ -58,6 +56,7 @@ def main() -> None:
     init_SOP: SOP
     input_tpl: list[str]
     (init_SOP, input_tpl) = mr.read()
+    init_SOP.set_uncertainties(settings=settings)
 
     # Create the workidir folder
     init_loc: str = os.getcwd()
@@ -93,11 +92,12 @@ def main() -> None:
     klog.info(f"{'Scoring function:':<65}{sf.name:>15}")
 
     # Initialize the perturbator
-    pert: Normal | LogNormal = set_pert(
+    pert: Perturbator = Perturbator(
         settings=settings,
-        init_SOP=init_SOP)
-    pert.set_gen_fact(0)
-    klog.info(f"{'Perturbator:':<65}{pert.name:>15}")
+        initial_SOP=init_SOP,
+        klog=klog
+        )
+    pert.print_pert_parameters()
 
     # Perform sensitivity analysis if requested
     first_sensi = False
@@ -147,9 +147,11 @@ def main() -> None:
 
     # Reinitialize the perturbator once the list of parameters to perturb
     # has been reduced
-    pert: Normal | LogNormal = set_pert(
+    pert: Perturbator = Perturbator(
         settings=settings,
-        init_SOP=init_SOP)
+        initial_SOP=init_SOP,
+        klog=klog
+        )
     klog.info(f"{'Selected parameters transmitted to perturbator':<65}")
 
     # Everything is initialized, create gen_0
@@ -521,19 +523,6 @@ def isconverged(threshold: float,
                 klog.info(f'StdD new: {new_std}')
 
     return converged
-
-
-def set_pert(settings,
-             init_SOP: SOP) -> Normal | LogNormal:
-    if settings['pert'] == 'normal':
-        pert = Normal(settings=settings,
-                      initial_SOP=init_SOP)
-    elif settings['pert'] == 'lognormal':
-        pert = LogNormal(settings=settings,
-                         initial_SOP=init_SOP)
-    else:
-        raise NotImplementedError('Unknown type of perturbator.')
-    return pert
 
 
 def get_stats(elements: list[Element],

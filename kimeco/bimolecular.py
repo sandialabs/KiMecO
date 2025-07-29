@@ -1,5 +1,8 @@
 from typing import Any
+from kimeco.enums import FreqMode
 from kimeco.well import Well
+from kimeco.database.kimeco_db import dbs
+from kimeco.enums import Ptype
 
 
 class Bimolecular:
@@ -8,8 +11,9 @@ class Bimolecular:
     def __init__(self,
                  name: str,
                  ct_names: dict[str, str],
+                 freq_mode: FreqMode = FreqMode.BATCH
                  ) -> None:
-
+        self.freq_mode: FreqMode = freq_mode
         self.name: str = name
         self.fragments: list[Well] = []
         self.ct_names: dict[str, str] = ct_names
@@ -17,6 +21,7 @@ class Bimolecular:
         # Not actualy used in cantera, but for data storage in db
         self.ct_name: str = name
         self.dummy = False
+        self.uncertainties: dict[str, float] = {}
 
     def set_fragments(self, frags: list[Well]) -> None:
         """Save a pair of fragments.
@@ -26,7 +31,7 @@ class Bimolecular:
         """
         self.fragments = frags
 
-    def add_new_frag(self, name: str, *args) -> None:
+    def add_new_frag(self, name: str) -> None:
         """Save a new fragment.
 
         Args:
@@ -39,7 +44,10 @@ class Bimolecular:
                 ct_name: str = self.ct_names[name]
         else:
             ct_name: str = name
-        frag = Well(name=name, ct_name=ct_name, *args, pert_e=False)
+        frag = Well(name=name,
+                    ct_name=ct_name,
+                    freq_mode=self.freq_mode,
+                    pert_e=False)
         self.fragments.append(frag)
 
     @property
@@ -54,10 +62,18 @@ class Bimolecular:
             names.append(frag.name)
         return names
 
+    def set_uncertainties(self,
+                          settings: dict[str, Any]) -> None:
+        self.uncertainties[f"{self.name}{dbs}{Ptype.WE.value}"] = \
+            settings[f'std_{Ptype.WE.value}']
+        for frag in self.fragments:
+            frag.set_uncertainties(settings=settings)
+            self.uncertainties.update(frag.uncertainties)
+
     @property
     def db_dict(self) -> dict[str, Any]:
-        db_dict = {
-            f"{self.name}__e": float(self.energy)}
+        db_dict: dict[str, float] = {
+            f"{self.name}{dbs}{Ptype.WE.value}": float(self.energy)}
         for frag in self.fragments:
             db_dict.update(frag.db_dict)
 

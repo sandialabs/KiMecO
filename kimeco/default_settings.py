@@ -1,5 +1,8 @@
 from typing import Any
 import getpass
+from kimeco.enums import Distrib
+from kimeco.enums import Ptype
+from kimeco.enums import FreqMode
 
 
 mandatory_keys: dict[str, Any] = {
@@ -38,7 +41,7 @@ default_settings: dict[str, Any] = {
     # Values: name of the species in the mechanism file
     "ct_names": {},
     # CPU used per master equation job
-    "cpu_kin": 4,
+    "cpu_kin": 1,
     # Memory (Mb) used per master equation job
     "mem_kin": 1000,
     # CPU used per simulation job
@@ -65,29 +68,60 @@ default_settings: dict[str, Any] = {
     "max_std": 4,
     # Standard deviation of energy (kcal/mol) perturbation for wells
     # and bimolecular species
-    "std_e": 0.5,
+    f"std_{Ptype.WE.value}": 0.5,
     # Standard deviation of energy (kcal/mol) perturbation for barriers
-    "std_b": 0.5,
+    f"std_{Ptype.BE.value}": 0.5,
+    # Mode for frequency perturbation/saving
+    "freq_mode": f"{FreqMode.BATCH.value}",
     # Standard deviation percentage perturbation for wells
+    # and bimolecular individual vibrations
+    f"std_{Ptype.IFC.value}": 0.05,
+    # Standard deviation percentage for batch perturbation of wells
     # and bimolecular vibrations
-    "std_hf_p": 0.05,
-    # Standard deviation percentage perturbation for wells
-    # and bimolecular vibrations
-    "std_lf_p": 0.1,
+    f"std_{Ptype.BFC.value}": 0.1,
     # Standard deviation percentage perturbation for hindered rotors
-    "std_hr": 0.1,
+    f"std_{Ptype.HRS.value}": 0.1,
     # Standard deviation percentage perturbation for imaginary frequencies
-    "std_if": 0.1,
+    f"std_{Ptype.IF.value}": 0.1,
     # Energy transfer probability, factor, percentage
-    "std_fact": 0.25,
+    f"std_{Ptype.ETF.value}": 0.25,
     # Energy transfer probability, exponent, absolute
-    "std_pow": 0.075,
+    f"std_{Ptype.ETP.value}": 0.075,
     # Lennard Jones, epsilon, percentage
-    "std_epsi": 0.1,
+    f"std_{Ptype.EPSI.value}": 0.1,
     # Lennard Jones, sigma, percentage
-    "std_sigma": 0.1,
-    # Multiplicating/dividing factor for symmetry factor of bl reactions
-    "std_sf_p": 2.0,
+    f"std_{Ptype.SIG.value}": 0.1,
+    # Multiplicating/dividing factor for sym  factor of bl reactions
+    f"std_{Ptype.SFC.value}": 2.0,
+    # Multiplicating/dividing factor for sym factor of M-D rotors
+    f"std_{Ptype.MRC.value}": 2.0,
+    # RNG distribution of energy (kcal/mol) perturbation for wells
+    # and bimolecular species
+    f"distrib_{Ptype.WE.value}": f"{Distrib.NORMAL.value}",
+    # RNG distribution of energy (kcal/mol) perturbation for barriers
+    f"distrib_{Ptype.BE.value}": f"{Distrib.NORMAL.value}",
+    # RNG distribution for wells
+    # and bimolecular individual vibrations
+    f"distrib_{Ptype.IFC.value}": f"{Distrib.LOGNORMAL.value}",
+    # RNG distribution for wells
+    # and bimolecular batch vibrations
+    f"distrib_{Ptype.BFC.value}": f"{Distrib.LOGNORMAL.value}",
+    # RNG distribution for hindered rotors
+    f"distrib_{Ptype.HRS.value}": f"{Distrib.NORMAL.value}",
+    # RNG distribution for imaginary frequencies
+    f"distrib_{Ptype.IF.value}": f"{Distrib.NORMAL.value}",
+    # RNG distribution for energy transfer probability, factor
+    f"distrib_{Ptype.ETF.value}": f"{Distrib.NORMAL.value}",
+    # RNG distribution for energy transfer probability, exponent
+    f"distrib_{Ptype.ETP.value}": f"{Distrib.NORMAL.value}",
+    # RNG distribution for Lennard Jones, epsilon
+    f"distrib_{Ptype.EPSI.value}": f"{Distrib.NORMAL.value}",
+    # RNG distribution Lennard Jones, sigma
+    f"distrib_{Ptype.SIG.value}": f"{Distrib.NORMAL.value}",
+    # RNG distribution for symmetry factor of bl reactions
+    f"distrib_{Ptype.SFC.value}": f"{Distrib.LOGNORMAL.value}",
+    # RNG distribution for symmetry factor of multi-d rotors
+    f"distrib_{Ptype.MRC.value}": f"{Distrib.LOGNORMAL.value}",
     # Name of the scoring function class to use
     "scoring_func": "weighteddif",
     # Name of species as in exp profiles header

@@ -1,8 +1,11 @@
 from typing import Any
 from kimeco.bimolecular import Bimolecular
+from kimeco.enums import FreqMode
 from kimeco.well import Well
 import numpy as np
 from numpy.typing import NDArray
+from kimeco.database.kimeco_db import dbs
+from kimeco.enums import Ptype
 
 
 class Barrier(Well):
@@ -10,25 +13,27 @@ class Barrier(Well):
     a bimolecular prod, or another well"""
     def __init__(self, name: str,
                  lside: Well | Bimolecular,
-                 rside: Well | Bimolecular) -> None:
+                 rside: Well | Bimolecular,
+                 freq_mode: FreqMode = FreqMode.BATCH) -> None:
 
-        super().__init__(name=name)
+        super().__init__(name=name,
+                         freq_mode=freq_mode)
         self.connected: list[Well | Bimolecular] = [lside, rside]
         self._energy: float
         self.ifreq: float
         # Barrierless parameters
         self._symFact: float
-        self.sf_p: float = 1.0
+        self.sfc: float = 1.0  # Symmetry Factor Coefficient
         self.barrierless: bool = False
         # Only used to retroactively set energy of a side if dummy
         self._well_depth: list[float]
-        pp: float  # PotentialPrefactor
-        ppe: float  # PotentialPowerExponent
-        file: str  # Rotd filename
+        self.pp: float  # PotentialPrefactor
+        self.ppe: float  # PotentialPowerExponent
+        self.file: str  # Rotd filename
 
     @property
-    def symFact(self):
-        return self._symFact * self.sf_p
+    def symFact(self) -> float:
+        return self._symFact * self.sfc
 
     @property
     def frequencies(self) -> NDArray[Any]:
@@ -67,8 +72,25 @@ class Barrier(Well):
     @property
     def db_dict(self) -> dict[str, Any]:
         if self.barrierless:
-            return {f"{self.name}__sf_p": float(self.sf_p)}
+            key: str = self.name + dbs + Ptype.SFC.value
+            return {key: float(self.sfc)}
         db_dict: dict = super(Barrier, self).db_dict
-        db_dict.update({f"{self.name}__if": float(self.ifreq)})
+        db_dict.pop(f"{self.name}{dbs}{Ptype.WE.value}", None)
+        db_dict[f"{self.name}{dbs}{Ptype.BE.value}"] = float(self._energy)
+        db_dict.update(
+            {f"{self.name}{dbs}{Ptype.IF.value}": float(self.ifreq)}
+            )
 
         return db_dict
+
+    def set_uncertainties(self, settings: dict[str, Any]):
+        super().set_uncertainties(settings)
+        self.uncertainties.pop(f'{self.name}{dbs}{Ptype.WE.value}', None)
+        barrier_specific: list[str] = [Ptype.BE]
+        if self.barrierless:
+            barrier_specific.append(Ptype.SFC)
+        else:
+            barrier_specific.append(Ptype.IF)
+        for ptype in barrier_specific:
+            param_name: str = self.name + dbs + ptype.value
+            self.uncertainties[param_name] = settings[f'std_{ptype.value}']

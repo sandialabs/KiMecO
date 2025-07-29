@@ -22,13 +22,13 @@ class MessInputReader:
         """
 
         self.filename: str = settings["initial_mess"]
-        self.SOP: SOP = SOP(score_species=settings['score_sp'])
+        self.SOP: SOP = SOP(score_species=settings['score_sp'],
+                            freq_mode=settings['freq_mode'])
         self.SOP.rc_temp = settings["rc_temp"]
         self.SOP.rc_pres = settings["rc_pres"]
         self.SOP.ct_names = settings["ct_names"]
         self.SOP.pres_unit = settings["pres_unit"]
         self.files2copy: list[str] = []
-
         if os.path.isfile(path=self.filename):
             with open(file=self.filename, mode='r') as f:
                 self.file: list[str] = f.readlines()

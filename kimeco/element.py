@@ -1,4 +1,3 @@
-from flask.config import T
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
@@ -9,17 +8,7 @@ from kimeco.simulation import SIM
 from kimeco.q_sys import JobStatus
 from typing import Any
 import numpy as np
-from enum import Enum
-
-
-class ElementStatus(Enum):
-    SOP = 'sop'
-    KIN = 'kin'
-    SIM = 'sim'
-    SCORING = 'scoring'
-    TO_SAVE = 'to_save'
-    DONE = 'DONE'
-    RESET = 'reset'
+from kimeco.enums import ElementStatus
 
 
 class Element:

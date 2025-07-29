@@ -1,6 +1,5 @@
 import os
 from time import sleep
-from token import OP
 from typing import Literal, Sequence
 from sqlalchemy import create_engine, MetaData, Table, Column, Row
 from sqlalchemy import Engine, Insert, update, Update, select
@@ -16,6 +15,9 @@ from kimeco.logger_config import setup_logger
 import numpy
 
 
+dbs = '__'
+
+
 class Kimeco_db:
     def __init__(self,
                  name: str,
@@ -24,6 +26,7 @@ class Kimeco_db:
         """Class managing the information storage of KIMECO database.
         """
         self.name: str = name
+        self.sleep_time: float = 5
         self._tabls = []
         if path == '':
             self.path = os.getcwd()
@@ -33,8 +36,6 @@ class Kimeco_db:
                                          pool_size=thread,
                                          max_overflow=0,
                                          connect_args={'timeout': thread})
-                                        #  isolation_level='AUTOCOMMIT'
-                                         #)
         if not database_exists(self.eng.url):
             create_database(self.eng.url)
         self.metadata = MetaData()
@@ -175,7 +176,8 @@ class Kimeco_db:
                     set_=g_insert.excluded
                 )
             try2connect = 0
-            while try2connect < 24:
+            wait_t = 0
+            while try2connect < 10:
                 try:
                     with self.eng.begin() as conn:
                         conn.execute(g_upsert)
@@ -183,7 +185,8 @@ class Kimeco_db:
                 except OperationalError as e:
                     if 'database is locked' in str(e):
                         try2connect += 1
-                        sleep(5)
+                        wait_t += self.sleep_time
+                        sleep(self.sleep_time)
                     else:
                         klog: Logger = setup_logger(name='db.log')
                         klog.warning('An OperationalError occured in the db:')
@@ -193,7 +196,10 @@ class Kimeco_db:
                     klog.warning('An error occured in the database:')
                     klog.warning(e)
             else:
-                klog.warning('Database locked for more than 2 minutes.')
+                msg: str = f'DB locked for more than {wait_t/60:.2f} min.'
+                klog.warning(msg)
+                self.sleep_time += 1
+                klog.warning(f'Reconnect extended to {self.sleep_time:2f} s.')
             # Update the lists to process the remaining entries
             values = values[chunk_size:]
             ids = ids[chunk_size:]

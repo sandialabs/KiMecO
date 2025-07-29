@@ -1,4 +1,3 @@
-from copy import deepcopy
 from typing import Any
 
 from ase import Atoms
@@ -10,6 +9,9 @@ import numpy as np
 from numpy.typing import NDArray
 from logging import Logger
 from kimeco.logger_config import setup_logger
+from kimeco.enums import Ptype
+from kimeco.database.kimeco_db import dbs
+from kimeco.enums import FreqMode
 
 
 class Well:
@@ -20,7 +22,8 @@ class Well:
     def __init__(self,
                  name: str,
                  ct_name: str = "",
-                 pert_e: bool = True
+                 pert_e: bool = True,
+                 freq_mode: FreqMode = FreqMode.BATCH
                  ) -> None:
 
         self.name: str = name
@@ -30,13 +33,14 @@ class Well:
         self.ct_name: str = ct_name
         self.energy: float
         self.structure: Atoms
-        # low frequencies perturbation
-        self.lf_p = 1.0
-        # high frequencies perturbation
-        self.hf_p = 1.0
-        # Set to False for fragments
-        self.pert_e = pert_e
-        self.dummy = False
+        # batch frequency coefficient
+        self.bfc = 1.0
+        # Individual frequency coefficient
+        self.ifc: list[float]
+        self.pert_e: bool = pert_e
+        self.dummy: bool = False
+        self.freq_mode: FreqMode = freq_mode
+        self.uncertainties: dict[str, float] = {}
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -62,23 +66,29 @@ class Well:
 
     @property
     def frequencies(self) -> NDArray[Any]:
-        freq = deepcopy(self._freq)
+        if self.freq_mode == FreqMode.BATCH:
+            return self._freq * self.bfc
+        elif self.freq_mode == FreqMode.INDIVIDUAL:
+            return self._freq * self.ifc
+        else:
+            raise AttributeError('Unknown FreqMode')
+        # freq = deepcopy(self._freq)
 
-        if len(freq[self._freq <= 500.0]) > 0:
-            if self.lf_p >= 1:
-                freq[self._freq <= 500.0] *= \
-                    (1 / freq[self._freq <= 500.0] * (self.lf_p - 1) * 100 + 1)
-            else:
-                freq[self._freq <= 500.0] /= \
-                    (1 / freq[self._freq <= 500.0] * (1 - self.lf_p) * 100 + 1)
-        if len(freq[self._freq > 500.0]) > 0:
-            if self.lf_p >= 1:
-                freq[self._freq > 500.0] *= \
-                    (1 / freq[self._freq > 500.0] * (self.hf_p - 1) * 100 + 1)
-            else:
-                freq[self._freq > 500.0] /= \
-                    (1 / freq[self._freq > 500.0] * (1 - self.hf_p) * 100 + 1)
-        return freq
+        # if len(freq[self._freq <= 500.0]) > 0:
+        #     if self.lf_p >= 1:
+        #         freq[self._freq <= 500.0] *= \
+        #             (1 / freq[self._freq <= 500.0] * (self.lf_p - 1) * 100 + 1)
+        #     else:
+        #         freq[self._freq <= 500.0] /= \
+        #             (1 / freq[self._freq <= 500.0] * (1 - self.lf_p) * 100 + 1)
+        # if len(freq[self._freq > 500.0]) > 0:
+        #     if self.lf_p >= 1:
+        #         freq[self._freq > 500.0] *= \
+        #             (1 / freq[self._freq > 500.0] * (self.hf_p - 1) * 100 + 1)
+        #     else:
+        #         freq[self._freq > 500.0] /= \
+        #             (1 / freq[self._freq > 500.0] * (1 - self.hf_p) * 100 + 1)
+        # return freq
 
     @property
     def r_struct(self) -> str:
@@ -129,6 +139,58 @@ class Well:
         scan += '\n'
         return scan
 
+    def set_uncertainties(self,
+                          settings: dict[str, Any]) -> None:
+        """Set the uncertainties of the well
+
+        Args:
+            settings (dict[str, Any]): User input
+
+        Raises:
+            TypeError: Unknown parameter
+        """
+        # Do not set the uncertainties for a well
+        to_ignore: list[Ptype] = [
+            Ptype.ETF,
+            Ptype.ETP,
+            Ptype.EPSI,
+            Ptype.SIG,
+            Ptype.IF,
+            Ptype.SFC,
+            Ptype.BE]
+        if self.freq_mode == FreqMode.BATCH:
+            to_ignore.append(Ptype.IFC)
+        else:
+            to_ignore.append(Ptype.BFC)
+        if not self.pert_e:
+            to_ignore.append(Ptype.WE)
+        for unctt, val in settings.items():
+            if not unctt.startswith('std_'):
+                continue
+            try:
+                ptype = Ptype(unctt.split('std_')[-1])
+            except Exception as e:
+                msg = 'Unknown parameter in setting uncertainties'
+                print(e)
+                raise TypeError(msg)
+            if ptype in to_ignore:
+                continue
+            elif ptype == Ptype.HRS:
+                for idx in range(len(self.h_rotors)):
+                    param_name: str = self.name + dbs + ptype.value + str(idx)
+                    self.uncertainties[param_name] = val
+            elif ptype == Ptype.MRC:
+                for idx in range(len(self.m_rotors)):
+                    param_name = self.name + dbs + ptype.value + str(idx)
+                    self.uncertainties[param_name] = val
+            elif ptype == Ptype.IFC:
+                for idx in range(len(self._freq)):
+                    param_name = self.name + dbs + ptype.value + f"{idx:02d}"
+                    self.uncertainties[param_name] = val
+            else:
+                param_name = self.name + dbs + ptype.value
+                self.uncertainties[param_name] = val
+
     def set_structure(self,
                       symbols: str,
                       positions: list[list]) -> None:
@@ -149,6 +211,7 @@ class Well:
             freqs (list[float]): list of frequencies
         """
         self._freq = np.array(freqs)
+        self.ifc = [1.0 for i in range(len(self._freq))]
 
     def add_hrotor(self,
                    thermalpowermax: float,
@@ -209,7 +272,7 @@ class Well:
         """
         if self.pert_e:
             db_dict: dict = {
-                    f"{self.name}__e": float(self.energy)
+                    f"{self.name}{dbs}{Ptype.WE.value}": float(self.energy)
                 }
         else:
             db_dict = {}
@@ -229,14 +292,16 @@ class Well:
         Returns:
             dict[str, float]: dictionary of frequencies.
         """
-        fd: dict[str, float] = {
-            f"{self.name}__lf_p": float(self.lf_p),
-            f"{self.name}__hf_p": float(self.hf_p),
-        }
-
-        # to save all freqs in db
-        # for num, f in enumerate(self.frequencies):
-        #     fd[f"{self.name}__f{num}"] = float(f)
+        if self.freq_mode == FreqMode.BATCH:
+            key: str = self.name + dbs + Ptype.BFC.value
+            fd: dict[str, float] = {
+                key: self.bfc
+            }
+        elif self.freq_mode == FreqMode.INDIVIDUAL:
+            fd = {}
+            for idx, fc in enumerate(self.ifc):
+                key = self.name + dbs + Ptype.IFC.value + f"{idx:02d}"
+                fd[key] = fc
 
         return fd
 
@@ -253,7 +318,7 @@ class Well:
             # Do not perturb fourier expansion based hindered rotors
             if rot.fourier:
                 continue
-            rd[f"{self.name}__hr{idx}"] = float(rot.pert)
+            rd[f'{self.name}{dbs}{Ptype.HRS.value}{idx}'] = float(rot.pert)
 
         return rd
 
@@ -267,6 +332,6 @@ class Well:
         """
         rd: dict[str, float] = {}
         for idx, rot in enumerate(self.m_rotors):
-            rd[f"{self.name}__mr{idx}"] = float(rot.sf_p)
+            rd[f'{self.name}{dbs}{Ptype.MRC.value}{idx}'] = float(rot.sfc)
 
         return rd

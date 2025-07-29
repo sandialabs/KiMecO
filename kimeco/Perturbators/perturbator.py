@@ -1,17 +1,24 @@
-from abc import ABC, abstractmethod
-from copy import deepcopy
+
+from copy import copy, deepcopy
+from logging import Logger
 from typing import Any
 
 from kimeco.barrier import Barrier
 from kimeco.bimolecular import Bimolecular
 from kimeco.parameters import SOP
+from kimeco.enums import FreqMode
 from kimeco.well import Well
+import numpy as np
+from kimeco.enums import Ptype
+from kimeco.database.kimeco_db import dbs
+from kimeco.enums import Distrib
 
 
-class Perturbator(ABC):
+class Perturbator:
     def __init__(self,
                  settings: dict[str, Any],
-                 initial_SOP: SOP
+                 initial_SOP: SOP,
+                 klog: Logger
                  ) -> None:
         """Model class for perturbator.
         Cannot be used directly, but should be inherited
@@ -23,21 +30,58 @@ class Perturbator(ABC):
         self.settings: dict[str, Any] = settings
         # Initial set of parameters
         self.i_sop: SOP = deepcopy(initial_SOP)
-        # Factor that starts at 1 and decreases as the number
-        # of generations go up.
-        self.gen_fact: float = 1.0
-        self.has_boundaries = False
-        self.additive: list[str] = ['e', 'b', 'pow', 'lf_p', 'hf_p']
-        self.multiplicative: list[str] = ['sf_p']
-        self.percent: list[str] = ['if', 'hr', 'sigma', 'epsi', 'fact']
-        tmp: list[str] = []
-        tmp.extend(self.percent)
-        tmp.extend(self.additive)
-        tmp.extend(self.multiplicative)
-        # ordered so that largest substrings are first
-        self.ptypes = sorted(tmp, key=len, reverse=True)
+        self.has_boundaries = True
+        self.klog: Logger = klog
 
+        # List of parameters that should never be below 0
+        self.zero_bound: set[str] = {
+            Ptype.SFC.value,
+            Ptype.ETF.value,
+            Ptype.ETP.value,
+            Ptype.HRS.value,
+            Ptype.SIG.value,
+            Ptype.EPSI.value,
+            Ptype.BFC.value,
+            Ptype.IFC.value
+        }
+        self.additive: set[str] = {
+            Ptype.WE.value,
+            Ptype.BE.value,
+            Ptype.ETP.value,
+            Ptype.BFC.value,
+            Ptype.IFC.value}
+        self.multiplicative: set[str] = {
+            Ptype.SFC.value,
+            Ptype.MRC.value
+            }
+        self.percent: set[str] = {
+            Ptype.IF.value,
+            Ptype.HRS.value,
+            Ptype.SIG.value,
+            Ptype.EPSI.value,
+            Ptype.ETF.value}
         self.select: list[str] = self.settings['only_perturb']
+        self.distribs: dict[Ptype, Distrib] = {
+            ptype: self.settings[f'distrib_{ptype.value}'] for ptype in Ptype
+            if f'distrib_{ptype.value}' in self.settings
+        }
+
+    def print_pert_parameters(self) -> None:
+        msg = 'Perturbation parameters:\n'
+        tpl = '\t{param:<20} {un_str:>20} {distrib:>20}\n'
+        msg += tpl.format(param='PARAMETERS',
+                          un_str='UNCERTAINTIES',
+                          distrib='DISTRIBUTIONS')
+        for param, un in self.i_sop.uncertainties.items():
+            pshort: list[str] = param.split(dbs)[1]
+            for ptype in Ptype:
+                if ptype.value in pshort:
+                    distrib = self.distribs[ptype].value
+                    break
+            msg += tpl.format(param=param,
+                              un_str=f'{un:-.2E}',
+                              distrib=distrib)
+        self.klog.info(msg)
 
     def get_boundaries(self,
                        ptype: str,
@@ -54,20 +98,25 @@ class Perturbator(ABC):
         Returns:
             list[float]: boundaries [lower, upper]
         """
+        bounds: list[float]
         std_p: str = 'std_' + ptype
         if ptype in self.additive:
-            return [i_val - self.settings[std_p] * self.settings['max_std'],
-                    i_val + self.settings[std_p] * self.settings['max_std']]
+            bounds = [i_val - self.settings[std_p] * self.settings['max_std'],
+                      i_val + self.settings[std_p] * self.settings['max_std']]
         elif ptype in self.percent:
-            return [i_val - i_val
-                    * self.settings[std_p] * self.settings['max_std'],
-                    i_val + i_val
-                    * self.settings[std_p] * self.settings['max_std']]
+            bounds = [i_val - i_val
+                      * self.settings[std_p] * self.settings['max_std'],
+                      i_val + i_val
+                      * self.settings[std_p] * self.settings['max_std']]
         elif ptype in self.multiplicative:
-            return [i_val / (self.settings[std_p] * self.settings['max_std']),
-                    i_val * (self.settings[std_p] * self.settings['max_std'])]
+            bounds = [
+                i_val / (self.settings[std_p] * self.settings['max_std']),
+                i_val * (self.settings[std_p] * self.settings['max_std'])]
         else:
             raise NotImplementedError('Parameter not parametrised.')
+        if ptype in self.zero_bound and min(bounds) < 0:
+            bounds[bounds.index(min(bounds))] = 0.0
+        return bounds
 
     def within_boundaries(self,
                           perturbed_val: float,
@@ -93,18 +142,79 @@ class Perturbator(ABC):
         else:
             return False
 
-    @abstractmethod
-    def set_gen_fact(self,
-                     gen: int) -> None:
-        """Set the generation factor depending on the
-        generation number.
+    def get_scale(self,
+                  ptype: str,
+                  param: str) -> float:
+        """Get the expected standard deviation.
 
         Args:
-            gen (int): number of generation
-        """
-        pass
+            ptype (str): parameter's type
+            param (str): parameter's name
 
-    @abstractmethod
+        Returns:
+            float: The standard deviation of the parameter.
+        """
+        uncertainty: float = self.i_sop.uncertainties[param]
+        if ptype in self.additive:
+            return uncertainty
+        elif ptype in self.percent:
+            return uncertainty * self.i_sop.parameters_names[param]
+        elif ptype in self.multiplicative:
+            return uncertainty * self.i_sop.parameters_names[param]
+
+    def get_mean_sigma(self,
+                       ptype: str,
+                       param: str,
+                       c_val: float,
+                       bounds: list[float]):
+        local_c_val: float = copy(c_val)
+        scale: float = self.get_scale(ptype, param)
+        shift: float = min(bounds)
+        local_c_val -= shift
+        variance: float = (scale/c_val) ** 2
+        sigma_squared: float = np.log(1 + variance)
+        sigma: float = float(np.sqrt(sigma_squared))
+        mean: float = float(np.log(local_c_val) - sigma_squared / 2)
+        return mean, sigma, shift
+
+    def get_rng(self,
+                ptype: str,
+                i_val: float,
+                c_val: float,
+                param: str,
+                distrib: Distrib) -> float:
+        """Get a random number for the desired parameter.
+
+        Args:
+            ptype (str): Parameter type
+            i_val (float): initial value
+            c_val (float): current values
+            param (str): parameter's name
+            distrib (Distrib): Type of distribution to sample
+
+        Returns:
+            float: the random number for requested parameter
+        """
+        if distrib == Distrib.UNIFORM:
+            bounds: list[float] = self.get_boundaries(ptype=ptype,
+                                                      i_val=i_val)
+            return float(np.random.uniform(low=bounds[0], high=bounds[1]))
+        elif distrib == Distrib.NORMAL:
+            loc: float = c_val
+            scale: float = self.get_scale(param=param,
+                                          ptype=ptype)
+            return float(np.random.normal(loc=loc, scale=scale))
+        elif distrib == Distrib.LOGNORMAL:
+            # This shift is simply for negative values
+            bounds: list[float] = self.get_boundaries(ptype=ptype,
+                                                      i_val=i_val)
+            mean, sigma, shift = self.get_mean_sigma(
+                param=param,
+                ptype=ptype,
+                c_val=c_val,
+                bounds=bounds)
+            return float(np.random.lognormal(mean, sigma) + shift)
+
     def perturb(self,
                 sop: SOP) -> SOP:
         """Perturb a set of parameters
@@ -115,46 +225,213 @@ class Perturbator(ABC):
         Returns:
             SOP: Perturbed SOP
         """
-        pass
+        p_sop: SOP = deepcopy(sop)
 
-    @abstractmethod
+        if dbs+Ptype.ETF.value in self.select:
+            try_fact = -1
+            while try_fact < 0 or\
+                not self.within_boundaries(perturbed_val=try_fact,
+                                           ptype=Ptype.ETF.value,
+                                           initial_val=self.i_sop.factor):
+                # Truncate distribution at 0 to have positive factor
+                try_fact: float = self.get_rng(
+                    ptype=Ptype.ETF.value,
+                    i_val=self.i_sop.factor,
+                    c_val=p_sop.factor,
+                    param=Ptype.ETF.value,
+                    distrib=self.settings[f'distrib_{Ptype.ETF.value}'])
+            p_sop.factor = try_fact
+
+        if dbs+Ptype.ETP.value in self.select:
+            try_pow = -1
+            while try_pow < 0 or\
+                not self.within_boundaries(perturbed_val=try_pow,
+                                           ptype=Ptype.ETP.value,
+                                           initial_val=self.i_sop.power):
+                # Truncate distribution at 0 to have positive power
+                try_pow: float = self.get_rng(
+                    ptype=Ptype.ETP.value,
+                    i_val=self.i_sop.power,
+                    c_val=p_sop.power,
+                    param=Ptype.ETP.value,
+                    distrib=self.settings[f'distrib_{Ptype.ETP.value}'])
+            p_sop.power = try_pow
+
+        for i in range(len(p_sop.sigmas)):
+            if f'{dbs}{Ptype.SIG.value}{i}' in self.select:
+                try_sig = -1
+                while try_sig < 0 or \
+                    not self.within_boundaries(
+                        perturbed_val=try_sig,
+                        ptype=Ptype.SIG.value,
+                        initial_val=self.i_sop.sigmas[i]):
+                    try_sig: float = self.get_rng(
+                        ptype=Ptype.SIG.value,
+                        i_val=self.i_sop.sigmas[i],
+                        c_val=p_sop.sigmas[i],
+                        param=Ptype.SIG.value,
+                        distrib=self.settings[f'distrib_{Ptype.SIG.value}'])
+                p_sop.sigmas[i] = try_sig
+
+        for i in range(len(p_sop.epsilons)):
+            if f'{dbs}{Ptype.EPSI.value}{i}' in self.select:
+                try_eps = -1
+                while try_eps < 0 or \
+                    not self.within_boundaries(
+                        perturbed_val=try_eps,
+                        ptype=Ptype.EPSI.value,
+                        initial_val=self.i_sop.epsilons[i]):
+                    try_eps: float = self.get_rng(
+                        ptype=Ptype.EPSI.value,
+                        i_val=self.i_sop.epsilons[i],
+                        c_val=p_sop.epsilons[i],
+                        param=Ptype.EPSI.value,
+                        distrib=self.settings[f'distrib_{Ptype.EPSI.value}'])
+                p_sop.epsilons[i] = try_eps
+
+        for well in p_sop.wells:
+            self.perturb_well(well)
+        for bim in p_sop.bimolecular:
+            self.perturb_bimolecular(bim)
+        # Barriers must alway be after W and BM
+        for bar in p_sop.barriers:
+            self.perturb_barrier(bar)
+
+        return p_sop
+
     def perturb_well(self,
                      well: Well) -> None:
-        pass
+        self.perturb_energy(item=well)
+        self.perturb_vibrations(well=well)
+        self.perturb_hindered_rotors(well=well)
+        self.perturb_multi_rotors(well=well)
 
-    @abstractmethod
     def perturb_barrier(self,
                         bar: Barrier) -> None:
-        pass
+        self.perturb_barrier_energy(bar=bar)
+        self.perturb_vibrations(well=bar)
+        self.perturb_hindered_rotors(well=bar)
+        self.perturb_multi_rotors(well=bar)
+        if bar.barrierless:
+            self.perturb_symmetry_factor(bar=bar)
+        else:
+            self.perturb_ifreq(bar=bar)
 
-    @abstractmethod
     def perturb_bimolecular(self,
                             bim: Bimolecular) -> None:
-        pass
+        self.perturb_energy(item=bim)
+        for well in bim.fragments:
+            self.perturb_vibrations(well=well)
+            self.perturb_hindered_rotors(well=well)
+            self.perturb_multi_rotors(well=well)
 
-    @abstractmethod
     def perturb_energy(self,
-                       item: Well | Bimolecular | Barrier) -> None:
+                       item: Well | Bimolecular) -> None:
         """Perturb the energy of a Well or Bimolecular object.
         Calculate the perturbation and add it to the energy of the object.
 
         Args:
             item (Well | Bimolecular): Object to perturb the energy of.
         """
-        pass
+        param: str = f'{item.name}{dbs}{Ptype.WE.value}'
+        if param in self.select:
+            # Set trial energy out of the boundaries
+            try_e: float = self.i_sop.items[item.name].energy\
+                - (3*self.settings['max_std']) * \
+                self.settings[f'std_{Ptype.WE.value}']
+            while not self.within_boundaries(
+                  perturbed_val=try_e,
+                  ptype=Ptype.WE.value,
+                  initial_val=self.i_sop.items[item.name].energy):
+                try_e = self.get_rng(
+                    ptype=Ptype.WE.value,
+                    i_val=self.i_sop.items[item.name].energy,
+                    c_val=item.energy,
+                    param=param,
+                    distrib=self.settings[f'distrib_{Ptype.WE.value}'])
 
-    @abstractmethod
+            item.energy = try_e
+
+    def perturb_barrier_energy(self,
+                               bar: Barrier) -> None:
+        """Perturb the energy of a Well or Bimolecular object.
+        Calculate the perturbation and add it to the energy of the object.
+
+        Args:
+            item (Well | Bimolecular): Object to perturb the energy of.
+        """
+        param: str = f'{bar.name}{dbs}{Ptype.BE.value}'
+        if param in self.select:
+            # Set trial energy out of the boundaries
+            try_e: float = -np.inf
+            # The barrier must always be above the energy of both fragments
+            while (try_e <= max(
+                    bar.connected[0].energy,
+                    bar.connected[1].energy) or
+                   not self.within_boundaries(
+                   perturbed_val=try_e,
+                   ptype=Ptype.BE.value,
+                   initial_val=self.i_sop.items[bar.name].energy)):
+                try_e = self.get_rng(
+                    ptype=Ptype.BE.value,
+                    i_val=self.i_sop.items[bar.name].energy,
+                    c_val=bar.energy,
+                    param=param,
+                    distrib=self.settings[f'distrib_{Ptype.BE.value}'])
+
+            bar._energy = try_e
+
     def perturb_vibrations(self,
                            well: Well) -> None:
-        """Perturb the vibrations of a well by a given percentage.
-        The percentage is the same for all frequencies.
+        """Change the perturbation factors
 
         Args:
             well (Well) : Well object
         """
-        pass
 
-    @abstractmethod
+        # BATCH perturbation
+        if self.settings['freq_mode'] == FreqMode.BATCH:
+            param: str = f'{well.name}{dbs}{Ptype.BFC.value}'
+            if param in self.select:
+                # Set trial low-frequency perturbation out of the boundaries
+                try_bfc = -1
+
+                while try_bfc < 0 or\
+                    not self.within_boundaries(
+                        perturbed_val=try_bfc,
+                        ptype=Ptype.BFC.value,
+                        initial_val=1):
+                    try_bfc = self.get_rng(
+                        ptype=Ptype.BFC.value,
+                        i_val=self.i_sop.items[well.name].bfc,
+                        c_val=well.bfc,
+                        param=param,
+                        distrib=self.settings[f'distrib_{Ptype.BFC.value}'])
+                well.bfc = try_bfc
+        # INDIVIDUAL perturbation
+        elif self.settings['freq_mode'] == FreqMode.INDIVIDUAL:
+            for idx, c_val in enumerate(well.ifc):
+                param: str = f'{well.name}{dbs}{Ptype.IFC.value}{idx:02d}'
+                if param in self.select:
+                    # Set trial frequency perturbation out of the boundaries
+                    try_ifc = -1
+
+                    while try_ifc < 0 or\
+                        not self.within_boundaries(
+                            perturbed_val=try_ifc,
+                            ptype=Ptype.IFC.value,
+                            initial_val=1):
+                        try_ifc: float = self.get_rng(
+                            ptype=Ptype.IFC.value,
+                            i_val=self.i_sop.items[well.name].ifc[idx],
+                            c_val=c_val,
+                            param=param,
+                            distrib=self.settings[f'distrib_{Ptype.IFC.value}']
+                            )
+                    well.ifc[idx] = try_ifc
+        else:
+            raise TypeError('Unknown frequency perturbation mode')
+
     def perturb_hindered_rotors(self,
                                 well: Well) -> None:
         """Perturb all hindered rotors scan by different
@@ -163,9 +440,58 @@ class Perturbator(ABC):
         Args:
             well (Well) : Well object
         """
-        pass
 
-    @abstractmethod
+        for num, rot in enumerate(well.h_rotors):
+            param: str = f'{well.name}{dbs}{Ptype.HRS.value}{num}'
+            if param in self.select:
+                # Set trial rotor perturbation out of the boundaries
+                try_r: float = 1 -\
+                    (3*self.settings['max_std']) *\
+                    self.settings[f'std_{Ptype.HRS.value}']
+                while not self.within_boundaries(
+                      perturbed_val=try_r,
+                      ptype=Ptype.HRS.value,
+                      initial_val=1):
+                    try_r = self.get_rng(
+                        ptype=Ptype.HRS.value,
+                        i_val=1.0,
+                        c_val=rot.pert,
+                        param=param,
+                        distrib=self.settings[f'distrib_{Ptype.HRS.value}']
+                        )
+
+                rot.pert = try_r
+
+    def perturb_multi_rotors(self,
+                             well: Well) -> None:
+        """Perturb all multi rotors symmetry factor by a different
+        percentage.
+
+        Args:
+            well (Well) : Well object
+        """
+
+        for num, rot in enumerate(well.m_rotors):
+            param: str = f'{well.name}{dbs}{Ptype.MRC.value}{num}'
+            if param in self.select:
+                # Set trial rotor perturbation out of the boundaries
+                try_r: float = 1 -\
+                    (3*self.settings['max_std']) *\
+                    self.settings[f'std_{Ptype.MRC.value}']
+                while not self.within_boundaries(
+                      perturbed_val=try_r,
+                      ptype=Ptype.MRC.value,
+                      initial_val=1):
+                    try_r = self.get_rng(
+                        ptype=Ptype.MRC.value,
+                        i_val=1.0,
+                        c_val=rot.sfc,
+                        param=param,
+                        distrib=self.settings[f'distrib_{Ptype.MRC.value}']
+                        )
+
+                rot.sfc = try_r
+
     def perturb_ifreq(self,
                       bar: Barrier) -> None:
         """Perturb the imaginary frequency of a barrier by a given percentage.
@@ -173,9 +499,46 @@ class Perturbator(ABC):
         Args:
             bar (Barrier) : Barrier object
         """
-        pass
+        param: str = f'{bar.name}{dbs}{Ptype.IF.value}'
+        if param in self.select:
+            # Set trial imaginary frequency out of the boundaries
+            try_if: float = -1
+            while try_if < 0 or not self.within_boundaries(
+                    perturbed_val=try_if,
+                    ptype=Ptype.IF.value,
+                    initial_val=self.i_sop.items[bar.name].ifreq):
+                try_if = self.get_rng(
+                        ptype=Ptype.IF.value,
+                        i_val=self.i_sop.items[bar.name].ifreq,
+                        c_val=bar.ifreq,
+                        param=param,
+                        distrib=self.settings[f'distrib_{Ptype.IF.value}']
+                        )
 
-    @abstractmethod
+            bar.ifreq = try_if
+
     def perturb_symmetry_factor(self,
                                 bar: Barrier):
-        pass
+        """Perturb the symmetry factor of a barrierless reaction
+
+        Args:
+            bar (Barrier): barrierless reaction.
+        """
+        param: str = f'{bar.name}{dbs}{Ptype.SFC.value}'
+        if param in self.select:
+            # Set trial symmetry factor out of the boundaries
+            try_sfc: float = -1
+            while (try_sfc <= 0 or
+                   not self.within_boundaries(
+                    perturbed_val=try_sfc,
+                    ptype=Ptype.SFC.value,
+                    initial_val=self.i_sop.items[bar.name].sfc)):
+                try_sfc = self.get_rng(
+                        ptype=Ptype.SFC.value,
+                        i_val=self.i_sop.items[bar.name].sfc,
+                        c_val=bar.sfc,
+                        param=param,
+                        distrib=self.settings[f'distrib_{Ptype.SFC.value}']
+                        )
+
+            bar.sfc = try_sfc

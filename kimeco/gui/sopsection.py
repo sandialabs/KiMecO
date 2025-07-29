@@ -219,7 +219,7 @@ class SOPSection(Section):
             # MultiRotors are called mrX
             # but get their symmetry factor modified
             elif 'mr' in param:
-                ptype = 'sf_p'
+                ptype = 'sfc'
 
         return self.pert.get_boundaries(
             ptype=ptype,
@@ -310,7 +310,7 @@ class SOPSection(Section):
         elif ptype == 'f_p' and 'lf_p' in param:
             plot_settings['title'] = \
                 f'Frequency perturbation {param} of {molec}'
-        elif ptype == 'f_p' and 'sf_p' in param:
+        elif ptype == 'f_p' and 'sfc' in param:
             plot_settings['title'] = \
                 f'Symmetry factor {param} of {molec}'
         elif (ptype == 'lj' and

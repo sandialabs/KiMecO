@@ -9,6 +9,8 @@ from numpy.typing import NDArray
 from scipy.constants import gas_constant
 import cantera.with_units as ctu
 from logging import Logger
+from kimeco.enums import Distrib
+from kimeco.enums import FreqMode
 
 
 ureg = ctu.cantera_units_registry
@@ -181,12 +183,35 @@ def check_input(input_file: str,
     # Set default values for all keys
     for key, value in default_settings.items():
         if key not in json_file:
+            # Replace value by enum for RNG distributions
+            if 'distrib' in key:
+                value = Distrib(value)
+            # Check the FreqMode
+            if key == 'freq_mode':
+                value = FreqMode(value)
             json_file[key] = value
         elif not isinstance(json_file[key], type(value)):
             if isinstance(value, float) and isinstance(json_file[key], int):
                 continue
             klog.info(f"{key} has incorrect type. It should be {type(value)}")
             cancel_run = True
+        # Replace value by enum for RNG distributions
+        elif 'distrib' in key:  # Key is a distribution specified in JSON
+            if any([json_file[key].casefold() == distrib.value
+                    for distrib in Distrib]):
+                json_file[key] = Distrib(json_file[key].casefold())
+            else:
+                klog.info(f"{key} has unknown distribution.")
+                cancel_run = True
+        # Replace value by enum for mode of frequencxy perturbation
+        elif key == 'freq_mode':
+            if any([json_file[key].casefold() == fm.value
+                    for fm in FreqMode]):
+                json_file[key] = FreqMode(json_file[key].casefold())
+            else:
+                klog.info(f"{key} has unknown frequency perturbation mode.")
+                cancel_run = True
+
 
     # READ CSVs
     clean_profiles = []
@@ -319,7 +344,7 @@ def check_input(input_file: str,
     # Setting the weight for each experiment
     # default
     if len(json_file['w_exp']) == 0:
-        json_file['w_exp'] = [1.0 for i in range(n_exp)]
+        json_file['w_exp'] = [1.0/n_exp for i in range(n_exp)]
     # Error in input
     elif len(json_file['w_exp']) != n_exp:
         klog.info(f"The number of weights in w_exp should be {n_exp}")

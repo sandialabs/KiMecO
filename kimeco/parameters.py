@@ -1,10 +1,12 @@
 from copy import deepcopy
 from typing import Any
-
+from kimeco.enums import FreqMode
 from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from kimeco.barrier import Barrier
 from kimeco.rotors.internalrotation import InternalRotation
+from kimeco.database.kimeco_db import dbs
+from kimeco.enums import Ptype
 
 
 class SOP:
@@ -12,18 +14,21 @@ class SOP:
     Main object of the KIMECO code, to be perturbed and optimized."""
 
     def __init__(self,
-                 score_species: list[str]) -> None:
+                 score_species: list[str],
+                 freq_mode: FreqMode = FreqMode.BATCH) -> None:
+        self.freq_mode: FreqMode = freq_mode
         self.sc_species: list[str] = score_species
         self.wells: list[Well] = []
         self.bimolecular: list[Bimolecular] = []
         self.barriers: list[Barrier] = []
         self.id: int
-        self.items: dict = {}
+        self.items: dict[str, Well | Bimolecular | Barrier] = {}
         self.power: float
         self.factor: float
         self.sigmas: list[float] = []
         self.rc_temp: list[float]
         self.rc_pres: list[float]
+        self.pres_unit: str
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
         self.files2copy: list[str] = []
@@ -52,8 +57,8 @@ class SOP:
         return table_repr[:-1] + ")>"
 
     @property
-    def species(self):
-        species = []
+    def species(self) -> list[str]:
+        species: list[str] = []
         for well in self.wells:
             species.append(well.ct_name)
         for bm in self.bimolecular:
@@ -120,7 +125,9 @@ class SOP:
         else:
             self.ct_names[name] = name
         ct_name: str = self.ct_names[name]
-        self.items[name] = Well(name=name, ct_name=ct_name)
+        self.items[name] = Well(name=name,
+                                ct_name=ct_name,
+                                freq_mode=self.freq_mode)
         self.wells.append(self.items[name])
 
     @property
@@ -142,7 +149,9 @@ class SOP:
         Args:
             name (str): name of the bimolecular object
         """
-        self.items[name] = Bimolecular(name, self.ct_names)
+        self.items[name] = Bimolecular(name,
+                                       self.ct_names,
+                                       freq_mode=self.freq_mode)
         self.bimolecular.append(self.items[name])
 
     @property
@@ -160,20 +169,20 @@ class SOP:
     @property
     def parameters_names(self) -> dict[str, Any]:
         pn: dict[str, Any] = {
-            '__fact': self.factor,
-            '__pow': self.power
+            dbs + Ptype.ETF.value: self.factor,
+            dbs + Ptype.ETP.value: self.power
             }
         sc = 0
         for obj in self.items.values():
             if obj.ct_name in self.sc_species:
-                pn[f'{obj.ct_name}__score'] = float(99999)
+                pn[obj.ct_name + dbs + Ptype.SCORE.value] = float(99999)
                 sc += 1
         for k, v in self.scores.items():
-            pn[f'{k}__score'] = float(v)
+            pn[k + dbs + Ptype.SCORE.value] = float(v)
         for idx, ep in enumerate(self.epsilons):
-            pn[f'__epsi_{idx}'] = float(ep)
+            pn[dbs + Ptype.EPSI.value + f'{idx}'] = float(ep)
         for idx, sig in enumerate(self.sigmas):
-            pn[f'__sigma_{idx}'] = float(sig)
+            pn[dbs + Ptype.SIG.value + f'{idx}'] = float(sig)
         for well in self.wells:
             if well.dummy:
                 continue
@@ -201,6 +210,7 @@ class SOP:
             rside (str): name of the product
         """
         self.items[name] = Barrier(name=name,
+                                   freq_mode=self.freq_mode,
                                    lside=self.items[lside],
                                    rside=self.items[rside])
         self.barriers.append(self.items[name])
@@ -327,56 +337,78 @@ class SOP:
             key (str): parameter name
             value (float): value in db
         """
-        # db_sep = '__'
 
-        if 'score' in key:
-            specie: str = key.split('__')[0]
+        if Ptype.SCORE.value in key:
+            specie: str = key.split(dbs)[0]
             self.scores[specie] = value
             return
         # Energy transfer probability, factor
-        elif 'fact' in key:
+        elif Ptype.ETF.value in key:
             self.factor = value
             return
         # Energy transfer probability, exponent
-        elif 'pow' in key:
+        elif Ptype.ETP.value in key:
             self.power = value
             return
-        elif 'epsi' in key:
-            idx = int(key.split('epsi_')[-1])
+        elif Ptype.EPSI.value in key:
+            idx = int(key.split(Ptype.EPSI.value)[-1])
             self.epsilons[idx] = value
             return
-        elif 'sigma' in key:
-            idx = int(key.split('sigma_')[-1])
+        elif Ptype.SIG.value in key:
+            idx = int(key.split(Ptype.SIG.value)[-1])
             self.sigmas[idx] = value
             return
-        item_name: str = '__'.join(key.split('__')[:-1])
-        param_name: str = key.split('__')[-1]
+        item_name: str = dbs.join(key.split(dbs)[:-1])
+        param_name: str = key.split(dbs)[-1]
         # Energies
-        if param_name == 'e':
-            if isinstance(self.items[item_name], Barrier):
-                self.items[item_name]._energy = value
-            else:
-                self.items[item_name].energy = value
+        if param_name == Ptype.WE.value:
+            self.items[item_name].energy = value
+        elif param_name == Ptype.BE.value:
+            self.items[item_name]._energy = value
         # Imaginary frequencies
-        elif 'if' in param_name:
+        elif Ptype.IF.value in param_name:
             self.items[item_name].ifreq = value
         # symmetry factor
-        elif 'sf' in param_name:
-            self.items[item_name].sf_p = value
+        elif Ptype.SFC.value in param_name:
+            self.items[item_name].sfc = value
         # Frequencies
-        elif 'hf_p' in param_name:
-            self.items[item_name].hf_p = value
-        elif 'lf_p' in param_name:
-            self.items[item_name].lf_p = value
+        elif Ptype.BFC.value in param_name:
+            self.items[item_name].bcf = float(value)
+        elif Ptype.IFC.value in param_name:
+            idx = int(param_name.split(Ptype.IFC.value)[-1])
+            self.items[item_name].ifc[idx] = float(value)
         # Hindered rotors
-        elif 'hr' in param_name:
-            idx = int(param_name.split('hr')[-1])
+        elif Ptype.HRS.value in param_name:
+            idx = int(param_name.split(Ptype.HRS.value)[-1])
             # Reset the rotor's scan
             self.items[item_name].h_rotors[idx].pert = value
         # Multi rotors
-        elif 'mr' in param_name:
-            idx = int(param_name.split('mr')[-1])
+        elif Ptype.MRC.value in param_name:
+            idx = int(param_name.split(Ptype.MRC.value)[-1])
             # Reset the rotor's scan
-            self.items[item_name].m_rotors[idx].sf_p = value
+            self.items[item_name].m_rotors[idx].sfc = value
         else:
             raise KeyError('Trying to restore unknown parameter.')
+
+    def set_uncertainties(self,
+                          settings: dict[str, Any]) -> None:
+        """Set the uncertainties for all the parameters
+
+        Args:
+            settings (dict[str, Any]): user's input
+        """
+        self.uncertainties: dict[str, float] = {
+            dbs+Ptype.ETF.value: settings[f'std_{Ptype.ETF.value}'],
+            dbs+Ptype.ETP.value: settings[f'std_{Ptype.ETP.value}']
+        }
+        for idx in range(len(self.sigmas)):
+            self.uncertainties[f'{dbs}{Ptype.SIG.value}{idx}'] = \
+                settings[f'std_{Ptype.SIG.value}']
+        for idx in range(len(self.epsilons)):
+            self.uncertainties[f'{dbs}{Ptype.EPSI.value}{idx}'] = \
+                settings[f'std_{Ptype.EPSI.value}']
+
+        for sp in self.items.values():
+            sp: Well | Barrier | Bimolecular
+            sp.set_uncertainties(settings)
+            self.uncertainties.update(sp.uncertainties)

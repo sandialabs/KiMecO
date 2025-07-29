@@ -1,4 +1,4 @@
-from mimetypes import init
+from kimeco.enums import Ptype
 from typing import Any
 import os
 import shutil
@@ -129,29 +129,35 @@ class Linear:
                 mol: str = key.split('__')[0]
                 param: str = key.split('__')[1]
                 lin_fact = self.settings['sensi_d']
-                if param == 'e':
-                    if isinstance(base_sop.items[mol], Barrier):
-                        modif = self.settings['std_b'] * lin_fact
-                    else:
-                        modif = self.settings['std_e'] * lin_fact
-                elif param.startswith('fact'):
-                    modif = pn[key] * (self.settings['std_fact'] - 1) *\
-                            lin_fact
-                elif param.startswith('hr'):
-                    modif = pn[key] * self.settings['std_hr'] * lin_fact
-                elif param.startswith('mr'):
-                    modif = pn[key] * self.settings['std_hr'] * lin_fact
-                elif param.startswith('epsi'):
-                    modif = pn[key] * self.settings['std_epsi'] * lin_fact
-                elif param.startswith('sigma'):
-                    modif = pn[key] * self.settings['std_sigma'] * lin_fact
-                elif param.startswith('sf_p'):
+                if param == Ptype.WE.value:
+                    modif = self.settings[f'std_{Ptype.WE.value}'] * lin_fact
+                elif param == Ptype.BE.value:
+                    modif = self.settings[f'std_{Ptype.BE.value}'] * lin_fact
+                elif param.startswith(Ptype.ETF.value):
+                    modif = pn[key] * \
+                        (self.settings[f'std_{Ptype.ETF.value}'] - 1) *\
+                        lin_fact
+                elif param.startswith(Ptype.HRS.value):
+                    modif = pn[key] * \
+                        self.settings[f'std_{Ptype.HRS.value}'] * lin_fact
+                elif param.startswith(Ptype.MRC.value):
+                    modif = pn[key] * \
+                        self.settings[f'std_{Ptype.MRC.value}'] * lin_fact
+                elif param.startswith(Ptype.EPSI.value):
+                    modif = pn[key] * \
+                        self.settings[f'std_{Ptype.EPSI.value}'] * lin_fact
+                elif param.startswith(Ptype.SIG.value):
+                    modif = pn[key] * \
+                        self.settings[f'std_{Ptype.SIG.value}'] * lin_fact
+                elif param.startswith(Ptype.SFC.value):
                     if side == 1:
-                        modif = pn[key] * (self.settings['std_sf_p'] - 1) *\
-                              lin_fact
+                        modif = pn[key] * \
+                            (self.settings[f'std_{Ptype.SFC.value}'] - 1) *\
+                            lin_fact
                     elif side == -1:
-                        modif = (pn[key] / self.settings['std_sf_p']) *\
-                            (self.settings['std_sf_p'] - 1) * lin_fact
+                        modif = \
+                            (pn[key] / self.settings[f'std_{Ptype.SFC.value}']) *\
+                            (self.settings[f'std_{Ptype.SFC.value}'] - 1) * lin_fact
                 else:
                     modif = pn[key] * self.settings[f'std_{param}'] * lin_fact
                 new_sop = SOP.from_db_row(
