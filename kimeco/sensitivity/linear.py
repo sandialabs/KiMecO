@@ -100,6 +100,7 @@ class Linear:
 
     def calculate_dstep(self,
                         val: float,
+                        uc: float,
                         param: str,
                         side: int) -> float:
         """Calculate the size of the derivative
@@ -118,13 +119,11 @@ class Linear:
         for ptype in Ptype:
             if ptype.value in param:
                 break
-        # Get the uncertainty of the parameter
-        uc: float = self.elements[0].sop.uncertainties[param]
-        if ptype in Pclass.ADDITIVE:
+        if ptype in Pclass.ADDITIVE.value:
             dstep: float = uc
-        elif ptype in Pclass.PERCENT:
+        elif ptype in Pclass.PERCENT.value:
             dstep = val * uc
-        elif ptype in Pclass.MULTIPLICATIVE:
+        elif ptype in Pclass.MULTIPLICATIVE.value:
             if side == 1:
                 dstep = val * (uc - 1)
             elif side == -1:
@@ -161,8 +160,11 @@ class Linear:
                 self.to_test.append(True)
                 el_id += 1
                 param: str = key.split('__')[1]
+                # Get the uncertainty of the parameter
+                uc: float = elements[0].sop.uncertainties[key]
                 dstep: float = self.calculate_dstep(
                     val=pn[key],
+                    uc=uc,
                     param=param,
                     side=side
                 )
