@@ -171,7 +171,7 @@ class Perturbator:
         scale: float = self.get_scale(ptype, param)
         shift: float = min(bounds)
         local_c_val -= shift
-        variance: float = (scale/c_val) ** 2
+        variance: float = (scale/local_c_val) ** 2
         sigma_squared: float = np.log(1 + variance)
         sigma: float = float(np.sqrt(sigma_squared))
         mean: float = float(np.log(local_c_val) - sigma_squared / 2)
