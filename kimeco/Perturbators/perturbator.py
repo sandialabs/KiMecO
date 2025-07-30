@@ -240,7 +240,7 @@ class Perturbator:
                     ptype=Ptype.ETF.value,
                     i_val=self.i_sop.factor,
                     c_val=p_sop.factor,
-                    param=Ptype.ETF.value,
+                    param=dbs+Ptype.ETF.value,
                     distrib=self.settings[f'distrib_{Ptype.ETF.value}'])
             p_sop.factor = try_fact
 
@@ -255,7 +255,7 @@ class Perturbator:
                     ptype=Ptype.ETP.value,
                     i_val=self.i_sop.power,
                     c_val=p_sop.power,
-                    param=Ptype.ETP.value,
+                    param=dbs+Ptype.ETP.value,
                     distrib=self.settings[f'distrib_{Ptype.ETP.value}'])
             p_sop.power = try_pow
 
@@ -271,7 +271,7 @@ class Perturbator:
                         ptype=Ptype.SIG.value,
                         i_val=self.i_sop.sigmas[i],
                         c_val=p_sop.sigmas[i],
-                        param=Ptype.SIG.value,
+                        param=dbs+Ptype.SIG.value,
                         distrib=self.settings[f'distrib_{Ptype.SIG.value}'])
                 p_sop.sigmas[i] = try_sig
 
@@ -287,7 +287,7 @@ class Perturbator:
                         ptype=Ptype.EPSI.value,
                         i_val=self.i_sop.epsilons[i],
                         c_val=p_sop.epsilons[i],
-                        param=Ptype.EPSI.value,
+                        param=dbs+Ptype.EPSI.value,
                         distrib=self.settings[f'distrib_{Ptype.EPSI.value}'])
                 p_sop.epsilons[i] = try_eps
 
