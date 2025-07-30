@@ -257,7 +257,7 @@ class Perturbator:
                         ptype=Ptype.SIG.value,
                         i_val=self.i_sop.sigmas[i],
                         c_val=p_sop.sigmas[i],
-                        param=dbs+Ptype.SIG.value,
+                        param=dbs+Ptype.SIG.value+f'{i}',
                         distrib=self.settings[f'distrib_{Ptype.SIG.value}'])
                 p_sop.sigmas[i] = try_sig
 
@@ -273,7 +273,7 @@ class Perturbator:
                         ptype=Ptype.EPSI.value,
                         i_val=self.i_sop.epsilons[i],
                         c_val=p_sop.epsilons[i],
-                        param=dbs+Ptype.EPSI.value,
+                        param=dbs+Ptype.EPSI.value+f'{i}',
                         distrib=self.settings[f'distrib_{Ptype.EPSI.value}'])
                 p_sop.epsilons[i] = try_eps
 
