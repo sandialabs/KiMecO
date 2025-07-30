@@ -27,6 +27,25 @@ class Ptype(Enum):
     SCORE = 'score'
 
 
+class Pclass(Enum):
+    ADDITIVE = {
+            Ptype.WE.value,
+            Ptype.BE.value,
+            Ptype.ETP.value,
+            Ptype.BFC.value,
+            Ptype.IFC.value}
+    MULTIPLICATIVE = {
+            Ptype.SFC.value,
+            Ptype.MRC.value
+            }
+    PERCENT = {
+            Ptype.IF.value,
+            Ptype.HRS.value,
+            Ptype.SIG.value,
+            Ptype.EPSI.value,
+            Ptype.ETF.value}
+
+
 class FreqMode(Enum):
     BATCH = 'batch'
     INDIVIDUAL = 'individual'

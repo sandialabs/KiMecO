@@ -9,9 +9,8 @@ from kimeco.parameters import SOP
 from kimeco.enums import FreqMode
 from kimeco.well import Well
 import numpy as np
-from kimeco.enums import Ptype
+from kimeco.enums import Ptype, Distrib, Pclass
 from kimeco.database.kimeco_db import dbs
-from kimeco.enums import Distrib
 
 
 class Perturbator:
@@ -44,22 +43,9 @@ class Perturbator:
             Ptype.BFC.value,
             Ptype.IFC.value
         }
-        self.additive: set[str] = {
-            Ptype.WE.value,
-            Ptype.BE.value,
-            Ptype.ETP.value,
-            Ptype.BFC.value,
-            Ptype.IFC.value}
-        self.multiplicative: set[str] = {
-            Ptype.SFC.value,
-            Ptype.MRC.value
-            }
-        self.percent: set[str] = {
-            Ptype.IF.value,
-            Ptype.HRS.value,
-            Ptype.SIG.value,
-            Ptype.EPSI.value,
-            Ptype.ETF.value}
+        self.additive: set[str] = Pclass.ADDITIVE.value
+        self.multiplicative: set[str] = Pclass.MULTIPLICATIVE.value
+        self.percent: set[str] = Pclass.PERCENT.value
         self.select: list[str] = self.settings['only_perturb']
         self.distribs: dict[Ptype, Distrib] = {
             ptype: self.settings[f'distrib_{ptype.value}'] for ptype in Ptype

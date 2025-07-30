@@ -1,13 +1,13 @@
-from kimeco.enums import Ptype
+from kimeco.enums import Pclass, Ptype
 from typing import Any
 import os
 import shutil
 import numpy as np
 from numpy.typing import NDArray
-from kimeco.barrier import Barrier
 from kimeco.element import Element
 from kimeco.parameters import SOP
 from kimeco.core import CoreRun
+from kimeco.database.kimeco_db import dbs
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
@@ -32,6 +32,7 @@ class Linear:
         self.name = 'SA'
         self.to_test = []
         self.selected = []
+        self.lin_fact: float = self.settings['sensi_d']
         self.elements: list[Element] = self.prepare_elements(
             elements=elements,
             sf=sf
@@ -97,6 +98,39 @@ class Linear:
         # Create a new SOP object using the from_db_row method
         return SOP.from_db_row(sop_template, list(averages.values()))
 
+    def calculate_dstep(self,
+                        val: float,
+                        param: str,
+                        side: int) -> float:
+        """Calculate the size of the derivative
+        step depending on the type of parameter.
+
+        Args:
+            val (float): value of the parameter
+            param (str): name of the parameter
+            side (int): side of the derivative
+
+        Returns:
+            float: _description_
+        """
+        dstep = 0.0
+        # Recognise type of parameter
+        for ptype in Ptype:
+            if ptype.value in param:
+                break
+        # Get the uncertainty of the parameter
+        uc: float = self.elements[0].sop.uncertainties[param]
+        if ptype in Pclass.ADDITIVE:
+            dstep: float = uc
+        elif ptype in Pclass.PERCENT:
+            dstep = val * uc
+        elif ptype in Pclass.MULTIPLICATIVE:
+            if side == 1:
+                dstep = val * (uc - 1)
+            elif side == -1:
+                dstep = (val/uc) * (uc - 1)
+        return dstep * self.lin_fact
+
     def prepare_elements(self,
                          elements: list[Element],
                          sf: Scoring) -> list[Element]:
@@ -120,49 +154,21 @@ class Linear:
                 # Check if the parameter should be modified
                 if any(
                     substring in key for substring in
-                    ['__score']):
+                    [f'{dbs}score']):
                     self.to_test.append(False)
                     continue
                 # Create a new SOP object with the modified parameter
                 self.to_test.append(True)
                 el_id += 1
-                mol: str = key.split('__')[0]
                 param: str = key.split('__')[1]
-                lin_fact = self.settings['sensi_d']
-                if param == Ptype.WE.value:
-                    modif = self.settings[f'std_{Ptype.WE.value}'] * lin_fact
-                elif param == Ptype.BE.value:
-                    modif = self.settings[f'std_{Ptype.BE.value}'] * lin_fact
-                elif param.startswith(Ptype.ETF.value):
-                    modif = pn[key] * \
-                        (self.settings[f'std_{Ptype.ETF.value}'] - 1) *\
-                        lin_fact
-                elif param.startswith(Ptype.HRS.value):
-                    modif = pn[key] * \
-                        self.settings[f'std_{Ptype.HRS.value}'] * lin_fact
-                elif param.startswith(Ptype.MRC.value):
-                    modif = pn[key] * \
-                        self.settings[f'std_{Ptype.MRC.value}'] * lin_fact
-                elif param.startswith(Ptype.EPSI.value):
-                    modif = pn[key] * \
-                        self.settings[f'std_{Ptype.EPSI.value}'] * lin_fact
-                elif param.startswith(Ptype.SIG.value):
-                    modif = pn[key] * \
-                        self.settings[f'std_{Ptype.SIG.value}'] * lin_fact
-                elif param.startswith(Ptype.SFC.value):
-                    if side == 1:
-                        modif = pn[key] * \
-                            (self.settings[f'std_{Ptype.SFC.value}'] - 1) *\
-                            lin_fact
-                    elif side == -1:
-                        modif = \
-                            (pn[key] / self.settings[f'std_{Ptype.SFC.value}']) *\
-                            (self.settings[f'std_{Ptype.SFC.value}'] - 1) * lin_fact
-                else:
-                    modif = pn[key] * self.settings[f'std_{param}'] * lin_fact
+                dstep: float = self.calculate_dstep(
+                    val=pn[key],
+                    param=param,
+                    side=side
+                )
                 new_sop = SOP.from_db_row(
                     sop_tpl=base_sop,
-                    row=[v+(modif*side) if k == key else v
+                    row=[v+(dstep*side) if k == key else v
                          for k, v in pn.items()])
                 new_elements.append(
                     Element(
