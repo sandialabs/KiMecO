@@ -67,13 +67,13 @@ class Perturbator:
         }
 
     def print_pert_parameters(self) -> None:
-        msg = 'Perturbation parameters:\n'
+        msg = 'Perturbation settings:\n'
         tpl = '\t{param:<20} {un_str:>20} {distrib:>20}\n'
         msg += tpl.format(param='PARAMETERS',
                           un_str='UNCERTAINTIES',
                           distrib='DISTRIBUTIONS')
         for param, un in self.i_sop.uncertainties.items():
-            pshort: list[str] = param.split(dbs)[1]
+            pshort: str = param.split(dbs)[1]
             for ptype in Ptype:
                 if ptype.value in pshort:
                     distrib = self.distribs[ptype].value
@@ -161,6 +161,8 @@ class Perturbator:
             return uncertainty * self.i_sop.parameters_names[param]
         elif ptype in self.multiplicative:
             return uncertainty * self.i_sop.parameters_names[param]
+        else:
+            raise TypeError('Unknown parameter type in get_scale.')
 
     def get_mean_sigma(self,
                        ptype: str,
