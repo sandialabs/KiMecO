@@ -200,7 +200,7 @@ def main() -> None:
     with open(location + '/goat.txt', 'w') as f:
         f.write(goat_line)
 
-    score_line_tpl = '{gen_id:>10s}{best_score:>15s}{score_avrg:>15s}\n'
+    score_line_tpl = '{gen_id:>10}{best_score:>15}{score_avrg:>15}\n'
     with open(location + '/score_info.txt', 'w') as f:
         f.write(score_line_tpl.format(
                 gen_id='GEN_ID',
@@ -262,6 +262,12 @@ def main() -> None:
                     msg = 'Bad replacement in goat list'
                     raise ValueError(msg)
                 replaced += 1
+            # Check if goat has been properly updated
+            max_goat: float = max([el.score for el in goat])
+            for el in new_gen.elements:
+                if el.score <= max_goat and el not in goat:
+                    msg: str = 'Bug in GOAT update.'
+                    raise ValueError(msg)
             goat_avrg = np.average([el.score for el in goat])
             klog.info(f'Number of goat replaced: {replaced}')
             klog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.3f}')

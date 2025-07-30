@@ -15,8 +15,8 @@ class Tournament(GeneticAlgorithm):
             return False
 
     def create_next_gen(self,
-                 gen: Generation
-                 ) -> tuple[dict[int, Element], list[Element]]:
+                        gen: Generation
+                        ) -> tuple[dict[int, Element], list[Element]]:
         """Pair all elements, keep the one with the best score,
         and create a new element from the loser.
 
@@ -27,9 +27,8 @@ class Tournament(GeneticAlgorithm):
             list[Element]: list of elements of the new generation.
         """
         # Change the intensity of the perturbation
-        self.pert.set_gen_fact(gen=gen.id)
         next_gen: list[Element] = gen.elements
-        shuffled = copy.copy(gen.elements)
+        shuffled: list[Element] = copy.copy(gen.elements)
         random.shuffle(shuffled)
         prev_gen: dict[int, Element] = {}
         half = int(len(shuffled)/2)

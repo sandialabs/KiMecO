@@ -166,7 +166,7 @@ class Perturbator:
                        ptype: str,
                        param: str,
                        c_val: float,
-                       bounds: list[float]):
+                       bounds: list[float]) -> tuple[float, float, float]:
         local_c_val: float = copy(c_val)
         scale: float = self.get_scale(ptype, param)
         shift: float = min(bounds)
