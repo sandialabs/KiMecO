@@ -112,22 +112,23 @@ class Linear:
             side (int): side of the derivative
 
         Returns:
-            float: _description_
+            float: derivative step
         """
-        dstep = 0.0
         # Recognise type of parameter
         for ptype in Ptype:
             if ptype.value in param:
                 break
-        if ptype in Pclass.ADDITIVE.value:
+        if ptype.value in Pclass.ADDITIVE.value:
             dstep: float = uc
-        elif ptype in Pclass.PERCENT.value:
+        elif ptype.value in Pclass.PERCENT.value:
             dstep = val * uc
-        elif ptype in Pclass.MULTIPLICATIVE.value:
+        elif ptype.value in Pclass.MULTIPLICATIVE.value:
             if side == 1:
                 dstep = val * (uc - 1)
             elif side == -1:
                 dstep = (val/uc) * (uc - 1)
+        else:
+            raise TypeError('Unrecognised Ptype in Linear sensitivity')
         return dstep * self.lin_fact
 
     def prepare_elements(self,
