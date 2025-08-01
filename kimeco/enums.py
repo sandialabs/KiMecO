@@ -14,8 +14,8 @@ class ElementStatus(Enum):
 class Ptype(Enum):
     WE = 'we'  # Well energy
     BE = 'be'  # Barrier energy
-    SIG = 'sigma'
-    EPSI = 'epsilon'
+    SIG = 'sigma'  # Lenard Jones potential
+    EPSI = 'epsilon'  # Lenard Jones potential
     ETF = 'fact'  # Energy Transfert Factor
     ETP = 'pow'  # Energy Transfert Power
     IF = 'if'  # Imaginary Frequency
@@ -53,5 +53,6 @@ class FreqMode(Enum):
 
 class Distrib(Enum):
     UNIFORM = 'uniform'
+    LOGUNIFORM = 'log-uniform'
     NORMAL = 'normal'
-    LOGNORMAL = 'lognormal'
+    LOGNORMAL = 'log-normal'

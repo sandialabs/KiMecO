@@ -158,11 +158,11 @@ class Perturbator:
         local_c_val: float = copy(c_val)
         scale: float = self.get_scale(ptype, param)
         shift: float = min(bounds)
-        local_c_val -= shift
+        # local_c_val -= shift
         variance: float = (scale/local_c_val) ** 2
         sigma_squared: float = np.log(1 + variance)
         sigma: float = float(np.sqrt(sigma_squared))
-        mean: float = float(np.log(local_c_val) - sigma_squared / 2)
+        mean: float = float(np.log(local_c_val))
         return mean, sigma, shift
 
     def get_rng(self,
@@ -187,6 +187,11 @@ class Perturbator:
             bounds: list[float] = self.get_boundaries(ptype=ptype,
                                                       i_val=i_val)
             return float(np.random.uniform(low=bounds[0], high=bounds[1]))
+        elif distrib == Distrib.LOGUNIFORM:
+            bounds: list[float] = self.get_boundaries(ptype=ptype,
+                                                      i_val=i_val)
+            return float(np.exp(np.random.uniform(low=np.log(bounds[0]),
+                                                  high=np.log(bounds[1]))))
         elif distrib == Distrib.NORMAL:
             loc: float = c_val
             scale: float = self.get_scale(param=param,
@@ -201,7 +206,9 @@ class Perturbator:
                 ptype=ptype,
                 c_val=c_val,
                 bounds=bounds)
-            return float(np.random.lognormal(mean, sigma) + shift)
+            return float(np.random.lognormal(mean, sigma))  #  + shift
+        else:
+            raise TypeError('Unknown Distribution in Perturbator')
 
     def perturb(self,
                 sop: SOP) -> SOP:

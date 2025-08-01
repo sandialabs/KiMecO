@@ -14,8 +14,6 @@ from kimeco.gui.kinsection import KINSection
 from kimeco.gui.simsection import SIMSection
 from kimeco.gui.corsection import CORSection
 from kimeco.Perturbators.perturbator import Perturbator
-from kimeco.Perturbators.normal import Normal
-from kimeco.Perturbators.lognormal import LogNormal
 from kimeco import kimeco_path
 from logging import Logger
 from kimeco.logger_config import setup_logger
@@ -76,9 +74,11 @@ class KimecoApp:
         else:
             self.init_vals = self.sop_db.get_table(table='G0000')[0]
 
-        self.pert: Perturbator = self.set_pert(
-            self.settings,
-            self.init_SOP)
+        self.pert: Perturbator = Perturbator(
+            settings=self.settings,
+            initial_SOP=self.init_SOP,
+            klog=self.klog
+            )
         with open(self.loc + '/goat.txt', 'r') as f:
             self.goats = f.readlines()
         # Initialize app
@@ -204,21 +204,6 @@ class KimecoApp:
             else:
                 raise PreventUpdate
             return sop_style, kin_style, sim_style, cor_style
-
-    def set_pert(self,
-                 settings,
-                 init_SOP: SOP) -> Perturbator:
-        if settings['pert'] == 'normal':
-            pert = Normal(
-                settings=settings,
-                initial_SOP=init_SOP)
-        elif settings['pert'] == 'lognormal':
-            pert = LogNormal(
-                settings=settings,
-                initial_SOP=init_SOP)
-        else:
-            raise NotImplementedError('Unknown type of perturbator.')
-        return pert
 
     def run(self):
         PORT = '8000'

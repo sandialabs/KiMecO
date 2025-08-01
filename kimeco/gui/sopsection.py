@@ -8,14 +8,62 @@ from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from dash.exceptions import PreventUpdate
 from typing import Any
+from numpy.typing import NDArray
 from kimeco.gui.histogram import Histogram
 import numpy as np
+from kimeco.enums import Ptype
+from kimeco.database.kimeco_db import dbs
 
 
 class SOPSection(Section):
     def __init__(self, gapp) -> None:
         super().__init__(gapp)
         self.pert: Perturbator = gapp.pert
+        self.ptype2title: dict[str, str] = {
+            Ptype.WE.value: 'Energy of {molec} (kcal mol<sup>-1</sup>)',
+            Ptype.BE.value: 'Energy of {molec} (kcal mol<sup>-1</sup>)',
+            Ptype.IF.value: 'Imaginary frequency of {molec} (cm<sup>-1</sup>)',
+            Ptype.ETP.value: 'Energy transfer power',
+            Ptype.ETF.value: 'Energy transfer factor (cm<sup>-1</sup>)',
+            Ptype.SIG.value: '{col}',
+            Ptype.EPSI.value: '{col}',
+            Ptype.BFC.value: 'Batch frequency perturbation coefficient of {molec}',
+            Ptype.IFC.value: 'Individual freq perturbation of {col} for {molec}',
+            Ptype.HRS.value: 'Hindered rotor coefficient {col} of {molec}',
+            Ptype.MRC.value: 'Symmetry factor of Multi-D rotor {col} of {molec}',
+            Ptype.SFC.value: 'Symmetry factor of barrierless reaction {molec}',
+            Ptype.SCORE.value: 'Score of {molec} averaged accross all experiments'
+        }
+        self.ptype2tfm: dict[str, str] = {
+            Ptype.WE.value: '.2f',
+            Ptype.BE.value: '.2f',
+            Ptype.IF.value: '.2f',
+            Ptype.ETP.value: '.2f',
+            Ptype.ETF.value: '.2f',
+            Ptype.SIG.value: '.2f',
+            Ptype.EPSI.value: '.2f',
+            Ptype.BFC.value: '.2f',
+            Ptype.IFC.value: '.2f',
+            Ptype.HRS.value: '.2f',
+            Ptype.MRC.value: '.2f',
+            Ptype.SFC.value: '.2f',
+            Ptype.SCORE.value: '.2f'
+        }
+        self.ptype2unit: dict[str, str] = {
+            Ptype.WE.value: u' (kcal mol\u207B\u00B9)',
+            Ptype.BE.value: u' (kcal mol\u207B\u00B9)',
+            Ptype.IF.value: u' (cm\u207B\u00B9)',
+            Ptype.ETP.value: '',
+            Ptype.ETF.value: u' (cm\u207B\u00B9)',
+            Ptype.SIG.value: '',
+            Ptype.EPSI.value: '',
+            Ptype.BFC.value: '',
+            Ptype.IFC.value: '',
+            Ptype.HRS.value: '',
+            Ptype.MRC.value: '',
+            Ptype.SFC.value: '',
+            Ptype.SCORE.value: ''
+        }
 
     @property
     def layout(self) -> html.Div:
@@ -25,13 +73,20 @@ class SOPSection(Section):
             children=[
                 html.H3('Type of parameter to plot:'),
                 dcc.RadioItems(options=[
-                    {'label': 'Energies', 'value': 'e'},
-                    {'label': 'Frequencies', 'value': 'f_p'},
-                    {'label': 'Imaginary freq', 'value': 'if'},
-                    {'label': 'Rotor perturbation', 'value': 'r'},
-                    {'label': 'Lennard-Jones', 'value': 'lj'},
-                    {'label': 'Score', 'value': 'score'},
-                    {'label': 'ME collision', 'value': 'me'}],
+                    {'label': 'Energies',
+                     'value': [Ptype.WE.value, Ptype.BE.value]},
+                    {'label': 'Frequencies',
+                     'value': [Ptype.IFC.value, Ptype.BFC.value]},
+                    {'label': 'Imaginary freq',
+                     'value': [Ptype.IF.value]},
+                    {'label': 'Rotor perturbation',
+                     'value': [Ptype.HRS.value, Ptype.MRC.value]},
+                    {'label': 'Lennard-Jones',
+                     'value': [Ptype.SIG.value, Ptype.EPSI.value]},
+                    {'label': 'Score',
+                     'value': [Ptype.SCORE.value]},
+                    {'label': 'ME collision',
+                     'value': [Ptype.ETF.value, Ptype.ETP.value]}],
                                 value='Energies',
                                 inline=True,
                                 id='ptype'),
@@ -68,8 +123,8 @@ class SOPSection(Section):
             Output('param_selection', 'options'),
             Input('ptype', 'value')
         )
-        def update_param_choice(ptype: str
-                                ) -> tuple[dict[str, str], list[dict[str, str]]]:
+        def update_p_choice(ptypes: list[str]
+                            ) -> tuple[dict[str, str], list[dict[str, str]]]:
             """Create a list of parameters depending on user selected ptype.
 
             Args:
@@ -83,41 +138,18 @@ class SOPSection(Section):
                 molec: str = col.split('__')[0]
                 if molec in self.settings['ct_names']:
                     molec = self.settings['ct_names'][molec]
-                param: str = col.split('__')[1]
-                if ptype == 'score':
-                    if 'score' not in param:
-                        continue
-                    filtered_param.append({
-                        'label': f"{molec}",
-                        'value': col})
-                elif ptype == 'e' and param == 'e':
-                    filtered_param.append({
-                        'label': f"{molec}",
-                        'value': col})
-                elif ptype == 'if' and param == 'if':
-                    filtered_param.append({
-                        'label': f"{molec}",
-                        'value': col})
-                elif ptype == 'r' and ('hr' in param or 'mr' in param):
-                    filtered_param.append({
-                        'label': f"{molec} {param}",
-                        'value': col})
-                elif ptype == 'f_p' and 'f_p' in param:
-                    filtered_param.append({
-                        'label': f"{molec} {param}",
-                        'value': col})
-                elif (ptype == 'lj' and
-                      ('epsi' in param or 'sigma' in param)):
-                    filtered_param.append({
-                        'label': f"{molec} {param}",
-                        'value': col})
-                elif (ptype == 'me' and
-                      (param == 'pow' or param == 'fact')):
-                    filtered_param.append({
-                        'label': f"{molec} {param}",
-                        'value': col})
-                else:
-                    continue
+                param: str = col.split(dbs)[1]
+                for ptype in ptypes:
+                    if ptype in param:
+                        if len(ptypes) == 1:
+                            filtered_param.append({
+                                'label': f"{molec}",
+                                'value': col})
+                        else:
+                            filtered_param.append({
+                                'label': f"{molec} {param}",
+                                'value': col})
+                        break
 
             if ptype != '':
                 style: dict[str, str] = {'display': 'block'}
@@ -125,7 +157,7 @@ class SOPSection(Section):
                 style = {'display': 'none'}
             return style, filtered_param
 
-        # Show sop plot button once generation and parameters have been selected
+        # Show sop plot button once generation and parameters are selected
         @self.app.callback(
             Output('sop_plot_button', 'style'),
             Input('param_selection', 'value')
@@ -149,26 +181,25 @@ class SOPSection(Section):
             running=[(Output("sop_plot_b", "disabled"), True, False)]
         )
         def update_sop_figure(clic,
-                              ptype: str,
+                              ptype: list[str],
                               param_selected: list[str],
                               selected_gen: list[int]
-                              ) \
-                -> tuple[dict[str, str], Figure, str, str, str]:
+                              ) -> tuple[dict[str, str], list[Any]]:
             if clic == 0 or clic is None:
                 raise PreventUpdate
 
             sop_plot_children = []
             for col in param_selected:
-                boundaries = self.get_boundaries(col)
-                plot_settings = self.get_plot_options(
+                boundaries: list[float] = self.get_boundaries(col)
+                plot_settings: dict[str, Any] = self.get_plot_options(
                     col,
                     ptype)
                 sop_plot_children.extend(
                     self.make_figure(
-                        boundaries,
-                        plot_settings,
-                        col,
-                        selected_gen
+                        boundaries=boundaries,
+                        plot_settings=plot_settings,
+                        col=col,
+                        selected_gen=selected_gen
                     )
                 )
             return ({'display': 'block'},
@@ -193,7 +224,7 @@ class SOPSection(Section):
             return new_fig
 
     def get_boundaries(self,
-                       col: str) -> list[str]:
+                       col: str) -> list[float]:
         """Get the boundary conditions directly from the perturbator
 
         Args:
@@ -202,39 +233,26 @@ class SOPSection(Section):
         Returns:
             list[str]: [min, max]
         """
-        idx = self.sop_db.columns.index(col)
+        idx: int = self.sop_db.columns.index(col)
         init_val: float = self.gapp.init_vals[idx+1]
-        raw_molec: str = col.split('__')[0]
-        param: str = col.split('__')[1]
-        if 'score' in col:
-            return [0.0, 0.0]
-        for substr in self.pert.ptypes:
-            if substr in param:
-                if substr == 'e' and\
-                   isinstance(self.init_SOP.items[raw_molec], Barrier):
-                    ptype: str = 'b'
-                else:
-                    ptype = substr
+        param: str = col.split(dbs)[1]
+        for ptype in Ptype:
+            if ptype.value in param:
                 break
-            # MultiRotors are called mrX
-            # but get their symmetry factor modified
-            elif 'mr' in param:
-                ptype = 'sfc'
-
         return self.pert.get_boundaries(
-            ptype=ptype,
+            ptype=ptype.value,
             i_val=init_val)
 
     def get_plot_options(self,
                          col: str,
-                         ptype: str
+                         ptypes: list[str]
                          ) -> dict[str, Any]:
         """Setup the figure ploting options depending on
         the parameter to plot.
 
         Args:
             col (str): parameter's name
-            ptype (str): parameter's type
+            ptypes (list[Ptype]): list of parameter's type
 
         Raises:
             NotImplementedError: _description_
@@ -249,21 +267,16 @@ class SOPSection(Section):
             'tickformat': '.2f',
             'unit': ''
         }
-        raw_molec: str = col.split('__')[0]
+        raw_molec: str = col.split(dbs)[0]
         if raw_molec in self.settings['ct_names']:
             molec = self.settings['ct_names'][raw_molec]
         else:
-            molec = raw_molec
-        param: str = col.split('__')[1]
-        if ptype == 'score' and param == 'score':
-            plot_settings['title'] = ptype
-            plot_settings['tickformat'] = 'e'
-        elif ptype == 'e' and param == 'e':
-            plot_settings['title'] = \
-                f'Energy of {molec} (kcal mol<sup>-1</sup>)'
-            plot_settings['unit'] = u' (kcal mol\u207B\u00B9)'
-        elif ptype == 'if' and param == 'if':
-            plot_settings['unit'] = u' (cm\u207B\u00B9)'
+            molec: str = raw_molec
+        param: str = col.split(dbs)[1]
+        for ptype in ptypes:
+            if ptype in param:
+                break
+        if ptype == Ptype.IF.value:
             bar: Barrier = self.init_SOP.items[raw_molec]
             if isinstance(bar.connected[0], Well):
                 if bar.connected[0].name in self.settings['ct_names']:
@@ -299,35 +312,24 @@ class SOPSection(Section):
                         To += frag
             else:
                 raise NotImplementedError('Unknown reactant object.')
-            plot_settings['title'] = \
-                f'I. frequency from {From} to {To} (cm<sup>-1</sup>)'
-        elif ptype == 'r' and ('hr' in param or 'mr' in param):
-            plot_settings['title'] = \
-                f'Rotor perturbation {param} of {molec}'
-        elif ptype == 'f_p' and 'hf_p' in param:
-            plot_settings['title'] = \
-                f'Frequency perturbation {param} of {molec}'
-        elif ptype == 'f_p' and 'lf_p' in param:
-            plot_settings['title'] = \
-                f'Frequency perturbation {param} of {molec}'
-        elif ptype == 'f_p' and 'sfc' in param:
-            plot_settings['title'] = \
-                f'Symmetry factor {param} of {molec}'
-        elif (ptype == 'lj' and
-                ('epsi' in param or 'sigma' in param)):
-            plot_settings['title'] = f"{param}"
-        elif (ptype == 'me' and param == 'fact'):
-            plot_settings['title'] = \
-                "dE<sup>(0)</sup><sub>down</sub> (cm<sup>-1</sup>)"
-            plot_settings['unit'] = u' (cm\u207B\u00B9)'
-        elif (ptype == 'me' and param == 'pow'):
-            plot_settings['title'] = f"{param}"
-        else:
-            raise KeyError('Unknown type of parameter selected.')
+            molec = f'{From} to {To}'
+        title: str = self.ptype2title[ptype]
+        if '{molec}' in title and '{col}' in title:
+            title = title.format(col=col, molec=molec)
+        elif '{molec}' in title:
+            title = title.format(molec=molec)
+        elif '{col}' in title:
+            title = title.format(col=col)
+        plot_settings['title'] = title
+        plot_settings['tickformat'] = self.ptype2tfm[ptype]
+        plot_settings['unit'] = self.ptype2unit[ptype]
+
+        # "dE<sup>(0)</sup><sub>down</sub> (cm<sup>-1</sup>)"
+
         return plot_settings
 
     def make_figure(self,
-                    boundaries: float,
+                    boundaries: list[float],
                     plot_settings: dict,
                     col: str,
                     selected_gen: list[int]):
@@ -335,7 +337,7 @@ class SOPSection(Section):
         idx: int = self.sop_db.columns.index(col)
         init_val: float = self.gapp.init_vals[idx+1]
 
-        all_gen_rows: dict[int, list[float]] = {}
+        all_gen_rows: dict[int, Any] = {}
         for gen_i in selected_gen:
             for origin in self.gapp.goats[gen_i].split():
                 gen_id = int(origin.split('_')[0])

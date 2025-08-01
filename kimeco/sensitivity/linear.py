@@ -197,7 +197,7 @@ class Linear:
             if self.to_test[i]]
 
         # Get the indices that would sort 'rslts' in decreasing order
-        indices = sorted(
+        indices: list[int] = sorted(
             range(len(highest)),
             key=lambda i: highest[i],
             reverse=True)
