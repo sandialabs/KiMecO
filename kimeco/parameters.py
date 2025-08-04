@@ -373,7 +373,7 @@ class SOP:
             self.items[item_name].sfc = value
         # Frequencies
         elif Ptype.BFC.value in param_name:
-            self.items[item_name].bcf = float(value)
+            self.items[item_name].bfc = float(value)
         elif Ptype.IFC.value in param_name:
             idx = int(param_name.split(Ptype.IFC.value)[-1])
             self.items[item_name].ifc[idx] = float(value)

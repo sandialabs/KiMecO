@@ -32,7 +32,7 @@ class SOPSection(Section):
             Ptype.HRS.value: 'Hindered rotor coefficient {col} of {molec}',
             Ptype.MRC.value: 'Symmetry factor of Multi-D rotor {col} of {molec}',
             Ptype.SFC.value: 'Symmetry factor of barrierless reaction {molec}',
-            Ptype.SCORE.value: 'Score of {molec} averaged accross all experiments'
+            Ptype.SCORE.value: "Average of {molec}'s score across all experiments"
         }
         self.ptype2tfm: dict[str, str] = {
             Ptype.WE.value: '.2f',

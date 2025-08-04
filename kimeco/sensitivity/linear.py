@@ -1,4 +1,5 @@
-from kimeco.enums import Pclass, Ptype
+import pty
+from kimeco.enums import Ptype, Pclass
 from typing import Any
 import os
 import shutil
@@ -37,6 +38,7 @@ class Linear:
             elements=elements,
             sf=sf
             )
+        self.pert: Perturbator = pert
         n_param: int = len(elements[0].sop.parameters_names)
         # Create generation directory
         SA_dir: str = f'{loc}/{self.name}'
@@ -99,7 +101,6 @@ class Linear:
         return SOP.from_db_row(sop_template, list(averages.values()))
 
     def calculate_dstep(self,
-                        val: float,
                         uc: float,
                         param: str,
                         side: int) -> float:
@@ -118,15 +119,19 @@ class Linear:
         for ptype in Ptype:
             if ptype.value in param:
                 break
+        scale: float = self.pert.get_scale(
+                ptype=ptype.value,
+                param=param
+            )
         if ptype.value in Pclass.ADDITIVE.value:
-            dstep: float = uc
+            dstep: float = scale
         elif ptype.value in Pclass.PERCENT.value:
-            dstep = val * uc
+            dstep = scale
         elif ptype.value in Pclass.MULTIPLICATIVE.value:
             if side == 1:
-                dstep = val * (uc - 1)
+                dstep = scale
             elif side == -1:
-                dstep = (val/uc) * (uc - 1)
+                dstep = scale/uc
         else:
             raise TypeError('Unrecognised Ptype in Linear sensitivity')
         return dstep * self.lin_fact
@@ -154,17 +159,16 @@ class Linear:
                 # Check if the parameter should be modified
                 if any(
                     substring in key for substring in
-                    [f'{dbs}score']):
+                    [f'{dbs}{Ptype.SCORE.value}']):
                     self.to_test.append(False)
                     continue
                 # Create a new SOP object with the modified parameter
                 self.to_test.append(True)
                 el_id += 1
-                param: str = key.split('__')[1]
+                param: str = key.split(dbs)[1]
                 # Get the uncertainty of the parameter
                 uc: float = elements[0].sop.uncertainties[key]
                 dstep: float = self.calculate_dstep(
-                    val=pn[key],
                     uc=uc,
                     param=param,
                     side=side

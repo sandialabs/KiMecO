@@ -254,7 +254,7 @@ class Well:
             qlem: float: quantumLevelEnergyMax
             irs: list[InternalRotation]
         """
-        self.h_rotors.append(MultiRotor(
+        self.m_rotors.append(MultiRotor(
             symmetryFactor=sf,
             interpolationEnergyMax=iem,
             potentialEnergySurface=pes,
