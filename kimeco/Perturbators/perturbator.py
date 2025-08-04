@@ -146,7 +146,7 @@ class Perturbator:
         elif ptype in self.percent:
             return uncertainty * self.i_sop.parameters_names[param]
         elif ptype in self.multiplicative:
-            return uncertainty * self.i_sop.parameters_names[param]
+            return (uncertainty-1) * self.i_sop.parameters_names[param]
         else:
             raise TypeError('Unknown parameter type in get_scale.')
 
@@ -158,7 +158,7 @@ class Perturbator:
         local_c_val: float = copy(c_val)
         scale: float = self.get_scale(ptype, param)
         shift: float = min(bounds)
-        # local_c_val -= shift
+        local_c_val -= shift
         variance: float = (scale/local_c_val) ** 2
         sigma_squared: float = np.log(1 + variance)
         sigma: float = float(np.sqrt(sigma_squared))
@@ -206,7 +206,7 @@ class Perturbator:
                 ptype=ptype,
                 c_val=c_val,
                 bounds=bounds)
-            return float(np.random.lognormal(mean, sigma))  #  + shift
+            return float(np.random.lognormal(mean, sigma)+ shift)  #  
         else:
             raise TypeError('Unknown Distribution in Perturbator')
 
@@ -396,7 +396,7 @@ class Perturbator:
                         perturbed_val=try_bfc,
                         ptype=Ptype.BFC.value,
                         initial_val=1):
-                    try_bfc = self.get_rng(
+                    try_bfc: float = self.get_rng(
                         ptype=Ptype.BFC.value,
                         i_val=self.i_sop.items[well.name].bfc,
                         c_val=well.bfc,

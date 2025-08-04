@@ -31,12 +31,12 @@ class Pclass(Enum):
     ADDITIVE = {
             Ptype.WE.value,
             Ptype.BE.value,
-            Ptype.ETP.value,
-            Ptype.BFC.value,
-            Ptype.IFC.value}
+            Ptype.ETP.value}
     MULTIPLICATIVE = {
             Ptype.SFC.value,
-            Ptype.MRC.value
+            Ptype.MRC.value,
+            Ptype.BFC.value,
+            Ptype.IFC.value
             }
     PERCENT = {
             Ptype.IF.value,

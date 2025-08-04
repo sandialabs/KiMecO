@@ -102,10 +102,10 @@ default_settings: dict[str, Any] = {
     f"distrib_{Ptype.BE.value}": f"{Distrib.NORMAL.value}",
     # RNG distribution for wells
     # and bimolecular individual vibrations
-    f"distrib_{Ptype.IFC.value}": f"{Distrib.LOGNORMAL.value}",
+    f"distrib_{Ptype.IFC.value}": f"{Distrib.NORMAL.value}",
     # RNG distribution for wells
     # and bimolecular batch vibrations
-    f"distrib_{Ptype.BFC.value}": f"{Distrib.LOGNORMAL.value}",
+    f"distrib_{Ptype.BFC.value}": f"{Distrib.NORMAL.value}",
     # RNG distribution for hindered rotors
     f"distrib_{Ptype.HRS.value}": f"{Distrib.NORMAL.value}",
     # RNG distribution for imaginary frequencies
