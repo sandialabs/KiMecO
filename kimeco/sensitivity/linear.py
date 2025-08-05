@@ -1,5 +1,4 @@
-import pty
-from kimeco.enums import Ptype, Pclass
+from kimeco.enums import Distrib, Ptype
 from typing import Any
 import os
 import shutil
@@ -34,11 +33,10 @@ class Linear:
         self.to_test = []
         self.selected = []
         self.lin_fact: float = self.settings['sensi_d']
-        self.elements: list[Element] = self.prepare_elements(
-            elements=elements,
-            sf=sf
-            )
         self.pert: Perturbator = pert
+        self.elements: list[Element] = self.prepare_elements(
+            elements=elements
+            )
         n_param: int = len(elements[0].sop.parameters_names)
         # Create generation directory
         SA_dir: str = f'{loc}/{self.name}'
@@ -109,7 +107,7 @@ class Linear:
 
         Args:
             val (float): value of the parameter
-            param (str): name of the parameter
+            param (str): full name of the parameter
             side (int): side of the derivative
 
         Returns:
@@ -123,22 +121,15 @@ class Linear:
                 ptype=ptype.value,
                 param=param
             )
-        if ptype.value in Pclass.ADDITIVE.value:
-            dstep: float = scale
-        elif ptype.value in Pclass.PERCENT.value:
-            dstep = scale
-        elif ptype.value in Pclass.MULTIPLICATIVE.value:
-            if side == 1:
-                dstep = scale
-            elif side == -1:
-                dstep = scale/uc
+        # Assymetric derivative for lognormal distribution
+        if self.pert.distribs[ptype] == Distrib.LOGNORMAL and side == -1:
+            dstep: float = scale/uc
         else:
-            raise TypeError('Unrecognised Ptype in Linear sensitivity')
+            dstep = scale
         return dstep * self.lin_fact
 
     def prepare_elements(self,
-                         elements: list[Element],
-                         sf: Scoring) -> list[Element]:
+                         elements: list[Element]) -> list[Element]:
 
         base_sop: SOP = self.average(
                 sop_list=[e.sop for e in elements])
@@ -165,12 +156,11 @@ class Linear:
                 # Create a new SOP object with the modified parameter
                 self.to_test.append(True)
                 el_id += 1
-                param: str = key.split(dbs)[1]
                 # Get the uncertainty of the parameter
                 uc: float = elements[0].sop.uncertainties[key]
                 dstep: float = self.calculate_dstep(
                     uc=uc,
-                    param=param,
+                    param=key,
                     side=side
                 )
                 new_sop = SOP.from_db_row(

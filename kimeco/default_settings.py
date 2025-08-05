@@ -159,6 +159,8 @@ default_settings: dict[str, Any] = {
     "only_perturb": [],
     # Frequency of the sensitivity analysis
     "SA_freq": 1000,
+    # From which generation to start the sensitivity analysis
+    "SA_start": 1,
     # Number of thread in the main process for I/O operations
     "thread": 5
 }

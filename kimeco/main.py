@@ -139,11 +139,10 @@ def main() -> None:
             f_el = Element(
                 sop=init_SOP,
                 id=0)
-    klog.info(f"{'Parameters selected for perturbation:':<65}")
-    pp = ''
-    for p in settings['only_perturb']:
-        pp += f'{p} '
-    klog.info(f"{pp:<65}")
+    msg = f"{'Parameters selected for perturbation:':<80}"
+    msg += '\n'
+    msg += "{}".format(settings['only_perturb']).replace("'", '"')
+    klog.info(msg)
 
     # Reinitialize the perturbator once the list of parameters to perturb
     # has been reduced
@@ -152,7 +151,7 @@ def main() -> None:
         initial_SOP=init_SOP,
         klog=klog
         )
-    klog.info(f"{'Selected parameters transmitted to perturbator':<65}")
+    klog.info(f"{'Selected parameters transmitted to perturbator':<80}")
 
     # Everything is initialized, create gen_0
     gen_0 = Generation(
@@ -291,14 +290,18 @@ def main() -> None:
             settings=settings
             )
         line_tpl = "{name:<25}{mean:>20}{std:>20}"
-        klog.info(line_tpl.format(name='PARAMETER',
-                                  mean='MEAN',
-                                  std='STD'))
+        msg = '\n'
+        msg += line_tpl.format(
+            name='PARAMETER',
+            mean='MEAN',
+            std='STD') + '\n'
         line_tpl = "{name:<25}{mean:>-20.3E}{std:>-20.3E}"
         for k in means:
-            klog.info(line_tpl.format(name=k,
-                                      mean=means[k],
-                                      std=stds[k]))
+            msg += line_tpl.format(
+                name=k,
+                mean=means[k],
+                std=stds[k]) + '\n'
+        klog.info(msg)
 
         if not isconverged(
            threshold=settings['final_conv'],
@@ -308,7 +311,8 @@ def main() -> None:
            new_stds=stds):
             old_means: Dict[str, float] = means
             old_stds: Dict[str, float] = stds
-            if new_gen.id % settings['SA_freq'] == 0:
+            if new_gen.id % settings['SA_freq'] == 0 and\
+               new_gen.id >= settings['SA_start']:
                 klog.info('On-the-fly sensitivity analysis.')
                 sensitivity = Linear(
                     elements=new_gen.elements,
@@ -321,7 +325,7 @@ def main() -> None:
                 sensitivity.run()
                 for p in sensitivity.selected:
                     if p not in settings['only_perturb']:
-                        klog.info(f'New parameter to perturb: {p}')
+                        klog.info(f'New parameter to perturb: "{p}"')
                         settings['only_perturb'].append(p)
         else:
             converged = True
@@ -474,6 +478,7 @@ def isconverged(threshold: float,
     """
     converged = True
     line_format = '   {type:<7}{param:<15}{status:>20}. CHANGE:{ratio:>7.3f}'
+    msg = '\n'
     # Check convergence for means
     for key in old_means:
         if key in new_means:
@@ -483,23 +488,23 @@ def isconverged(threshold: float,
                 ratio_mean: float = abs(new_mean - old_mean) / abs(old_mean)
                 if ratio_mean > threshold:
                     converged = False
-                    klog.info(line_format.format(
+                    msg += line_format.format(
                         type='MEAN',
                         param=key,
                         status='NOT CONVERGED',
                         ratio=ratio_mean
-                    ))
+                    ) + '\n'
                 else:
-                    klog.info(line_format.format(
+                    msg += line_format.format(
                         type='MEAN',
                         param=key,
                         status='CONVERGED',
                         ratio=ratio_mean
-                    ))
+                    ) + '\n'
             else:
-                klog.info(f'Warning: {key} skipped (div 0)')
-                klog.info(f'Mean old: {old_mean}')
-                klog.info(f'Mean new: {new_mean}')
+                msg += f'Warning: {key} skipped (div 0)' + '\n'
+                msg += f'Mean old: {old_mean}' + '\n'
+                msg += f'Mean new: {new_mean}' + '\n'
 
     # Check convergence for standard deviations
     for key in old_stds:
@@ -510,23 +515,24 @@ def isconverged(threshold: float,
                 ratio_std: float = abs(new_std - old_std) / abs(old_std)
                 if ratio_std > threshold:
                     converged = False
-                    klog.info(line_format.format(
+                    msg += line_format.format(
                         type='STD',
                         param=key,
                         status='NOT CONVERGED',
                         ratio=ratio_std
-                    ))
+                    ) + '\n'
                 else:
-                    klog.info(line_format.format(
+                    msg += line_format.format(
                         type='STD',
                         param=key,
                         status='CONVERGED',
                         ratio=ratio_std
-                    ))
+                    ) + '\n'
             else:
-                klog.info(f'Warning: {key} skipped (div 0)')
-                klog.info(f'StdD old: {old_std}')
-                klog.info(f'StdD new: {new_std}')
+                msg += f'Warning: {key} skipped (div 0)' + '\n'
+                msg += f'StdD old: {old_std}' + '\n'
+                msg += f'StdD new: {new_std}' + '\n'
+    klog.info(msg)
 
     return converged
 
