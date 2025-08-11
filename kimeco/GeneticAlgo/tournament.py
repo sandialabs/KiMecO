@@ -38,8 +38,8 @@ class Tournament(GeneticAlgorithm):
         random.shuffle(shuffled)
         prev_gen: dict[int, Element] = {}
         half = int(len(shuffled)/2)
-        for idx in shuffled[:half]:
-            el1: Element = next_gen[idx]
+        for idx in range(len(shuffled[:half])):
+            el1: Element = next_gen[shuffled[idx]]
             el2: Element = next_gen[shuffled[idx+half]]
             if el1.score < el2.score:
                 winner: Element = el1
