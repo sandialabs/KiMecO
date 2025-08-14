@@ -14,6 +14,7 @@ from kimeco.scoring_f.scoring import Scoring
 from kimeco.templates.sim_helper import sim_helper
 from logging import Logger
 import time
+import shutil
 import concurrent.futures
 
 
@@ -65,6 +66,18 @@ class CoreRun:
         self.clean_files()
         # Contain the time when a sim_id was first queried
         self.requeue_timer = {}
+
+        # Create core directory
+        core_dir: str = f'{self.loc}/{self.name}'
+        os.makedirs(core_dir + '/logs', exist_ok=True)
+        for subfolder in range(len(self.elements)//50+1):
+            os.makedirs(
+                core_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
+            # Copy files necessary for MESS calculation
+            for file in self.elements[0].sop.files2copy:
+                shutil.copyfile(f'{self.loc}/{file}',
+                                f'{core_dir}/{subfolder:02d}/{file}')
+        os.chdir(core_dir)
 
     def clean_files(self) -> None:
         for el in self.elements:

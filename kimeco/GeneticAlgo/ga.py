@@ -27,7 +27,7 @@ class GeneticAlgorithm(ABC):
         self.settings: dict[str, Any] = settings
         self.pert: Perturbator = pert
         self.sf: Scoring = sf
-        self.sop_db = sop_db
+        self.sop_db: SOP_DB = sop_db
         self.losers: NDArray = np.zeros(
             shape=(
                 self.settings['n_elem'],

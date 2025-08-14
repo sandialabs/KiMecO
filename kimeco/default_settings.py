@@ -29,6 +29,8 @@ mandatory_keys: dict[str, Any] = {
 
 default_settings: dict[str, Any] = {
     "project_name": "KMO_Project",
+    # Type of genetic algorythm to use
+    "ga_type": "tournament",
     # Software to use for the master equation code
     "rc_software": "mess",
     # List of temperatures in Kelvin

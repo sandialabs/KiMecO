@@ -1,5 +1,4 @@
 from dash import html, dcc, Output, Input, State, MATCH
-from plotly.graph_objs._figure import Figure
 import plotly.graph_objects as go
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.gui.section import Section
@@ -8,7 +7,6 @@ from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from dash.exceptions import PreventUpdate
 from typing import Any
-from numpy.typing import NDArray
 from kimeco.gui.histogram import Histogram
 import numpy as np
 from kimeco.enums import Ptype

@@ -1,11 +1,22 @@
-import copy
 from kimeco.GeneticAlgo.ga import GeneticAlgorithm
+from kimeco.Perturbators.perturbator import Perturbator
+from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
 from kimeco.generation import Generation
 import random
+from typing import Any
+from kimeco.scoring_f.scoring import Scoring
 
 
 class Tournament(GeneticAlgorithm):
+    def __init__(self,
+                 settings: dict[str, Any],
+                 sf: Scoring,
+                 pert: Perturbator,
+                 sop_db: SOP_DB) -> None:
+        super().__init__(settings, sf, pert, sop_db)
+        self.name = 'Tournament'
+
     def converged(self,
                   gen: Generation
                   ) -> bool:

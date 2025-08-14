@@ -4,6 +4,7 @@ import math
 import numpy as np
 import shutil
 from typing import Any, Dict
+from kimeco.GeneticAlgo.exponential import Exponential
 from kimeco.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.GeneticAlgo.tournament import Tournament
 from kimeco.database.kin_db import KIN_DB
@@ -153,6 +154,23 @@ def main() -> None:
         )
     klog.info(f"{'Selected parameters transmitted to perturbator':<80}")
 
+    if settings['ga_type'].casefold() == 'tournament':
+        ga = Tournament(
+            settings=settings,
+            sf=sf,
+            pert=pert,
+            sop_db=sop_db)
+    elif settings['ga_type'].casefold() == 'exp':
+        ga = Exponential(
+            settings=settings,
+            sf=sf,
+            pert=pert,
+            sop_db=sop_db,
+            klog=klog)
+    else:
+        raise TypeError('Unknown genetic algorythm requested')
+    klog.info(f"{'Genetic algorythm:':<65}{ga.name:>15}")
+
     # Everything is initialized, create gen_0
     gen_0 = Generation(
         elements=[f_el],
@@ -176,11 +194,6 @@ def main() -> None:
     gen_0.run()
 
     converged = False
-
-    ga = Tournament(settings=settings,
-                    sf=sf,
-                    pert=pert,
-                    sop_db=sop_db)
 
     median = np.median([
         el.score for el in gen_0.elements

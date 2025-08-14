@@ -206,7 +206,7 @@ class Perturbator:
                 ptype=ptype,
                 c_val=c_val,
                 bounds=bounds)
-            return float(np.random.lognormal(mean, sigma))  # + shift
+            return float(np.random.lognormal(mean, sigma))# + shift
         else:
             raise TypeError('Unknown Distribution in Perturbator')
 
