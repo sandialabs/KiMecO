@@ -16,7 +16,8 @@ class Element:
     def __init__(self,
                  sop: SOP,
                  id: int,
-                 gen: int = 0) -> None:
+                 gen: int = 0,
+                 status: str = ElementStatus.SOP.value) -> None:
         """An element is part of a generation and has
         different attributes, such as an id and a status.
         It is mainly a container object.
@@ -31,7 +32,7 @@ class Element:
         """
         self.sop: SOP = sop
         self.gen: int = gen
-        self.status: ElementStatus = ElementStatus.SOP
+        self.status: ElementStatus = ElementStatus(status)
         self.id: int = id
         self.sop.id = self.id
         self.rateCoef: RateCo

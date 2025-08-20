@@ -1,6 +1,9 @@
+from logging import Logger
 from kimeco.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.database.sop_db import SOP_DB
+from kimeco.database.kin_db import KIN_DB
+from kimeco.database.sim_db import SIM_DB
 from kimeco.element import Element
 from kimeco.generation import Generation
 import random
@@ -13,13 +16,29 @@ class Tournament(GeneticAlgorithm):
                  settings: dict[str, Any],
                  sf: Scoring,
                  pert: Perturbator,
-                 sop_db: SOP_DB) -> None:
-        super().__init__(settings, sf, pert, sop_db)
+                 sop_db: SOP_DB,
+                 sim_db: SIM_DB,
+                 kin_db: KIN_DB,
+                 f_el: Element,
+                 input_tpl: list[str],
+                 location: str,
+                 klog: Logger) -> None:
+        super().__init__(
+            settings=settings,
+            sf=sf,
+            pert=pert,
+            input_tpl=input_tpl,
+            location=location,
+            sop_db=sop_db,
+            kin_db=kin_db,
+            sim_db=sim_db,
+            f_el=f_el,
+            klog=klog)
         self.name = 'Tournament'
 
-    def converged(self,
-                  gen: Generation
-                  ) -> bool:
+    def isconverged(self,
+                    gen: Generation
+                    ) -> bool:
         if gen.best_score < self.settings['score_conv']:
             return True
         else:

@@ -332,3 +332,20 @@ class Kimeco_db:
         with self.eng.begin() as conn:
             rslt: Sequence[Row[Any]] = conn.execute(query).fetchall()
         return rslt
+
+    def get_column(self,
+                   table: str,
+                   column_name: str) -> list[Any]:
+        """Retrieve all values from a specified column in a given table.
+
+        Args:
+            table (str): The name of the table to query.
+            column_name (str): The name of the column to retrieve values from.
+
+        Returns:
+            list[Any]: A list of values from the specified column.
+        """
+        query = select(self.tables[table].c[column_name])
+        with self.eng.begin() as conn:
+            db_rslt: Sequence[Row[Any]] = conn.execute(query).fetchall()
+        return [row[0] for row in db_rslt]

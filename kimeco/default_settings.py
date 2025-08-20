@@ -31,6 +31,8 @@ default_settings: dict[str, Any] = {
     "project_name": "KMO_Project",
     # Type of genetic algorythm to use
     "ga_type": "tournament",
+    # Length of the GOAT list
+    "goat_length": 250,
     # Software to use for the master equation code
     "rc_software": "mess",
     # List of temperatures in Kelvin
@@ -104,10 +106,10 @@ default_settings: dict[str, Any] = {
     f"distrib_{Ptype.BE.value}": f"{Distrib.NORMAL.value}",
     # RNG distribution for wells
     # and bimolecular individual vibrations
-    f"distrib_{Ptype.IFC.value}": f"{Distrib.NORMAL.value}",
+    f"distrib_{Ptype.IFC.value}": f"{Distrib.LOGNORMAL.value}",
     # RNG distribution for wells
     # and bimolecular batch vibrations
-    f"distrib_{Ptype.BFC.value}": f"{Distrib.NORMAL.value}",
+    f"distrib_{Ptype.BFC.value}": f"{Distrib.LOGNORMAL.value}",
     # RNG distribution for hindered rotors
     f"distrib_{Ptype.HRS.value}": f"{Distrib.NORMAL.value}",
     # RNG distribution for imaginary frequencies
@@ -124,6 +126,12 @@ default_settings: dict[str, Any] = {
     f"distrib_{Ptype.SFC.value}": f"{Distrib.LOGNORMAL.value}",
     # RNG distribution for symmetry factor of multi-d rotors
     f"distrib_{Ptype.MRC.value}": f"{Distrib.LOGNORMAL.value}",
+    # Convergence threshold for well energies
+    f"conv_{Ptype.WE.value}": 0.1,
+    # Convergence threshold for barriers energies
+    f"conv_{Ptype.BE.value}": 0.1,
+    # Convergence threshold for energy transfer probability, exponent
+    f"conv_{Ptype.ETP.value}": 0.01,
     # Name of the scoring function class to use
     "scoring_func": "weighteddif",
     # Name of species as in exp profiles header
@@ -148,7 +156,7 @@ default_settings: dict[str, Any] = {
     # Maximum number of generations
     "max_gen": 10,
     # Percentage of deviation of means and stds of parameters to converge
-    "final_conv": 0.01,
+    "param_conv": 0.01,
     # Numbers of helpers to save the simulations profiles
     "max_helpers": 10,
     # Multiplicating factors of std parameters for derivative in
