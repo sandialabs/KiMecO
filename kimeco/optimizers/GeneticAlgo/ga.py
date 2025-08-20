@@ -279,7 +279,7 @@ class GeneticAlgorithm(ABC):
                     next_elements.append(
                         Element(
                             sop=SOP.from_db_row(
-                                sop_tpl=self.f_el,
+                                sop_tpl=self.f_el.sop,
                                 row=row[1:].tolist()
                             ),
                             id=el_id,

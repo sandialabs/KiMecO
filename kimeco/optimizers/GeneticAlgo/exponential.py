@@ -1,5 +1,5 @@
 from logging import Logger
-from kimeco.GeneticAlgo.ga import GeneticAlgorithm
+from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.database.sop_db import SOP_DB
 from kimeco.database.kin_db import KIN_DB

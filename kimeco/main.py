@@ -5,9 +5,9 @@ import numpy as np
 import shutil
 from typing import Any, Dict
 from numpy.typing import NDArray
-from kimeco.GeneticAlgo.exponential import Exponential
-from kimeco.GeneticAlgo.ga import GeneticAlgorithm
-from kimeco.GeneticAlgo.tournament import Tournament
+from kimeco.optimizers.GeneticAlgo.exponential import Exponential
+from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
+from kimeco.optimizers.GeneticAlgo.tournament import Tournament
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
