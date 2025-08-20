@@ -1,4 +1,3 @@
-import os
 from typing import Any
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
@@ -9,7 +8,6 @@ from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
 import time
 from logging import Logger
-import shutil
 
 
 class Generation(CoreRun):
@@ -62,17 +60,7 @@ class Generation(CoreRun):
                  klog=klog,
                  previous_el=previous_el,
                  name=f'G{self.id:04d}')
-        # # Create generation directory
-        # gen_dir: str = f'{self.loc}/{self.name}'
-        # os.makedirs(gen_dir + '/logs', exist_ok=True)
-        # for subfolder in range(len(self.elements)//50+1):
-        #     os.makedirs(
-        #         gen_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
-        #     # Copy files necessary for MESS calculation
-        #     for file in self.elements[0].sop.files2copy:
-        #         shutil.copyfile(f'{self.loc}/{file}',
-        #                         f'{gen_dir}/{subfolder:02d}/{file}')
-        # os.chdir(gen_dir)
+
         # Clean the SIM database
         if not self.finished and self.sim_db.table_exists(self.name):
             self.sim_db.wipe_table(self.name)

@@ -29,6 +29,8 @@ mandatory_keys: dict[str, Any] = {
 
 default_settings: dict[str, Any] = {
     "project_name": "KMO_Project",
+    # Type of optimizers
+    "optimizer": "ga",
     # Type of genetic algorythm to use
     "ga_type": "tournament",
     # Length of the GOAT list

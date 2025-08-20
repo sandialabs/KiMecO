@@ -98,11 +98,13 @@ class GeneticAlgorithm(ABC):
                 if ptype.value in Pclass.ADDITIVE.value:
                     mean_thresh: float = self.settings[f'conv_{ptype.value}']
                     std_thresh: float = self.settings[f'conv_{ptype.value}']
+                    m_change: float = self.means[key] - self.old_means[key]
+                    s_change: float = self.stds[key] - self.stds[key]
                 else:
-                    mean_thresh = self.settings['param_conv']*self.old_means[key]
-                    std_thresh = self.settings['param_conv']*self.old_stds[key]
-                m_change: float = self.means[key] - self.old_means[key]
-                s_change: float = self.stds[key] - self.stds[key]
+                    mean_thresh = self.settings['param_conv']
+                    std_thresh = self.settings['param_conv']
+                    m_change: float = self.means[key]/self.old_means[key]
+                    s_change: float = self.stds[key]/self.stds[key]
                 if abs(m_change) < mean_thresh and abs(s_change) < std_thresh:
                     self.__converged[key] = True
                 else:
@@ -283,7 +285,8 @@ class GeneticAlgorithm(ABC):
                                 row=row[1:].tolist()
                             ),
                             id=el_id,
-                            gen=next_gen_id))
+                            gen=next_gen_id,
+                            status=ElementStatus.DONE.value))
                 elif el_id in [el.id for el in gen.elements]:
                     el_index: int = [el.id for el in gen.elements].index(el_id)
                     next_elements.append(gen.elements[el_index])

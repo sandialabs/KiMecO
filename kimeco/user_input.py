@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from scipy.constants import gas_constant
 import cantera.with_units as ctu
 from logging import Logger
-from kimeco.enums import Distrib
+from kimeco.enums import Distrib, Optimizers, Pclass, Ptype
 from kimeco.enums import FreqMode
 
 
@@ -193,15 +193,25 @@ def check_input(input_file: str,
         elif not isinstance(json_file[key], type(value)):
             if isinstance(value, float) and isinstance(json_file[key], int):
                 continue
-            klog.info(f"{key} has incorrect type. It should be {type(value)}")
+            klog.warning(f"{key} has incorrect type. It should be {type(value)}")
             cancel_run = True
         # Replace value by enum for RNG distributions
         elif 'distrib' in key:  # Key is a distribution specified in JSON
+            for ptype in Ptype:
+                if ptype.value in key:
+                    break
             if any([json_file[key].casefold() == distrib.value
                     for distrib in Distrib]):
+                dist = Distrib(json_file[key].casefold())
+                if ptype.value in Pclass.ADDITIVE.value:
+                    if dist == Distrib.LOGNORMAL or\
+                       dist == Distrib.LOGUNIFORM:
+                        msg = f"{key} is not allowed for this parameter."
+                        klog.warning(msg)
+                        cancel_run = True
                 json_file[key] = Distrib(json_file[key].casefold())
             else:
-                klog.info(f"{key} has unknown distribution.")
+                klog.warning(f"{key} has unknown distribution.")
                 cancel_run = True
         # Replace value by enum for mode of frequencxy perturbation
         elif key == 'freq_mode':
@@ -209,7 +219,14 @@ def check_input(input_file: str,
                     for fm in FreqMode]):
                 json_file[key] = FreqMode(json_file[key].casefold())
             else:
-                klog.info(f"{key} has unknown frequency perturbation mode.")
+                klog.warning(f"{key} has unknown frequency perturbation mode.")
+                cancel_run = True
+        elif key == 'optimizer':
+            if any([json_file[key].casefold() == opt.value
+                    for opt in Optimizers]):
+                json_file[key] = Optimizers(json_file[key].casefold())
+            else:
+                klog.warning(f"{key} has unknown type.")
                 cancel_run = True
 
 

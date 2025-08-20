@@ -11,6 +11,11 @@ class ElementStatus(Enum):
     RESET = 'reset'
 
 
+class Optimizers(Enum):
+    NM = 'nelder-mead'
+    GA = 'ga'
+
+
 class Ptype(Enum):
     WE = 'we'  # Well energy
     BE = 'be'  # Barrier energy
