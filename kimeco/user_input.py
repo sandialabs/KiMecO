@@ -189,6 +189,8 @@ def check_input(input_file: str,
             # Check the FreqMode
             if key == 'freq_mode':
                 value = FreqMode(value)
+            elif key == 'optimizer':
+                value = Optimizers(value)
             json_file[key] = value
         elif not isinstance(json_file[key], type(value)):
             if isinstance(value, float) and isinstance(json_file[key], int):

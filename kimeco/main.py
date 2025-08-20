@@ -5,6 +5,7 @@ import numpy as np
 import shutil
 from typing import Any, Dict
 from numpy.typing import NDArray
+from kimeco.enums import Optimizers
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
@@ -14,6 +15,7 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element, ElementStatus
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.generation import Generation
+from kimeco.optimizers.nelder_mead import NelderMead
 from kimeco.readers.mess_input import MessInputReader
 from kimeco.sensitivity.linear import Linear
 from kimeco.user_input import check_input
@@ -161,32 +163,46 @@ def main() -> None:
             kin_db=kin_db,
             sim_db=sim_db
         )
-
-    if settings['ga_type'].casefold() == 'tournament':
-        ga = Tournament(
-            settings=settings,
-            sf=sf,
-            pert=pert,
-            input_tpl=input_tpl,
-            location=location,
-            sop_db=sop_db,
-            kin_db=kin_db,
-            sim_db=sim_db,
-            f_el=f_el,
-            klog=klog)
-    elif settings['ga_type'].casefold() == 'exp':
-        ga = Exponential(
-            settings=settings,
-            sf=sf,
-            pert=pert,
-            input_tpl=input_tpl,
-            location=location,
-            sop_db=sop_db,
-            kin_db=kin_db,
-            sim_db=sim_db,
-            f_el=f_el,
-            klog=klog)
+    if settings['optimizer'] == Optimizers.GA:
+        if settings['ga_type'].casefold() == 'tournament':
+            optimizer = Tournament(
+                settings=settings,
+                sf=sf,
+                pert=pert,
+                input_tpl=input_tpl,
+                location=location,
+                sop_db=sop_db,
+                kin_db=kin_db,
+                sim_db=sim_db,
+                f_el=f_el,
+                klog=klog)
+        elif settings['ga_type'].casefold() == 'exp':
+            optimizer = Exponential(
+                settings=settings,
+                sf=sf,
+                pert=pert,
+                input_tpl=input_tpl,
+                location=location,
+                sop_db=sop_db,
+                kin_db=kin_db,
+                sim_db=sim_db,
+                f_el=f_el,
+                klog=klog)
+        else:
+            raise TypeError('Unknown genetic algorythm requested')
+    elif settings['optimizer'] == Optimizers.NM:
+        optimizer = NelderMead(
+                settings=settings,
+                sf=sf,
+                pert=pert,
+                input_tpl=input_tpl,
+                location=location,
+                sop_db=sop_db,
+                kin_db=kin_db,
+                sim_db=sim_db,
+                f_el=f_el,
+                klog=klog)
     else:
-        raise TypeError('Unknown genetic algorythm requested')
-    klog.info(f"{'Genetic algorythm:':<65}{ga.name:>15}")
-    ga.run()
+        raise TypeError('Unknown optimizer requested')
+    klog.info(f"{'OPTIMIZER:':<65}{optimizer.name}")
+    optimizer.run()

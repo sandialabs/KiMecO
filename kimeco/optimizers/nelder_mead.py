@@ -4,17 +4,35 @@ import numpy as np
 from scipy.optimize import minimize
 from numpy.typing import NDArray
 from kimeco.Perturbators.perturbator import Perturbator
+from kimeco.database.kin_db import KIN_DB
+from kimeco.database.sim_db import SIM_DB
+from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
 from kimeco.parameters import SOP
 from kimeco.generation import Generation
+from kimeco.scoring_f.scoring import Scoring
 
 
 class NelderMead:
     def __init__(self,
-                 f_el: Element,
                  settings: dict[str, Any],
+                 sf: Scoring,
                  pert: Perturbator,
-                 klog: Logger) -> None:
+                 sop_db: SOP_DB,
+                 sim_db: SIM_DB,
+                 kin_db: KIN_DB,
+                 f_el: Element,
+                 input_tpl: list[str],
+                 location: str,
+                 klog: Logger
+                 ) -> None:
+        self.name = 'Nelder-Mead'
+        self.sf: Scoring = sf
+        self.sop_db: SOP_DB = sop_db
+        self.kin_db: KIN_DB = kin_db
+        self.sim_db: SIM_DB = sim_db
+        self.loc: str = location
+        self.input_tpl: list[str] = input_tpl
         self.f_el: Element = f_el
         self.settings: dict[str, Any] = settings
         self.pert: Perturbator = pert
@@ -36,12 +54,11 @@ class NelderMead:
             ])
         return simplex
 
-    def optimize(self,
-                 initial_params: NDArray) -> NDArray:
+    def optimize(self) -> NDArray:
         """Run the Nelder-Mead optimization."""
         result = minimize(
-            self.objective_function,
-            self.get_initial_simplex(),
+            fun=self.objective_function,
+            x0=self.get_initial_simplex(),
             method='Nelder-Mead',
             options={
                 'xatol': self.settings.get('tolerance', 1e-4),
@@ -55,7 +72,7 @@ class NelderMead:
             raise RuntimeError("Nelder-Mead optimization failed.")
 
     def objective_function(self,
-                           params: NDArray):
+                           params: NDArray) -> float:
         row = [
             v
             if p not in self.settings['only_perturb']
@@ -79,5 +96,7 @@ class NelderMead:
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog,
-                previous_el={0:self.f_el}
+                previous_el={0: self.f_el}
                 )
+        new_gen.run()
+        return new_gen.elements[0].score

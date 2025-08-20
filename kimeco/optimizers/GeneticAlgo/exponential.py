@@ -64,7 +64,9 @@ class Exponential(GeneticAlgorithm):
         gen_len: int = len(gen.elements)
         available_ids: list[int] = [i for i in range(gen_len)]
         scores: NDArray = np.array([el.score for el in gen.elements])
-        child_prob: NDArray = np.exp(np.min(scores) - scores)/np.median(scores)
+        child_prob: NDArray = np.exp(
+            (np.min(scores) - scores)/np.median(scores)
+            )
         idxs = range(gen_len)
         # Always keep the best element
         best_idx: int = int(np.where(max(child_prob) == child_prob)[0][0])
