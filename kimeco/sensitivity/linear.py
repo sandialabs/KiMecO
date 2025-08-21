@@ -1,7 +1,5 @@
 from kimeco.enums import Distrib, Ptype
 from typing import Any
-import os
-import shutil
 import numpy as np
 from numpy.typing import NDArray
 from kimeco.element import Element
@@ -234,13 +232,29 @@ class Linear:
             kin_db (KIN_DB): Main run kin database
             sim_db (SIM_DB): Main run sim database
         """
+        tbl_name: str = 'G0000'
+        # SOP
+        if tbl_name not in sop_db.tables:
+            sop_db.create_table(
+                name=tbl_name
+                )
+        # KIN
+        if tbl_name not in kin_db.tables:
+            kin_db.create_table(
+                name=tbl_name
+                )
+        # SIM
+        if tbl_name not in sim_db.tables:
+            sim_db.create_table(
+                name=tbl_name
+                )
         initial_element: Element = self.core.elements[0]
-        initial_element.save_kin(db=kin_db, table='G0000')
+        initial_element.save_kin(db=kin_db, table=tbl_name)
         for sim_num in range(len(initial_element.sim.simulations)):
             initial_element.save_sim(db=sim_db,
-                                     table='G0000',
+                                     table=tbl_name,
                                      sim_num=sim_num)
-        initial_element.prepare_upsert(db=sop_db, table='G0000')
+        initial_element.prepare_upsert(db=sop_db, table=tbl_name)
         sop_db.batch_upsert()
         kin_db.batch_upsert()
         sim_db.batch_upsert()

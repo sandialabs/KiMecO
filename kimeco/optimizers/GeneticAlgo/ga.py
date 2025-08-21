@@ -64,10 +64,10 @@ class GeneticAlgorithm(ABC):
         self.loc: str = location
         self.goat: list[Element] = [f_el]
         self.__converged: dict[str, bool] = {}
-        self.means: dict[str, float]
-        self.stds: dict[str, float]
-        self.old_means: dict[str, float]
-        self.old_stds: dict[str, float]
+        self.means: dict[str, float] = {}
+        self.stds: dict[str, float] = {}
+        self.old_means: dict[str, float] = {}
+        self.old_stds: dict[str, float] = {}
 
     @property
     def goat_scores(self):
@@ -82,33 +82,31 @@ class GeneticAlgorithm(ABC):
                 return False
         return True
 
-    def actualize_conv(self,
-                       gen: Generation) -> None:
+    def actualize_conv(self) -> None:
         """Actualize the convergence of the perturbed parameters
         """
-        
         for key in self.means:
             if key not in self.__converged:
                 self.__converged[key] = False
-            if gen.id > 1:
-                # Find the type of parameter
-                for ptype in Ptype:
-                    if ptype.value in key.split(dbs)[1]:
-                        break
-                if ptype.value in Pclass.ADDITIVE.value:
-                    mean_thresh: float = self.settings[f'conv_{ptype.value}']
-                    std_thresh: float = self.settings[f'conv_{ptype.value}']
-                    m_change: float = self.means[key] - self.old_means[key]
-                    s_change: float = self.stds[key] - self.stds[key]
-                else:
-                    mean_thresh = self.settings['param_conv']
-                    std_thresh = self.settings['param_conv']
-                    m_change: float = self.means[key]/self.old_means[key]
-                    s_change: float = self.stds[key]/self.stds[key]
-                if abs(m_change) < mean_thresh and abs(s_change) < std_thresh:
-                    self.__converged[key] = True
-                else:
-                    self.__converged[key] = False
+            # Find the type of parameter
+        for key in self.old_means:
+            for ptype in Ptype:
+                if ptype.value in key.split(dbs)[1]:
+                    break
+            if ptype.value in Pclass.ADDITIVE.value:
+                mean_thresh: float = self.settings[f'conv_{ptype.value}']
+                std_thresh: float = self.settings[f'conv_{ptype.value}']
+                m_change: float = self.means[key] - self.old_means[key]
+                s_change: float = self.stds[key] - self.stds[key]
+            else:
+                mean_thresh = self.settings['param_conv']
+                std_thresh = self.settings['param_conv']
+                m_change: float = self.means[key]/self.old_means[key]
+                s_change: float = self.stds[key]/self.stds[key]
+            if abs(m_change) < mean_thresh and abs(s_change) < std_thresh:
+                self.__converged[key] = True
+            else:
+                self.__converged[key] = False
 
     def write_goat_update(self) -> None:
         goat_line: str = ''
@@ -120,7 +118,7 @@ class GeneticAlgorithm(ABC):
             f.write(goat_line)
 
     def print_stats(self) -> None:
-        line_tpl = '{name:<15}{mean:>7}±{std:<7}{status:>20}'
+        line_tpl = '{name:<15}{mean:>10} ± {std:<10}{status:>20}'
         msg = '\n'
         msg += line_tpl.format(
             name='PARAMETER',
@@ -130,11 +128,11 @@ class GeneticAlgorithm(ABC):
         for k, mean in self.means.items():
             std: float = self.stds[k]
             if mean >= 1000:
-                str_mean: str = f"{mean:-5.2E}"
-                str_std: str = f"{std:5.2E}"
+                str_mean: str = f"{mean:-9.2E}"
+                str_std: str = f"{std:9.2E}"
             else:
-                str_mean: str = f"{mean:-6.2f}"
-                str_std: str = f"{std:6.2f}"
+                str_mean: str = f"{mean:-10.2f}"
+                str_std: str = f"{std:10.2f}"
             if self.__converged[k]:
                 status = 'CONVERGED'
             else:
@@ -329,7 +327,7 @@ class GeneticAlgorithm(ABC):
                 elements=self.goat
                 )
             # Actualize which parameter is converged
-            self.actualize_conv(gen=new_gen)
+            self.actualize_conv()
             self.write_score_update(gen=new_gen)
             if new_gen.id > 1:
                 self.print_stats()
