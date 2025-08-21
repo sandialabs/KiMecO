@@ -201,12 +201,16 @@ class Perturbator:
             # This shift is simply for negative values
             bounds: list[float] = self.get_boundaries(ptype=ptype,
                                                       i_val=i_val)
-            mean, sigma, shift = self.get_mean_sigma(
-                param=param,
-                ptype=ptype,
-                c_val=c_val,
-                bounds=bounds)
-            return float(np.random.lognormal(mean, sigma))# + shift
+            # mean, sigma, shift = self.get_mean_sigma(
+            #     param=param,
+            #     ptype=ptype,
+            #     c_val=c_val,
+            #     bounds=bounds)
+            # return float(np.random.lognormal(mean, sigma)) # + shift
+            loc: float = c_val
+            scale: float = self.get_scale(param=param,
+                                          ptype=ptype)
+            return float(np.exp(np.random.normal(loc=loc, scale=scale)))
         else:
             raise TypeError('Unknown Distribution in Perturbator')
 
