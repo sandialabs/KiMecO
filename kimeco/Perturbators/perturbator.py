@@ -210,7 +210,7 @@ class Perturbator:
             loc: float = c_val
             scale: float = self.get_scale(param=param,
                                           ptype=ptype)
-            return float(np.exp(np.random.normal(loc=loc, scale=scale)))
+            return float(np.exp(np.random.normal(loc=np.log(loc), scale=scale)))
         else:
             raise TypeError('Unknown Distribution in Perturbator')
 
