@@ -101,8 +101,10 @@ class GeneticAlgorithm(ABC):
             else:
                 mean_thresh = self.settings['param_conv']
                 std_thresh = self.settings['param_conv']
-                m_change: float = self.means[key]/self.old_means[key]
-                s_change: float = self.stds[key]/self.stds[key]
+                m_change: float = abs(self.old_means[key]-self.means[key]
+                                      )/self.old_means[key]
+                s_change: float = abs(self.old_stds[key]-self.stds[key]
+                                      )/self.old_stds[key]
             if abs(m_change) < mean_thresh and abs(s_change) < std_thresh:
                 self.__converged[key] = True
             else:
