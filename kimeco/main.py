@@ -1,10 +1,6 @@
 import sys
 import os
-import math
-import numpy as np
 import shutil
-from typing import Any, Dict
-from numpy.typing import NDArray
 from kimeco.enums import Optimizers
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
@@ -14,7 +10,6 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element, ElementStatus
 from kimeco.Perturbators.perturbator import Perturbator
-from kimeco.generation import Generation
 from kimeco.optimizers.nelder_mead import NelderMead
 from kimeco.readers.mess_input import MessInputReader
 from kimeco.sensitivity.linear import Linear

@@ -99,6 +99,11 @@ class GeneticAlgorithm(ABC):
                 m_change: float = self.means[key] - self.old_means[key]
                 s_change: float = self.stds[key] - self.stds[key]
             else:
+                # Avoids dividing by 0
+                if self.old_means[key] == 0 or\
+                   self.old_stds[key] == 0:
+                    self.__converged[key] = False
+                    continue
                 mean_thresh = self.settings['param_conv']
                 std_thresh = self.settings['param_conv']
                 m_change: float = abs(self.old_means[key]-self.means[key]
