@@ -173,6 +173,8 @@ default_settings: dict[str, Any] = {
     "SA_freq": 1000,
     # From which generation to start the sensitivity analysis
     "SA_start": 1,
+    # Key: generation number. Value: List of parameters added at that generation
+    "SA_restart": {},
     # Number of thread in the main process for I/O operations
     "thread": 5
 }

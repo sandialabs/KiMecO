@@ -11,7 +11,6 @@ from kimeco.scoring_f.scoring import Scoring
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
 import numpy as np
-from numpy.typing import NDArray
 from kimeco.sensitivity.linear import Linear
 from kimeco.database.kimeco_db import dbs
 
@@ -45,10 +44,6 @@ class GeneticAlgorithm(ABC):
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
         self.f_el: Element = f_el
-        self.losers: NDArray = np.zeros(
-            shape=(
-                self.settings['n_elem'],
-                len(self.sop_db.columns)+1))
         self.input_tpl: list[str] = input_tpl
         self.gen_0 = Generation(
             elements=[f_el],
@@ -62,7 +57,7 @@ class GeneticAlgorithm(ABC):
             pert=pert,
             klog=klog)
         self.loc: str = location
-        self.goat: list[Element] = [f_el]
+        self.goat: list[Element] = []
         self.__converged: dict[str, bool] = {}
         self.means: dict[str, float] = {}
         self.stds: dict[str, float] = {}
@@ -115,14 +110,19 @@ class GeneticAlgorithm(ABC):
             else:
                 self.__converged[key] = False
 
-    def write_goat_update(self) -> None:
+    def write_goat_update(self,
+                          create: bool = False) -> None:
         goat_line: str = ''
         for el in self.goat:
             goat_line += f'{el.gen}_{el.id} '
         goat_line += '\n'
 
-        with open(self.loc + '/goat.txt', 'w') as f:
-            f.write(goat_line)
+        if create:
+            with open(self.loc + '/goat.txt', 'w') as f:
+                f.write(goat_line)
+        else:
+            with open(self.loc + '/goat.txt', 'a') as f:
+                f.write(goat_line)
 
     def print_stats(self) -> None:
         line_tpl = '{name:<15}{mean:>10} ± {std:<10}{status:>20}'
@@ -306,6 +306,13 @@ class GeneticAlgorithm(ABC):
         """Run the genetic algorythm to optimize an ensemble of elements
         """
         self.gen_0.run()
+        self.update_goat(new_els=self.gen_0.elements)
+        self.means, self.stds = self.get_stats(
+            elements=self.goat
+            )
+        # Actualize which parameter is converged
+        self.actualize_conv()
+        self.write_score_update(gen=self.gen_0)
         prev_elements: dict[int, Element]
         new_elements: list[Element]
         prev_elements, new_elements = self.get_gen_one()
@@ -327,9 +334,9 @@ class GeneticAlgorithm(ABC):
             new_gen.run()
             # Update the goat list
             self.update_goat(new_els=new_gen.elements)
-            if new_gen.id > 1:
-                self.old_means = self.means
-                self.old_stds = self.stds
+            # if new_gen.id > 1:
+            self.old_means = self.means
+            self.old_stds = self.stds
             self.means, self.stds = self.get_stats(
                 elements=self.goat
                 )
@@ -342,35 +349,44 @@ class GeneticAlgorithm(ABC):
                 prev_elements, new_elements = self.get_next_gen(gen=new_gen)
                 if new_gen.id % self.settings['SA_freq'] == 0 and\
                    new_gen.id >= self.settings['SA_start']:
-                    self.klog.info('On-the-fly sensitivity analysis.')
-                    sensitivity = Linear(
-                        elements=self.goat,
-                        settings=self.settings,
-                        rc_tpl=self.input_tpl,
-                        loc=self.loc,
-                        sf=self.sf,
-                        pert=self.pert,
-                        klog=self.klog)
-                    sensitivity.run()
-                    new_params = [
-                        p for p in sensitivity.selected
-                        if p not in self.settings['only_perturb']
-                                  ]
-                    new_p: bool = len(new_params) > 0
-                    for p in new_params:
-                        self.settings['only_perturb'].append(p)
-                    if new_p:
-                        msg = 'Perturbing the following new parameters:\n'
-                        msg += "{}".format(new_params).replace("'", '"')
-                        self.klog.info(msg)
+                    self.run_sensitivity(gen_id=new_gen.id)
         self.klog.info('Run Sucessful.')
         self.klog.info(f'Termination at generation {new_gen.id}')
         self.klog.info(f'Final score: {new_gen.best_score}')
+
+    def run_sensitivity(self,
+                        gen_id: int):
+        if str(gen_id) in self.settings["SA_restart"]:
+            selected = self.settings["SA_restart"][str(gen_id)]
+        else:
+            self.klog.info('On-the-fly sensitivity analysis.')
+            sensitivity = Linear(
+                elements=self.goat,
+                settings=self.settings,
+                rc_tpl=self.input_tpl,
+                loc=self.loc,
+                sf=self.sf,
+                pert=self.pert,
+                klog=self.klog)
+            sensitivity.run()
+            selected = sensitivity.selected
+        new_params = [
+            p for p in selected
+            if p not in self.settings['only_perturb']
+                        ]
+        new_p: bool = len(new_params) > 0
+        for p in new_params:
+            self.settings['only_perturb'].append(p)
+        if new_p:
+            msg = 'Perturbing the following new parameters:\n'
+            msg += "{}".format(new_params).replace("'", '"')
+            self.klog.info(msg)
 
     def update_goat(self,
                     new_els: list[Element]) -> None:
         replaced = 0
         added = 0
+        gen_id: int = max([el.gen for el in new_els])
         # ordered elements
         o_els: list[Element] = sorted(
                 new_els, key=lambda el: el.score
@@ -378,6 +394,8 @@ class GeneticAlgorithm(ABC):
         # Add elements in goat as long as it's too short
         if len(self.goat) < self.settings['goat_length']:
             for el in o_els:
+                if el in self.goat:
+                    continue
                 self.goat.append(el)
                 added += 1
                 if len(self.goat) == self.settings['goat_length']:
@@ -404,7 +422,7 @@ class GeneticAlgorithm(ABC):
             self.klog.info(f'GOATs ADDED: {added}')
         if replaced > 0:
             self.klog.info(f'GOATs REPLACED: {replaced}')
-        self.write_goat_update()
+        self.write_goat_update(create=gen_id == 0)
 
     def get_stats(self,
                   elements: list[Element]) -> tuple[dict[str, float], dict[str, float]]:
