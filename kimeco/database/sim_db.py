@@ -1,7 +1,7 @@
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
-from sqlalchemy import select, Row
-from typing import Any, Sequence
+from sqlalchemy import select
+from typing import Sequence
 import numpy as np
 from numpy.typing import NDArray
 
@@ -115,7 +115,7 @@ class SIM_DB(Kimeco_db):
                     ).where(
                         self.tables[table].c.sim_id.in_(sim_ids))
             with self.eng.begin() as conn:
-                db_rslt: Sequence[Row[Any]] = np.array(
+                db_rslt: NDArray = np.array(
                     conn.execute(
                         query).fetchall()
                     )

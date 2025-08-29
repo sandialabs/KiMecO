@@ -65,6 +65,36 @@ class KIN_DB(Kimeco_db):
             db_rslt: Sequence = conn.execute(query).fetchall()
         return list(db_rslt)
 
+    def get_kin_rc_for_kin_id(self,
+                              table: str,
+                              From: str,
+                              To: str,
+                              pres: float,
+                              temp: float,
+                              kin_id: int) -> list[Any]:
+        """Query the rate coefficients.
+
+        Args:
+            table (str): Generation
+            From (str): Species name
+            To (str): Specie name
+            pres (float): Pressure (Torr)
+            temp (float): Temperature (K)
+
+        Returns:
+            list[Any]: _description_
+        """
+        query = select(
+            self.tables[table].c[To],
+            ).where(
+                self.tables[table].c.P == pres,
+                self.tables[table].c.T == temp,
+                self.tables[table].c.kin_id == kin_id,
+                self.tables[table].c.specie == From)
+        with self.eng.begin() as conn:
+            db_rslt: Sequence = conn.execute(query).fetchall()
+        return list(db_rslt)
+
     def get_ids_from_kin_id(self,
                             table: str,
                             kin_id: int):

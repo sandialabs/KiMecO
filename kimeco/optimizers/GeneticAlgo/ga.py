@@ -72,6 +72,8 @@ class GeneticAlgorithm(ABC):
     def converged(self) -> bool:
         if Generation.total() < 2:
             return False
+        elif any([goat.score > 9 for goat in self.goat] ):
+            return False
         for conv in self.__converged.values():
             if not conv:
                 return False
