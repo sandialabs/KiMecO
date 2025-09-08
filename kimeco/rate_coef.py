@@ -140,7 +140,7 @@ class RateCo:
                                    klog=self.klog)
             mor.read()
         self.rc: np.ndarray = mor.rc
-        self.rc[self.rc < 0 ] = 0.0
+        self.rc[self.rc < 0] = 0.0
         # self.hp_rc: np.ndarray = mor.hp_rc  # Not used for now
         self.tbl_map: dict[str, int] = mor.tbl_map
         names: NDArray[Any] = np.full(shape=(len(self.tbl_map)),

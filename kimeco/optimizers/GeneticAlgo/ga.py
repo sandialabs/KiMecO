@@ -353,8 +353,9 @@ class GeneticAlgorithm(ABC):
                    new_gen.id >= self.settings['SA_start']:
                     self.run_sensitivity(gen_id=new_gen.id)
         self.klog.info('Run Sucessful.')
-        self.klog.info(f'Termination at generation {new_gen.id}')
-        self.klog.info(f'Final score: {new_gen.best_score}')
+        if Generation.total() > 1:
+            self.klog.info(f'Termination at generation {new_gen.id}')
+            self.klog.info(f'Final score: {new_gen.best_score}')
 
     def run_sensitivity(self,
                         gen_id: int):

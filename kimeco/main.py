@@ -3,7 +3,6 @@ import os
 import shutil
 from kimeco.enums import Optimizers
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
-from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
