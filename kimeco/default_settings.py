@@ -62,6 +62,8 @@ default_settings: dict[str, Any] = {
     "max_cpu": 2000,
     # Maximum number of jobs submitted per generation
     "max_jobs": 600,
+    # Maximum number of jobs for the user
+    "max_user_jobs": 1500,
     # Nodes to exclude from the SLURM submission list
     "exclude_nodes": "",
     # Username for the server hosting the db

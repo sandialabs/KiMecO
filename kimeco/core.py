@@ -382,7 +382,7 @@ class CoreRun:
             settings (dict[str, Any]): User input + default settings
         """
         try:
-            scores = self.sf.score(sim=el.sim)
+            scores: list[float] = self.sf.score(sim=el.sim)
             for idx, k in enumerate(el.sop.scores):
                 el.sop.scores[k] = scores[idx]
             el.status = ElementStatus.TO_SAVE

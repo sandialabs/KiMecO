@@ -80,14 +80,14 @@ class KimecoApp:
             klog=self.klog
             )
         with open(self.loc + '/goat.txt', 'r') as f:
-            self.goats = f.readlines()
+            self.goats: list[str] = f.readlines()
         # Initialize app
         self.app = Dash(
             assets_url_path=f"{kimeco_path}/gui/assets")
         self.create_layout()
         self.register_callbacks()
 
-    def create_layout(self):
+    def create_layout(self) -> None:
         self.app.layout = [
             html.Div(className='row', children=[
                 html.H1('KiMecO Analyser'),

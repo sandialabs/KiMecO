@@ -64,6 +64,7 @@ class QueueingSystem:
         self.cpu_sim: int = self.settings['cpu_sim']
         self.mem_kin: int = self.settings['mem_kin']
         self.mem_sim: int = self.settings['mem_sim']
+        self.current_user_jobs: int = 0
 
         if q_type.casefold() == 'slurm':
             self.subtpl: str = slurmtpl
@@ -100,14 +101,16 @@ class QueueingSystem:
         self.running: int = 0
 
     @property
-    def av_jobs(self):
+    def av_jobs(self) -> int:
         job_sum = len(self.kin_q[self.kin_q['status'] == JobStatus.RUNNING])
         job_sum += len(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING])
         job_sum += len(self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING])
-        return self._max_jobs - job_sum
+        return min(
+            self._max_jobs - job_sum,
+            self.settings['max_user_jobs'] - self.current_user_jobs)
 
     @property
-    def av_cpu(self):
+    def av_cpu(self) -> int:
         cpu_sum = np.sum(
             self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['cpu'])
         cpu_sum += np.sum(
@@ -117,7 +120,7 @@ class QueueingSystem:
         return self._max_cpu - cpu_sum
 
     @property
-    def av_mem(self):
+    def av_mem(self) -> float:
         mem_sum = np.sum(
             self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['mem'])
         mem_sum += np.sum(
@@ -127,8 +130,8 @@ class QueueingSystem:
         return self._max_mem - mem_sum
 
     @property
-    def n_ready(self):
-        n_ready = len(self.kin_q[self.kin_q['status'] == JobStatus.READY])
+    def n_ready(self) -> int:
+        n_ready: int = len(self.kin_q[self.kin_q['status'] == JobStatus.READY])
         n_ready += len(self.sim_q[self.sim_q['status'] == JobStatus.READY])
         n_ready += len(self.hlp_q[self.hlp_q['status'] == JobStatus.READY])
         return n_ready
@@ -206,7 +209,7 @@ class QueueingSystem:
            jtype == 'sim':
             while not (os.path.exists(f"{lfile}.err")):
                 time.sleep(0.1)
-            if os.stat(f"{lfile}.err").st_size > 0 :
+            if os.stat(f"{lfile}.err").st_size > 0:
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
                 self.klog.warning(
@@ -361,6 +364,7 @@ class QueueingSystem:
                         shell=False, stdout=PIPE, stdin=PIPE, stderr=PIPE)
         out, err = process.communicate()
         jobs: list[str] = out.decode().split('\n')[1:]
+        self.current_user_jobs = len(jobs)
         slurm_ids: NDArray[int32] = np.zeros(len(jobs), dtype=np.int32)
         for i, j in enumerate(jobs[:-1]):
             slurm_ids[i] = int32(j.split()[0])
