@@ -155,6 +155,8 @@ default_settings: dict[str, Any] = {
     "restart": 'default',
     # Number of elements per generation
     "n_elem": 500,
+    # Value of score above which a generation won't converge
+    "max_score": 9.0,
     # Value of score under which a generation has converged
     "score_conv": 0.01,
     # Maximum number of generations
