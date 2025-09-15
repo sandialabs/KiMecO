@@ -104,7 +104,7 @@ class SIM_DB(Kimeco_db):
                 int: sim_id within this table.
                 NDArray: [rows, [sim_id, time, concentrations]]
         """
-        results: dict[dict[NDArray]] = {}
+        results: dict[str, dict[int, NDArray]] = {}
         for table in self._select:
             sim_ids = self._select[table]
             query = select(

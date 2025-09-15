@@ -2,6 +2,7 @@
 from typing import Any
 import os
 import glob
+from numpy.typing import NDArray
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
@@ -117,9 +118,37 @@ class CoreRun:
         """Run a generation until all of its elements are scored.
         """
         while not self.finished:
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=self.settings['thread']) as exec:
-                futures = []
+            if self.settings['thread'] > 1:
+                with concurrent.futures.ThreadPoolExecutor(
+                     max_workers=self.settings['thread']) as exec:
+                    futures = []
+                    for idx, el in enumerate(self.elements):
+                        # Safeguard
+                        if self.elements[idx].id != el.id:
+                            raise IndexError(
+                                'Incorrect ordering of the elements.')
+                        if el.status == ElementStatus.DONE:
+                            continue
+                        if el.status == ElementStatus.RESET:
+                            futures.append(exec.submit(self.reset_element, el))
+                            continue
+                        if el.status == ElementStatus.SOP:
+                            futures.append(
+                                exec.submit(
+                                    self.calculate_rate_coefficients, el))
+                        elif el.status == ElementStatus.KIN:
+                            futures.append(
+                                exec.submit(self.run_simulation, el))
+                        elif el.status == ElementStatus.SIM:
+                            futures.append(
+                                exec.submit(self.recover_simulation_data, el))
+                        elif el.status == ElementStatus.SCORING:
+                            futures.append(exec.submit(self.calc_score, el))
+                        if el.status == ElementStatus.TO_SAVE:
+                            futures.append(exec.submit(self.finalize_element, el))
+                    # Wait for all futures to complete
+                    concurrent.futures.wait(futures)
+            else:
                 for idx, el in enumerate(self.elements):
                     # Safeguard
                     if self.elements[idx].id != el.id:
@@ -127,30 +156,18 @@ class CoreRun:
                     if el.status == ElementStatus.DONE:
                         continue
                     if el.status == ElementStatus.RESET:
-                        # self.reset_element(el)
-                        futures.append(exec.submit(self.reset_element, el))
+                        self.reset_element(el)
                         continue
                     if el.status == ElementStatus.SOP:
-                        # self.calculate_rate_coefficients(el)
-                        futures.append(
-                            exec.submit(
-                                self.calculate_rate_coefficients, el))
+                        self.calculate_rate_coefficients(el)
                     elif el.status == ElementStatus.KIN:
-                        # self.run_simulation(el)
-                        futures.append(
-                            exec.submit(self.run_simulation, el))
+                        self.run_simulation(el)
                     elif el.status == ElementStatus.SIM:
-                        # self.recover_simulation_data(el)
-                        futures.append(
-                            exec.submit(self.recover_simulation_data, el))
+                        self.recover_simulation_data(el)
                     elif el.status == ElementStatus.SCORING:
-                        # self.calc_score(el)
-                        futures.append(exec.submit(self.calc_score, el))
+                        self.calc_score(el)
                     if el.status == ElementStatus.TO_SAVE:
-                        # self.finalize_element(el)
-                        futures.append(exec.submit(self.finalize_element, el))
-                # Wait for all futures to complete
-                concurrent.futures.wait(futures)
+                        self.finalize_element(el)
             self.sop_db.batch_upsert()
             self.kin_db.batch_upsert()
             self.check_helpers_status()
@@ -253,7 +270,7 @@ class CoreRun:
             len(self.settings['rc_temp'])
         collected: list[int] = []
         to_collect = self.sim_db._select[self.name]
-        collecting: dict[int, list[list[Any]]] = self.sim_db.batch_select()
+        collecting: dict[str, dict[int, NDArray]] = self.sim_db.batch_select()
         for sim_id, db_data in collecting[self.name].items():
             el: Element = self.elements[sim_id // nsim]
             sim: int = sim_id % nsim
