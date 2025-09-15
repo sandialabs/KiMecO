@@ -180,5 +180,5 @@ default_settings: dict[str, Any] = {
     # Key: generation number. Value: List of parameters added at that generation
     "SA_restart": {},
     # Number of thread in the main process for I/O operations
-    "thread": 5
+    "thread": 1
 }
