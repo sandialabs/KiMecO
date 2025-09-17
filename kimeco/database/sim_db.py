@@ -4,6 +4,8 @@ from sqlalchemy import select
 from typing import Sequence
 import numpy as np
 from numpy.typing import NDArray
+from sqlalchemy.exc import OperationalError
+from time import sleep
 
 
 class SIM_DB(Kimeco_db):
@@ -114,11 +116,20 @@ class SIM_DB(Kimeco_db):
                   for sp in self.sv_species]
                     ).where(
                         self.tables[table].c.sim_id.in_(sim_ids))
-            with self.eng.begin() as conn:
-                db_rslt: NDArray = np.array(
-                    conn.execute(
-                        query).fetchall()
-                    )
+            try2connect = 0
+            wait_t = 0
+            while try2connect < 10:
+                try:
+                    with self.eng.begin() as conn:
+                        db_rslt: NDArray = np.array(
+                            conn.execute(
+                                query).fetchall()
+                            )
+                except OperationalError as e:
+                    if 'database is locked' in str(e):
+                        try2connect += 1
+                        wait_t += self.sleep_time
+                        sleep(self.sleep_time)
             results[table] = {}
             if len(db_rslt) != 0:
                 collected_sim_ids = set(db_rslt[:, 0])
