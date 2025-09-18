@@ -6,6 +6,8 @@ import numpy as np
 from numpy.typing import NDArray
 from sqlalchemy.exc import OperationalError
 from time import sleep
+from logging import Logger
+from kimeco.logger_config import setup_logger
 
 
 class SIM_DB(Kimeco_db):
@@ -125,11 +127,22 @@ class SIM_DB(Kimeco_db):
                             conn.execute(
                                 query).fetchall()
                             )
+                        break
                 except OperationalError as e:
                     if 'database is locked' in str(e):
                         try2connect += 1
                         wait_t += self.sleep_time
                         sleep(self.sleep_time)
+                    else:
+                        klog: Logger = setup_logger(name='sim_db.log')
+                        klog.warning('An OperationalError occured in the db:')
+                        klog.warning(e)
+                        raise OperationalError(e)
+                except Exception as e:
+                    klog: Logger = setup_logger(name='sim_db.log')
+                    klog.warning('An error occured in the database:')
+                    klog.warning(e)
+                    raise TypeError(e)
             results[table] = {}
             if len(db_rslt) != 0:
                 collected_sim_ids = set(db_rslt[:, 0])
