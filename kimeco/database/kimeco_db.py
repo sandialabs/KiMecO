@@ -178,13 +178,13 @@ class Kimeco_db:
             try2connect = 0
             wait_t = 0
             while try2connect < 10:
+                try2connect += 1
                 try:
                     with self.eng.begin() as conn:
                         conn.execute(g_upsert)
                         break
                 except OperationalError as e:
                     if 'database is locked' in str(e):
-                        try2connect += 1
                         wait_t += self.sleep_time
                         sleep(self.sleep_time)
                     else:
@@ -196,6 +196,7 @@ class Kimeco_db:
                     klog.warning('An error occured in the database:')
                     klog.warning(e)
             else:
+                klog: Logger = setup_logger(name='db.log')
                 msg: str = f'DB locked for more than {wait_t/60:.2f} min.'
                 klog.warning(msg)
                 self.sleep_time += 1

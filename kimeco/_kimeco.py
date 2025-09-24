@@ -1,0 +1,204 @@
+
+import os
+import shutil
+from typing import Any
+from kimeco.readers.mess_input import MessInputReader
+from kimeco.parameters import SOP
+from logging import Logger
+from kimeco.logger_config import setup_logger
+from kimeco.user_input import check_input
+from kimeco.database.kin_db import KIN_DB
+from kimeco.database.sim_db import SIM_DB
+from kimeco.database.sop_db import SOP_DB
+from kimeco.scoring_f.weighteddif import WeightedDif
+from kimeco.Perturbators.perturbator import Perturbator
+from kimeco.sensitivity.linear import Linear
+from kimeco.element import Element, ElementStatus
+from kimeco.enums import Optimizers
+from kimeco.optimizers.GeneticAlgo.exponential import Exponential
+from kimeco.optimizers.GeneticAlgo.tournament import Tournament
+from kimeco.optimizers.nelder_mead import NelderMead
+
+
+class KiMecO:
+    def __init__(self,
+                 input_file: str,
+                 name: str = 'KiMecO') -> None:
+        """Class containing utilities function
+
+        Args:
+            settings (dict[str, Any]): user input
+        """
+        self.klog: Logger = setup_logger(f'{name}.log')
+        self.settings: dict[str, Any] = check_input(
+            input_file=input_file,
+            klog=self.klog)
+        self.klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
+        mr = MessInputReader(settings=self.settings)
+        self.init_SOP: SOP
+        self.input_tpl: list[str]
+        (self.init_SOP, self.input_tpl) = mr.read()
+        self.init_SOP.set_uncertainties(settings=self.settings)
+        self.first_sensi: bool = len(self.settings['only_perturb']) == 0
+
+    def initialize_workdir(self) -> None:
+        """Create and access the working directory
+        """
+        self.init_loc: str = os.getcwd()
+        if not os.path.isdir(self.settings['project_name']):
+            os.mkdir(self.settings['project_name'])
+        os.chdir(self.settings['project_name'])
+        self.workdir: str = os.getcwd()
+
+    def copy_necessary_files(self) -> None:
+        """Copy files necessary for MESS calculation"""
+        with open('mess_tpl', 'w') as f:
+            f.writelines(self.input_tpl)
+
+        for file in self.init_SOP.files2copy:
+            shutil.copyfile(
+                f'{self.init_loc}/{file}',
+                f'{self.workdir}/{file}')
+
+    def initialize_databases(self) -> None:
+        """Create the three databases used by KiMecO
+        """
+        self.sop_db = SOP_DB(sop=self.init_SOP,
+                             name='KMO_DB_SOP',
+                             thread=self.settings['thread'])
+        self.kin_db = KIN_DB(sop=self.init_SOP,
+                             name='KMO_DB_KIN',
+                             thread=self.settings['thread'])
+        self.sim_db = SIM_DB(sop=self.init_SOP,
+                             name='KMO_DB_SIM',
+                             thread=self.settings['thread'])
+        self.klog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
+
+    def set_scoring_function(self) -> None:
+        """Define which scoring function to use"""
+        if self.settings['scoring_func'].casefold() == 'weighteddif':
+            self.sf = WeightedDif(settings=self.settings)
+        else:
+            # Default scoring function
+            self.sf = WeightedDif(settings=self.settings)
+        self.klog.info(f"{'Scoring function:':<65}{self.sf.name:>15}")
+
+    def set_perturbator(self) -> None:
+        """Initialize the perturbator"""
+        self.pert: Perturbator = Perturbator(
+            settings=self.settings,
+            initial_SOP=self.init_SOP,
+            klog=self.klog
+            )
+        self.pert.print_pert_parameters()
+
+    def set_important_parameters(self) -> None:
+        """Start with user specified parameters,
+        or run a first densitivity analysis
+        """
+        if self.first_sensi:
+            self.klog.info(f"{'Running sensitivity analysis':<65}")
+            self.sensitivity = Linear(
+                elements=[Element(
+                    sop=self.init_SOP,
+                    id=0)],
+                settings=self.settings,
+                rc_tpl=self.input_tpl,
+                loc=self.workdir,
+                sf=self.sf,
+                pert=self.pert,
+                klog=self.klog)
+            self.sensitivity.run()
+            self.settings['only_perturb'] = self.sensitivity.selected
+            self.f_el: Element = self.sensitivity.elements[0]
+            self.sensitivity.save_initial_element(
+                sop_db=self.sop_db,
+                kin_db=self.kin_db,
+                sim_db=self.sim_db
+            )
+        else:
+            # Check DB for restart if not SA
+            if self.sop_db.table_exists('G0000'):
+                rows = self.sop_db.get_table(table='G0000')
+                if len(rows) == 1:
+                    db_sop: SOP = SOP.from_db_row(
+                        sop_tpl=self.init_SOP,
+                        row=rows[0][1:]
+                        )
+                    self.f_el = Element(
+                        sop=db_sop,
+                        id=0)
+                    self.f_el.status = ElementStatus.DONE
+            # Otherwise initialize the first Element from scratch
+                else:
+                    self.f_el = Element(
+                        sop=self.init_SOP,
+                        id=0)
+            else:
+                self.f_el = Element(
+                    sop=self.init_SOP,
+                    id=0)
+        msg = f"{'Parameters selected for perturbation:':<80}"
+        msg += '\n'
+        msg += "{}".format(self.settings['only_perturb']).replace("'", '"')
+        self.klog.info(msg)
+
+        # Reinitialize the perturbator once the list of parameters to perturb
+        # has been reduced
+        self.pert: Perturbator = Perturbator(
+            settings=self.settings,
+            initial_SOP=self.init_SOP,
+            klog=self.klog
+            )
+        self.klog.info(
+            f"{'Selected parameters transmitted to perturbator':<80}")
+
+    def set_optimizer(self) -> None:
+        """Define the optimizer being used for this run
+
+        Raises:
+            TypeError: Unknown GA
+            TypeError: Unknown optimizer
+        """
+        if self.settings['optimizer'] == Optimizers.GA:
+            if self.settings['ga_type'].casefold() == 'tournament':
+                self.optimizer = Tournament(
+                    settings=self.settings,
+                    sf=self.sf,
+                    pert=self.pert,
+                    input_tpl=self.input_tpl,
+                    location=self.workdir,
+                    sop_db=self.sop_db,
+                    kin_db=self.kin_db,
+                    sim_db=self.sim_db,
+                    f_el=self.f_el,
+                    klog=self.klog)
+            elif self.settings['ga_type'].casefold() == 'exp':
+                self.optimizer = Exponential(
+                    settings=self.settings,
+                    sf=self.sf,
+                    pert=self.pert,
+                    input_tpl=self.input_tpl,
+                    location=self.workdir,
+                    sop_db=self.sop_db,
+                    kin_db=self.kin_db,
+                    sim_db=self.sim_db,
+                    f_el=self.f_el,
+                    klog=self.klog)
+            else:
+                raise TypeError('Unknown genetic algorythm requested')
+        elif self.settings['optimizer'] == Optimizers.NM:
+            self.optimizer = NelderMead(
+                    settings=self.settings,
+                    sf=self.sf,
+                    pert=self.pert,
+                    input_tpl=self.input_tpl,
+                    location=self.workdir,
+                    sop_db=self.sop_db,
+                    kin_db=self.kin_db,
+                    sim_db=self.sim_db,
+                    f_el=self.f_el,
+                    klog=self.klog)
+        else:
+            raise TypeError('Unknown optimizer requested')
+        self.klog.info(f"{'OPTIMIZER:':<65}{self.optimizer.name}")

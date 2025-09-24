@@ -172,11 +172,11 @@ class SOP:
             dbs + Ptype.ETF.value: self.factor,
             dbs + Ptype.ETP.value: self.power
             }
-        sc = 0
-        for obj in self.items.values():
-            if obj.ct_name in self.sc_species:
-                pn[obj.ct_name + dbs + Ptype.SCORE.value] = float(99999)
-                sc += 1
+        # sc = 0
+        # for obj in self.items.values():
+        #     if obj.ct_name in self.sc_species:
+        #         pn[obj.ct_name + dbs + Ptype.SCORE.value] = float(99999)
+        #         sc += 1
         for k, v in self.scores.items():
             pn[k + dbs + Ptype.SCORE.value] = float(v)
         for idx, ep in enumerate(self.epsilons):

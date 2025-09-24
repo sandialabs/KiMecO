@@ -121,6 +121,7 @@ class SIM_DB(Kimeco_db):
             try2connect = 0
             wait_t = 0
             while try2connect < 10:
+                try2connect += 1
                 try:
                     with self.eng.begin() as conn:
                         db_rslt: NDArray = np.array(
@@ -130,19 +131,23 @@ class SIM_DB(Kimeco_db):
                         break
                 except OperationalError as e:
                     if 'database is locked' in str(e):
-                        try2connect += 1
                         wait_t += self.sleep_time
                         sleep(self.sleep_time)
                     else:
                         klog: Logger = setup_logger(name='sim_db.log')
                         klog.warning('An OperationalError occured in the db:')
                         klog.warning(e)
-                        raise OperationalError(e)
                 except Exception as e:
                     klog: Logger = setup_logger(name='sim_db.log')
                     klog.warning('An error occured in the database:')
                     klog.warning(e)
                     raise TypeError(e)
+            else:
+                klog: Logger = setup_logger(name='sim.log')
+                msg: str = f'DB locked for more than {wait_t/60:.2f} min.'
+                klog.warning(msg)
+                self.sleep_time += 1
+                klog.warning(f'Reconnect extended to {self.sleep_time:2f} s.')
             results[table] = {}
             if len(db_rslt) != 0:
                 collected_sim_ids = set(db_rslt[:, 0])

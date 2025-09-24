@@ -139,6 +139,8 @@ class RateCo:
                                    sop=self.sop,
                                    klog=self.klog)
             mor.read()
+        else:
+            raise NotImplementedError('Unknown master equation software.')
         self.rc: np.ndarray = mor.rc
         self.rc[self.rc < 0] = 0.0
         # self.hp_rc: np.ndarray = mor.hp_rc  # Not used for now

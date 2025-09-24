@@ -331,8 +331,8 @@ class CoreRun:
             else:
                 if sim_id not in self.requeue_timer:
                     self.requeue_timer[sim_id] = time.time()
-                # Wait maximum 5 sec for file to be written
-                elif time.time() - self.requeue_timer[sim_id] < 5.0:
+                # Wait maximum 30 sec for file to be written
+                elif time.time() - self.requeue_timer[sim_id] < 30.0:
                     continue
                 # or resubmit
                 else:
