@@ -1,8 +1,10 @@
 from enum import Enum
 from genericpath import isfile
 from kimeco.templates.pyjob import pytpl
+from kimeco.templates.pyjobarray import pyarrtpl
 from kimeco.templates.messjob import messtpl
 from kimeco.templates.slurm import slurmtpl
+from kimeco.templates.slurm_arr import slurmarrtpl
 from subprocess import Popen, PIPE
 import numpy as np
 from numpy.typing import NDArray
@@ -65,9 +67,12 @@ class QueueingSystem:
         self.mem_kin: int = self.settings['mem_kin']
         self.mem_sim: int = self.settings['mem_sim']
         self.current_user_jobs: int = 0
+        self.n_exp: int = \
+            len(self.settings['rc_temp']) * len(self.settings['rc_pres'])
 
         if q_type.casefold() == 'slurm':
             self.subtpl: str = slurmtpl
+            self.sub_arr_tpl: str = slurmarrtpl
             self.ext: str = 'slurm'
             exclude_substr = 'exclude'
         else:
@@ -79,6 +84,7 @@ class QueueingSystem:
             self.subtpl = self.subtpl.replace(line, '')
 
         self.pytpl: str = pytpl
+        self.pyarrtpl: str = pyarrtpl
         self.messtpl: str = messtpl
         self.q_name: str = q_name
 
@@ -96,6 +102,7 @@ class QueueingSystem:
         self.sim_q: NDArray[Any] = np.empty(shape=(nsim), dtype=self.jobdata)
         self.hlp_q: NDArray[Any] = np.empty(shape=(nhlp), dtype=self.jobdata)
         self.queues: list[NDArray] = [self.kin_q, self.sim_q, self.hlp_q]
+        self.queues_order: list[str] = ['kin', 'sim', 'hlp']
 
         self.submitted: int = 0
         self.running: int = 0
@@ -103,7 +110,9 @@ class QueueingSystem:
     @property
     def av_jobs(self) -> int:
         job_sum = len(self.kin_q[self.kin_q['status'] == JobStatus.RUNNING])
-        job_sum += len(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING])
+        job_sum += \
+            len(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]) *\
+            self.n_exp
         job_sum += len(self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING])
         return min(
             self._max_jobs - job_sum,
@@ -114,7 +123,8 @@ class QueueingSystem:
         cpu_sum = np.sum(
             self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['cpu'])
         cpu_sum += np.sum(
-            self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['cpu'])
+            self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['cpu']) *\
+            self.n_exp
         cpu_sum += np.sum(
             self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['cpu'])
         return self._max_cpu - cpu_sum
@@ -124,7 +134,8 @@ class QueueingSystem:
         mem_sum = np.sum(
             self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['mem'])
         mem_sum += np.sum(
-            self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['mem'])
+            self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['mem']) *\
+            self.n_exp
         mem_sum += np.sum(
             self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['mem'])
         return self._max_mem - mem_sum
@@ -169,19 +180,40 @@ class QueueingSystem:
     def create_sub_file(self,
                         job: NDArray[Any]) -> None:
         """Create the submission script for the job."""
-        sub_cmd: str = self.subtpl.format(
-            exclude_nodes=self.settings['exclude_nodes'],
-            nprocs=job['cpu'][0],
-            filename=str(job['name'][0]),
-            sub_queue=self.q_name,
-            mem_mb=job['mem'][0]
-        )
+        if job['type'] == 'sim':
+            scratchdir: str = self.settings['scratch_base'] +\
+                              self.settings["project_name"] + '/' +\
+                              job['name'][0]
+            sub_cmd: str = self.sub_arr_tpl.format(
+                n_exp=self.n_exp-1,
+                exclude_nodes=self.settings['exclude_nodes'],
+                nprocs=job['cpu'][0],
+                filename=str(job['name'][0]),
+                sub_queue=self.q_name,
+                mem_mb=job['mem'][0],
+                scratchdir=scratchdir
+            )
+        else:
+            sub_cmd: str = self.subtpl.format(
+                exclude_nodes=self.settings['exclude_nodes'],
+                nprocs=job['cpu'][0],
+                filename=str(job['name'][0]),
+                sub_queue=self.q_name,
+                mem_mb=job['mem'][0]
+            )
         job_cmd: str
 
         if job['type'] == 'kin':
             job_cmd = self.messtpl.format(filename=str(job['name'][0]))
-        elif job['type'] in ['sim', 'hlp']:
+        elif job['type'] == 'hlp':
             job_cmd = self.pytpl.format(filename=str(job['name'][0]))
+        elif job['type'] == 'sim':
+            job_cmd = self.pyarrtpl.format(
+                filename=str(job['name'][0]),
+                scratchdir=scratchdir,
+                destination=job['loc'][0])
+        else:
+            raise NotImplementedError('Unknown job type')
 
         sub_file: str = sub_cmd + job_cmd
 
@@ -201,6 +233,8 @@ class QueueingSystem:
             job = self.sim_q[id]
         elif jtype == 'hlp':
             job = self.hlp_q[id]
+        else:
+            raise NotImplementedError('Unknown job type')
 
         clear_err = True
         file: str = f"{job['loc']}/{job['name']}"
@@ -249,7 +283,7 @@ class QueueingSystem:
         # Don't delete files for jobs that need to be resubmitted
         if job['status'] == JobStatus.READY.value:
             return
-        for ext in ['log', 'inp', 'aux', 'slurm', 'pkl']:
+        for ext in ['log', 'aux', 'slurm']:
             if ext == 'err' and not clear_err:
                 continue
             if os.path.exists(f"{job['loc']}/{job['name']}.{ext}"):
@@ -309,10 +343,12 @@ class QueueingSystem:
         as long as ressources are available.
         """
         here: str = os.getcwd()
-        for q in self.queues:
+        for q, jtype in zip(self.queues, self.queues_order):
             for idx, rdy in enumerate(q['status'] == JobStatus.READY.value):
                 if rdy:
-                    if self.enough_resources_for(job=q[idx]):
+                    if self.enough_resources_for(
+                        job=q[idx],
+                        jtype=jtype):
                         self.submit(job=q[idx])
                     else:
                         self.actualize()
@@ -321,11 +357,18 @@ class QueueingSystem:
             self.actualize()
         os.chdir(here)
 
-    def enough_resources_for(self, job) -> bool:
+    def enough_resources_for(self,
+                             job,
+                             jtype: str) -> bool:
         """Check if remaining resources are enough to send the job."""
-        return (self.av_jobs > 0 and
-                self.av_cpu >= job['cpu'] and
-                self.av_mem >= job['mem'])
+        if jtype == 'sim':
+            return (self.av_jobs >= self.n_exp and
+                    self.av_cpu >= job['cpu']*self.n_exp and
+                    self.av_mem >= job['mem']*self.n_exp)
+        else:
+            return (self.av_jobs > 0 and
+                    self.av_cpu >= job['cpu'] and
+                    self.av_mem >= job['mem'])
 
     def actualize(self) -> None:
         """Remove picked up jobs from queuing system.
@@ -360,14 +403,18 @@ class QueueingSystem:
         Returns:
             NDArray[int32]: job ids in return of command squeue -u user
         """
-        process = Popen(args=['squeue', '-u', f'{getpass.getuser()}'],
+        process = Popen(args=[
+            'squeue',
+            '-u',
+            f'{getpass.getuser()}',
+            '--format=\"%.20F\"'],
                         shell=False, stdout=PIPE, stdin=PIPE, stderr=PIPE)
         out, err = process.communicate()
-        jobs: list[str] = out.decode().split('\n')[1:]
-        self.current_user_jobs = len(jobs)
-        slurm_ids: NDArray[int32] = np.zeros(len(jobs), dtype=np.int32)
-        for i, j in enumerate(jobs[:-1]):
-            slurm_ids[i] = int32(j.split()[0])
+        jobids: list[str] = [jobid.strip('"').strip() for jobid in out.decode().split('\n')[1:]]
+        slurm_ids: NDArray[int32] = np.array(
+            jobids[:-1],
+            dtype=np.int32)
+        self.current_user_jobs = len(slurm_ids)
         return slurm_ids
 
     def status(self, id: int, jtype: str) -> JobStatus:
@@ -407,8 +454,6 @@ class QueueingSystem:
                     and os.stat(base + '.inp').st_size > 0)
         elif job['type'] == 'sim':
             return (isfile(base + '.py')
-                    and os.stat(base + '.py').st_size > 0 and
-                    isfile(base + '.pkl')
-                    and os.stat(base + '.pkl').st_size > 0)
+                    and os.stat(base + '.py').st_size > 0)
         else:
             raise NotImplementedError('Unknown file type')

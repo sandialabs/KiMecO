@@ -21,7 +21,8 @@ class MessInputReader:
                              with additional default parameters
         """
 
-        self.filename: str = settings["initial_mess"]
+        self.filename: str = settings['init_loc'] + '/' +\
+            settings["initial_mess"]
         self.SOP: SOP = SOP(score_species=settings['score_sp'],
                             freq_mode=settings['freq_mode'])
         self.SOP.rc_temp = settings["rc_temp"]
@@ -32,6 +33,10 @@ class MessInputReader:
         if os.path.isfile(path=self.filename):
             with open(file=self.filename, mode='r') as f:
                 self.file: list[str] = f.readlines()
+        else:
+            raise FileNotFoundError(
+                'Mess input file not found.'
+            )
 
         self.template: list[str] = []
 

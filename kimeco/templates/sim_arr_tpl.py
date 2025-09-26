@@ -1,4 +1,5 @@
-ctjobtpl = """import cantera as ct
+ctjobtpl = """import sys
+import cantera as ct
 from kimeco.cantera.customrate import MessData, MessRate
 from kimeco.database.sim_db import SIM_DB
 import numpy as np
@@ -9,40 +10,53 @@ import copy
 import time
 import cantera.with_units as ctu
 import json
-from kimeco.user_input import check_input
-from kimeco.logger_config import setup_logger
-from logging import Logger
+from kimeco._kimeco import KiMecO
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 
 R = Q_(gas_constant, 'J mol^-1 K^-1')
 Vol = Q_(1, 'cm^3')
-klog: Logger = setup_logger('sim_jobs.log')
 
-db = SIM_DB(name='{db.name}',
-             path='{db.path}')
+kmo = KiMecO(input_file='{input_file}',
+             init_loc='{init_loc}',
+             name='E{el_num:04d}_sims',
+             sim_job=True)
+kmo.initialize_workdir()
+kmo.initialize_databases()
 
-input_file = {input_file}
-settings: dict = check_input(input_file=input_file,
-                             klog=klog)
+scratchdir = kmo.settings['scratch_base'] +\
+             kmo.settings["project_name"] + '/' +\
+             '{gen_name}E{el_num:04d}S'
+os.chdir(scratchdir)
 
-mr = MessInputReader(settings=settings)
-init_SOP: SOP
-input_tpl: list[str]
-(init_SOP, input_tpl) = mr.read()
-init_SOP.set_uncertainties(settings=settings)
+exp_id = int(sys.argv[1])
+el_num = {el_num}
+sim_id = len(kmo.settings['exp_profiles']) * el_num + exp_id
 
-gas = ct.Solution(name=wf_gas.name,
-                    thermo='ideal-gas',
-                    kinetics='gas',
-                    species=wf_gas.species(),
-                    reactions=wf_gas.reactions())
-gas.X = {initial_X}
-pres = Q_(f"{{wf_gas.P}} {pres_unit}")
-temp = Q_(f"{{wf_gas.T}} K")
+kin_mech = KiMec(file=f"{{kmo.init_loc}}/{{kmo.settings['initial_mess']}}",
+                 settings=kmo.settings,
+                 sop_tpl=kmo.init_SOP)
+tbl_map = {tbl_map}
+rates = {rates}
+initial_X = {initial_X}
+exp_num = 0
+for p in kmo.settings['rc_pres']:
+    for t in kmo.settings['rc_temp']:
+        if exp_num == exp_id:
+            break
+        else:
+            exp_num += 1
+
+gas = kin_mech.get_updated_mech(
+    rates=rates,
+    tbl_map=tbl_map)
+gas.X = initial_X[exp_id]
+pres = Q_(f"{{p}} {pres_unit}")
+temp = Q_(f"{{t}} K")
+
 # Total number of molecules
 ntot = (pres*Vol/(R*temp)).to('molecule')
-gas.TP = wf_gas.T, np.round(pres.to("Pa").magnitude, 5)
+gas.TP = temp.magnitude, np.round(pres.to("Pa").magnitude, 5)
 # number of mol of gas in 1 cm^3
 
 reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
@@ -53,18 +67,17 @@ net.rtol = 1e-15
 
 sim_time = 0.0
 # In seconds
-times = {time}
+times = {time}[exp_id]
 all_tsteps = np.array({all_tsteps})
 block_size = np.sum(all_tsteps)
-sim_in_element = {sim_id} % len(all_tsteps)
-start_idx = np.sum(all_tsteps[:sim_in_element])
-tot_steps = all_tsteps[sim_in_element]
+start_idx = np.sum(all_tsteps[:exp_id])
+tot_steps = all_tsteps[exp_id]
 
 to_watch = {to_watch}
 traces = {{}}
 traces['P'] = np.full(tot_steps, gas.P)
 traces['T'] = np.full(tot_steps, gas.T)
-traces['sim_id'] = np.full(tot_steps, {sim_id})
+traces['sim_id'] = np.full(tot_steps, sim_id)
 traces['time'] = np.array(times)
 
 names = []
@@ -122,10 +135,11 @@ json_object = json.dumps(traces_serializable, indent=4)
 
 # Writing to sample.json
 with open(
-    f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json", "w"
+    f"{gen_name}E{el_num:04d}S{{exp_id:02d}}.json", "w"
     ) as outfile:
     outfile.write(json_object)
-while not os.path.exists(f"{gen_name}E{el_num:04d}S{{sim_in_element:02d}}.json"):
+while not os.path.exists(f"{gen_name}E{el_num:04d}S{{exp_id:02d}}.json"):
     time.sleep(3)
+
 
 """

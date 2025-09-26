@@ -28,6 +28,8 @@ mandatory_keys: dict[str, Any] = {
                                   }
 
 default_settings: dict[str, Any] = {
+    # Location of where the simulation will run
+    "scratch_base": f"/scratch/{getpass.getuser()}/kmo/",
     "project_name": "KMO_Project",
     # Type of optimizers
     "optimizer": "ga",

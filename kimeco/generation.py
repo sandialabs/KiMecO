@@ -29,7 +29,7 @@ class Generation(CoreRun):
                  sf: Scoring,
                  pert: Perturbator,
                  klog: Logger,
-                 previous_el: dict[int, Element] = {}
+                 previous_el: dict[int, Element] = {},
                  ) -> None:
         """Generation object manages the worflow of
         a given set of elements, going from creating them

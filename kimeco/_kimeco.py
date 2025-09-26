@@ -6,7 +6,7 @@ from kimeco.readers.mess_input import MessInputReader
 from kimeco.parameters import SOP
 from logging import Logger
 from kimeco.logger_config import setup_logger
-from kimeco.user_input import check_input
+from kimeco.user_input import KMOInput
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
@@ -23,16 +23,26 @@ from kimeco.optimizers.nelder_mead import NelderMead
 class KiMecO:
     def __init__(self,
                  input_file: str,
-                 name: str = 'KiMecO') -> None:
+                 init_loc: str = os.getcwd(),
+                 name: str = 'KiMecO',
+                 sim_job: bool = False) -> None:
         """Class containing utilities function
 
         Args:
             settings (dict[str, Any]): user input
         """
+        self.init_loc: str = init_loc
         self.klog: Logger = setup_logger(f'{name}.log')
-        self.settings: dict[str, Any] = check_input(
+        self.raw_input = KMOInput(
             input_file=input_file,
+            init_loc=init_loc,
             klog=self.klog)
+        # if sim_job:
+        #     self.settings: dict[str, Any] = self.raw_input.sim_settings_only()
+        # else:
+        self.settings: dict[str, Any] = self.raw_input.full_run_settings()
+        self.settings['init_loc'] = self.init_loc
+        self.settings['input_file'] = input_file
         self.klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
         mr = MessInputReader(settings=self.settings)
         self.init_SOP: SOP
@@ -44,7 +54,6 @@ class KiMecO:
     def initialize_workdir(self) -> None:
         """Create and access the working directory
         """
-        self.init_loc: str = os.getcwd()
         if not os.path.isdir(self.settings['project_name']):
             os.mkdir(self.settings['project_name'])
         os.chdir(self.settings['project_name'])
@@ -65,13 +74,16 @@ class KiMecO:
         """
         self.sop_db = SOP_DB(sop=self.init_SOP,
                              name='KMO_DB_SOP',
-                             thread=self.settings['thread'])
+                             thread=self.settings['thread'],
+                             path=self.workdir)
         self.kin_db = KIN_DB(sop=self.init_SOP,
                              name='KMO_DB_KIN',
-                             thread=self.settings['thread'])
+                             thread=self.settings['thread'],
+                             path=self.workdir)
         self.sim_db = SIM_DB(sop=self.init_SOP,
                              name='KMO_DB_SIM',
-                             thread=self.settings['thread'])
+                             thread=self.settings['thread'],
+                             path=self.workdir)
         self.klog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
 
     def set_scoring_function(self) -> None:

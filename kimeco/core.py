@@ -57,9 +57,7 @@ class CoreRun:
         self.qs = QueueingSystem(
             settings=self.settings,
             nkin=len(self.elements),
-            nsim=len(self.elements) *
-            len(self.settings['rc_temp']) *
-            len(self.settings['rc_pres']),
+            nsim=len(self.elements),
             nhlp=self.settings['max_helpers'],
             klog=self.klog
             )
@@ -234,12 +232,12 @@ class CoreRun:
         for sim_idx, prof in enumerate(el.sim.profiles):
             sim_id: int = el.id * len(el.sim.simulations) + sim_idx
             # Change status from RUNNING to FINISHED (may have failed)
-            el.sim.set_status(sim_idx)
+            el.sim.set_status()
             # Check if failed
             if el.sim.status[sim_idx] == JobStatus.FINISHED:
                 self.qs.pickUp(id=sim_id,
                                jtype='sim')
-                el.sim.set_status(sim_idx)
+                el.sim.set_status()
             # If successful, do the request
             if el.sim.status[sim_idx] == JobStatus.PICKED_UP or\
                el.sim.status[sim_idx] == JobStatus.NOT_IN_QUEUE:
@@ -340,7 +338,7 @@ class CoreRun:
                     msg: str = f'Missing file: {el.name}S{sim:02d}.json'
                     msg += ' Sim re-submitted.'
                     self.klog.info(msg)
-                    el.sim.requeue(idx=sim, sim_id=sim_id)
+                    el.sim.q_up()
                 continue
         if len(self.sim_hlpers[hlp_idx]) == 0:
             return

@@ -119,8 +119,9 @@ class SIM_DB(Kimeco_db):
                     ).where(
                         self.tables[table].c.sim_id.in_(sim_ids))
             try2connect = 0
-            wait_t = 0
-            while try2connect < 10:
+            tot_try = 10
+            results[table] = {}
+            while try2connect < tot_try:
                 try2connect += 1
                 try:
                     with self.eng.begin() as conn:
@@ -131,7 +132,7 @@ class SIM_DB(Kimeco_db):
                         break
                 except OperationalError as e:
                     if 'database is locked' in str(e):
-                        wait_t += self.sleep_time
+                        self.sleep_time += 5
                         sleep(self.sleep_time)
                     else:
                         klog: Logger = setup_logger(name='sim_db.log')
@@ -144,11 +145,13 @@ class SIM_DB(Kimeco_db):
                     raise TypeError(e)
             else:
                 klog: Logger = setup_logger(name='sim.log')
-                msg: str = f'DB locked for more than {wait_t/60:.2f} min.'
+                msg: str = \
+                    f'DB locked for {self.sleep_time*tot_try/60:.2f} min.'
                 klog.warning(msg)
-                self.sleep_time += 1
+                self.sleep_time += 5
                 klog.warning(f'Reconnect extended to {self.sleep_time:2f} s.')
-            results[table] = {}
+                return results
+
             if len(db_rslt) != 0:
                 collected_sim_ids = set(db_rslt[:, 0])
                 for sim_id in collected_sim_ids:

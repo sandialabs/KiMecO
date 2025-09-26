@@ -26,7 +26,7 @@ class Kimeco_db:
         """Class managing the information storage of KIMECO database.
         """
         self.name: str = name
-        self.sleep_time: float = 5
+        self.sleep_time: float = 10
         self._tabls = []
         if path == '':
             self.path = os.getcwd()
@@ -176,8 +176,8 @@ class Kimeco_db:
                     set_=g_insert.excluded
                 )
             try2connect = 0
-            wait_t = 0
-            while try2connect < 10:
+            tot_try = 10
+            while try2connect < tot_try:
                 try2connect += 1
                 try:
                     with self.eng.begin() as conn:
@@ -185,7 +185,7 @@ class Kimeco_db:
                         break
                 except OperationalError as e:
                     if 'database is locked' in str(e):
-                        wait_t += self.sleep_time
+                        self.sleep_time += 5
                         sleep(self.sleep_time)
                     else:
                         klog: Logger = setup_logger(name='db.log')
@@ -197,9 +197,10 @@ class Kimeco_db:
                     klog.warning(e)
             else:
                 klog: Logger = setup_logger(name='db.log')
-                msg: str = f'DB locked for more than {wait_t/60:.2f} min.'
+                msg: str = \
+                    f'DB locked for {self.sleep_time*tot_try/60:.2f} min.'
                 klog.warning(msg)
-                self.sleep_time += 1
+                self.sleep_time += 5
                 klog.warning(f'Reconnect extended to {self.sleep_time:2f} s.')
             # Update the lists to process the remaining entries
             values = values[chunk_size:]
