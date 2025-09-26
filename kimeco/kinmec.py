@@ -40,12 +40,10 @@ class KiMec:
                 self.rc_tpl += f'rc_{pindex}_{tindex}: ' +\
                                 '{rates[' + f'{pindex}][{tindex}]' + '}' + '\n'
         self.new_reactions_tpls: dict[tuple[str, str], str] = {}
-        self.prepare_mech()
 
     def prepare_mech(self):
         """Prepare the mechanism for modifications of the reactions
         """
-        self.check_species()
         self.add_species()
         self.create_reactions_templates()
         # temporarily create reactions with 0 rate coefficients
@@ -55,7 +53,11 @@ class KiMec:
             1,
             1
         ))
-        tbl_map: dict[str, int] = {sp: 0 for sp in self.ct_names.values()}
+        tbl_map: dict[str, int] = {}
+        for sp in self.SOP.wells_names:
+            tbl_map[sp] = 0
+        for sp in self.SOP.bimols_names:
+            tbl_map[sp] = 0
         new_reactions = self.create_reactions(
             rates=rc,
             tbl_map=tbl_map
@@ -71,9 +73,10 @@ class KiMec:
         Args:
             kmo_species (list[str]): species in the workflow
         """
+        mech_names = [sp.name for sp in self.species]
         sp_in_mech = 0
         for kmo_sp in self.SOP.species:
-            if kmo_sp in self.species:
+            if kmo_sp in mech_names:
                 sp_in_mech += 1
         if sp_in_mech == 0:
             raise ValueError('No MESS species in Kinetic Mechanism.')
@@ -82,19 +85,19 @@ class KiMec:
         """Add the missing species from the SOP
         to the cantera Simulation.
         """
-        new_species: list[ct.Species] = []
+        mech_names: list[str] = [sp.name for sp in self.species]
         thermo = ct.NasaPoly2(self.species[0].thermo.min_temp,
                               self.species[0].thermo.max_temp,
                               self.species[0].thermo.reference_pressure,
                               self.species[0].thermo.coeffs)
         for specie in self.SOP.species:
-            well: Well = self.SOP.items[self.ct_names[specie]]
-            new_specie: ct.Species = ct.Species(name=well.ct_name,
-                                                composition=well.compo
-                                                )
-            new_specie.thermo = thermo
-            new_species.append(new_specie)
-        self.species.extend(new_species)
+            if specie not in mech_names:
+                well: Well = self.SOP.items[self.ct_names[specie]]
+                new_specie: ct.Species = ct.Species(name=well.ct_name,
+                                                    composition=well.compo
+                                                    )
+                new_specie.thermo = thermo
+                self.species.append(new_specie)
 
     def find_redundant_idx(self,
                            new_reactions: list[ct.Reaction]
@@ -146,8 +149,9 @@ class KiMec:
         """Create the template of a reaction where only the rate coefficient
         needs to be changed."""
 
-        equation: str = self.get_reaction_eq(reactant=reactant,
-                                               product=product)
+        equation: str = self.get_reaction_eq(
+            reactant=reactant,
+            product=product)
         p_yaml: str = ''
         for p in self.settings["rc_pres"]:
             p_yaml += f'  - {round(p, 5)} {self.settings["pres_unit"]}' + '\n'
@@ -314,10 +318,10 @@ class KiMec:
         return new_reactions
 
     def get_updated_mech(self,
-                         rates: NDArray,
+                         rates: list[Any],
                          tbl_map: dict[str, int]):
         new_reactions = self.create_reactions(
-            rates=rates,
+            rates=np.array(rates),
             tbl_map=tbl_map
         )
         return ct.Solution(

@@ -7,6 +7,7 @@ from kimeco.parameters import SOP
 from logging import Logger
 from kimeco.logger_config import setup_logger
 from kimeco.user_input import KMOInput
+from kimeco.kinmec import KiMec
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
@@ -50,6 +51,14 @@ class KiMecO:
         (self.init_SOP, self.input_tpl) = mr.read()
         self.init_SOP.set_uncertainties(settings=self.settings)
         self.first_sensi: bool = len(self.settings['only_perturb']) == 0
+        self.check_kinmech()
+
+    def check_kinmech(self) -> None:
+        kin_mech = KiMec(
+            file=f"{self.init_loc}/{self.settings['ct_yaml']}",
+            settings=self.settings,
+            sop_tpl=self.init_SOP)
+        kin_mech.check_species()
 
     def initialize_workdir(self) -> None:
         """Create and access the working directory

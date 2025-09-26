@@ -212,7 +212,6 @@ class CoreRun:
             db=self.sim_db,
             gen_name=self.name,
             sc_species=self.sc_species,
-            species=self.elements[0].sop.species,
             loc=f'{self.loc}/{self.name}',
             q_sys=self.qs,
             set=self.settings,
@@ -226,28 +225,25 @@ class CoreRun:
         """Recover simulation data for an element."""
         # Avoid large batch_select causing I/O errors
         if len(self.sim_db._select) > 2000:
-            self.klog.info(f'Already {len(self.sim_db._select)} selected')
+            self.klog.debug(f'Already {len(self.sim_db._select)} selected')
             return
 
-        for sim_idx, prof in enumerate(el.sim.profiles):
-            sim_id: int = el.id * len(el.sim.simulations) + sim_idx
-            # Change status from RUNNING to FINISHED (may have failed)
+        # Change status from RUNNING to FINISHED (may have failed)
+        el.sim.set_status()
+        if el.sim.status == JobStatus.FINISHED:
+            self.qs.pickUp(id=el.id, jtype='sim')
             el.sim.set_status()
-            # Check if failed
-            if el.sim.status[sim_idx] == JobStatus.FINISHED:
-                self.qs.pickUp(id=sim_id,
-                               jtype='sim')
-                el.sim.set_status()
-            # If successful, do the request
-            if el.sim.status[sim_idx] == JobStatus.PICKED_UP or\
-               el.sim.status[sim_idx] == JobStatus.NOT_IN_QUEUE:
+        # If successful, do the request
+        if el.sim.status == JobStatus.PICKED_UP or\
+           el.sim.status == JobStatus.NOT_IN_QUEUE:
+            for prof in el.sim.profiles:
                 if prof is None:
                     el.request_sim_profiles(sim_db=self.sim_db,
                                             table=self.name)
                     break
-            # Reset Element if simulation had an error
-            elif el.sim.status[sim_idx] == JobStatus.FAILED:
-                el.status = ElementStatus.RESET
+        # Reset Element if simulation had an error
+        elif el.sim.status == JobStatus.FAILED:
+            el.status = ElementStatus.RESET
 
     def finalize_element(self,
                          el: Element) -> None:

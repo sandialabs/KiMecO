@@ -10,6 +10,7 @@ import copy
 import time
 import cantera.with_units as ctu
 import json
+from kimeco.kinmec import KiMec
 from kimeco._kimeco import KiMecO
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
@@ -33,9 +34,10 @@ exp_id = int(sys.argv[1])
 el_num = {el_num}
 sim_id = len(kmo.settings['exp_profiles']) * el_num + exp_id
 
-kin_mech = KiMec(file=f"{{kmo.init_loc}}/{{kmo.settings['initial_mess']}}",
+kin_mech = KiMec(file=f"{{kmo.init_loc}}/{{kmo.settings['ct_yaml']}}",
                  settings=kmo.settings,
                  sop_tpl=kmo.init_SOP)
+kin_mech.prepare_mech()
 tbl_map = {tbl_map}
 rates = {rates}
 initial_X = {initial_X}

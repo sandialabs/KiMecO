@@ -236,11 +236,20 @@ class QueueingSystem:
         else:
             raise NotImplementedError('Unknown job type')
 
+        if jtype == 'kin':
+            clear_err: bool = self._pickup_kin(job)
+        elif jtype == 'sim':
+            clear_err = self._pickup_sim(job)
+        elif jtype == 'hlp':
+            clear_err = self._pickup_hlp(job)
+        self.clean_files(job, clear_err=clear_err)
+
+    def _pickup_kin(self,
+                    job) -> bool:
         clear_err = True
         file: str = f"{job['loc']}/{job['name']}"
         lfile: str = f"{job['loc']}/logs/{job['name']}"
-        if (jtype == 'kin' and os.path.exists(f"{file}.out")) or\
-           jtype == 'sim':
+        if os.path.exists(f"{file}.out"):
             while not (os.path.exists(f"{lfile}.err")):
                 time.sleep(0.1)
             if os.stat(f"{lfile}.err").st_size > 0:
@@ -248,10 +257,8 @@ class QueueingSystem:
                 clear_err = False
                 self.klog.warning(
                     f"Resetting job {job['name']} because an error occurred.")
-                if jtype == 'kin':
-                    os.remove(f"{file}.out")
-            elif (jtype == 'kin' and
-                  os.path.exists(f"{file}.err") and
+                os.remove(f"{file}.out")
+            elif (os.path.exists(f"{file}.err") and
                   os.stat(f"{file}.err").st_size > 0):
                 job['status'] = JobStatus.FAILED.value
                 clear_err = False
@@ -260,16 +267,41 @@ class QueueingSystem:
                 os.remove(f"{file}.out")
             else:
                 job['status'] = JobStatus.PICKED_UP.value
-        elif jtype == 'hlp':
-            if (os.path.exists(f"{lfile}.err") and
-                    os.stat(
-                        f"{lfile}.err").st_size > 0):
-                job['status'] = JobStatus.FAILED.value
-                clear_err = False
-                self.klog.info(f"Helper {job['name'][0]} failed.")
-            else:
-                job['status'] = JobStatus.PICKED_UP.value
-        self.clean_files(job, clear_err=clear_err)
+        return clear_err
+
+    def _pickup_sim(self,
+                    job) -> bool:
+        clear_err = True
+        successful: int = True
+        for exp in range(self.n_exp):
+            lfile: str = f"{job['loc']}/logs/{job['name']}_{exp}"
+            while not (os.path.exists(f"{lfile}.err")):
+                time.sleep(0.1)
+                if os.stat(f"{lfile}.err").st_size > 0:
+                    successful = False
+                self.klog.warning(
+                    f"Simulation {exp} of {job['name']} has an error.")
+        if not successful:
+            job['status'] = JobStatus.FAILED.value
+            clear_err = False
+            self.klog.warning(
+                f"Resetting job {job['name']} because an error occurred.")
+        else:
+            job['status'] = JobStatus.PICKED_UP.value
+        return clear_err
+
+    def _pickup_hlp(self,
+                    job) -> bool:
+        clear_err = True
+        lfile: str = f"{job['loc']}/logs/{job['name']}"
+        if os.path.exists(f"{lfile}.err") and\
+           os.stat(f"{lfile}.err").st_size > 0:
+            job['status'] = JobStatus.FAILED.value
+            clear_err = False
+            self.klog.info(f"Helper {job['name'][0]} failed.")
+        else:
+            job['status'] = JobStatus.PICKED_UP.value
+        return clear_err
 
     def clean_files(self,
                     job: NDArray[Any],

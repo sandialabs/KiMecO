@@ -1,11 +1,9 @@
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
-from kimeco.database.sop_db import SOP_DB
 from kimeco.parameters import SOP
 from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
-from kimeco.q_sys import JobStatus
 from typing import Any
 import numpy as np
 from kimeco.enums import ElementStatus
@@ -40,6 +38,7 @@ class Element:
         # Purely for debugging
         self.reset: int = 0
         self.name: str = f'E{self.id:04d}'
+        self.n_exp: int
 
     def save_kin(self,
                  db: KIN_DB,
@@ -69,8 +68,9 @@ class Element:
     def request_sim_profiles(self,
                              sim_db: SIM_DB,
                              table) -> None:
-        for sim in range(len(self.sim.simulations)):
-            sim_id: int = self.id * len(self.sim.simulations) + sim
+        n_exp: int = len(self.sim.profiles)
+        for sim in range(n_exp):
+            sim_id: int = self.id * n_exp + sim
             if self.sim.profiles[sim] is None:
                 sim_db.prepare_batch_select(
                     table=table,
