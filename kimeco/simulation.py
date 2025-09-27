@@ -92,9 +92,13 @@ class SIM:
         times = []
         for exp in self.settings['exp_profiles']:
             times.append(exp[0].tolist())
+        scratchdir: str = self.settings['scratch_base'] +\
+                          self.settings["project_name"] + '/' +\
+                          self.name
         ct_job: str = self.ctjobtpl.format(
             init_loc=self.settings['init_loc'],
             input_file=self.settings['input_file'],
+            scratchdir=scratchdir,
             el_num=self.id,
             db=self.db,
             tbl_map=self.KIN.tbl_map,
@@ -102,9 +106,7 @@ class SIM:
             time=times,
             all_tsteps=time_steps,
             gen_name=self.gen_name,
-            to_watch=self.sc_species,
-            initial_X=self.settings['initial_X'],
-            pres_unit=self.settings['pres_unit']
+            to_watch=self.sc_species
             )
         with open(f'{self.loc}/{self.name}.py', 'w') as f:
             f.write(ct_job)

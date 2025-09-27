@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 import getpass
 from kimeco.enums import Distrib
@@ -27,9 +28,10 @@ mandatory_keys: dict[str, Any] = {
     "exp_errors": []
                                   }
 
+now: str = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 default_settings: dict[str, Any] = {
     # Location of where the simulation will run
-    "scratch_base": f"/scratch/{getpass.getuser()}/kmo/",
+    "scratch_base": f"/scratch/{getpass.getuser()}/kmo/{now}/",
     "project_name": "KMO_Project",
     # Type of optimizers
     "optimizer": "ga",

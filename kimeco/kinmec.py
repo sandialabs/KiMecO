@@ -215,7 +215,7 @@ class KiMec:
             rc (NDArray): all rate coefficients from KIN object
 
         Returns:
-            list[str]: reaction rates[forward, backward]
+            list[str]: reaction rates of selected reaction.
         """
         From: int = tbl_map[reactant.name]
         To: int = tbl_map[product.name]

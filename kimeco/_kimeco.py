@@ -4,7 +4,7 @@ import shutil
 from typing import Any
 from kimeco.readers.mess_input import MessInputReader
 from kimeco.parameters import SOP
-from logging import Logger
+from logging import Logger, WARNING
 from kimeco.logger_config import setup_logger
 from kimeco.user_input import KMOInput
 from kimeco.kinmec import KiMec
@@ -34,6 +34,8 @@ class KiMecO:
         """
         self.init_loc: str = init_loc
         self.klog: Logger = setup_logger(f'{name}.log')
+        if sim_job:
+            self.klog.setLevel(WARNING)
         self.raw_input = KMOInput(
             input_file=input_file,
             init_loc=init_loc,
@@ -63,10 +65,9 @@ class KiMecO:
     def initialize_workdir(self) -> None:
         """Create and access the working directory
         """
-        if not os.path.isdir(self.settings['project_name']):
-            os.mkdir(self.settings['project_name'])
-        os.chdir(self.settings['project_name'])
-        self.workdir: str = os.getcwd()
+        if not os.path.isdir(self.settings['workdir']):
+            os.mkdir(self.settings['workdir'])
+        os.chdir(self.settings['workdir'])
 
     def copy_necessary_files(self) -> None:
         """Copy files necessary for MESS calculation"""
@@ -76,7 +77,7 @@ class KiMecO:
         for file in self.init_SOP.files2copy:
             shutil.copyfile(
                 f'{self.init_loc}/{file}',
-                f'{self.workdir}/{file}')
+                f'{self.settings["workdir"]}/{file}')
 
     def initialize_databases(self) -> None:
         """Create the three databases used by KiMecO
@@ -84,15 +85,15 @@ class KiMecO:
         self.sop_db = SOP_DB(sop=self.init_SOP,
                              name='KMO_DB_SOP',
                              thread=self.settings['thread'],
-                             path=self.workdir)
+                             path=self.settings['workdir'])
         self.kin_db = KIN_DB(sop=self.init_SOP,
                              name='KMO_DB_KIN',
                              thread=self.settings['thread'],
-                             path=self.workdir)
+                             path=self.settings['workdir'])
         self.sim_db = SIM_DB(sop=self.init_SOP,
                              name='KMO_DB_SIM',
                              thread=self.settings['thread'],
-                             path=self.workdir)
+                             path=self.settings['workdir'])
         self.klog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
 
     def set_scoring_function(self) -> None:
@@ -125,7 +126,7 @@ class KiMecO:
                     id=0)],
                 settings=self.settings,
                 rc_tpl=self.input_tpl,
-                loc=self.workdir,
+                loc=self.settings['workdir'],
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog)
@@ -188,7 +189,7 @@ class KiMecO:
                     sf=self.sf,
                     pert=self.pert,
                     input_tpl=self.input_tpl,
-                    location=self.workdir,
+                    location=self.settings['workdir'],
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
@@ -200,7 +201,7 @@ class KiMecO:
                     sf=self.sf,
                     pert=self.pert,
                     input_tpl=self.input_tpl,
-                    location=self.workdir,
+                    location=self.settings['workdir'],
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
@@ -214,7 +215,7 @@ class KiMecO:
                     sf=self.sf,
                     pert=self.pert,
                     input_tpl=self.input_tpl,
-                    location=self.workdir,
+                    location=self.settings['workdir'],
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,

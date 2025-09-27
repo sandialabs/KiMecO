@@ -14,7 +14,7 @@ from kimeco.enums import Distrib, Optimizers, Pclass, Ptype
 from kimeco.enums import FreqMode
 
 
-ureg = ctu.cantera_units_registry
+ureg: ctu.UnitRegistry = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 
 R = Q_(gas_constant, 'J mol^-1 K^-1')
@@ -85,7 +85,7 @@ class KMOInput:
     def create_initial_conditions(self) -> None:
         """Create the initial conditions for every experiments
         """
-        self.n_exp= \
+        self.n_exp: int = \
             len(self.json_file['rc_pres'])*len(self.json_file['rc_temp'])
         base_key = 'n2'
 
@@ -260,7 +260,7 @@ class KMOInput:
                     self.klog.warning(f"{key} has unknown type.")
                     self.cancel_run = True
 
-    def set_profiles(self):
+    def set_profiles(self) -> None:
         """Read the csv files for every experiments,
         together with the error files
         """

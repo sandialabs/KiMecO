@@ -269,7 +269,7 @@ class CoreRun:
             el: Element = self.elements[sim_id // nsim]
             sim: int = sim_id % nsim
             # number of timesteps
-            nsteps = len(self.settings['exp_profiles'][sim][0])
+            nsteps: int = len(self.settings['exp_profiles'][sim][0])
             # Happens because of data concurrency
             if len(db_data) != nsteps:
                 continue
@@ -282,6 +282,7 @@ class CoreRun:
             collected.append(sim_id)
         if collected == to_collect:
             return
+        # Some profiles are not saved in the database yet
         hlp_idx = -1
         # Look if helpers are available
         for idx, hlp in enumerate(self.sim_hlpers):

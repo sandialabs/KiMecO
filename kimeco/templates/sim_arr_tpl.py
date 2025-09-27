@@ -25,9 +25,7 @@ kmo = KiMecO(input_file='{input_file}',
 kmo.initialize_workdir()
 kmo.initialize_databases()
 
-scratchdir = kmo.settings['scratch_base'] +\
-             kmo.settings["project_name"] + '/' +\
-             '{gen_name}E{el_num:04d}S'
+scratchdir = '{scratchdir}'
 os.chdir(scratchdir)
 
 exp_id = int(sys.argv[1])
@@ -40,7 +38,6 @@ kin_mech = KiMec(file=f"{{kmo.init_loc}}/{{kmo.settings['ct_yaml']}}",
 kin_mech.prepare_mech()
 tbl_map = {tbl_map}
 rates = {rates}
-initial_X = {initial_X}
 exp_num = 0
 for p in kmo.settings['rc_pres']:
     for t in kmo.settings['rc_temp']:
@@ -48,12 +45,13 @@ for p in kmo.settings['rc_pres']:
             break
         else:
             exp_num += 1
-
+    if exp_num == exp_id:
+        break
 gas = kin_mech.get_updated_mech(
     rates=rates,
     tbl_map=tbl_map)
-gas.X = initial_X[exp_id]
-pres = Q_(f"{{p}} {pres_unit}")
+gas.X = kmo.settings['initial_X'][exp_id]
+pres = Q_(f"{{p}} {{kmo.settings['pres_unit']}}")
 temp = Q_(f"{{t}} K")
 
 # Total number of molecules
