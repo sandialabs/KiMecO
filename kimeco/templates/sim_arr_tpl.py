@@ -38,15 +38,10 @@ kin_mech = KiMec(file=f"{{kmo.init_loc}}/{{kmo.settings['ct_yaml']}}",
 kin_mech.prepare_mech()
 tbl_map = {tbl_map}
 rates = {rates}
-exp_num = 0
-for p in kmo.settings['rc_pres']:
-    for t in kmo.settings['rc_temp']:
-        if exp_num == exp_id:
-            break
-        else:
-            exp_num += 1
-    if exp_num == exp_id:
-        break
+
+p = kmo.settings['rc_pres'][exp_id // len(kmo.settings['rc_temp'])]
+t = kmo.settings['rc_temp'][exp_id % len(kmo.settings['rc_temp'])]
+
 gas = kin_mech.get_updated_mech(
     rates=rates,
     tbl_map=tbl_map)

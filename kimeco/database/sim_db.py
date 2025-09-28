@@ -129,7 +129,9 @@ class SIM_DB(Kimeco_db):
                             conn.execute(
                                 query).fetchall()
                             )
-                        break
+                    if self.sleep_time >= 10:
+                        self.sleep_time -= 1
+                    break
                 except OperationalError as e:
                     if 'database is locked' in str(e):
                         self.sleep_time += 5

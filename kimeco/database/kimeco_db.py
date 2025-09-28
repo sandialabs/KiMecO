@@ -182,7 +182,9 @@ class Kimeco_db:
                 try:
                     with self.eng.begin() as conn:
                         conn.execute(g_upsert)
-                        break
+                    if self.sleep_time >= 10:
+                        self.sleep_time -= 1
+                    break
                 except OperationalError as e:
                     if 'database is locked' in str(e):
                         self.sleep_time += 5
