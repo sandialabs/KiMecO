@@ -473,6 +473,7 @@ class KMOInput:
         self.json_file['init_loc'] = self.init_loc
         self.json_file['workdir'] = \
             self.init_loc+self.json_file['project_name']
+        self.json_file['n_exp'] = self.n_exp
 
         return self.json_file
 

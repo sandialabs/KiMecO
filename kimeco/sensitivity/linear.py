@@ -42,17 +42,6 @@ class Linear:
         self.sim_db = SIM_DB(sop=self.elements[0].sop,
                              name='SA_DB_SIM',
                              tbl_name=self.name)
-        # # Create generation directory
-        # n_param: int = len(elements[0].sop.parameters_names)
-        # SA_dir: str = f'{loc}/{self.name}'
-        # os.makedirs(SA_dir + '/logs', exist_ok=True)
-        # for subfolder in range((2*n_param+1)//50+1):
-        #     os.makedirs(SA_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
-        #     # Copy files necessary for MESS calculation
-        #     for file in self.elements[0].sop.files2copy:
-        #         shutil.copyfile(f'{loc}/{file}',
-        #                         f'{SA_dir}/{subfolder:02d}/{file}')
-        # os.chdir(SA_dir)
         self.core = CoreRun(
             elements=self.elements,
             settings=self.settings,
@@ -250,7 +239,7 @@ class Linear:
                 )
         initial_element: Element = self.core.elements[0]
         initial_element.save_kin(db=kin_db, table=tbl_name)
-        for sim_num in range(len(initial_element.sim.simulations)):
+        for sim_num in range(self.settings['n_exp']):
             initial_element.save_sim(db=sim_db,
                                      table=tbl_name,
                                      sim_num=sim_num)

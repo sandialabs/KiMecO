@@ -102,7 +102,7 @@ class Element:
         db.prepare_batch_upsert(table=table,
                                 id=self.id,
                                 values=self.sop.parameters_names)
-    
+
     def save_sim(self,
                  db: SIM_DB,
                  table: str,
@@ -114,7 +114,7 @@ class Element:
             sim_num (int): index of the simulation for this element
         """
 
-        sim_id: int = sim_num + self.id * len(self.sim.simulations)
+        sim_id: int = sim_num + self.id * self.sim.settings['n_exp']
         all_tsteps = np.array(
             [len(i[0]) for i in self.sim.settings['exp_profiles']])
         block_size = np.sum(all_tsteps)
@@ -124,7 +124,7 @@ class Element:
         p: float = self.sop.rc_pres[sim_id // len(self.sop.rc_temp)]
         t: float = self.sop.rc_temp[sim_id % len(self.sop.rc_temp)]
 
-        to_watch: list[str] = self.sim.sv_species
+        to_watch: list[str] = self.sim.sc_species
         traces: dict[str, Any] = {}
         traces['P'] = np.full(tot_steps, p)
         traces['T'] = np.full(tot_steps, t)
@@ -137,7 +137,9 @@ class Element:
 
         # Arrays to hold the datas
         for idx, i in enumerate(to_watch):
-            traces[i] = np.full(tot_steps, self.sim.profiles[sim_num][:, idx+2])
+            traces[i] = np.full(
+                tot_steps,
+                self.sim.profiles[sim_num][:, idx+2])
             names.append(i)
         for idx, id in enumerate(row_ids):
             row_dict = {}
