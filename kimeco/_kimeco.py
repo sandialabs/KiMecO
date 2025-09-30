@@ -40,12 +40,9 @@ class KiMecO:
             input_file=input_file,
             init_loc=init_loc,
             klog=self.klog)
-        # if sim_job:
-        #     self.settings: dict[str, Any] = self.raw_input.sim_settings_only()
-        # else:
         self.settings: dict[str, Any] = self.raw_input.full_run_settings()
-        self.settings['init_loc'] = self.init_loc
-        self.settings['input_file'] = input_file
+        if not sim_job:
+            self.klog.setLevel(self.settings['log_level'])
         self.klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
         mr = MessInputReader(settings=self.settings)
         self.init_SOP: SOP

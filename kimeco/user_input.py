@@ -34,7 +34,7 @@ class KMOInput:
             klog (Logger): logger
         """
         self.init_loc: str = init_loc + '/'
-        self.input_file: str = self.init_loc + input_file
+        self.input_file: str = input_file
         self.klog: Logger = klog
         self.cancel_run: bool = False
         self.json_file: dict[str, Any] = self.load_input()
@@ -42,17 +42,18 @@ class KMOInput:
 
     def load_input(self) -> dict:
         # File exist?
-        if not os.path.isfile(path=self.input_file):
-            self.klog.info(f'The input_file {self.input_file} was not found.')
+        input_path: str = self.init_loc + self.input_file
+        if not os.path.isfile(path=input_path):
+            self.klog.info(f'The input_file {input_path} was not found.')
             sys.exit(-1)
 
         # Is JSON file?
-        if self.input_file[-5:].casefold() != '.json':
+        if input_path[-5:].casefold() != '.json':
             self.klog.info(
                 "The argument given to KIMECO should be a json file.")
             sys.exit(-1)
 
-        with open(self.input_file, mode='r') as f:
+        with open(input_path, mode='r') as f:
             return json.load(fp=f)
 
     def basic_checks(self) -> None:
@@ -473,6 +474,7 @@ class KMOInput:
         self.json_file['init_loc'] = self.init_loc
         self.json_file['workdir'] = \
             self.init_loc+self.json_file['project_name']
+        self.json_file['input_file'] = self.input_file
         self.json_file['n_exp'] = self.n_exp
 
         return self.json_file

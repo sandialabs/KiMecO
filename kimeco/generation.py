@@ -4,6 +4,7 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
 from kimeco.core import CoreRun
+from kimeco.enums import ElementStatus
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
 import time
@@ -68,6 +69,7 @@ class Generation(CoreRun):
             self.sop_db.defragmentate()
             self.kin_db.defragmentate()
             self.sim_db.defragmentate()
+        self.logger_tpl = '{message:<65}{number:>14.2f}'
 
     def run(self) -> None:
         """Run a generation until all of its elements are scored.
@@ -79,11 +81,54 @@ class Generation(CoreRun):
 
     def end_run(self, start_time: float) -> None:
         """Report the runtime of the generation."""
+
         end_time: float = time.time()
         runtime: float = end_time - start_time
-        message: str = f'Generation {self.id} completed. RUNTIME:'
-        self.klog.info(f'{message:<65}{runtime:>14.2f}s.')
-        self.klog.info(f"{'Best score:':<65}{self.best_score:>14.2f}")
+        message: str = f'Generation {self.id} completed. RUNTIME (s):'
+        self.klog.info(
+            self.logger_tpl.format(
+                message=message,
+                number=runtime))
+        self.klog.info(
+            self.logger_tpl.format(
+                message='Best score:',
+                number=self.best_score))
+        self.klog.debug(
+            self.logger_tpl.format(
+                message='Rate coefficients:',
+                number=self.timers[ElementStatus.SOP]
+            )
+        )
+        self.klog.debug(
+            self.logger_tpl.format(
+                message='Preparing simulations:',
+                number=self.timers[ElementStatus.KIN]
+            )
+        )
+        self.klog.debug(
+            self.logger_tpl.format(
+                message='Collecting simulations:',
+                number=self.timers[ElementStatus.SIM]
+            )
+        )
+        self.klog.debug(
+            self.logger_tpl.format(
+                message='Scoring:',
+                number=self.timers[ElementStatus.SCORING]
+            )
+        )
+        self.klog.debug(
+            self.logger_tpl.format(
+                message='Saving SOP:',
+                number=self.timers[ElementStatus.TO_SAVE]
+            )
+        )
+        self.klog.debug(
+            self.logger_tpl.format(
+                message='Resetting elements',
+                number=self.timers[ElementStatus.RESET]
+            )
+        )
 
     def reset_element(self, el: Element) -> None:
         """Reset a failed element."""

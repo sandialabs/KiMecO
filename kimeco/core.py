@@ -53,6 +53,9 @@ class CoreRun:
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
+        self.timers: dict[ElementStatus, float] = {
+            estat: 0 for estat in ElementStatus
+            }
         self.create_tables()
         self.qs = QueueingSystem(
             settings=self.settings,
@@ -174,6 +177,7 @@ class CoreRun:
 
     def reset_element(self, el: Element) -> None:
         """Reset a failed element."""
+        start_time: float = time.time()
         rst: int = el.reset
         self.elements[el.id] = Element(
             sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
@@ -182,9 +186,11 @@ class CoreRun:
         for file in glob.glob(f"{self.name}{el.name}*"):
             os.remove(file)
         self.elements[el.id].reset = rst + 1
+        self.timers[ElementStatus.RESET] += (time.time() - start_time)/len(self.elements)
 
     def calculate_rate_coefficients(self, el: Element) -> None:
         """Calculate rate coefficients for an element."""
+        start_time: float = time.time()
         el.rateCoef = RateCo(
             sop=el.sop,
             settings=self.settings,
@@ -201,10 +207,13 @@ class CoreRun:
             el.rateCoef.q_up()
         elif el.rateCoef.status == JobStatus.FINISHED:
             el.save_kin(db=self.kin_db, table=self.name)
+        self.timers[ElementStatus.SOP] += \
+            (time.time() - start_time)/len(self.elements)
 
     def run_simulation(self,
                        el: Element) -> None:
         """Run the simulation for an element."""
+        start_time: float = time.time()
         el.sim = SIM(
             sop=el.sop,
             kin=el.rateCoef,
@@ -218,12 +227,15 @@ class CoreRun:
             klog=self.klog
         )
         el.sim.q_up()
+        self.timers[ElementStatus.KIN] += \
+            (time.time() - start_time)/len(self.elements)
         el.status = ElementStatus.SIM
 
     def recover_simulation_data(self,
                                 el: Element) -> None:
         """Recover simulation data for an element."""
         # Avoid large batch_select causing I/O errors
+        start_time: float = time.time()
         if len(self.sim_db._select) > 2000:
             self.klog.debug(f'Already {len(self.sim_db._select)} selected')
             return
@@ -244,20 +256,26 @@ class CoreRun:
         # Reset Element if simulation had an error
         elif el.sim.status == JobStatus.FAILED:
             el.status = ElementStatus.RESET
+        self.timers[ElementStatus.SIM] += \
+            (time.time() - start_time)/len(self.elements)
 
     def finalize_element(self,
                          el: Element) -> None:
         """Make sure element is saved before changing status."""
+        start_time: float = time.time()
         if self.sop_db.entry_exist(table=self.name,
                                    id=el.id):
             el.status = ElementStatus.DONE
         else:
             el.prepare_upsert(db=self.sop_db, table=self.name)
+        self.timers[ElementStatus.TO_SAVE] += \
+            (time.time() - start_time)/len(self.elements)
 
     def collect_sim_profiles(self):
         """Batch recovery of the concentration profiles to avoid
         multiple db transactions.
         """
+        start_time: float = time.time()
         if len(self.sim_db._select) == 0:
             return
         nsim: int = len(self.settings['rc_pres']) *\
@@ -342,6 +360,7 @@ class CoreRun:
 
         self.submit_helper(hlp_idx=hlp_idx,
                            filenames=filenames)
+        self.timers[el.status] += (time.time() - start_time)/len(self.elements)
 
     def submit_helper(self,
                       hlp_idx: int,
@@ -393,6 +412,7 @@ class CoreRun:
         Args:
             settings (dict[str, Any]): User input + default settings
         """
+        start_time: float = time.time()
         try:
             scores: list[float] = self.sf.score(sim=el.sim)
             for idx, k in enumerate(el.sop.scores):
@@ -403,7 +423,9 @@ class CoreRun:
             # Occurs when a simulation didn't work so profiles were not saved
             el.status = ElementStatus.RESET
             self.klog.info(f'Resetting element {el.id}: error during scoring.')
+        self.timers[ElementStatus.SCORING] += \
+            (time.time() - start_time)/len(self.elements)
 
     @property
-    def best_score(self):
+    def best_score(self) -> float:
         return min([el.score for el in self.elements])

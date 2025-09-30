@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any
 import getpass
+from logging import DEBUG
 from kimeco.enums import Distrib
 from kimeco.enums import Ptype
 from kimeco.enums import FreqMode
@@ -32,7 +33,10 @@ now: str = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 default_settings: dict[str, Any] = {
     # Location of where the simulation will run
     "scratch_base": f"/scratch/{getpass.getuser()}/kmo/{now}/",
+    # Name of the workdir folder
     "project_name": "KMO_Project",
+    # Level of printing in the debugger
+    "log_level": DEBUG,
     # Type of optimizers
     "optimizer": "ga",
     # Type of genetic algorythm to use

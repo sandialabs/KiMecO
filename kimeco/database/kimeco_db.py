@@ -14,7 +14,7 @@ from logging import Logger
 from kimeco.logger_config import setup_logger
 import numpy
 
-
+# Database separator
 dbs = '__'
 
 
