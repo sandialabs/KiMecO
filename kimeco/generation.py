@@ -107,8 +107,14 @@ class Generation(CoreRun):
         )
         self.klog.debug(
             self.logger_tpl.format(
-                message='Collecting simulations:',
+                message='Requesting simulations:',
                 number=self.timers[ElementStatus.SIM]
+            )
+        )
+        self.klog.debug(
+            self.logger_tpl.format(
+                message='Collecting simulations:',
+                number=self.timers['collecting_sim']
             )
         )
         self.klog.debug(

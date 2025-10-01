@@ -1,3 +1,4 @@
+import time
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
 from sqlalchemy import select, Row
@@ -19,14 +20,15 @@ class SOP_DB(Kimeco_db):
         self.types: list[type] = \
             [type(val) for val in sop.parameters_names.values()]
         tbls_in_db = self.get_table_names()
-
         for tbl in tbls_in_db:
-            # May cause slow-down
-            # self.load_table(name=tbl[0])
-            self.create_table(name=tbl[0])
+            self.load_table(name=tbl[0])
+            # Causes slow-down
+            # self.create_table(name=tbl[0],
+            #                      columns=self.columns,
+            #                      types=self.types)
 
-    def create_table(self,
-                     name: str) -> None:
+    def create_new_table(self,
+                         name: str) -> None:
         return super().create_table(name=name,
                                     columns=self.columns,
                                     types=self.types)

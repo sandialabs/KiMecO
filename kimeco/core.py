@@ -53,9 +53,10 @@ class CoreRun:
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
-        self.timers: dict[ElementStatus, float] = {
-            estat: 0 for estat in ElementStatus
+        self.timers: dict[Any, float] = {
+            estat: 0.0 for estat in ElementStatus
             }
+        self.timers['collecting_sim'] = 0.0
         self.create_tables()
         self.qs = QueueingSystem(
             settings=self.settings,
@@ -96,17 +97,17 @@ class CoreRun:
         # SOP
         tbl_name: str = self.name
         if tbl_name not in self.sop_db.tables:
-            self.sop_db.create_table(
+            self.sop_db.create_new_table(
                 name=tbl_name
                 )
         # KIN
         if tbl_name not in self.kin_db.tables:
-            self.kin_db.create_table(
+            self.kin_db.create_new_table(
                 name=tbl_name
                 )
         # SIM
         if tbl_name not in self.sim_db.tables:
-            self.sim_db.create_table(
+            self.sim_db.create_new_table(
                 name=tbl_name
                 )
 
@@ -271,7 +272,7 @@ class CoreRun:
         self.timers[ElementStatus.TO_SAVE] += \
             (time.time() - start_time)/len(self.elements)
 
-    def collect_sim_profiles(self):
+    def collect_sim_profiles(self) -> None:
         """Batch recovery of the concentration profiles to avoid
         multiple db transactions.
         """
@@ -299,6 +300,7 @@ class CoreRun:
                 el.status = ElementStatus.SCORING
             collected.append(sim_id)
         if collected == to_collect:
+            self.timers['collecting_sim'] += (time.time() - start_time)/len(self.elements)
             return
         # Some profiles are not saved in the database yet
         hlp_idx = -1
@@ -356,11 +358,12 @@ class CoreRun:
                     el.sim.q_up()
                 continue
         if len(self.sim_hlpers[hlp_idx]) == 0:
+            self.timers['collecting_sim'] += (time.time() - start_time)/len(self.elements)
             return
 
         self.submit_helper(hlp_idx=hlp_idx,
                            filenames=filenames)
-        self.timers[el.status] += (time.time() - start_time)/len(self.elements)
+        self.timers['collecting_sim'] += (time.time() - start_time)/len(self.elements)
 
     def submit_helper(self,
                       hlp_idx: int,
@@ -379,7 +382,7 @@ class CoreRun:
                  idx=hlp_idx,
                  location=f'{self.loc}/{self.name}',
                  jtype='hlp',
-                 ressources=(1, self.settings['mem_hlp'])
+                 ressources=(self.settings['cpu_kin'], self.settings['mem_hlp'])
                  )
 
     def check_helpers_status(self) -> None:

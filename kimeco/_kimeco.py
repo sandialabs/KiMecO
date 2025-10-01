@@ -1,6 +1,7 @@
 
 import os
 import shutil
+import time
 from typing import Any
 from kimeco.readers.mess_input import MessInputReader
 from kimeco.parameters import SOP
@@ -79,19 +80,29 @@ class KiMecO:
     def initialize_databases(self) -> None:
         """Create the three databases used by KiMecO
         """
+        start_time: float = time.time()
         self.sop_db = SOP_DB(sop=self.init_SOP,
                              name='KMO_DB_SOP',
                              thread=self.settings['thread'],
                              path=self.settings['workdir'])
+        sop_db_time: float = time.time() - start_time
+        msg = 'SOP_DB initialized:'
+        self.klog.info(f"{msg:<65}{sop_db_time:>15.1f}")
         self.kin_db = KIN_DB(sop=self.init_SOP,
                              name='KMO_DB_KIN',
                              thread=self.settings['thread'],
                              path=self.settings['workdir'])
+        kin_db_time: float = time.time() - start_time - sop_db_time
+        msg = 'KIN_DB initialized:'
+        self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
         self.sim_db = SIM_DB(sop=self.init_SOP,
                              name='KMO_DB_SIM',
                              thread=self.settings['thread'],
                              path=self.settings['workdir'])
-        self.klog.info(f"{'Creating databases...':<65}{'PASSED':>15}")
+        sim_db_time: float = \
+            time.time() - start_time - sop_db_time - kin_db_time
+        msg = 'SIM_DB initialized:'
+        self.klog.info(f"{msg:<65}{sim_db_time:>15.1f}")
 
     def set_scoring_function(self) -> None:
         """Define which scoring function to use"""

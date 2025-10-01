@@ -8,7 +8,7 @@ from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
-from kimeco.enums import Ptype
+from kimeco.enums import ElementStatus, Ptype
 from kimeco.parameters import SOP
 from kimeco.generation import Generation
 from kimeco.scoring_f.scoring import Scoring
@@ -72,13 +72,54 @@ class NelderMead:
             if p not in self.settings['only_perturb']
             else params[self.settings['only_perturb'].index(p)]
             for p, v in self.f_el.sop.parameters_names.items()]
-        vertice = Element(
-            sop=SOP.from_db_row(
+        v_sop: SOP = SOP.from_db_row(
                 sop_tpl=self.f_el.sop,
                 row=row
-            ),
-            id=0,
-            gen=Generation.total())
+            )
+        if self.is_generation_finished(gen_id=Generation.total()):
+            sop_in_db = True
+            try:
+                db_row: list[float] = self.sop_db.get_sop_row(
+                        table=f'G{Generation.total():04d}',
+                        id=0)[1:]
+            except Exception:
+                sop_in_db = False
+                
+            if sop_in_db:
+                db_sop: SOP = SOP.from_db_row(
+                    sop_tpl=self.f_el.sop,
+                    row=db_row
+                )
+                same_p: list[bool] = [
+                    True if ('score' in p and 'score' in q)
+                    else
+                    (p==q and
+                    db_sop.parameters_names[p] == v_sop.parameters_names[q])
+                    for p, q in
+                    zip(db_sop.parameters_names, v_sop.parameters_names)
+                ]
+                if all(same_p):
+                    vertice = Element(
+                        sop=db_sop,
+                        id=0,
+                        gen=Generation.total(),
+                        status=ElementStatus.DONE.value)
+                else:
+                    vertice = Element(
+                        sop=v_sop,
+                        id=0,
+                        gen=Generation.total())
+            else:
+                vertice = Element(
+                    sop=v_sop,
+                    id=0,
+                    gen=Generation.total())
+        else:
+            vertice = Element(
+                sop=v_sop,
+                id=0,
+                gen=Generation.total())
+
         new_gen = Generation(
                 elements=[vertice],
                 settings=self.settings,
@@ -95,6 +136,37 @@ class NelderMead:
         new_gen.run()
         self.print_stats(params=params)
         return new_gen.elements[0].score
+
+    def is_generation_finished(self,
+                               gen_id: int) -> bool:
+        """Check if a generation is finished.
+
+        Args:
+            gen_id (int): Generation id
+
+        Returns:
+            bool: Wether it is finished
+        """
+        gen_name: str = f"G{gen_id:04d}"
+        if self.sop_db.table_exists(gen_name) and\
+           self.kin_db.table_exists(gen_name) and\
+           self.sim_db.table_exists(gen_name):
+            sop_ids = set(self.sop_db.get_column(
+                table=gen_name,
+                column_name='id'))
+            kin_ids = set(self.kin_db.get_column(
+                table=gen_name,
+                column_name='kin_id'))
+            tmp = np.array(self.sim_db.get_column(
+                table=gen_name,
+                column_name='sim_id'))//len(self.settings['exp_profiles'])
+            sim_ids = set(tmp.tolist())
+            if sop_ids == kin_ids == sim_ids:
+                return True
+            else:
+                return False
+        else:
+            return False
 
     def get_bounds(self):
         bounds = []

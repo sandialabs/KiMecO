@@ -36,10 +36,10 @@ class SIM_DB(Kimeco_db):
         tbls_in_db = self.get_table_names()
 
         for tbl in tbls_in_db:
-            self.create_table(name=tbl[0])
+            self.load_table(name=tbl[0])
 
-    def create_table(self,
-                     name: str) -> None:
+    def create_new_table(self,
+                         name: str) -> None:
         return super().create_table(name=name,
                                     columns=self.columns,
                                     types=self.types)

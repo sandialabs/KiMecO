@@ -1,10 +1,8 @@
 ctjobtpl = """import sys
 import cantera as ct
 from kimeco.cantera.customrate import MessData, MessRate
-from kimeco.database.sim_db import SIM_DB
 import numpy as np
 from scipy.constants import gas_constant
-import pickle
 import os
 import copy
 import time
@@ -23,7 +21,6 @@ kmo = KiMecO(input_file='{input_file}',
              name='E{el_num:04d}_sims',
              sim_job=True)
 kmo.initialize_workdir()
-kmo.initialize_databases()
 
 scratchdir = '{scratchdir}'
 os.chdir(scratchdir)
@@ -45,6 +42,7 @@ t = kmo.settings['rc_temp'][exp_id % len(kmo.settings['rc_temp'])]
 gas = kin_mech.get_updated_mech(
     rates=rates,
     tbl_map=tbl_map)
+
 gas.X = kmo.settings['initial_X'][exp_id]
 pres = Q_(f"{{p}} {{kmo.settings['pres_unit']}}")
 temp = Q_(f"{{t}} K")
@@ -127,7 +125,6 @@ traces_serializable = \
     else value for key, value in traces.items()}}
 # Serializing json
 json_object = json.dumps(traces_serializable, indent=4)
-
 # Writing to sample.json
 with open(
     f"{gen_name}E{el_num:04d}S{{exp_id:02d}}.json", "w"
