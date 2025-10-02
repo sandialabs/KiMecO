@@ -224,17 +224,17 @@ class Linear:
         tbl_name: str = 'G0000'
         # SOP
         if tbl_name not in sop_db.tables:
-            sop_db.create_table(
+            sop_db.create_new_table(
                 name=tbl_name
                 )
         # KIN
         if tbl_name not in kin_db.tables:
-            kin_db.create_table(
+            kin_db.create_new_table(
                 name=tbl_name
                 )
         # SIM
         if tbl_name not in sim_db.tables:
-            sim_db.create_table(
+            sim_db.create_new_table(
                 name=tbl_name
                 )
         initial_element: Element = self.core.elements[0]
