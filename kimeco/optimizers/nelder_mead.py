@@ -7,6 +7,7 @@ from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
+from kimeco.sensitivity.linear import Linear
 from kimeco.element import Element
 from kimeco.enums import ElementStatus, Ptype
 from kimeco.parameters import SOP
@@ -39,31 +40,78 @@ class NelderMead:
         self.settings: dict[str, Any] = settings
         self.pert: Perturbator = pert
         self.klog: Logger = klog
+        self.new_parameters: list[str] = self.settings['only_perturb']
+        self.current_dimensions: list[str] = []
+        # Updated in objective function
+        self.last_vertice: SOP = self.f_el.sop
+
+    @property
+    def not_enough_dimensions(self) -> bool:
+        return self.new_parameters != 0
 
     def get_initial_simplex(self) -> NDArray:
         vertice_0 = np.array([
             self.f_el.sop.parameters_names[p]
-            for p in self.settings['only_perturb']
+            for p in self.current_dimensions
         ])
         return vertice_0
 
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization."""
+        while self.not_enough_dimensions:
+            self.current_dimensions.extend(self.new_parameters)
+            self.new_parameters = []
+            result = minimize(
+                fun=self.objective_function,
+                x0=self.get_initial_simplex(),
+                method='Nelder-Mead',
+                bounds=self.get_bounds(),
+                options={
+                    'fatol': 0.1,
+                    'disp': True,
+                    'adaptive': True}  # better performance in high D.
+            )
+            if result.success:
+                self.klog.info(result.x)
+                msg = "Running SA to check if minimum is full-dimensional"
+                self.klog.info(msg)
+                sensitivity = Linear(
+                    elements=[Element(
+                        sop=self.last_vertice,
+                        id=0)],
+                    settings=self.settings,
+                    rc_tpl=self.input_tpl,
+                    loc=self.settings['workdir'],
+                    sf=self.sf,
+                    pert=self.pert,
+                    klog=self.klog)
+                sensitivity.run()
+                self.new_parameters = [
+                    p for p in sensitivity.selected
+                    if p not in self.current_dimensions
+                                ]
+            else:
+                self.klog.error(f"Optimization failed: {result.message}")
+                raise RuntimeError("Nelder-Mead optimization failed.")
+        msg: str = "\nDecreasing error for last minimization.\n"
+        msg += "Score accuracy: 0.002\n"
+
+        self.klog.info(msg)
         result = minimize(
             fun=self.objective_function,
             x0=self.get_initial_simplex(),
             method='Nelder-Mead',
             bounds=self.get_bounds(),
             options={
-                'fatol': 0.001,
-                'disp': True}
+                'fatol': 0.002,
+                'disp': True,
+                'adaptive': True}  # better performance in high D.
         )
         if result.success:
-            self.klog.info(f"Optimization successful: {result.message}")
-            return result.x
+            self.klog.info(result.x)
         else:
             self.klog.error(f"Optimization failed: {result.message}")
-            raise RuntimeError("Nelder-Mead optimization failed.")
+            raise NotImplementedError("Contact the dev. for a solution.")
 
     def objective_function(self,
                            params: NDArray) -> float:
@@ -72,7 +120,8 @@ class NelderMead:
             if p not in self.settings['only_perturb']
             else params[self.settings['only_perturb'].index(p)]
             for p, v in self.f_el.sop.parameters_names.items()]
-        v_sop: SOP = SOP.from_db_row(
+        # SOP from vertice
+        self.last_vertice = SOP.from_db_row(
                 sop_tpl=self.f_el.sop,
                 row=row
             )
@@ -82,9 +131,10 @@ class NelderMead:
                 db_row: list[float] = self.sop_db.get_sop_row(
                         table=f'G{Generation.total():04d}',
                         id=0)[1:]
-            except Exception:
+            except Exception as e:
                 sop_in_db = False
-                
+                self.klog.debug(e)
+
             if sop_in_db:
                 db_sop: SOP = SOP.from_db_row(
                     sop_tpl=self.f_el.sop,
@@ -93,10 +143,12 @@ class NelderMead:
                 same_p: list[bool] = [
                     True if ('score' in p and 'score' in q)
                     else
-                    (p==q and
-                    db_sop.parameters_names[p] == v_sop.parameters_names[q])
+                    (p == q and
+                     db_sop.parameters_names[p] ==
+                     self.last_vertice.parameters_names[q])
                     for p, q in
-                    zip(db_sop.parameters_names, v_sop.parameters_names)
+                    zip(db_sop.parameters_names,
+                        self.last_vertice.parameters_names)
                 ]
                 if all(same_p):
                     vertice = Element(
@@ -106,17 +158,17 @@ class NelderMead:
                         status=ElementStatus.DONE.value)
                 else:
                     vertice = Element(
-                        sop=v_sop,
+                        sop=self.last_vertice,
                         id=0,
                         gen=Generation.total())
             else:
                 vertice = Element(
-                    sop=v_sop,
+                    sop=self.last_vertice,
                     id=0,
                     gen=Generation.total())
         else:
             vertice = Element(
-                sop=v_sop,
+                sop=self.last_vertice,
                 id=0,
                 gen=Generation.total())
 
@@ -170,7 +222,7 @@ class NelderMead:
 
     def get_bounds(self):
         bounds = []
-        for param in self.settings['only_perturb']:
+        for param in self.current_dimensions:
             for ptype in Ptype:
                 if ptype.value in param.split(dbs)[1]:
                     break
@@ -190,15 +242,15 @@ class NelderMead:
             name='PARAMETER',
             start='INITIAL',
             current='CURRENT') + '\n'
-        for idx, p in enumerate(self.settings['only_perturb']):
+        for idx, p in enumerate(self.current_dimensions):
             start: float = self.f_el.sop.parameters_names[p]
             current: float = params[idx]
             if start >= 1000:
-                str_start: str = f"{start:-5.2E}"
+                str_start: str = f"{start:-6.2E}"
             else:
                 str_start: str = f"{start:-6.2f}"
             if current >= 1000:
-                str_current: str = f"{current:-5.2E}"
+                str_current: str = f"{current:-6.2E}"
             else:
                 str_current: str = f"{current:-6.2f}"
             msg += line_tpl.format(

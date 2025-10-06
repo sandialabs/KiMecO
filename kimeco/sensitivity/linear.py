@@ -2,7 +2,7 @@ from kimeco.enums import Distrib, Ptype
 from typing import Any
 import numpy as np
 from numpy.typing import NDArray
-from kimeco.element import Element
+from kimeco.element import Element, ElementStatus
 from kimeco.parameters import SOP
 from kimeco.core import CoreRun
 from kimeco.database.kimeco_db import dbs
@@ -14,7 +14,14 @@ from kimeco.Perturbators.perturbator import Perturbator
 from logging import Logger
 
 
-class Linear:
+class Linear(CoreRun):
+    __id = 0
+
+    @classmethod
+    def total(cls) -> int:
+        """Return the total number of Generation instances."""
+        return cls.__id
+
     def __init__(self,
                  elements: list[Element],
                  settings: dict[str, Any],
@@ -24,25 +31,29 @@ class Linear:
                  pert: Perturbator,
                  klog: Logger
                  ) -> None:
-
+        self.id: int = Linear.__id
+        Linear.__id += 1
         self.klog: Logger = klog
         self.settings: dict[str, Any] = settings
-        self.name = 'SA'
-        self.to_test = []
-        self.selected = []
+        self.name: str = f'SA{self.id:04d}'
+        self.to_test: list[bool] = []
+        self.selected: list[str] = []
+        self.sop_tpl: SOP = elements[0].sop
         self.lin_fact: float = self.settings['sensi_d']
         self.pert: Perturbator = pert
-        self.elements: list[Element] = self.prepare_elements(
-            elements=elements
-            )
-        self.sop_db = SOP_DB(sop=self.elements[0].sop,
+        self.sop_db = SOP_DB(sop=self.sop_tpl,
                              name='SA_DB_SOP')
-        self.kin_db = KIN_DB(sop=self.elements[0].sop,
+        self.kin_db = KIN_DB(sop=self.sop_tpl,
                              name='SA_DB_KIN')
-        self.sim_db = SIM_DB(sop=self.elements[0].sop,
-                             name='SA_DB_SIM',
-                             tbl_name=self.name)
-        self.core = CoreRun(
+        self.sim_db = SIM_DB(sop=self.sop_tpl,
+                             name='SA_DB_SIM')
+        if self.SA_is_in_db():
+            self.elements = self.get_elements_from_db()
+        else:
+            self.elements: list[Element] = self.prepare_elements(
+                elements=elements
+                )
+        super().__init__(
             elements=self.elements,
             settings=self.settings,
             rc_tpl=rc_tpl,
@@ -53,11 +64,97 @@ class Linear:
             sf=sf,
             pert=pert,
             name=self.name,
-            klog=self.klog
-        )
+            klog=self.klog)
         # Clean the SIM database
-        if not self.core.finished and self.sim_db.table_exists(self.name):
+        if not self.finished and self.sim_db.table_exists(self.name):
             self.sim_db.wipe_table(self.name)
+        if self.id % 10 == 0:
+            self.sop_db.defragmentate()
+            self.kin_db.defragmentate()
+            self.sim_db.defragmentate()
+
+    def same_f_el_in_db(self) -> bool:
+        try:
+            db_row: list[float] = self.sop_db.get_sop_row(
+                table=self.name,
+                id=0)[1:]
+        except Exception as e:
+            self.klog.debug(e)
+            return False
+
+        db_sop: SOP = SOP.from_db_row(
+            sop_tpl=self.sop_tpl,
+            row=db_row
+        )
+        same_p: list[bool] = [
+            True if ('score' in p and 'score' in q)
+            else
+            (p == q and
+                db_sop.parameters_names[p] ==
+                self.elements[0].sop.parameters_names[q])
+            for p, q in
+            zip(db_sop.parameters_names,
+                self.elements[0].sop.parameters_names)
+        ]
+        return all(same_p)
+
+    def SA_is_in_db(self) -> bool:
+        """Check if a generation is finished.
+
+        Args:
+            gen_id (int): Generation id
+
+        Returns:
+            bool: Wether it is finished
+        """
+        if self.sop_db.table_exists(self.name) and\
+           self.kin_db.table_exists(self.name) and\
+           self.sim_db.table_exists(self.name):
+            sop_ids = set(self.sop_db.get_column(
+                table=self.name,
+                column_name='id'))
+            kin_ids = set(self.kin_db.get_column(
+                table=self.name,
+                column_name='kin_id'))
+            tmp = np.array(self.sim_db.get_column(
+                table=self.name,
+                column_name='sim_id'))//len(self.settings['exp_profiles'])
+            sim_ids = set(tmp.tolist())
+            if sop_ids == kin_ids == sim_ids:
+                return self.same_f_el_in_db()
+            else:
+                return False
+        else:
+            return False
+
+    def get_elements_from_db(self) -> list[Element]:
+        """Restaure the elements from the SA from the DB
+
+        Returns:
+            list[Element]: Elements with a score and DONE status
+        """
+        next_elements = []
+        sop_ids: list[Any] = self.sop_db.get_column(
+            table=self.name,
+            column_name='id')
+        # Only valid for 2-step derivative plus central element
+        expected_number_of_elements: int =\
+            2*len(self.sop_tpl.parameters_names)+1
+        if len(sop_ids) == expected_number_of_elements:
+            rows = np.array(
+                self.sop_db.get_table(table=self.name)
+                                    )
+            for e_id, row in zip(sop_ids, rows):
+                next_elements.append(
+                    Element(
+                        sop=SOP.from_db_row(
+                            sop_tpl=self.elements[0].sop,
+                            row=row[1:].tolist()
+                        ),
+                        id=e_id,
+                        gen=self.id,
+                        status=ElementStatus.DONE.value))
+        return next_elements
 
     def average(self,
                 sop_list: list[SOP]) -> SOP:
@@ -161,10 +258,10 @@ class Linear:
         return new_elements
 
     def run(self) -> None:
-        self.core.run()
-        zero: float = self.core.elements[0].score
+        super().run()
+        zero: float = self.elements[0].score
         rslts: NDArray = np.absolute(
-            [el.score - zero for el in self.core.elements[1:]]
+            [el.score - zero for el in self.elements[1:]]
             )
         half = int(len(rslts)/2)
         highest = [
@@ -237,7 +334,7 @@ class Linear:
             sim_db.create_new_table(
                 name=tbl_name
                 )
-        initial_element: Element = self.core.elements[0]
+        initial_element: Element = self.elements[0]
         initial_element.save_kin(db=kin_db, table=tbl_name)
         for sim_num in range(self.settings['n_exp']):
             initial_element.save_sim(db=sim_db,

@@ -140,7 +140,7 @@ class KiMecO:
                 klog=self.klog)
             self.sensitivity.run()
             self.settings['only_perturb'] = self.sensitivity.selected
-            self.f_el: Element = self.sensitivity.core.elements[0]
+            self.f_el: Element = self.sensitivity.elements[0]
             self.sensitivity.save_initial_element(
                 sop_db=self.sop_db,
                 kin_db=self.kin_db,
