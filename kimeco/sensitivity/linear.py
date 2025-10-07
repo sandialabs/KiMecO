@@ -42,11 +42,14 @@ class Linear(CoreRun):
         self.lin_fact: float = self.settings['sensi_d']
         self.pert: Perturbator = pert
         self.sop_db = SOP_DB(sop=self.sop_tpl,
-                             name='SA_DB_SOP')
+                             name='SA_DB_SOP',
+                             path=self.settings['workdir'])
         self.kin_db = KIN_DB(sop=self.sop_tpl,
-                             name='SA_DB_KIN')
+                             name='SA_DB_KIN',
+                             path=self.settings['workdir'])
         self.sim_db = SIM_DB(sop=self.sop_tpl,
-                             name='SA_DB_SIM')
+                             name='SA_DB_SIM',
+                             path=self.settings['workdir'])
         if self.SA_is_in_db():
             self.elements = self.get_elements_from_db()
         else:
@@ -91,10 +94,10 @@ class Linear(CoreRun):
             else
             (p == q and
                 db_sop.parameters_names[p] ==
-                self.elements[0].sop.parameters_names[q])
+                self.sop_tpl.parameters_names[q])
             for p, q in
             zip(db_sop.parameters_names,
-                self.elements[0].sop.parameters_names)
+                self.sop_tpl.parameters_names)
         ]
         return all(same_p)
 
@@ -148,7 +151,7 @@ class Linear(CoreRun):
                 next_elements.append(
                     Element(
                         sop=SOP.from_db_row(
-                            sop_tpl=self.elements[0].sop,
+                            sop_tpl=self.sop_tpl,
                             row=row[1:].tolist()
                         ),
                         id=e_id,
@@ -241,7 +244,7 @@ class Linear(CoreRun):
                 self.to_test.append(True)
                 el_id += 1
                 # Get the uncertainty of the parameter
-                uc: float = elements[0].sop.uncertainties[key]
+                uc: float = self.sop_tpl.uncertainties[key]
                 dstep: float = self.calculate_dstep(
                     uc=uc,
                     param=key,
@@ -271,7 +274,7 @@ class Linear(CoreRun):
             for idx, num in enumerate(rslts[:half])]
         tot = np.sum(highest)
         params: list[str] = [
-            k for i, k in enumerate(self.elements[0].sop.parameters_names)
+            k for i, k in enumerate(self.sop_tpl.parameters_names)
             if self.to_test[i]]
 
         # Get the indices that would sort 'rslts' in decreasing order

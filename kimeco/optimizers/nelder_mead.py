@@ -67,7 +67,7 @@ class NelderMead:
                 method='Nelder-Mead',
                 bounds=self.get_bounds(),
                 options={
-                    'fatol': 0.1,
+                    'fatol': 4.0,
                     'disp': True,
                     'adaptive': True}  # better performance in high D.
             )

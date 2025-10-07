@@ -351,7 +351,7 @@ class CoreRun:
                     continue
                 # or resubmit
                 else:
-                    self.requeue_timer.pop(sim_id, None)
+                    self.requeue_timer[sim_id] = time.time()
                     msg: str = f'Missing file: {el.name}S{sim:02d}.json'
                     msg += ' Sim re-submitted.'
                     self.klog.info(msg)
