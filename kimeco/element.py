@@ -117,19 +117,19 @@ class Element:
         sim_id: int = sim_num + self.id * self.sim.settings['n_exp']
         all_tsteps = np.array(
             [len(i[0]) for i in self.sim.settings['exp_profiles']])
-        block_size = np.sum(all_tsteps)
-        start_idx = np.sum(all_tsteps[:sim_num])
-        tot_steps = all_tsteps[sim_num]
+        block_size = int(np.sum(all_tsteps))
+        start_idx = int(np.sum(all_tsteps[:sim_num]))
+        tot_steps = int(all_tsteps[sim_num])
 
         p: float = self.sop.rc_pres[sim_id // len(self.sop.rc_temp)]
         t: float = self.sop.rc_temp[sim_id % len(self.sop.rc_temp)]
 
         to_watch: list[str] = self.sim.sc_species
         traces: dict[str, Any] = {}
-        traces['P'] = np.full(tot_steps, p)
-        traces['T'] = np.full(tot_steps, t)
-        traces['sim_id'] = np.full(tot_steps, sim_id)
-        traces['time'] = self.sim.settings['exp_profiles'][sim_num][0]
+        traces['P'] = np.full(tot_steps, p).tolist()
+        traces['T'] = np.full(tot_steps, t).tolist()
+        traces['sim_id'] = np.full(tot_steps, sim_id).tolist()
+        traces['time'] = self.sim.settings['exp_profiles'][sim_num][0].tolist()
         row_ids: list[int] = [i for i in range(self.id*block_size+start_idx,
                               self.id*block_size+start_idx+len(traces['time']),
                               1)]
@@ -139,7 +139,7 @@ class Element:
         for idx, i in enumerate(to_watch):
             traces[i] = np.full(
                 tot_steps,
-                self.sim.profiles[sim_num][:, idx+2])
+                self.sim.profiles[sim_num][:, idx+2]).tolist()
             names.append(i)
         for idx, id in enumerate(row_ids):
             row_dict = {}

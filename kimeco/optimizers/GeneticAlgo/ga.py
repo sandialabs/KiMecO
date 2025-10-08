@@ -138,8 +138,8 @@ class GeneticAlgorithm(ABC):
         for k, mean in self.means.items():
             std: float = self.stds[k]
             if mean >= 1000:
-                str_mean: str = f"{mean:-9.2E}"
-                str_std: str = f"{std:9.2E}"
+                str_mean: str = f"{mean:-10.2E}"
+                str_std: str = f"{std:10.2E}"
             else:
                 str_mean: str = f"{mean:-10.2f}"
                 str_std: str = f"{std:10.2f}"

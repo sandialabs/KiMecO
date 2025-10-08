@@ -141,11 +141,12 @@ class KiMecO:
             self.sensitivity.run()
             self.settings['only_perturb'] = self.sensitivity.selected
             self.f_el: Element = self.sensitivity.elements[0]
-            self.sensitivity.save_initial_element(
-                sop_db=self.sop_db,
-                kin_db=self.kin_db,
-                sim_db=self.sim_db
-            )
+            if not self.sensitivity.elements_from_db:
+                self.sensitivity.save_initial_element(
+                    sop_db=self.sop_db,
+                    kin_db=self.kin_db,
+                    sim_db=self.sim_db
+                )
         else:
             # Check DB for restart if not SA
             if self.sop_db.table_exists('G0000'):

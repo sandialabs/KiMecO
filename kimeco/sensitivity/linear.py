@@ -52,10 +52,12 @@ class Linear(CoreRun):
                              path=self.settings['workdir'])
         if self.SA_is_in_db():
             self.elements = self.get_elements_from_db()
+            self.elements_from_db = True
         else:
             self.elements: list[Element] = self.prepare_elements(
                 elements=elements
                 )
+            self.elements_from_db = False
         super().__init__(
             elements=self.elements,
             settings=self.settings,
@@ -141,9 +143,18 @@ class Linear(CoreRun):
             table=self.name,
             column_name='id')
         # Only valid for 2-step derivative plus central element
-        expected_number_of_elements: int =\
-            2*len(self.sop_tpl.parameters_names)+1
-        if len(sop_ids) == expected_number_of_elements:
+        for side in [1, -1]:
+            # Iterate through the parameters
+            for key in self.sop_tpl.parameters_names:
+                # Check if the parameter should be modified
+                if any(
+                    substring in key for substring in
+                    [f'{dbs}{Ptype.SCORE.value}']):
+                    self.to_test.append(False)
+                    continue
+                # Create a new SOP object with the modified parameter
+                self.to_test.append(True)
+        if len(sop_ids) == sum(self.to_test)+1:
             rows = np.array(
                 self.sop_db.get_table(table=self.name)
                                     )
