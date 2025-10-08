@@ -46,7 +46,7 @@ class Perturbator:
         self.additive: set[str] = Pclass.ADDITIVE.value
         self.multiplicative: set[str] = Pclass.MULTIPLICATIVE.value
         self.percent: set[str] = Pclass.PERCENT.value
-        self.select: list[str] = self.settings['only_perturb']
+        self.select: list[str] = self.settings['to_perturb']
         self.distribs: dict[Ptype, Distrib] = {
             ptype: self.settings[f'distrib_{ptype.value}'] for ptype in Ptype
             if f'distrib_{ptype.value}' in self.settings

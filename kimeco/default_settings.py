@@ -180,7 +180,7 @@ default_settings: dict[str, Any] = {
     # important parameters to perturb
     "cumul_sensi": 0.95,
     # User given list of parameters to perturb. All if empty.
-    "only_perturb": [],
+    "to_perturb": [],
     # Frequency of the sensitivity analysis
     "SA_freq": 1000,
     # From which generation to start the sensitivity analysis

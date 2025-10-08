@@ -50,7 +50,7 @@ class KiMecO:
         self.input_tpl: list[str]
         (self.init_SOP, self.input_tpl) = mr.read()
         self.init_SOP.set_uncertainties(settings=self.settings)
-        self.first_sensi: bool = len(self.settings['only_perturb']) == 0
+        self.first_sensi: bool = len(self.settings['to_perturb']) == 0
         self.check_kinmech()
 
     def check_kinmech(self) -> None:
@@ -126,52 +126,54 @@ class KiMecO:
         """Start with user specified parameters,
         or run a first densitivity analysis
         """
-        if self.first_sensi:
+        self.sensitivity = Linear(
+            elements=[Element(
+                sop=self.init_SOP,
+                id=0)],
+            settings=self.settings,
+            rc_tpl=self.input_tpl,
+            loc=self.settings['workdir'],
+            sf=self.sf,
+            pert=self.pert,
+            klog=self.klog)
+        if not self.sensitivity.elements_from_db:
             self.klog.info(f"{'Running sensitivity analysis':<65}")
-            self.sensitivity = Linear(
-                elements=[Element(
-                    sop=self.init_SOP,
-                    id=0)],
-                settings=self.settings,
-                rc_tpl=self.input_tpl,
-                loc=self.settings['workdir'],
-                sf=self.sf,
-                pert=self.pert,
-                klog=self.klog)
-            self.sensitivity.run()
-            self.settings['only_perturb'] = self.sensitivity.selected
-            self.f_el: Element = self.sensitivity.elements[0]
-            if not self.sensitivity.elements_from_db:
-                self.sensitivity.save_initial_element(
-                    sop_db=self.sop_db,
-                    kin_db=self.kin_db,
-                    sim_db=self.sim_db
-                )
         else:
-            # Check DB for restart if not SA
-            if self.sop_db.table_exists('G0000'):
-                rows = self.sop_db.get_table(table='G0000')
-                if len(rows) == 1:
-                    db_sop: SOP = SOP.from_db_row(
-                        sop_tpl=self.init_SOP,
-                        row=rows[0][1:]
-                        )
-                    self.f_el = Element(
-                        sop=db_sop,
-                        id=0)
-                    self.f_el.status = ElementStatus.DONE
-            # Otherwise initialize the first Element from scratch
-                else:
-                    self.f_el = Element(
-                        sop=self.init_SOP,
-                        id=0)
-            else:
-                self.f_el = Element(
-                    sop=self.init_SOP,
-                    id=0)
+            self.klog.info(f"{'SA read from DB':<65}")
+        self.sensitivity.run()  # Only actually run if necessary
+        self.settings['to_perturb'] = self.sensitivity.selected
+        self.f_el: Element = self.sensitivity.elements[0]
+        if not self.sensitivity.elements_from_db:
+            self.sensitivity.save_initial_element(
+                sop_db=self.sop_db,
+                kin_db=self.kin_db,
+                sim_db=self.sim_db
+            )
+        # else:
+        #     # Check DB for restart if not SA
+        #     if self.sop_db.table_exists('G0000'):
+        #         rows = self.sop_db.get_table(table='G0000')
+        #         if len(rows) == 1:
+        #             db_sop: SOP = SOP.from_db_row(
+        #                 sop_tpl=self.init_SOP,
+        #                 row=rows[0][1:]
+        #                 )
+        #             self.f_el = Element(
+        #                 sop=db_sop,
+        #                 id=0)
+        #             self.f_el.status = ElementStatus.DONE
+        #     # Otherwise initialize the first Element from scratch
+        #         else:
+        #             self.f_el = Element(
+        #                 sop=self.init_SOP,
+        #                 id=0)
+        #     else:
+        #         self.f_el = Element(
+        #             sop=self.init_SOP,
+        #             id=0)
         msg = f"{'Parameters selected for perturbation:':<80}"
         msg += '\n'
-        msg += "{}".format(self.settings['only_perturb']).replace("'", '"')
+        msg += "{}".format(self.settings['to_perturb']).replace("'", '"')
         self.klog.info(msg)
 
         # Reinitialize the perturbator once the list of parameters to perturb

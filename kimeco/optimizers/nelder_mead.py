@@ -40,7 +40,7 @@ class NelderMead:
         self.settings: dict[str, Any] = settings
         self.pert: Perturbator = pert
         self.klog: Logger = klog
-        self.new_parameters: list[str] = self.settings['only_perturb']
+        self.new_parameters: list[str] = self.settings['to_perturb']
         self.current_dimensions: list[str] = []
         # Updated in objective function
         self.last_vertice: SOP = self.f_el.sop
@@ -118,8 +118,8 @@ class NelderMead:
                            params: NDArray) -> float:
         row = [
             v
-            if p not in self.settings['only_perturb']
-            else params[self.settings['only_perturb'].index(p)]
+            if p not in self.settings['to_perturb']
+            else params[self.settings['to_perturb'].index(p)]
             for p, v in self.f_el.sop.parameters_names.items()]
         # SOP from vertice
         self.last_vertice = SOP.from_db_row(
