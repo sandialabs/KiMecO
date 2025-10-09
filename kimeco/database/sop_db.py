@@ -1,4 +1,3 @@
-import time
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
 from sqlalchemy import select, Row
@@ -14,6 +13,10 @@ class SOP_DB(Kimeco_db):
         super().__init__(name=name,
                          path=path,
                          thread=thread)
+
+        # Keep a reference to the SOP template used to build this DB
+        # This allows other modules to reconstruct SOP objects from DB rows
+        self.sop_tpl: SOP = sop
 
         self.columns: list[str] = \
             [key for key in sop.parameters_names.keys()]

@@ -50,19 +50,18 @@ class CORSection(Section):
             self.corr_tables = []
             if start != 'COR' or n_clicks is None:
                 raise PreventUpdate
-            for gen_i in selected_gen:
-                if gen_i not in self.sop_tables:
-                    for origin in self.gapp.goats[gen_i].split():
-                        gen_id = int(origin.split('_')[0])
-                        el_id = int(origin.split('_')[1])
-                        self.sop_db.prepare_batch_select(
-                            table=f'G{gen_id:04d}',
-                            row_id=el_id
-                        )
-                    self.sop_tables[gen_i] = self.sop_db.batch_select()
-                self.create_cor_table(
-                    table=np.array(self.sop_tables[gen_i])[:, 1:],
-                    id=gen_i)
+                for gen_i in selected_gen:
+                    if gen_i not in self.sop_tables:
+                        elements = self.gapp.goats.get_goat_for_gen(gen_i)
+                        for el in elements:
+                            self.sop_db.prepare_batch_select(
+                                table=f'G{el.gen:04d}',
+                                row_id=el.id
+                            )
+                        self.sop_tables[gen_i] = self.sop_db.batch_select()
+                    self.create_cor_table(
+                        table=np.array(self.sop_tables[gen_i])[:, 1:],
+                        id=gen_i)
             return self.corr_tables
 
         @self.app.callback(

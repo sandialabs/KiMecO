@@ -13,6 +13,7 @@ from kimeco.parameters import SOP
 from kimeco.database.sop_db import SOP_DB
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
+from kimeco.goat import GOATs
 from kimeco.gui.sopsection import SOPSection
 from kimeco.gui.kinsection import KINSection
 from kimeco.gui.simsection import SIMSection
@@ -54,8 +55,7 @@ class KimecoApp(KiMecO):
                     if name in bimol.frag_names:
                         self.og_names[ct_name] = bimol.name
 
-        with open(self.settings['workdir'] + '/goat.txt', 'r') as f:
-            self.goats: list[str] = f.readlines()
+        # GOAT file will be handled by a GOATs instance after DB init
         # Initialize app
         self.app = Dash(
             assets_url_path=f"{kimeco_path}/gui/assets")
@@ -66,6 +66,13 @@ class KimecoApp(KiMecO):
         self.sop_tot_g: int = len(self.sop_db.tables)
         self.kin_tot_g: int = len(self.kin_db.tables)
         self.sim_tot_g: int = len(self.sim_db.tables)
+        # Construct GOATs object so GUI sections can request Element objects
+        goat_file = f"{self.settings['workdir']}/goat.txt"
+        # Always construct GOATs from the same goat.txt used previously
+        self.goats = GOATs(filename=goat_file,
+                           sop_db=self.sop_db,
+                           kin_db=self.kin_db,
+                           sim_db=self.sim_db)
 
     def create_layout(self) -> None:
         self.app.layout = [

@@ -4,6 +4,7 @@ from kimeco.gui.section import Section
 from dash.exceptions import PreventUpdate
 import cantera.with_units as ctu
 from numpy.typing import NDArray
+import numpy as np
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 
@@ -54,8 +55,8 @@ class SIMSection(Section):
             Input('sim_T', 'value'),
         )
         def show_sim_plot_button(specs: list[str],
-                                 pres: float,
-                                 temp: float):
+                                 pres: list | float,
+                                 temp: list | float):
             if specs is None or pres is None or temp is None:
                 raise PreventUpdate
             else:
@@ -76,34 +77,61 @@ class SIMSection(Section):
         )
         def update_sim_figure(clic,
                               specs: list[str],
-                              pres: float,
-                              temp: float,
+                              pres: list | float,
+                              temp: list | float,
                               selected_gen: list[int]
                               ):
             if clic is None:
                 raise PreventUpdate
+
+            # Allow single-value selections (Dash may pass a scalar when
+            # the dropdown is not in multi-mode). Coerce scalars to lists so
+            # the code below can always iterate over pres and temp.
+            if not isinstance(pres, (list, tuple, np.ndarray)):
+                pres = [pres]
+            if not isinstance(temp, (list, tuple, np.ndarray)):
+                temp = [temp]
 
             sim_plot_children = []
             for p in pres:
                 p_idx = self.settings['rc_pres'].index(p)
                 for t in temp:
                     t_idx = self.settings['rc_temp'].index(t)
-                    all_gen_sims: list[dict[dict[NDArray]]] = []
+                    # Mapping per-generation: list of dicts mapping table ->
+                    # origin -> ndarray. Use explicit types for mypy/
+                    # linters: dict[str, dict[int, NDArray]]
+                    all_gen_sims: list[dict[str, dict[int, NDArray]]] = []
+                    # Prepare selects for all generations, then do a single
+                    # batch_select to reduce DB round-trips.
+                    elements_per_gen: dict[int, list] = {}
                     for gen_i in selected_gen:
-                        for origin in self.gapp.goats[gen_i].split():
-                            gen_id = int(origin.split('_')[0])
-                            el_id = int(origin.split('_')[1])
+                        elements = self.gapp.goats.get_goat_for_gen(gen_i)
+                        elements_per_gen[gen_i] = elements
+                        for el in elements:
                             sim_id = int(
-                                el_id *
+                                el.id *
                                 len(self.settings['rc_pres']) *
                                 len(self.settings['rc_temp']) +
                                 p_idx * len(self.settings['rc_temp']) +
-                                t_idx)
+                                t_idx
+                            )
                             self.sim_db.prepare_batch_select(
-                                table=f'G{gen_id:04d}',
+                                table=f'G{el.gen:04d}',
                                 sim_id=sim_id
                             )
-                        all_gen_sims.append(self.sim_db.batch_select())
+                    # Single batch select for all requested tables/ids
+                    all_results = self.sim_db.batch_select()
+                    # Split results per requested generation preserving order
+                    for gen_i in selected_gen:
+                        tables = {
+                            f'G{el.gen:04d}'
+                            for el in elements_per_gen[gen_i]
+                        }
+                        TPGenSP: dict[str, dict[int, NDArray]] = {}
+                        for tbl in tables:
+                            if tbl in all_results:
+                                TPGenSP[tbl] = all_results[tbl]
+                        all_gen_sims.append(TPGenSP)
                     # Create a figure and associated text for each combination
                     # in the user selection
                     for TPGenSP, gen_i in zip(all_gen_sims, selected_gen):
@@ -156,7 +184,8 @@ class SIMSection(Section):
                         x=exp_p[0],
                         y=exp_p[sp_idx-1],
                         error_y={
-                            'array': self.settings['exp_errors'][eidx][sp_idx-1]
+                            'array':
+                                self.settings['exp_errors'][eidx][sp_idx-1]
                             },
                         mode='lines',
                         name='Exp. profile',

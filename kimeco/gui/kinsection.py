@@ -124,12 +124,13 @@ class KINSection(Section):
                                         if tmp_frm in bim.frag_names:
                                             frm = bim.name
                                             break
-                                for origin in self.gapp.goats[gen_i].split():
-                                    gen_id = int(origin.split('_')[0])
-                                    kin_id = int(origin.split('_')[1])
+                                # Use GOATs Element objects
+                                elements = self.gapp.goats.get_goat_for_gen(
+                                    gen_i)
+                                for el in elements:
                                     self.kin_db.prepare_batch_select(
-                                        table=f'G{gen_id:04d}',
-                                        kin_id=kin_id,
+                                        table=f'G{el.gen:04d}',
+                                        kin_id=el.id,
                                         p=p,
                                         t=t,
                                         From=frm,
@@ -197,13 +198,10 @@ class KINSection(Section):
 
         all_gen_rows: dict[int, list[float]] = {}
         for gen_i in generations:
-            all_gen_rows[gen_i] = np.empty(
-                len(self.gapp.goats[gen_i].split()))
-            for idx, origin in enumerate(self.gapp.goats[gen_i].split()):
-                gen_id = int(origin.split('_')[0])
-                kin_id = int(origin.split('_')[1])
-                all_gen_rows[gen_i][idx] = \
-                    rates[f"G{gen_id:04d}"][kin_id][cond]
+            elements = self.gapp.goats.get_goat_for_gen(gen_i)
+            all_gen_rows[gen_i] = np.empty(len(elements))
+            for idx, el in enumerate(elements):
+                all_gen_rows[gen_i][idx] = rates[f"G{el.gen:04d}"][el.id][cond]
 
         plot_settings['title'] = \
             f"Rate coefficients ({unit}) from {From} to {To} at"

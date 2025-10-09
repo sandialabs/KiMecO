@@ -337,15 +337,18 @@ class SOPSection(Section):
 
         all_gen_rows: dict[int, Any] = {}
         for gen_i in selected_gen:
-            for origin in self.gapp.goats[gen_i].split():
-                gen_id = int(origin.split('_')[0])
-                el_id = int(origin.split('_')[1])
-                self.sop_db.prepare_batch_select(
-                    table=f'G{gen_id:04d}',
-                    row_id=el_id
-                )
-            all_gen_rows[gen_i] = \
-                np.concatenate(self.sop_db.batch_select_col(col))
+            # Use GOATs Element objects to extract parameter values
+            elements = self.gapp.goats.get_goat_for_gen(gen_i)
+            values: list[float] = []
+            for el in elements:
+                try:
+                    val = el.sop.parameters_names[col]
+                except Exception:
+                    raise KeyError(
+                        f"Parameter {col} not found in SOP for element {el.id}"
+                    )
+                values.append(val)
+            all_gen_rows[gen_i] = np.array(values)
 
         hist = Histogram(
             data=all_gen_rows,
