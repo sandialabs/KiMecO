@@ -1,6 +1,7 @@
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
-from sqlalchemy import select, Row
+from sqlalchemy import select
+from sqlalchemy.engine import Row
 from typing import Any, Sequence
 from numpy.typing import NDArray
 import numpy as np

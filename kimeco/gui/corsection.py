@@ -2,7 +2,6 @@ from kimeco.gui.section import Section
 from dash import html, dcc, Output, Input, State, MATCH
 from dash.dash_table import DataTable
 from dash.exceptions import PreventUpdate
-from sqlalchemy import Row
 import numpy as np
 from typing import Any
 import plotly.graph_objects as go
@@ -11,11 +10,13 @@ import plotly.graph_objects as go
 class CORSection(Section):
     def __init__(self, gapp) -> None:
         super().__init__(gapp)
-        self.corr_tables: list[DataTable]
-        self.sop_tables = {}
+        # corr_tables stores html.Div blocks (each contains a DataTable and
+        # an associated plot container), not raw DataTable objects.
+        self.corr_tables: list[html.Div] = []
+        self.sop_tables: dict[int, Any] = {}
         # Key is generation id
-        self.cor_data = {}
-        self.col_names = {}
+        self.cor_data: dict[int, np.ndarray] = {}
+        self.col_names: dict[int, list[str]] = {}
 
     @property
     def layout(self) -> html.Div:
@@ -50,18 +51,18 @@ class CORSection(Section):
             self.corr_tables = []
             if start != 'COR' or n_clicks is None:
                 raise PreventUpdate
-                for gen_i in selected_gen:
-                    if gen_i not in self.sop_tables:
-                        elements = self.gapp.goats.get_goat_for_gen(gen_i)
-                        for el in elements:
-                            self.sop_db.prepare_batch_select(
-                                table=f'G{el.gen:04d}',
-                                row_id=el.id
-                            )
-                        self.sop_tables[gen_i] = self.sop_db.batch_select()
-                    self.create_cor_table(
-                        table=np.array(self.sop_tables[gen_i])[:, 1:],
-                        id=gen_i)
+            for gen_i in selected_gen:
+                if gen_i not in self.sop_tables:
+                    elements = self.gapp.goats.get_goat_for_gen(gen_i)
+                    for el in elements:
+                        self.sop_db.prepare_batch_select(
+                            table=f'G{el.gen:04d}',
+                            row_id=el.id
+                        )
+                    self.sop_tables[gen_i] = self.sop_db.batch_select()
+                self.create_cor_table(
+                    table=np.array(self.sop_tables[gen_i])[:, 1:],
+                    id=gen_i)
             return self.corr_tables
 
         @self.app.callback(
@@ -166,7 +167,7 @@ class CORSection(Section):
             return cor_plots
 
     def create_cor_table(self,
-                         table: list[Row],
+                         table: np.ndarray,
                          id: int):
         # Calculate the correlation matrix
         stds = np.std(table, axis=0)

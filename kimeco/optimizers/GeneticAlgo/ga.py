@@ -13,6 +13,7 @@ from kimeco.element import Element
 import numpy as np
 from kimeco.sensitivity.linear import Linear
 from kimeco.database.kimeco_db import dbs
+from kimeco.goat import GOATs
 
 
 class GeneticAlgorithm(ABC):
@@ -33,7 +34,6 @@ class GeneticAlgorithm(ABC):
                  kin_db: KIN_DB,
                  f_el: Element,
                  input_tpl: list[str],
-                 location: str,
                  klog: Logger
                  ) -> None:
         self.klog: Logger = klog
@@ -49,14 +49,21 @@ class GeneticAlgorithm(ABC):
             elements=[f_el],
             settings=settings,
             rc_tpl=input_tpl,
-            loc=location,
             sop_db=sop_db,
             kin_db=kin_db,
             sim_db=sim_db,
             sf=sf,
             pert=pert,
             klog=klog)
-        self.loc: str = location
+        self.loc: str = self.settings['workdir']
+        # GOATs manager: if caller provided one, use it; otherwise create
+        # a default GOATs instance that will persist to <location>/goats.txt
+        self.goats = GOATs(
+                sop_db=self.sop_db,
+                kin_db=self.kin_db,
+                sim_db=self.sim_db,
+            )
+
         self.goat: list[Element] = []
         self.__converged: dict[str, bool] = {}
         self.means: dict[str, float] = {}
@@ -112,20 +119,6 @@ class GeneticAlgorithm(ABC):
                 self.__converged[key] = True
             else:
                 self.__converged[key] = False
-
-    def write_goat_update(self,
-                          create: bool = False) -> None:
-        goat_line: str = ''
-        for el in self.goat:
-            goat_line += f'{el.gen}_{el.id} '
-        goat_line += '\n'
-
-        if create:
-            with open(self.loc + '/goat.txt', 'w') as f:
-                f.write(goat_line)
-        else:
-            with open(self.loc + '/goat.txt', 'a') as f:
-                f.write(goat_line)
 
     def print_stats(self) -> None:
         line_tpl = '{name:<15}{mean:>10} ± {std:<10}{status:>20}'
@@ -325,7 +318,6 @@ class GeneticAlgorithm(ABC):
                 elements=new_elements,
                 settings=self.settings,
                 rc_tpl=self.input_tpl,
-                loc=self.loc,
                 sop_db=self.sop_db,
                 kin_db=self.kin_db,
                 sim_db=self.sim_db,
@@ -368,7 +360,6 @@ class GeneticAlgorithm(ABC):
                 elements=self.goat,
                 settings=self.settings,
                 rc_tpl=self.input_tpl,
-                loc=self.loc,
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog)
@@ -388,48 +379,26 @@ class GeneticAlgorithm(ABC):
 
     def update_goat(self,
                     new_els: list[Element]) -> None:
-        replaced = 0
-        added = 0
-        gen_id: int = max([el.gen for el in new_els])
-        # ordered elements
-        o_els: list[Element] = sorted(
-                new_els, key=lambda el: el.score
-                )
-        # Add elements in goat as long as it's too short
-        if len(self.goat) < self.settings['goat_length']:
-            for el in o_els:
-                if el in self.goat:
-                    continue
-                self.goat.append(el)
-                added += 1
-                if len(self.goat) == self.settings['goat_length']:
-                    break
-        # Otherwise, update
-        else:
-            for el in o_els:
-                if el in self.goat:
-                    continue
-                max_goat = max(self.goat_scores)
-                if el.score < max_goat:
-                    to_replace: int = self.goat_scores.index(max_goat)
-                    self.goat[to_replace] = el
-                    replaced += 1
-            # Check if goat has been properly updated
-            max_goat: float = max(self.goat_scores)
-            for el in o_els:
-                if el.score <= max_goat and el not in self.goat:
-                    msg: str = 'Bug in GOAT update.'
-                    raise ValueError(msg)
-        goat_avrg = np.average([el.score for el in self.goat])
-        self.klog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.2f}')
-        if added > 0:
-            self.klog.info(f'GOATs ADDED: {added}')
-        if replaced > 0:
-            self.klog.info(f'GOATs REPLACED: {replaced}')
-        self.write_goat_update(create=gen_id == 0)
+        # Delegate selection and persistence to the GOATs manager. The
+        # GOATs instance will keep a global pool of seen elements and
+        # return the chosen goat list for this generation.
+        chosen = self.goats.update_with_generation(
+            elements=new_els,
+            goat_length=self.settings['goat_length']
+        )
 
-    def get_stats(self,
-                  elements: list[Element]) -> tuple[dict[str, float], dict[str, float]]:
+        # Update local goat list and log stats
+        self.goat = chosen
+        if self.goat:
+            goat_avrg = float(np.average([el.score for el in self.goat]))
+        else:
+            goat_avrg = float('nan')
+        self.klog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.2f}')
+
+    def get_stats(
+        self,
+        elements: list[Element],
+    ) -> tuple[dict[str, float], dict[str, float]]:
         """Calculate the standard deviation of each key in the
         parameters_names dictionary across all SOP objects.
 

@@ -15,7 +15,7 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.scoring_f.weighteddif import WeightedDif
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.sensitivity.linear import Linear
-from kimeco.element import Element, ElementStatus
+from kimeco.element import Element
 from kimeco.enums import Optimizers
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
@@ -132,7 +132,6 @@ class KiMecO:
                 id=0)],
             settings=self.settings,
             rc_tpl=self.input_tpl,
-            loc=self.settings['workdir'],
             sf=self.sf,
             pert=self.pert,
             klog=self.klog)
@@ -149,28 +148,7 @@ class KiMecO:
                 kin_db=self.kin_db,
                 sim_db=self.sim_db
             )
-        # else:
-        #     # Check DB for restart if not SA
-        #     if self.sop_db.table_exists('G0000'):
-        #         rows = self.sop_db.get_table(table='G0000')
-        #         if len(rows) == 1:
-        #             db_sop: SOP = SOP.from_db_row(
-        #                 sop_tpl=self.init_SOP,
-        #                 row=rows[0][1:]
-        #                 )
-        #             self.f_el = Element(
-        #                 sop=db_sop,
-        #                 id=0)
-        #             self.f_el.status = ElementStatus.DONE
-        #     # Otherwise initialize the first Element from scratch
-        #         else:
-        #             self.f_el = Element(
-        #                 sop=self.init_SOP,
-        #                 id=0)
-        #     else:
-        #         self.f_el = Element(
-        #             sop=self.init_SOP,
-        #             id=0)
+
         msg = f"{'Parameters selected for perturbation:':<80}"
         msg += '\n'
         msg += "{}".format(self.settings['to_perturb']).replace("'", '"')
@@ -200,7 +178,6 @@ class KiMecO:
                     sf=self.sf,
                     pert=self.pert,
                     input_tpl=self.input_tpl,
-                    location=self.settings['workdir'],
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
@@ -212,7 +189,6 @@ class KiMecO:
                     sf=self.sf,
                     pert=self.pert,
                     input_tpl=self.input_tpl,
-                    location=self.settings['workdir'],
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
@@ -226,12 +202,11 @@ class KiMecO:
                     sf=self.sf,
                     pert=self.pert,
                     input_tpl=self.input_tpl,
-                    location=self.settings['workdir'],
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
                     f_el=self.f_el,
                     klog=self.klog)
         else:
-            raise TypeError('Unknown optimizer requested')
+            raise NotImplementedError('Unknown optimizer requested')
         self.klog.info(f"{'OPTIMIZER:':<65}{self.optimizer.name}")

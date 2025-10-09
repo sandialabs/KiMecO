@@ -1,11 +1,11 @@
 from dash import html, dcc, callback, Output, Input, State
 import numpy as np
-from typing import Any
-from numpy.typing import NDArray
+from typing import Any, Optional, List, Tuple
 from kimeco.gui.section import Section
-from plotly.graph_objs._figure import Figure
+# Figure import not required for current return types; keep types minimal
 from dash.exceptions import PreventUpdate
 from kimeco.gui.histogram import Histogram
+from kimeco.goat import RateResult
 
 
 class KINSection(Section):
@@ -84,131 +84,180 @@ class KINSection(Section):
                 (Output("kin_plot_button", "disabled"), True, False),
                 (Output("kin_plot_button", "children"), 'Updating', 'Plot')]
         )
-        def update_kin_figure(clic,
-                              From: list[str],
-                              To: list[str],
-                              pres: list[float],
-                              temp: list[float],
-                              selected_gen: list[int]
-                              ) -> \
-                tuple[dict[str, str], Figure, str, str, str]:
+        def update_kin_figure(
+            clic,
+            From: list[str],
+            To: list[str],
+            pres: list[float],
+            temp: list[float],
+            selected_gen: list[int],
+        ) -> tuple[dict[str, str], list[Any]]:
             if clic is None:
                 raise PreventUpdate
 
-            for gen_i in selected_gen:
-                for p in pres:
-                    for t in temp:
-                        for _to in To:
-                            # Find the corresponding name in db
-                            for k, v in self.settings['ct_names'].items():
-                                if v == _to:
-                                    tmp_to: str = k
-                                    break
-                            if tmp_to in self.init_SOP.wells_names:
-                                to: str = tmp_to
-                            else:
-                                for bim in self.init_SOP.bimolecular:
-                                    if tmp_to in bim.frag_names:
-                                        to = bim.name
-                                        break
-                            for _frm in From:
-                                # Find the corresponding name in db
-                                for k, v in self.settings['ct_names'].items():
-                                    if v == _frm:
-                                        tmp_frm: str = k
-                                        break
-                                if tmp_frm in self.init_SOP.wells_names:
-                                    frm: str = tmp_frm
-                                else:
-                                    for bim in self.init_SOP.bimolecular:
-                                        if tmp_frm in bim.frag_names:
-                                            frm = bim.name
-                                            break
-                                # Use GOATs Element objects
-                                elements = self.gapp.goats.get_goat_for_gen(
-                                    gen_i)
-                                for el in elements:
-                                    self.kin_db.prepare_batch_select(
-                                        table=f'G{el.gen:04d}',
-                                        kin_id=el.id,
-                                        p=p,
-                                        t=t,
-                                        From=frm,
-                                        To=to
-                                    )
-            # Only do one request for all gen
-            all_gen_rates: dict[str, dict[int, NDArray]] = \
-                self.kin_db.batch_select()
-            all_figs: list[Histogram] = []
+            # Build requested P/T conditions
+            req_conditions = [(float(p), float(t)) for p in pres for t in temp]
+
+            # Resolve displayed names to DB keys once and prepare pairs
+            rate_pairs_db: List[Tuple[Optional[str], Optional[str]]] = []
+            display_to_db: dict[Tuple[str, str],
+                                Tuple[Optional[str], Optional[str]]] = {}
+            for disp_to in To:
+                tmp_to = next(
+                    (k for k, v in self.settings['ct_names'].items()
+                     if v == disp_to),
+                    None,
+                )
+                if tmp_to is None:
+                    continue
+                if tmp_to in self.init_SOP.wells_names:
+                    to_db_candidate = tmp_to
+                else:
+                    to_db_candidate = next(
+                        (bim.name for bim in self.init_SOP.bimolecular
+                         if tmp_to in bim.frag_names),
+                        None,
+                    )
+                for disp_frm in From:
+                    tmp_frm = next(
+                        (k for k, v in self.settings['ct_names'].items()
+                         if v == disp_frm),
+                        None,
+                    )
+                    if tmp_frm is None:
+                        continue
+                    if tmp_frm in self.init_SOP.wells_names:
+                        frm_db_candidate = tmp_frm
+                    else:
+                        frm_db_candidate = next(
+                            (bim.name for bim in self.init_SOP.bimolecular
+                             if tmp_frm in bim.frag_names),
+                            None,
+                        )
+                    rate_pairs_db.append((frm_db_candidate, to_db_candidate))
+                    display_to_db[(disp_frm, disp_to)] = (
+                        frm_db_candidate,
+                        to_db_candidate,
+                    )
+
+            # Fetch all rates in a single batched DB call
+            all_rates: RateResult = self.gapp.goats.get_rate_coefficients(
+                req_conditions,
+                selected_gen,
+                rate_pairs_db,
+            )
+
+            figs: list[Any] = []
             for p in pres:
                 for t in temp:
-                    for to in To:
-                        for frm in From:
-                            all_figs.extend(self.make_figure(
+                    for disp_to in To:
+                        for disp_frm in From:
+                            db_pair = display_to_db.get((disp_frm, disp_to))
+                            result = self.make_figure(
                                 generations=selected_gen,
-                                p=p,
-                                t=t,
-                                To=to,
-                                From=frm,
-                                rates=all_gen_rates
-                            ))
-            return {'display': 'block'}, all_figs
+                                p=float(p),
+                                t=float(t),
+                                To=disp_to,
+                                From=disp_frm,
+                                db_pair=db_pair,
+                                rates=all_rates,
+                            )
+                            # make_figure may return a single component
+                            # or a list
+                            if isinstance(result, list):
+                                figs.extend(result)
+                            else:
+                                figs.append(result)
 
-    def make_figure(self,
-                    generations: list[int],
-                    p: float,
-                    t: float,
-                    To: str,
-                    From: str,
-                    rates: list[dict[dict[dict[tuple, float]]]]):
+            if not figs:
+                # No figures produced — show a helpful message in the UI
+                msg = html.Div([
+                    html.P(
+                        'No data available for the selected '
+                        'species/conditions.'
+                    ),
+                    html.P(
+                        'Check that you selected valid From/To species,'
+                        ' pressures, temperatures, and generations.'
+                    ),
+                ])
+                return {'display': 'block'}, [msg]
+
+            return {'display': 'block'}, figs
+
+    def make_figure(
+        self,
+        generations: list[int],
+        p: float,
+        t: float,
+        To: str,
+        From: str,
+        db_pair: Optional[Tuple[Optional[str], Optional[str]]],
+        rates: RateResult,
+    ) -> Any:
         plot_settings: dict[str, Any] = {
             'title': '',
             'tickformat': '.2e',
             'unit': ''
         }
-        # Find the names as saved in the kin db
-        for k, v in self.settings['ct_names'].items():
-            if v == To:
-                tmp_to = k
-                break
-        if tmp_to in self.init_SOP.wells_names:
-            to = tmp_to
-        else:
-            for bim in self.init_SOP.bimolecular:
-                if tmp_to in bim.frag_names:
-                    to = bim.name
-                    break
-        for k, v in self.settings['ct_names'].items():
-            if v == From:
-                tmp_frm = k
-                break
-        if tmp_frm in self.init_SOP.wells_names:
-            frm = tmp_frm
+
+        frm_db, to_db = (None, None) if db_pair is None else db_pair
+
+        # Determine unit and display names (keep display names From/To)
+        if frm_db in self.init_SOP.wells_names:
             unit = 's<sup>-1</sup> '
             plot_settings['unit'] = u's\u207B\u00B9'
         else:
             unit = 'cm<sup>3</sup> molecule<sup>-1</sup> s<sup>-1</sup>'
-            plot_settings['unit'] = \
+            plot_settings['unit'] = (
                 u'cm\u00B3 molecule\u207B\u00B9 s\u207B\u00B9'
-            for bim in self.init_SOP.bimolecular:
-                if tmp_frm in bim.frag_names:
-                    frm = bim.name
-                    break
-        cond = (p, t, to, frm)
+            )
 
-        all_gen_rows: dict[int, list[float]] = {}
+        all_gen_rows: dict[int, np.ndarray] = {}
         for gen_i in generations:
-            elements = self.gapp.goats.get_goat_for_gen(gen_i)
-            all_gen_rows[gen_i] = np.empty(len(elements))
-            for idx, el in enumerate(elements):
-                all_gen_rows[gen_i][idx] = rates[f"G{el.gen:04d}"][el.id][cond]
+            tokens = []
+            try:
+                tokens = self.gapp.goats.generations[gen_i]
+            except Exception:
+                tokens = []
+            all_gen_rows[gen_i] = np.empty(len(tokens))
+            for idx, (elem_gen, elem_id) in enumerate(tokens):
+                val = None
+                if (gen_i in rates
+                        and frm_db is not None
+                        and to_db is not None):
+                    conds = rates[gen_i]
+                    key_cond = (float(p), float(t))
+                    pair = conds.get(key_cond, {})
+                    pair = pair.get((frm_db, to_db), {})
+                    val = pair.get((elem_gen, elem_id), None)
+                all_gen_rows[gen_i][idx] = (
+                    val if val is not None else np.nan
+                )
 
-        plot_settings['title'] = \
+        plot_settings['title'] = (
             f"Rate coefficients ({unit}) from {From} to {To} at"
-        plot_settings['title'] += \
             f" {p} {self.settings['pres_unit']}/{t} K"
+        )
+        # Histogram expects dict[int, list[float]]; convert arrays to lists
+
+        def coerce_list(arr):
+            if hasattr(arr, 'tolist'):
+                raw = arr.tolist()
+            else:
+                raw = list(arr)
+            coerced: list[float] = []
+            for v in raw:
+                try:
+                    coerced.append(float(v))
+                except Exception:
+                    coerced.append(float('nan'))
+            return coerced
+
+        hist_data = {g: coerce_list(arr) for g, arr in all_gen_rows.items()}
         hist = Histogram(
-            data=all_gen_rows,
-            settings=plot_settings
+            data=hist_data,
+            settings=plot_settings,
         )
         return hist.layout()
+

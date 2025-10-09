@@ -24,7 +24,6 @@ class CoreRun:
                  elements: list[Element],
                  settings: dict[str, Any],
                  rc_tpl: list[str],
-                 loc: str,
                  sop_db: SOP_DB,
                  kin_db: KIN_DB,
                  sim_db: SIM_DB,
@@ -44,7 +43,8 @@ class CoreRun:
         self.sc_species: list[str] = self.settings['score_sp']
         # Rate coefficients template
         self.rc_tpl: list[str] = rc_tpl
-        self.loc: str = loc
+        self.loc: str = settings['workdir']
+        # Scoring function
         self.sf: Scoring = sf
         self.sim_hlpers = [
             [] for i in range(self.settings['max_helpers'])

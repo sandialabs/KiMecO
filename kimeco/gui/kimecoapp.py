@@ -69,10 +69,12 @@ class KimecoApp(KiMecO):
         # Construct GOATs object so GUI sections can request Element objects
         goat_file = f"{self.settings['workdir']}/goat.txt"
         # Always construct GOATs from the same goat.txt used previously
-        self.goats = GOATs(filename=goat_file,
-                           sop_db=self.sop_db,
-                           kin_db=self.kin_db,
-                           sim_db=self.sim_db)
+        self.goats = GOATs.from_file(
+            filename=goat_file,
+            sop_db=self.sop_db,
+            kin_db=self.kin_db,
+            sim_db=self.sim_db,
+        )
 
     def create_layout(self) -> None:
         self.app.layout = [
@@ -131,7 +133,9 @@ class KimecoApp(KiMecO):
     def register_callbacks(self):
         # GENERATION CONTROL
         @self.app.callback(
-            Output(component_id='gen range slider', component_property='value'),
+            Output(
+                component_id='gen range slider', component_property='value'
+            ),
             State(component_id='gen range slider', component_property='value'),
             Input(component_id='gen_num', component_property='value')
         )

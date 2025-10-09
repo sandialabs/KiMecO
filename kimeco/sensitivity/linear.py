@@ -26,7 +26,6 @@ class Linear(CoreRun):
                  elements: list[Element],
                  settings: dict[str, Any],
                  rc_tpl: list[str],
-                 loc: str,
                  sf: Scoring,
                  pert: Perturbator,
                  klog: Logger
@@ -62,7 +61,6 @@ class Linear(CoreRun):
             elements=self.elements,
             settings=self.settings,
             rc_tpl=rc_tpl,
-            loc=loc,
             sop_db=self.sop_db,
             kin_db=self.kin_db,
             sim_db=self.sim_db,

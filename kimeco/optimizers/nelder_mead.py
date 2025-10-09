@@ -26,7 +26,6 @@ class NelderMead:
                  kin_db: KIN_DB,
                  f_el: Element,
                  input_tpl: list[str],
-                 location: str,
                  klog: Logger
                  ) -> None:
         self.name = 'Nelder-Mead'
@@ -34,7 +33,6 @@ class NelderMead:
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
-        self.loc: str = location
         self.input_tpl: list[str] = input_tpl
         self.f_el: Element = f_el
         self.settings: dict[str, Any] = settings
@@ -82,7 +80,6 @@ class NelderMead:
                         id=0)],
                     settings=self.settings,
                     rc_tpl=self.input_tpl,
-                    loc=self.settings['workdir'],
                     sf=self.sf,
                     pert=self.pert,
                     klog=self.klog)
@@ -177,7 +174,6 @@ class NelderMead:
                 elements=[vertice],
                 settings=self.settings,
                 rc_tpl=self.input_tpl,
-                loc=self.loc,
                 sop_db=self.sop_db,
                 kin_db=self.kin_db,
                 sim_db=self.sim_db,

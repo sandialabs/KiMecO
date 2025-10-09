@@ -21,14 +21,12 @@ class Tournament(GeneticAlgorithm):
                  kin_db: KIN_DB,
                  f_el: Element,
                  input_tpl: list[str],
-                 location: str,
                  klog: Logger) -> None:
         super().__init__(
             settings=settings,
             sf=sf,
             pert=pert,
             input_tpl=input_tpl,
-            location=location,
             sop_db=sop_db,
             kin_db=kin_db,
             sim_db=sim_db,

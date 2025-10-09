@@ -1,10 +1,21 @@
 import os
 from time import sleep
 from typing import Literal, Sequence
-from sqlalchemy import create_engine, MetaData, Table, Column, Row
-from sqlalchemy import Engine, Insert, update, Update, select
-from sqlalchemy import Float, Integer, String, text, TextClause
-from sqlalchemy import delete
+from sqlalchemy import (
+    create_engine,
+    MetaData,
+    Table,
+    Column,
+    update,
+    select,
+    Float,
+    Integer,
+    String,
+    delete,
+)
+from sqlalchemy.engine import Row, Engine
+from sqlalchemy.sql import Insert, text
+from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
@@ -132,7 +143,7 @@ class Kimeco_db:
                      table: str,
                      id: int,
                      values: dict[str, Any]) -> None:
-        query: Update = (
+        query = (
             update(table=self.tables[table]).
             where(self.tables[table].c.id == id).
             values(**values)
