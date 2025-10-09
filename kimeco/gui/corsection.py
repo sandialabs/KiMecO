@@ -53,13 +53,21 @@ class CORSection(Section):
                 raise PreventUpdate
             for gen_i in selected_gen:
                 if gen_i not in self.sop_tables:
+                    # Fetch Elements for this generation and build the
+                    # parameter table directly from Element.sop.parameters_names
                     elements = self.gapp.goats.get_goat_for_gen(gen_i)
+                    # Preserve GOAT ordering when building rows
+                    rows: list[list[float]] = []
                     for el in elements:
-                        self.sop_db.prepare_batch_select(
-                            table=f'G{el.gen:04d}',
-                            row_id=el.id
-                        )
-                    self.sop_tables[gen_i] = self.sop_db.batch_select()
+                        # parameters_names is an ordered dict-like mapping
+                        vals = list(el.sop.parameters_names.values())
+                        # Prepend the id into the row for compatibility with
+                        # previous layout (original code used [:,1:])
+                        rows.append([el.id] + [float(v) for v in vals])
+                    if rows:
+                        self.sop_tables[gen_i] = np.array(rows)
+                    else:
+                        self.sop_tables[gen_i] = np.empty((0, 0))
                 self.create_cor_table(
                     table=np.array(self.sop_tables[gen_i])[:, 1:],
                     id=gen_i)
