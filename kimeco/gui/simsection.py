@@ -103,29 +103,39 @@ class SIMSection(Section):
                     all_gen_sims: list[dict[str, dict[int, NDArray]]] = []
                     # Prepare selects for all generations, then do a single
                     # batch_select to reduce DB round-trips.
+                    # Use stored GOAT tokens (gen, id) to avoid reconstructing
+                    # Element objects and to prepare batch selects in one pass.
                     elements_per_gen: dict[int, list] = {}
                     for gen_i in selected_gen:
-                        elements = self.gapp.goats.get_goat_for_gen(gen_i)
-                        elements_per_gen[gen_i] = elements
-                        for el in elements:
+                        gens = self.gapp.goats.generations
+                        if isinstance(gens, dict):
+                            tokens = gens.get(gen_i, [])
+                        else:
+                            try:
+                                tokens = gens[gen_i]
+                            except Exception:
+                                tokens = []
+                        elements_per_gen[gen_i] = tokens
+                        for (elem_gen, elem_id) in tokens:
                             sim_id = int(
-                                el.id *
+                                elem_id *
                                 len(self.settings['rc_pres']) *
                                 len(self.settings['rc_temp']) +
                                 p_idx * len(self.settings['rc_temp']) +
                                 t_idx
                             )
                             self.sim_db.prepare_batch_select(
-                                table=f'G{el.gen:04d}',
-                                sim_id=sim_id
+                                table=f'G{elem_gen:04d}',
+                                sim_id=sim_id,
                             )
                     # Single batch select for all requested tables/ids
                     all_results = self.sim_db.batch_select()
                     # Split results per requested generation preserving order
                     for gen_i in selected_gen:
+                        # elements_per_gen stores tokens as (gen, id)
                         tables = {
-                            f'G{el.gen:04d}'
-                            for el in elements_per_gen[gen_i]
+                            f'G{tkn[0]:04d}'
+                            for tkn in elements_per_gen[gen_i]
                         }
                         TPGenSP: dict[str, dict[int, NDArray]] = {}
                         for tbl in tables:
