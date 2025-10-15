@@ -1,5 +1,7 @@
 from typing import List, Tuple, Union, Optional, Dict
 import numpy as np
+from numpy.typing import NDArray
+from typing import Any
 
 
 from kimeco.element import Element
@@ -190,7 +192,7 @@ class GOATs:
         self,
         req_conditions: List[Tuple[float, float]],
         gen_ids: List[int],
-        rate_pairs: List[Tuple[str, str]],
+        from_to: tuple[str, str],
     ) -> RateResult:
         """Return rate coefficients for GOAT elements in the requested
         generations and conditions.
@@ -221,64 +223,46 @@ class GOATs:
         # Collect element tokens (gen,id) per requested generation.
         # We avoid reconstructing Element objects here and use the
         # stored tokens directly to minimize work.
-        gen_elements: Dict[int, List[Tuple[int, int]]] = {}
-        for gen_id in gen_ids:
-            try:
-                tokens = self.generations[gen_id]
-            except IndexError:
-                tokens = []
-            gen_elements[gen_id] = tokens
+        # gen_elements: Dict[int, List[Tuple[int, int]]] = {}
+        # for gen_id in gen_ids:
+        #     tokens = self.generations[gen_id]
+        #     gen_elements[gen_id] = tokens
 
         # Prepare batch selects for every element token / condition /
         # rate_pair. gen_elements stores tuples (elem_gen, elem_id).
-        for _req_gen_id, tokens in gen_elements.items():
-            for (elem_gen, elem_id) in tokens:
-                table = f"G{elem_gen:04d}"
+        for gen_id in gen_ids:
+            for (elem_gen, elem_id) in self.generations[gen_id]:
+                table: str = f"G{elem_gen:04d}"
                 kin_id = int(elem_id)
                 for (p, t) in req_conditions:
-                    for (frm, to) in rate_pairs:
-                        # KIN_DB expects From, To parameter names
-                        self.kin_db.prepare_batch_select(
-                            table=table,
-                            kin_id=kin_id,
-                            p=float(p),
-                            t=float(t),
-                            From=frm,
-                            To=to)
+                    # KIN_DB expects From, To parameter names
+                    self.kin_db.prepare_batch_select(
+                        table=table,
+                        kin_id=kin_id,
+                        p=float(p),
+                        t=float(t),
+                        From=from_to[0],
+                        To=from_to[1])
 
         raw_results = self.kin_db.batch_select()
 
         # Assemble results in requested shape
-        out: RateResult = {}
-        for gen_id, tokens in gen_elements.items():
+        out: dict[int, dict[tuple[float, float], list[float]]] = {}
+        for gen_id in gen_ids:
             out[gen_id] = {}
             for (p, t) in req_conditions:
-                out[gen_id][(p, t)] = {}
-                for (frm, to) in rate_pairs:
-                    per_elem: Dict[Tuple[int, int], Optional[float]] = {}
-                    for (elem_gen, elem_id) in tokens:
-                        table = f"G{elem_gen:04d}"
-                        kin_id = int(elem_id)
-                        # Access nested dicts returned by KIN_DB.batch_select.
-                        table_dict = raw_results.get(table, {})
-                        kin_dict = table_dict.get(kin_id, {})
-                        key = (p, t, to, frm)
-                        if isinstance(kin_dict, dict) and key in kin_dict:
-                            val = kin_dict[key]
-                        else:
-                            val = None
-                        # Ensure floats are plain python floats when present.
-                        if val is not None:
-                            per_elem[(elem_gen, elem_id)] = float(val)
-                        else:
-                            per_elem[(elem_gen, elem_id)] = None
-                    out[gen_id][(p, t)][(frm, to)] = per_elem
-
+                key = (p, t, from_to[1], from_to[0])
+                out[gen_id][(p, t)] = []
+                for (elem_gen, elem_id) in self.generations[gen_id]:
+                    table = f"G{elem_gen:04d}"
+                    kin_id = int(elem_id)
+                    out[gen_id][(p, t)].append(
+                        float(raw_results[table][kin_id][key]))
         return out
 
     def get_p_for_gen(self,
                       params: List[str],
-                      gen_ids: List[int]) -> Dict[int, Dict[str, np.ndarray]]:
+                      gen_id: int) -> NDArray:
         """Return requested SOP parameters for GOAT elements.
 
         Args:
@@ -288,96 +272,16 @@ class GOATs:
         Returns:
             dict mapping gen_id -> { param_name: np.array(values) }
 
-        Behavior and performance:
-            - Uses self.sop_db.prepare_batch_select and batch_select to
-              minimize DB round-trips when retrieving SOP rows for the
-              goat elements in each requested generation.
-            - Preserves the order of GOAT elements as stored in
-              self.generations[gen_id]. Missing rows produce NaNs for
-              the corresponding element positions.
         """
-        import numpy as np
 
-        if self.sop_db is None:
-            raise RuntimeError(
-                "GOATs requires a sop_db to fetch SOP parameters"
-            )
-
-        result: Dict[int, Dict[str, 'np.ndarray']] = {}
-
-        # Collect per-generation element ids and prepare batch selects
-        gen_elem_ids: Dict[int, List[int]] = {}
-        for gen_id in gen_ids:
-            try:
-                goat_tokens = self.generations[gen_id]
-            except IndexError:
-                goat_tokens = []
-            # preserve order of tokens
-            ids = [el_id for (_gen, el_id) in goat_tokens]
-            gen_elem_ids[gen_id] = ids
-            # prepare selects
-            for el_id in ids:
-                table = f"G{gen_id:04d}"
-                self.sop_db.prepare_batch_select(table=table, row_id=el_id)
+        for (gen_origin, el_id) in self.generations[gen_id]:
+            table: str = f"G{gen_origin:04d}"
+            self.sop_db.prepare_batch_select(table=table, row_id=el_id)
 
         # Execute batched select once
-        raw_rows = self.sop_db.batch_select()
+        raw_cols: List[Tuple[Any]] = self.sop_db.batch_select_cols(cols=params)
 
-        # raw_rows is a list of DB rows (each row is list-like with id first)
-        # Build a lookup from row id -> row (without id column)
-        by_id: Dict[int, List[float]] = {}
-        for row in raw_rows:
-            # Defensive handling: row may be a SQLAlchemy Row or similar.
-            try:
-                seq = list(row)
-            except TypeError:
-                # Not iterable; skip
-                continue
-            if not seq:
-                continue
-            try:
-                rid = int(seq[0])
-            except Exception:
-                continue
-            by_id[rid] = seq[1:]
-
-        # For each generation, for each requested param collect values
-        for gen_id, ids in gen_elem_ids.items():
-            per_param: Dict[str, 'np.ndarray'] = {}
-            # If no elements, return empty arrays
-            if not ids:
-                for p in params:
-                    per_param[p] = np.array([])
-                result[gen_id] = per_param
-                continue
-
-            # Determine column indices in SOP DB tables
-            col_names = self.sop_db.columns
-            idx_map: Dict[str, int] = {}
-            for p in params:
-                if p not in col_names:
-                    raise KeyError(
-                        f"Parameter '{p}' not found in SOP DB columns"
-                    )
-                idx_map[p] = col_names.index(p)
-
-            # For each param build an array matching goat element order
-            for p in params:
-                vals = []
-                for el_id in ids:
-                    row_vals = by_id.get(el_id)
-                    if row_vals is None:
-                        vals.append(np.nan)
-                    else:
-                        # row_vals does not include the id column; idx_map
-                        # refers to table columns which include id at
-                        # position 0, so adjust index by -1
-                        col_idx = idx_map[p] - 1
-                        vals.append(row_vals[col_idx])
-                per_param[p] = np.array(vals)
-            result[gen_id] = per_param
-
-        return result
+        return np.array(raw_cols)
 
     def __len__(self) -> int:
         return len(self.generations)

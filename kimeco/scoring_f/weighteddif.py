@@ -31,16 +31,14 @@ class WeightedDif(Scoring):
         for p in range(len(self.settings['rc_pres'])):
             for t in range(len(self.settings['rc_temp'])):
                 sim_index: int = p*len(self.settings['rc_temp']) + t
-                n_tstep: int = len(self.settings['exp_profiles'][sim_index][0])
                 sim_prof: NDArray = sim.profiles[sim_index].T[2:]
                 exp_prof: NDArray = self.settings['exp_profiles'][sim_index][1:]
                 exp_errs: NDArray = self.settings['exp_errors'][sim_index][1:]
                 sp_weight: NDArray = self.settings['weights'][sim_index]
-                dif: NDArray = np.sum(
+                dif: NDArray = np.average(
                     np.abs(
-                        ((1 / n_tstep) * ((1/exp_errs)**2)) *
-                        (sim_prof - exp_prof)**2
-                        ),  # Normalize time
+                        ((exp_prof - sim_prof)**2)/(exp_errs**2)
+                        ),
                     axis=1
                     )
                 # Accumulate and normalize the x

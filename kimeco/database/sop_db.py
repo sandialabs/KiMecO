@@ -92,8 +92,8 @@ class SOP_DB(Kimeco_db):
         self._select = {}  # Clear the _select dictionary after processing
         return all_db_rslt
 
-    def batch_select_col(self,
-                         col) -> dict[int, list[list[Any]]]:
+    def batch_select_cols(self,
+                          cols: list[str]) -> list[tuple[Any]]:
         """Execute batch select requests stored in the _select dictionary.
 
         Returns:
@@ -104,8 +104,8 @@ class SOP_DB(Kimeco_db):
         all_db_rslt = []
         for table in self._select:
             row_ids = self._select[table]
-            query = select(
-                self.tables[table].c[col]
+            column_references = [self.tables[table].c[col] for col in cols]
+            query = select(*column_references).where(
                     ).where(
                         self.tables[table].c.id.in_(row_ids))
             with self.eng.begin() as conn:

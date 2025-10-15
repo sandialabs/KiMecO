@@ -88,7 +88,7 @@ class Element:
             float:
                 Sum of the score selected by the user with score_sp.
         """
-        return np.sum(self.scores)
+        return float(np.average(self.scores))
 
     def prepare_upsert(self,
                        db: Kimeco_db,

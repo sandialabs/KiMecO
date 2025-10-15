@@ -45,11 +45,12 @@ class NelderMead:
 
     @property
     def not_enough_dimensions(self) -> bool:
-        return self.new_parameters != 0
+        return set(self.new_parameters) == \
+            set(self.current_dimensions)
 
     def get_initial_simplex(self) -> NDArray:
         vertice_0 = np.array([
-            self.f_el.sop.parameters_names[p]
+            self.last_vertice.parameters_names[p]
             for p in self.current_dimensions
         ])
         return vertice_0
@@ -57,7 +58,10 @@ class NelderMead:
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization."""
         while self.not_enough_dimensions:
-            self.current_dimensions.extend(self.new_parameters)
+            self.current_dimensions = self.new_parameters
+            msg = "Current dimensions:\n"
+            msg += f'{self.current_dimensions}' + '\n'
+            self.klog.info(msg)
             self.new_parameters = []
             result = minimize(
                 fun=self.objective_function,
@@ -65,7 +69,9 @@ class NelderMead:
                 method='Nelder-Mead',
                 bounds=self.get_bounds(),
                 options={
+                    'xatol': 4.0,
                     'fatol': 4.0,
+                    'maxiter': 100,
                     'maxfev': 100,
                     'disp': True,
                     'adaptive': True}  # better performance in high D.
@@ -86,13 +92,12 @@ class NelderMead:
                 sensitivity.run()
                 self.new_parameters = [
                     p for p in sensitivity.selected
-                    if p not in self.current_dimensions
                                 ]
             else:
                 self.klog.error(f"Optimization failed: {result.message}")
                 raise RuntimeError("Nelder-Mead optimization failed.")
         msg: str = "\nDecreasing error for last minimization.\n"
-        msg += "Score accuracy: 0.002\n"
+        msg += "Score accuracy: 0.005\n"
 
         self.klog.info(msg)
         result = minimize(
@@ -101,9 +106,12 @@ class NelderMead:
             method='Nelder-Mead',
             bounds=self.get_bounds(),
             options={
-                'fatol': 0.002,
-                'disp': True,
-                'adaptive': True}  # better performance in high D.
+                    'xatol': 0.005,
+                    'fatol': 0.005,
+                    # 'maxiter': 100,
+                    # 'maxfev': 100,
+                    'disp': True,
+                    'adaptive': True}  # better performance in high D.
         )
         if result.success:
             self.klog.info(result.x)

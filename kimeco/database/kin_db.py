@@ -141,16 +141,18 @@ class KIN_DB(Kimeco_db):
         self._select[table][kin_id]['To'].append(To)
         self._select[table][kin_id]['From'].append(From)
 
-    def batch_select(self) -> dict[str, dict[int, NDArray]]:
+    def batch_select(self
+                     ) -> dict[str, dict[int, dict[tuple[float, float, str, str], NDArray]]]:
         """Execute batch select requests stored in the _select dictionary.
 
         Returns:
-            dict[str, dict[int, NDArray]]:
+            dict[str, dict[int, dict[tuple[float, float, str, str], NDArray]]]:
                 str: table name.
-                int: sim_id within this table.
-                NDArray: [rows, [sim_id, time, concentrations]]
+                int: kin_id within this table.
+                tuple: (p, t, from, to)
+                NDArray: db_row
         """
-        results: dict[dict[NDArray]] = {}
+        results: dict[str, dict[int, dict[tuple[float, float, str, str], NDArray]]] = {}
         for table in self._select:
             kin_ids = [kid for kid in self._select[table].keys()]
             tmp_pres = []
