@@ -5,6 +5,7 @@ from logging import DEBUG
 from kimeco.enums import Distrib
 from kimeco.enums import Ptype
 from kimeco.enums import FreqMode
+from kimeco.enums import RestartType
 
 
 mandatory_keys: dict[str, Any] = {
@@ -160,7 +161,7 @@ default_settings: dict[str, Any] = {
     # It is normalized so that the sum of the weights = number of species
     "w_species": {},
     # Restart modes, and treatment of existing tables/db
-    "restart": 'default',
+    "restart": RestartType.DEFAULT.value,
     # Number of elements per generation
     "n_elem": 500,
     # Value of score above which a generation won't converge

@@ -3,6 +3,7 @@ from typing import Any
 import os
 import glob
 from numpy.typing import NDArray
+from kimeco.enums import RestartType, ElementStatus
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
@@ -10,7 +11,7 @@ from kimeco.q_sys import QueueingSystem, JobStatus
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
-from kimeco.element import Element, ElementStatus
+from kimeco.element import Element
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.templates.sim_helper import sim_helper
 from logging import Logger
@@ -144,10 +145,14 @@ class CoreRun:
                         elif el.status == ElementStatus.SIM:
                             futures.append(
                                 exec.submit(self.recover_simulation_data, el))
+                    # Only accessed on restart if RestartType is RESCORE
+                        elif el.status == ElementStatus.RESCORE:
+                            futures.append(exec.submit(self.recalc_score, el))
                         elif el.status == ElementStatus.SCORING:
                             futures.append(exec.submit(self.calc_score, el))
                         if el.status == ElementStatus.TO_SAVE:
-                            futures.append(exec.submit(self.finalize_element, el))
+                            futures.append(
+                                exec.submit(self.finalize_element, el))
                     # Wait for all futures to complete
                     concurrent.futures.wait(futures)
             else:
@@ -166,6 +171,9 @@ class CoreRun:
                         self.run_simulation(el)
                     elif el.status == ElementStatus.SIM:
                         self.recover_simulation_data(el)
+                    # Only accessed on restart if RestartType is RESCORE
+                    elif el.status == ElementStatus.RESCORE:
+                        self.recalc_score(el)
                     elif el.status == ElementStatus.SCORING:
                         self.calc_score(el)
                     if el.status == ElementStatus.TO_SAVE:
@@ -187,7 +195,8 @@ class CoreRun:
         for file in glob.glob(f"{self.name}{el.name}*"):
             os.remove(file)
         self.elements[el.id].reset = rst + 1
-        self.timers[ElementStatus.RESET] += (time.time() - start_time)/len(self.elements)
+        self.timers[ElementStatus.RESET] += (
+            time.time() - start_time)
 
     def calculate_rate_coefficients(self, el: Element) -> None:
         """Calculate rate coefficients for an element."""
@@ -209,7 +218,7 @@ class CoreRun:
         elif el.rateCoef.status == JobStatus.FINISHED:
             el.save_kin(db=self.kin_db, table=self.name)
         self.timers[ElementStatus.SOP] += \
-            (time.time() - start_time)/len(self.elements)
+            (time.time() - start_time)
 
     def run_simulation(self,
                        el: Element) -> None:
@@ -229,7 +238,7 @@ class CoreRun:
         )
         el.sim.q_up()
         self.timers[ElementStatus.KIN] += \
-            (time.time() - start_time)/len(self.elements)
+            (time.time() - start_time)
         el.status = ElementStatus.SIM
 
     def recover_simulation_data(self,
@@ -249,16 +258,14 @@ class CoreRun:
         # If successful, do the request
         if el.sim.status == JobStatus.PICKED_UP or\
            el.sim.status == JobStatus.NOT_IN_QUEUE:
-            for prof in el.sim.profiles:
-                if prof is None:
-                    el.request_sim_profiles(sim_db=self.sim_db,
-                                            table=self.name)
-                    break
+            if any([prof is None for prof in el.sim.profiles]):
+                el.request_sim_profiles(sim_db=self.sim_db,
+                                        table=self.name)
         # Reset Element if simulation had an error
         elif el.sim.status == JobStatus.FAILED:
             el.status = ElementStatus.RESET
         self.timers[ElementStatus.SIM] += \
-            (time.time() - start_time)/len(self.elements)
+            (time.time() - start_time)
 
     def finalize_element(self,
                          el: Element) -> None:
@@ -270,7 +277,7 @@ class CoreRun:
         else:
             el.prepare_upsert(db=self.sop_db, table=self.name)
         self.timers[ElementStatus.TO_SAVE] += \
-            (time.time() - start_time)/len(self.elements)
+            (time.time() - start_time)
 
     def collect_sim_profiles(self) -> None:
         """Batch recovery of the concentration profiles to avoid
@@ -300,7 +307,13 @@ class CoreRun:
                 el.status = ElementStatus.SCORING
             collected.append(sim_id)
         if collected == to_collect:
-            self.timers['collecting_sim'] += (time.time() - start_time)/len(self.elements)
+            self.timers['collecting_sim'] += (
+                time.time() - start_time)
+            return
+        elif self.settings['restart_type'] == RestartType.RESCORE:
+            msg = f'Collected {len(collected)}/{len(to_collect)} sim profiles.'
+            msg += 'Waiting for the rest to be collected.'
+            self.klog.debug(msg)
             return
         # Some profiles are not saved in the database yet
         hlp_idx = -1
@@ -358,12 +371,12 @@ class CoreRun:
                     el.sim.q_up()
                 continue
         if len(self.sim_hlpers[hlp_idx]) == 0:
-            self.timers['collecting_sim'] += (time.time() - start_time)/len(self.elements)
+            self.timers['collecting_sim'] += (time.time() - start_time)
             return
 
         self.submit_helper(hlp_idx=hlp_idx,
                            filenames=filenames)
-        self.timers['collecting_sim'] += (time.time() - start_time)/len(self.elements)
+        self.timers['collecting_sim'] += (time.time() - start_time)
 
     def submit_helper(self,
                       hlp_idx: int,
@@ -404,6 +417,41 @@ class CoreRun:
             elif self.qs.status(i, 'hlp') == JobStatus.NOT_IN_QUEUE:
                 self.sim_hlpers[i] = []
 
+    def recalc_score(self,
+                     el: Element) -> None:
+        """Reload the simulated profiles from the db, and rescore them.
+        Save the new score by overwritting the old one.
+
+        Args:
+            el (Element): Element
+        """
+        el.rateCoef = RateCo(
+            sop=el.sop,
+            settings=self.settings,
+            software_tpl=self.rc_tpl,
+            id=el.id,
+            name=f'{self.name}{el.name}',
+            loc=f'{self.loc}/{self.name}',
+            q_sys=self.qs,
+            db=self.kin_db,
+            klog=self.klog
+        )
+        el.sim = SIM(
+            sop=el.sop,
+            kin=el.rateCoef,
+            id=el.id,
+            db=self.sim_db,
+            gen_name=self.name,
+            sc_species=self.sc_species,
+            loc=f'{self.loc}/{self.name}',
+            q_sys=self.qs,
+            set=self.settings,
+            klog=self.klog
+        )
+        if any([prof is None for prof in el.sim.profiles]):
+            el.request_sim_profiles(sim_db=self.sim_db,
+                                    table=self.name)
+
     def calc_score(self,
                    el: Element) -> None:
         """Calculate the score of the element
@@ -427,7 +475,7 @@ class CoreRun:
             el.status = ElementStatus.RESET
             self.klog.info(f'Resetting element {el.id}: error during scoring.')
         self.timers[ElementStatus.SCORING] += \
-            (time.time() - start_time)/len(self.elements)
+            (time.time() - start_time)
 
     @property
     def best_score(self) -> float:

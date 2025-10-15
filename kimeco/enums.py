@@ -5,10 +5,16 @@ class ElementStatus(Enum):
     SOP = 'sop'
     KIN = 'kin'
     SIM = 'sim'
+    RESCORE = 'rescore'
     SCORING = 'scoring'
     TO_SAVE = 'to_save'
     DONE = 'DONE'
     RESET = 'reset'
+
+
+class RestartType(Enum):
+    DEFAULT = 'default'
+    RESCORE = 'rescore'
 
 
 class Optimizers(Enum):

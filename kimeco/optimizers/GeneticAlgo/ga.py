@@ -3,7 +3,7 @@ from logging import Logger
 from typing import Any
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
-from kimeco.enums import ElementStatus, Pclass, Ptype
+from kimeco.enums import ElementStatus, Pclass, Ptype, RestartType
 from kimeco.generation import Generation
 from kimeco.parameters import SOP
 from kimeco.Perturbators.perturbator import Perturbator
@@ -218,15 +218,26 @@ class GeneticAlgorithm(ABC):
                     self.sop_db.get_table(table=f"G{next_gen_id:04d}")
                                         )
                 for e_id, row in zip(sop_ids, rows):
-                    next_elements.append(
-                        Element(
-                            sop=SOP.from_db_row(
-                                sop_tpl=self.f_el.sop,
-                                row=row[1:].tolist()
-                            ),
-                            id=e_id,
-                            gen=next_gen_id,
-                            status=ElementStatus.DONE.value))
+                    if self.settings['restart'] == RestartType.RESCORE.value:
+                        next_elements.append(
+                            Element(
+                                sop=SOP.from_db_row(
+                                    sop_tpl=self.f_el.sop,
+                                    row=row[1:].tolist()
+                                ),
+                                id=e_id,
+                                gen=next_gen_id,
+                                status=ElementStatus.RESCORE.value))
+                    else:
+                        next_elements.append(
+                            Element(
+                                sop=SOP.from_db_row(
+                                    sop_tpl=self.f_el.sop,
+                                    row=row[1:].tolist()
+                                ),
+                                id=e_id,
+                                gen=next_gen_id,
+                                status=ElementStatus.DONE.value))
             else:
                 if self.sop_db.table_exists(next_gen_name):
                     self.sop_db.wipe_table(next_gen_name)

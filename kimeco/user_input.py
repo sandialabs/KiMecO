@@ -11,7 +11,7 @@ from scipy.constants import gas_constant
 import cantera.with_units as ctu
 from logging import Logger
 from kimeco.enums import Distrib, Optimizers, Pclass, Ptype
-from kimeco.enums import FreqMode
+from kimeco.enums import FreqMode, RestartType
 
 
 ureg: ctu.UnitRegistry = ctu.cantera_units_registry
@@ -449,9 +449,12 @@ class KMOInput:
         if self.json_file['scoring_func'].casefold() not in implemented_sf:
             self.klog.info('Unknown scoring function. Check the spelling?')
             self.cancel_run = True
-        implemented_restart: list[str] = ['default', 'scratch']
-        if self.json_file['restart'].casefold() not in implemented_restart:
-            self.klog.info('Unknown restart mode. Check the spelling?')
+        if any([self.json_file['restart'].casefold() == rt.value
+                for rt in RestartType]):
+            self.json_file['restart'] = RestartType(
+                self.json_file['restart'].casefold())
+        else:
+            self.klog.warning(f"'restart' has unknown type.")
             self.cancel_run = True
 
     def full_run_settings(self) -> dict[str, Any]:
