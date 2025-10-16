@@ -45,6 +45,7 @@ class GeneticAlgorithm(ABC):
         self.sim_db: SIM_DB = sim_db
         self.f_el: Element = f_el
         self.input_tpl: list[str] = input_tpl
+        self.new_gen_has_been_created = False
         self.gen_0 = Generation(
             elements=[f_el],
             settings=settings,
@@ -177,6 +178,10 @@ class GeneticAlgorithm(ABC):
         Returns:
             bool: Wether it is finished
         """
+        # GA are sequential, if a new gen has been created,
+        # the next one cannot be restarted from DB
+        if self.new_gen_has_been_created:
+            return False
         gen_name: str = f"G{gen_id:04d}"
         if self.sop_db.table_exists(gen_name) and\
            self.kin_db.table_exists(gen_name) and\
@@ -264,6 +269,7 @@ class GeneticAlgorithm(ABC):
         else:
             self.klog.debug(
                 'Next generation not in DB. Creating it.')
+            self.new_gen_has_been_created = True
             if self.settings['restart'] == RestartType.RESCORE:
                 raise TypeError(
                     'Rescoring only but next generation not in DB.')
@@ -339,6 +345,7 @@ class GeneticAlgorithm(ABC):
         else:
             self.klog.debug(
                 'Next generation not in DB. Creating it.')
+            self.new_gen_has_been_created = True
             if self.settings['restart'] == RestartType.RESCORE:
                 raise TypeError(
                     'Rescoring only but next generation not in DB.')
