@@ -79,13 +79,12 @@ class GeneticAlgorithm(ABC):
     def converged(self) -> bool:
         if Generation.total() < 2:
             return False
-        elif any([goat.score > self.settings['max_score']
-                  for goat in self.goat]):
+        elif all([goat.score < self.settings['max_score']
+                  for goat in self.goat]) or all(
+                      [conv for conv in self.__converged.values()]):
+            return True
+        else:
             return False
-        for conv in self.__converged.values():
-            if not conv:
-                return False
-        return True
 
     def actualize_conv(self) -> None:
         """Actualize the convergence of the perturbed parameters
