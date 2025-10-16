@@ -39,7 +39,7 @@ class NelderMead:
         self.pert: Perturbator = pert
         self.klog: Logger = klog
         self.new_parameters: list[str] = self.settings['to_perturb']
-        self.current_dimensions: list[str] = []
+        self.current_dimensions: list[str] = self.settings['to_perturb']
         # Updated in objective function
         self.last_vertice: SOP = self.f_el.sop
 
