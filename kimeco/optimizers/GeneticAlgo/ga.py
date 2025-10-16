@@ -412,6 +412,10 @@ class GeneticAlgorithm(ABC):
 
     def run_sensitivity(self,
                         gen_id: int) -> None:
+        if self.new_gen_has_been_created is False:
+            restart = True
+        else:
+            restart = False
         if str(gen_id) in self.settings["SA_restart"]:
             selected = self.settings["SA_restart"][str(gen_id)]
         else:
@@ -422,7 +426,8 @@ class GeneticAlgorithm(ABC):
                 rc_tpl=self.input_tpl,
                 sf=self.sf,
                 pert=self.pert,
-                klog=self.klog)
+                klog=self.klog,
+                restart=restart)
             sensitivity.run()
             selected = sensitivity.selected
         new_params = [

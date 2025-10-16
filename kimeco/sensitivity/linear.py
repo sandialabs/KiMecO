@@ -28,7 +28,8 @@ class Linear(CoreRun):
                  rc_tpl: list[str],
                  sf: Scoring,
                  pert: Perturbator,
-                 klog: Logger
+                 klog: Logger,
+                 restart: bool = True
                  ) -> None:
         self.id: int = Linear.__id
         Linear.__id += 1
@@ -49,7 +50,7 @@ class Linear(CoreRun):
         self.sim_db = SIM_DB(sop=self.sop_tpl,
                              name='SA_DB_SIM',
                              path=self.settings['workdir'])
-        if self.SA_is_in_db():
+        if self.SA_is_in_db() and restart:
             self.klog.debug('SA is in DB. Reading results.')
             self.elements = self.get_elements_from_db()
             self.elements_from_db = True
