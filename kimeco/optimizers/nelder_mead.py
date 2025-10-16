@@ -76,7 +76,7 @@ class NelderMead:
                     'disp': True,
                     'adaptive': True}  # better performance in high D.
             )
-            if result.success:
+            if result.success or result.nfev >= 100:
                 self.klog.info(result.x)
                 msg = "Running SA to check if minimum is full-dimensional"
                 self.klog.info(msg)
@@ -90,13 +90,14 @@ class NelderMead:
                     pert=self.pert,
                     klog=self.klog)
                 sensitivity.run()
-                self.new_parameters = [
-                    p for p in sensitivity.selected
-                                ]
+                self.new_parameters = sensitivity.selected
+                self.klog.info(f"New dimensions: {self.new_parameters}")
             else:
                 self.klog.error(f"Optimization failed: {result.message}")
                 raise RuntimeError("Nelder-Mead optimization failed.")
-        msg: str = "\nDecreasing error for last minimization.\n"
+        else:
+            self.klog.info("The dimensionality has not changed.")
+        msg: str = "\nIncreasing accuracy for last minimization.\n"
         msg += "Score accuracy: 0.005\n"
 
         self.klog.info(msg)
