@@ -60,9 +60,6 @@ class Generation(CoreRun):
                  previous_el=previous_el,
                  name=f'G{self.id:04d}')
 
-        # Clean the SIM database
-        if not self.finished and self.sim_db.table_exists(self.name):
-            self.sim_db.wipe_table(self.name)
         if self.id % 10 == 0:
             self.sop_db.defragmentate()
             self.kin_db.defragmentate()

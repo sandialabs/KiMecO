@@ -307,14 +307,22 @@ class CoreRun:
                 el.status = ElementStatus.SCORING
             collected.append(sim_id)
         if collected == to_collect:
+            msg = 'Collected all requested sim profiles.'
+            self.klog.debug(msg)
             self.timers['collecting_sim'] += (
                 time.time() - start_time)
             return
-        elif self.settings['restart_type'] == RestartType.RESCORE:
+        elif self.settings['restart'] == RestartType.RESCORE:
             msg = f'Collected {len(collected)}/{len(to_collect)} sim profiles.'
-            msg += 'Waiting for the rest to be collected.'
+            msg += 'Waiting for the others from DB.'
             self.klog.debug(msg)
-            return
+            # Only True for Linear sensitivity analysis
+            if not hasattr(self, 'selected'):
+                return
+        else:
+            msg = f'Collected {len(collected)}/{len(to_collect)} sim profiles.'
+            msg += 'Requesting the others from helpers.'
+            self.klog.debug(msg)
         # Some profiles are not saved in the database yet
         hlp_idx = -1
         # Look if helpers are available

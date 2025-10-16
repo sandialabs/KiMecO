@@ -1,4 +1,4 @@
-from kimeco.enums import Distrib, Ptype
+from kimeco.enums import Distrib, Ptype, RestartType
 from typing import Any
 import numpy as np
 from numpy.typing import NDArray
@@ -50,9 +50,13 @@ class Linear(CoreRun):
                              name='SA_DB_SIM',
                              path=self.settings['workdir'])
         if self.SA_is_in_db():
+            self.klog.debug('SA is in DB. Reading results.')
             self.elements = self.get_elements_from_db()
             self.elements_from_db = True
         else:
+            if self.settings['restart'] == RestartType.RESCORE:
+                self.klog.warning(
+                    'Rescoring only but SA not in DB.')
             self.elements: list[Element] = self.prepare_elements(
                 elements=elements
                 )
@@ -69,8 +73,10 @@ class Linear(CoreRun):
             name=self.name,
             klog=self.klog)
         # Clean the SIM database
-        if not self.finished and self.sim_db.table_exists(self.name):
-            self.sim_db.wipe_table(self.name)
+        if self.sim_db.table_exists(self.name) and not self.finished:
+            if not self.settings['restart'] == RestartType.RESCORE:
+                self.sim_db.wipe_table(self.name)
+
         if self.id % 10 == 0:
             self.sop_db.defragmentate()
             self.kin_db.defragmentate()
@@ -153,19 +159,40 @@ class Linear(CoreRun):
                 # Create a new SOP object with the modified parameter
                 self.to_test.append(True)
         if len(sop_ids) == sum(self.to_test)+1:
+            self.klog.debug(
+                'SA restarted from DB')
+            if self.settings['restart'] == RestartType.RESCORE:
+                self.klog.debug(
+                    'Rescoring only, no new calculations will be done.')
             rows = np.array(
                 self.sop_db.get_table(table=self.name)
                                     )
             for e_id, row in zip(sop_ids, rows):
-                next_elements.append(
-                    Element(
-                        sop=SOP.from_db_row(
-                            sop_tpl=self.sop_tpl,
-                            row=row[1:].tolist()
-                        ),
-                        id=e_id,
-                        gen=self.id,
-                        status=ElementStatus.DONE.value))
+                if self.settings['restart'] == RestartType.RESCORE:
+                    next_elements.append(
+                        Element(
+                            sop=SOP.from_db_row(
+                                sop_tpl=self.sop_tpl,
+                                row=row[1:].tolist()
+                            ),
+                            id=e_id,
+                            gen=self.id,
+                            status=ElementStatus.RESCORE.value))
+                else:
+                    next_elements.append(
+                        Element(
+                            sop=SOP.from_db_row(
+                                sop_tpl=self.sop_tpl,
+                                row=row[1:].tolist()
+                            ),
+                            id=e_id,
+                            gen=self.id,
+                            status=ElementStatus.DONE.value))
+        else:
+            raise ValueError(
+                f'SA {self.name} in DB is incomplete. '
+                f'Found {len(sop_ids)} SOP but expected '
+                f'{sum(self.to_test)+1}.')
         return next_elements
 
     def average(self,

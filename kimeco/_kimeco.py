@@ -16,7 +16,7 @@ from kimeco.scoring_f.weighteddif import WeightedDif
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.sensitivity.linear import Linear
 from kimeco.element import Element
-from kimeco.enums import Optimizers
+from kimeco.enums import Optimizers, RestartType
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
 from kimeco.optimizers.nelder_mead import NelderMead
@@ -142,7 +142,9 @@ class KiMecO:
         self.sensitivity.run()  # Only actually run if necessary
         self.settings['to_perturb'] = self.sensitivity.selected
         self.f_el: Element = self.sensitivity.elements[0]
-        if not self.sensitivity.elements_from_db:
+        if not self.sensitivity.elements_from_db or \
+            (self.settings['restart'] == RestartType.RESCORE and
+             self.sensitivity.elements_from_db):
             self.sensitivity.save_initial_element(
                 sop_db=self.sop_db,
                 kin_db=self.kin_db,

@@ -453,6 +453,8 @@ class KMOInput:
                 for rt in RestartType]):
             self.json_file['restart'] = RestartType(
                 self.json_file['restart'].casefold())
+            self.klog.warning(
+                f"'restart' set to {self.json_file['restart'].value}")
         else:
             self.klog.warning(f"'restart' has unknown type.")
             self.cancel_run = True
@@ -472,6 +474,7 @@ class KMOInput:
         self.check_unknown_kwords()
         self.set_default_values()
         self.set_profiles()
+        self.other_checks_to_modif()
         if self.cancel_run:
             sys.exit(-1)
         self.json_file['init_loc'] = self.init_loc

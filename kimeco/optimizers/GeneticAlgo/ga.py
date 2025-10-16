@@ -213,12 +213,19 @@ class GeneticAlgorithm(ABC):
             sop_ids: list[Any] = self.sop_db.get_column(
                 table=next_gen_name,
                 column_name='id')
+            self.klog.debug(
+                f'Found {len(sop_ids)} elements for next generation in DB')
             if len(sop_ids) == self.settings['n_elem']-1:
+                self.klog.debug(
+                    'Generation restarted from DB')
+                if self.settings['restart'] == RestartType.RESCORE:
+                    self.klog.debug(
+                        'Rescoring only, no new calculations will be done.')
                 rows = np.array(
                     self.sop_db.get_table(table=f"G{next_gen_id:04d}")
                                         )
                 for e_id, row in zip(sop_ids, rows):
-                    if self.settings['restart'] == RestartType.RESCORE.value:
+                    if self.settings['restart'] == RestartType.RESCORE:
                         next_elements.append(
                             Element(
                                 sop=SOP.from_db_row(
@@ -239,6 +246,10 @@ class GeneticAlgorithm(ABC):
                                 gen=next_gen_id,
                                 status=ElementStatus.DONE.value))
             else:
+                self.klog.debug(
+                    f'n_elem requested but only {len(sop_ids)} found in DB.')
+                self.klog.debug(
+                    'Tables erased from DB and Genereation recreated.')
                 if self.sop_db.table_exists(next_gen_name):
                     self.sop_db.wipe_table(next_gen_name)
                 if self.kin_db.table_exists(next_gen_name):
@@ -252,6 +263,11 @@ class GeneticAlgorithm(ABC):
                         gen=next_gen_id)
                     for id in range(1, self.settings['n_elem'])])
         else:
+            self.klog.debug(
+                'Next generation not in DB. Creating it.')
+            if self.settings['restart'] == RestartType.RESCORE:
+                raise TypeError(
+                    'Rescoring only but next generation not in DB.')
             if self.sop_db.table_exists(next_gen_name):
                 self.sop_db.wipe_table(next_gen_name)
             if self.kin_db.table_exists(next_gen_name):
@@ -284,21 +300,37 @@ class GeneticAlgorithm(ABC):
             sop_ids: list[Any] = self.sop_db.get_column(
                 table=next_gen_name,
                 column_name='id')
+            self.klog.debug(
+                f'Found {len(sop_ids)} elements for next generation in DB')
             rows = np.array(
                 self.sop_db.get_table(table=f"G{next_gen_id:04d}")
                                     )
+            if self.settings['restart'] == RestartType.RESCORE:
+                self.klog.debug(
+                    'Rescoring only, no new calculations will be done.')
             for el_id in range(self.settings['n_elem']):
                 if el_id in sop_ids:
                     row = rows[rows[:, 0] == el_id][0]
-                    next_elements.append(
-                        Element(
-                            sop=SOP.from_db_row(
-                                sop_tpl=self.f_el.sop,
-                                row=row[1:].tolist()
-                            ),
-                            id=el_id,
-                            gen=next_gen_id,
-                            status=ElementStatus.DONE.value))
+                    if self.settings['restart'] == RestartType.RESCORE:
+                        next_elements.append(
+                            Element(
+                                sop=SOP.from_db_row(
+                                    sop_tpl=self.f_el.sop,
+                                    row=row[1:].tolist()
+                                ),
+                                id=el_id,
+                                gen=next_gen_id,
+                                status=ElementStatus.RESCORE.value))
+                    else:
+                        next_elements.append(
+                            Element(
+                                sop=SOP.from_db_row(
+                                    sop_tpl=self.f_el.sop,
+                                    row=row[1:].tolist()
+                                ),
+                                id=el_id,
+                                gen=next_gen_id,
+                                status=ElementStatus.DONE.value))
                 elif el_id in [el.id for el in gen.elements]:
                     el_index: int = [el.id for el in gen.elements].index(el_id)
                     next_elements.append(gen.elements[el_index])
@@ -306,6 +338,17 @@ class GeneticAlgorithm(ABC):
                     msg: str = f'Element {el_id} not found in db or prev. gen'
                     raise TypeError(msg)
         else:
+            self.klog.debug(
+                'Next generation not in DB. Creating it.')
+            if self.settings['restart'] == RestartType.RESCORE:
+                raise TypeError(
+                    'Rescoring only but next generation not in DB.')
+            if self.sop_db.table_exists(next_gen_name):
+                self.sop_db.wipe_table(next_gen_name)
+            if self.kin_db.table_exists(next_gen_name):
+                self.kin_db.wipe_table(next_gen_name)
+            if self.sim_db.table_exists(next_gen_name):
+                self.sim_db.wipe_table(next_gen_name)
             prev_elements, next_elements = self.create_next_gen(gen=gen)
         return prev_elements, next_elements
 
@@ -362,7 +405,7 @@ class GeneticAlgorithm(ABC):
             self.klog.info(f'Final score: {new_gen.best_score}')
 
     def run_sensitivity(self,
-                        gen_id: int):
+                        gen_id: int) -> None:
         if str(gen_id) in self.settings["SA_restart"]:
             selected = self.settings["SA_restart"][str(gen_id)]
         else:
