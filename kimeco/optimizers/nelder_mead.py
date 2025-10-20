@@ -57,7 +57,7 @@ class NelderMead:
 
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization."""
-        while self.not_enough_dimensions:
+        while self.not_enough_dimensions or result['fun'] > 9:
             self.current_dimensions = self.new_parameters
             msg = "Current dimensions:\n"
             msg += f'{self.current_dimensions}' + '\n'
