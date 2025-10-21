@@ -54,7 +54,6 @@ class NelderMead:
                 iter='ITERATION',
                 score='SCORE'))
 
-
     @property
     def not_enough_dimensions(self) -> bool:
         return set(self.new_parameters) == \

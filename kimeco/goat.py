@@ -31,7 +31,8 @@ class GOATs:
                  sop_db: SOP_DB,
                  kin_db: KIN_DB,
                  sim_db: SIM_DB,
-                 wdir: str = '.') -> None:
+                 wdir: str = '.',
+                 overwrite: bool = True) -> None:
         """Load GOATs from a file and keep references to databases.
 
         Args:
@@ -61,11 +62,12 @@ class GOATs:
         self.all_seen: Dict[Tuple[int, int], Element] = {}
 
         self.score_line_tpl = '{iter:>10}{best_score:>15}{score_avrg:>15}\n'
-        with open(self.wdir + '/score_info.txt', 'w') as f:
-            f.write(self.score_line_tpl.format(
-                    iter='ITER',
-                    best_score='BEST SCORE',
-                    score_avrg='GOAT AVERAGE'))
+        if overwrite:
+            with open(self.wdir + '/score_info.txt', 'w') as f:
+                f.write(self.score_line_tpl.format(
+                        iter='ITER',
+                        best_score='BEST SCORE',
+                        score_avrg='GOAT AVERAGE'))
 
     @classmethod
     def from_file(cls,
@@ -79,7 +81,11 @@ class GOATs:
         `generations` are populated. It does not populate `all_seen` (that
         is built dynamically by update_with_generation).
         """
-        inst = cls(sop_db=sop_db, kin_db=kin_db, sim_db=sim_db)
+        inst = cls(
+            sop_db=sop_db,
+            kin_db=kin_db,
+            sim_db=sim_db,
+            overwrite=False)
         inst.filename = filename
         gens: List[List[Tuple[int, int]]] = []
         try:
