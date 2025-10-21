@@ -30,7 +30,8 @@ class GOATs:
     def __init__(self,
                  sop_db: SOP_DB,
                  kin_db: KIN_DB,
-                 sim_db: SIM_DB) -> None:
+                 sim_db: SIM_DB,
+                 wdir: str = '.') -> None:
         """Load GOATs from a file and keep references to databases.
 
         Args:
@@ -46,16 +47,25 @@ class GOATs:
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
+        self.wdir: str = wdir
 
         # generations is a list where each index corresponds to a
         # generation number and stores a list of (gen_id, el_id) tuples
         # representing the GOAT elements for that generation.
         self.generations: List[List[Tuple[int, int]]] = []
+        self.scores: list[list[float]] = []
 
         # all_seen stores Element objects we've been given through
         # update_with_generation so we can compute the global bests.
         # Keyed by (gen, id) -> Element
         self.all_seen: Dict[Tuple[int, int], Element] = {}
+
+        self.score_line_tpl = '{iter:>10}{best_score:>15}{score_avrg:>15}\n'
+        with open(self.wdir + '/score_info.txt', 'w') as f:
+            f.write(self.score_line_tpl.format(
+                    iter='ITER',
+                    best_score='BEST SCORE',
+                    score_avrg='GOAT AVERAGE'))
 
     @classmethod
     def from_file(cls,
@@ -151,21 +161,22 @@ class GOATs:
         if not elements:
             return []
 
-        gen_id = max(el.gen for el in elements)
+        gen_id: int = max(el.gen for el in elements)
 
         # Add new elements to pool
         for el in elements:
             self.all_seen[(el.gen, el.id)] = el
 
         # Build candidate list from all seen elements up to this gen
-        candidates = [
+        candidates: List[Element] = [
             el
             for (g, _), el in self.all_seen.items()
             if g <= gen_id
         ]
 
         # Sort ascending by score (lower is better) and pick top N
-        chosen = sorted(candidates, key=lambda e: e.score)[:goat_length]
+        chosen: List[Element] = sorted(
+            candidates, key=lambda e: e.score)[:goat_length]
 
         # Ensure self.generations is long enough
         if len(self.generations) <= gen_id:
@@ -178,14 +189,22 @@ class GOATs:
         self.generations[gen_id] = [(el.gen, el.id) for el in chosen]
 
         # Persist full file (rewrite) to keep it consistent
-        with open(self.filename, 'w', encoding='utf-8') as fh:
+        with open(self.wdir + '/' + self.filename, 'w', encoding='utf-8') as f:
             for goats in self.generations:
                 if not goats:
-                    fh.write('\n')
+                    f.write('\n')
                     continue
                 line = ' '.join(f"{g}_{i}" for g, i in goats)
-                fh.write(line + '\n')
+                f.write(line + '\n')
 
+        best_score: float = min(el.score for el in chosen)
+        average_score = np.average([el.score for el in chosen])
+        with open(self.wdir + '/score_info.txt', 'a', encoding='utf-8') as f:
+            f.write(self.score_line_tpl.format(
+                iter=f"{gen_id:04d}",
+                best_score=f"{best_score:.3f}",
+                score_avrg=f"{average_score:.3f}"))
+        
         return chosen
 
     def get_rate_coefficients(

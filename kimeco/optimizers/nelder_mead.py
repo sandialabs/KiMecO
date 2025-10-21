@@ -7,6 +7,7 @@ from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
+from kimeco.goat import GOATs
 from kimeco.sensitivity.linear import Linear
 from kimeco.element import Element
 from kimeco.enums import ElementStatus, Ptype
@@ -40,8 +41,19 @@ class NelderMead:
         self.klog: Logger = klog
         self.new_parameters: list[str] = self.settings['to_perturb']
         self.current_dimensions: list[str] = self.settings['to_perturb']
+        self.wdir: str = self.settings['workdir']
         # Updated in objective function
         self.last_vertice: SOP = self.f_el.sop
+        self.iterations = GOATs(sop_db=sop_db,
+                                sim_db=sim_db,
+                                kin_db=kin_db,
+                                wdir=self.wdir)
+        self.score_line_tpl = '{iter:>10}{score:>15}\n'
+        with open(self.wdir + '/NM_scores.txt', 'w', encoding='utf-8') as f:
+            f.write(self.score_line_tpl.format(
+                iter='ITERATION',
+                score='SCORE'))
+
 
     @property
     def not_enough_dimensions(self) -> bool:
@@ -54,6 +66,45 @@ class NelderMead:
             for p in self.current_dimensions
         ])
         return vertice_0
+
+    def get_options(self) -> dict[str, Any]:
+        options = {'disp': True}
+        if self.settings['nm_fatol'] > 0.0:
+            self.klog.debug(
+                f"Setting Nelder-Mead fatol={self.settings['nm_fatol']}")
+            options['fatol'] = self.settings['nm_fatol']
+            self.klog.debug("Using adaptive Nelder-Mead")
+        if self.settings['nm_maxiter'] > 0:
+            self.klog.debug(
+                f"Setting Nelder-Mead maxiter={self.settings['nm_maxiter']}")
+            options['maxiter'] = self.settings['nm_maxiter']
+            self.klog.debug("Using adaptive Nelder-Mead")
+        if self.settings['nm_maxfev'] > 0:
+            self.klog.debug(
+                f"Setting Nelder-Mead maxfev={self.settings['nm_maxfev']}")
+            options['maxfev'] = self.settings['nm_maxfev']
+        if self.settings['nm_adaptive']:
+            self.klog.debug("Using adaptive Nelder-Mead")
+            options['adaptive'] = True
+            # better performance in high D.
+        return options
+
+    def update_iterations(self,
+                          last_vertice: Element) -> None:
+        """Keep track of the goat list in the goat file,
+        and and the associated score
+
+        Args:
+            new_els (list[Element]): last vertive
+        """
+        chosen: list[Element] = self.iterations.update_with_generation(
+            elements=[last_vertice],
+            goat_length=1
+        )
+        with open(self.wdir + '/NM_scores.txt', 'a', encoding='utf-8') as f:
+            f.write(self.score_line_tpl.format(
+                iter=last_vertice.gen,
+                score=f"{last_vertice.score:.3f}"))
 
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization."""
@@ -68,13 +119,7 @@ class NelderMead:
                 x0=self.get_initial_simplex(),
                 method='Nelder-Mead',
                 bounds=self.get_bounds(),
-                options={
-                    'xatol': 4.0,
-                    'fatol': 4.0,
-                    'maxiter': 100,
-                    'maxfev': 100,
-                    'disp': True,
-                    'adaptive': True}  # better performance in high D.
+                options=self.get_options()
             )
             if result.success or result.nfev >= 100:
                 self.klog.info(result.x)
@@ -193,6 +238,7 @@ class NelderMead:
                 )
         new_gen.run()
         self.print_stats(params=params)
+        self.update_iterations(last_vertice=new_gen.elements[0])
         return new_gen.elements[0].score
 
     def is_generation_finished(self,

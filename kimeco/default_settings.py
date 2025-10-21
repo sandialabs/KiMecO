@@ -40,6 +40,14 @@ default_settings: dict[str, Any] = {
     "log_level": DEBUG,
     # Type of optimizers
     "optimizer": "ga",
+    # Parameter for nelder-mead optimizer
+    "nm_fatol": 0.0,
+    # Parameter for nelder-mead optimizer
+    "nm_maxiter": 0,
+    # Parameter for nelder-mead optimizer
+    "nm_maxfev": 0,
+    # Parameter for nelder-mead optimizer
+    "nm_adaptive": False,
     # Type of genetic algorythm to use
     "ga_type": "tournament",
     # Length of the GOAT list

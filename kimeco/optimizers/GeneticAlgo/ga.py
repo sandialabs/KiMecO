@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from logging import Logger
-from typing import Any
+from typing import Any, List
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.enums import ElementStatus, Pclass, Ptype, RestartType
@@ -63,6 +63,7 @@ class GeneticAlgorithm(ABC):
                 sop_db=self.sop_db,
                 kin_db=self.kin_db,
                 sim_db=self.sim_db,
+                wdir=self.loc
             )
 
         self.goat: list[Element] = []
@@ -73,7 +74,7 @@ class GeneticAlgorithm(ABC):
         self.old_stds: dict[str, float] = {}
 
     @property
-    def goat_scores(self):
+    def goat_scores(self) -> list[float]:
         return [el.score for el in self.goat]
 
     @property
@@ -147,26 +148,26 @@ class GeneticAlgorithm(ABC):
                 status=status) + '\n'
         self.klog.info(msg)
 
-    def write_score_update(self,
-                           gen: Generation) -> None:
-        """Write the next line in score_info
+    # def write_score_update(self,
+    #                        gen: Generation) -> None:
+    #     """Write the next line in score_info
 
-        Args:
-            gen (Generation): next generation
-        """
-        score_line_tpl = '{gen_id:>10}{best_score:>15}{score_avrg:>15}\n'
-        if gen.id == 1:
-            with open(self.loc + '/score_info.txt', 'w') as f:
-                f.write(score_line_tpl.format(
-                        gen_id='GEN_ID',
-                        best_score='BEST SCORE',
-                        score_avrg='GOAT AVERAGE'))
-        goat_avrg = np.average([el.score for el in self.goat])
-        with open(self.loc + '/score_info.txt', 'a') as f:
-            f.write(score_line_tpl.format(
-                gen_id=f"G{gen.id:04d}",
-                best_score=f"{gen.best_score:.3f}",
-                score_avrg=f"{goat_avrg:.3f}"))
+    #     Args:
+    #         gen (Generation): next generation
+    #     """
+    #     score_line_tpl = '{gen_id:>10}{best_score:>15}{score_avrg:>15}\n'
+    #     if gen.id == 1:
+    #         with open(self.loc + '/score_info.txt', 'w') as f:
+    #             f.write(score_line_tpl.format(
+    #                     gen_id='GEN_ID',
+    #                     best_score='BEST SCORE',
+    #                     score_avrg='GOAT AVERAGE'))
+    #     goat_avrg = np.average([el.score for el in self.goat])
+    #     with open(self.loc + '/score_info.txt', 'a') as f:
+    #         f.write(score_line_tpl.format(
+    #             gen_id=f"G{gen.id:04d}",
+    #             best_score=f"{gen.best_score:.3f}",
+    #             score_avrg=f"{goat_avrg:.3f}"))
 
     def is_generation_finished(self,
                                gen_id: int) -> bool:
@@ -368,7 +369,7 @@ class GeneticAlgorithm(ABC):
             )
         # Actualize which parameter is converged
         self.actualize_conv()
-        self.write_score_update(gen=self.gen_0)
+        # self.write_score_update(gen=self.gen_0)
         prev_elements: dict[int, Element]
         new_elements: list[Element]
         prev_elements, new_elements = self.get_gen_one()
@@ -397,7 +398,7 @@ class GeneticAlgorithm(ABC):
                 )
             # Actualize which parameter is converged
             self.actualize_conv()
-            self.write_score_update(gen=new_gen)
+            # self.write_score_update(gen=new_gen)
             if new_gen.id > 1:
                 self.print_stats()
             if not self.converged:
@@ -447,7 +448,7 @@ class GeneticAlgorithm(ABC):
         # Delegate selection and persistence to the GOATs manager. The
         # GOATs instance will keep a global pool of seen elements and
         # return the chosen goat list for this generation.
-        chosen = self.goats.update_with_generation(
+        chosen: List[Element] = self.goats.update_with_generation(
             elements=new_els,
             goat_length=self.settings['goat_length']
         )
