@@ -66,26 +66,47 @@ class NelderMead:
         ])
         return vertice_0
 
-    def get_options(self) -> dict[str, Any]:
-        options = {'disp': True}
-        if self.settings['nm_fatol'] > 0.0:
-            self.klog.debug(
-                f"Setting Nelder-Mead fatol={self.settings['nm_fatol']}")
-            options['fatol'] = self.settings['nm_fatol']
-            self.klog.debug("Using adaptive Nelder-Mead")
-        if self.settings['nm_maxiter'] > 0:
-            self.klog.debug(
-                f"Setting Nelder-Mead maxiter={self.settings['nm_maxiter']}")
-            options['maxiter'] = self.settings['nm_maxiter']
-            self.klog.debug("Using adaptive Nelder-Mead")
-        if self.settings['nm_maxfev'] > 0:
-            self.klog.debug(
-                f"Setting Nelder-Mead maxfev={self.settings['nm_maxfev']}")
-            options['maxfev'] = self.settings['nm_maxfev']
-        if self.settings['nm_adaptive']:
-            self.klog.debug("Using adaptive Nelder-Mead")
-            options['adaptive'] = True
-            # better performance in high D.
+    def get_options(self,
+                    final: bool = False) -> dict[str, Any]:
+        options: dict[str, Any] = {'disp': True}
+        if not final:
+            if self.settings['nm_fatol'] > 0.0:
+                self.klog.debug(
+                    f"Setting Nelder-Mead fatol={self.settings['nm_fatol']}")
+                options['fatol'] = self.settings['nm_fatol']
+                self.klog.debug("Using adaptive Nelder-Mead")
+            if self.settings['nm_maxiter'] > 0:
+                self.klog.debug(
+                    f"Setting Nelder-Mead maxiter={self.settings['nm_maxiter']}")
+                options['maxiter'] = self.settings['nm_maxiter']
+                self.klog.debug("Using adaptive Nelder-Mead")
+            if self.settings['nm_maxfev'] > 0:
+                self.klog.debug(
+                    f"Setting Nelder-Mead maxfev={self.settings['nm_maxfev']}")
+                options['maxfev'] = self.settings['nm_maxfev']
+            if self.settings['nm_adaptive']:
+                self.klog.debug("Using adaptive Nelder-Mead")
+                options['adaptive'] = True
+                # better performance in high D.
+        else:
+            if self.settings['nm_final_fatol'] > 0.0:
+                self.klog.debug(
+                    f"Setting final Nelder-Mead fatol={self.settings['nm_final_fatol']}")
+                options['fatol'] = self.settings['nm_final_fatol']
+                self.klog.debug("Using adaptive Nelder-Mead")
+            if self.settings['nm_final_maxiter'] > 0:
+                self.klog.debug(
+                    f"Setting final Nelder-Mead maxiter={self.settings['nm_final_maxiter']}")
+                options['maxiter'] = self.settings['nm_final_maxiter']
+                self.klog.debug("Using adaptive Nelder-Mead")
+            if self.settings['nm_maxfev'] > 0:
+                self.klog.debug(
+                    f"Setting final Nelder-Mead maxfev={self.settings['nm_final_maxfev']}")
+                options['maxfev'] = self.settings['nm_final_maxfev']
+            if self.settings['nm_adaptive']:
+                self.klog.debug("Using adaptive for final Nelder-Mead")
+                options['adaptive'] = True
+                # better performance in high D.
         return options
 
     def update_iterations(self,
@@ -150,13 +171,7 @@ class NelderMead:
             x0=self.get_initial_simplex(),
             method='Nelder-Mead',
             bounds=self.get_bounds(),
-            options={
-                    'xatol': 0.005,
-                    'fatol': 0.005,
-                    # 'maxiter': 100,
-                    # 'maxfev': 100,
-                    'disp': True,
-                    'adaptive': True}  # better performance in high D.
+            options=self.get_options(final=True)
         )
         if result.success:
             self.klog.info(result.x)

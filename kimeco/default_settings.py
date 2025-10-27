@@ -48,6 +48,14 @@ default_settings: dict[str, Any] = {
     "nm_maxfev": 0,
     # Parameter for nelder-mead optimizer
     "nm_adaptive": False,
+    # Parameter for final nelder-mead optimizer
+    "nm_final_fatol": 0.0,
+    # Parameter for final nelder-mead optimizer
+    "nm_final_maxiter": 0,
+    # Parameter for final nelder-mead optimizer
+    "nm_final_maxfev": 0,
+    # Parameter for final nelder-mead optimizer
+    "nm_final_adaptive": False,
     # Type of genetic algorythm to use
     "ga_type": "tournament",
     # Length of the GOAT list

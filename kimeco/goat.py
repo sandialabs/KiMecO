@@ -91,11 +91,7 @@ class GOATs:
         try:
             with open(filename, "r", encoding="utf-8") as fh:
                 for lineno, raw in enumerate(fh):
-                    goat_str: str = raw.strip()
-                    if not goat_str:
-                        gens.append([])
-                        continue
-                    goat_list: List[str] = goat_str.split()
+                    goat_list: List[str] = raw.strip().split()
                     goats: List[Tuple[int, int]] = []
                     for el in goat_list:
                         try:
@@ -129,23 +125,43 @@ class GOATs:
         elements: List[Element] = []
         # Each entry in self.generations[generation_number] is a tuple
         # (gen_id, el_id)
+        gen_ids = []
+        el_ids = []
+        tables = {}
+
         for gen_id, el_id in self.generations[generation_number]:
             # Table name in DBs follows the pattern G{gen_id:04d}
             table: str = f"G{gen_id:04d}"
-            try:
-                # get_sop_row returns full row including id as first column
-                row = self.sop_db.get_sop_row(table=table, id=el_id)
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Failed to retrieve SOP row for {table} id {el_id}: {exc}"
-                ) from exc
+            if table not in tables:
+                tables[table] = []
+            tables[table].append(el_id)
+            gen_ids.append(gen_id)
+            el_ids.append(el_id)
 
+        # Prepare batch select for all required SOP rows
+        for table, ids in tables.items():
+            for el_id in ids:
+                self.sop_db.prepare_batch_select(table=table, row_id=el_id)
+
+        # Execute batch select
+        try:
+            rows: Dict[int, List[List[Any]]] = \
+                self.sop_db.batch_select_to_dict()
+        except Exception as exc:
+            raise RuntimeError(f"Failed to retrieve SOP rows: {exc}") from exc
+
+        # Map rows to Elements
+        for gen_id, el_id in zip(gen_ids, el_ids):
             # drop the id column and reconstruct SOP
-            # get_sop_row returns a list-like Row where the first entry is id
-            sop_vals = list(row)[1:]
+            table = np.array(rows[f'G{gen_id:04d}'])
+            row = table[table[:, 0] == el_id][:,1:]
+            if len(row) != 1:
+                msg = "Expected exactly one row for id "
+                msg += f"{el_id} in table G{gen_id:04d}, found {len(row)}"
+                raise ValueError(msg)
             sop_obj = self.sop_db.sop_tpl.__class__.from_db_row(
                 sop_tpl=self.sop_db.sop_tpl,
-                row=sop_vals
+                row=row[0]
             )
             el = Element(sop=sop_obj, id=el_id, gen=gen_id)
             elements.append(el)
@@ -210,7 +226,6 @@ class GOATs:
                 iter=f"{gen_id:04d}",
                 best_score=f"{best_score:.3f}",
                 score_avrg=f"{average_score:.3f}"))
-        
         return chosen
 
     def get_rate_coefficients(
