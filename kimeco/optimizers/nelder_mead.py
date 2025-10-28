@@ -451,7 +451,12 @@ class NelderMead:
                 previous_el={0: self.f_el}
                 )
         new_gen.run()
-        self.print_stats(params=params)
+        self.print_stats(
+            params=np.array([
+                self.get_absolute(
+                    param=p,
+                    value=params[self.current_dimensions.index(p)])
+                for p in self.current_dimensions]))
         self.update_iterations(last_vertice=new_gen.elements[0])
         return new_gen.elements[0].score
 
