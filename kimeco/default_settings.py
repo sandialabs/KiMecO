@@ -56,6 +56,9 @@ default_settings: dict[str, Any] = {
     "nm_final_maxfev": 0,
     # Parameter for final nelder-mead optimizer
     "nm_final_adaptive": False,
+    # Multiplicating factor for the derivative step used
+    # to create the initial simplex in NM
+    "nm_deriv_step_factor": 0.2,
     # Type of genetic algorythm to use
     "ga_type": "tournament",
     # Length of the GOAT list

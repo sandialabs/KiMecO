@@ -230,7 +230,7 @@ class Linear(CoreRun):
         step depending on the type of parameter.
 
         Args:
-            val (float): value of the parameter
+            uc (float): value of the uncertainty for this parameter
             param (str): full name of the parameter
             side (int): side of the derivative
 
@@ -268,7 +268,7 @@ class Linear(CoreRun):
 
         el_id = 0
         # direction of the derivative
-        for side in [1, -1]:
+        for side in (1, -1):
             # Iterate through the parameters
             for key in pn:
                 # Check if the parameter should be modified

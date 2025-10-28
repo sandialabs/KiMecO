@@ -58,6 +58,7 @@ class Perturbator:
         msg += tpl.format(param='PARAMETERS',
                           un_str='UNCERTAINTIES',
                           distrib='DISTRIBUTIONS')
+        distrib: str = ''
         for param, un in self.i_sop.uncertainties.items():
             pshort: str = param.split(dbs)[1]
             for ptype in Ptype:
@@ -71,7 +72,7 @@ class Perturbator:
 
     def get_boundaries(self,
                        ptype: str,
-                       i_val: float) -> list[float]:
+                       i_val: float) -> tuple[float, float]:
         """Get the appropriate boundaries for a given parameter.
 
         Args:
@@ -84,24 +85,26 @@ class Perturbator:
         Returns:
             list[float]: boundaries [lower, upper]
         """
-        bounds: list[float]
+        bounds: tuple[float, float]
         std_p: str = 'std_' + ptype
         if ptype in self.additive:
-            bounds = [i_val - self.settings[std_p] * self.settings['max_std'],
-                      i_val + self.settings[std_p] * self.settings['max_std']]
+            bounds = (i_val - self.settings[std_p] * self.settings['max_std'],
+                      i_val + self.settings[std_p] * self.settings['max_std'])
         elif ptype in self.percent:
-            bounds = [i_val - i_val
+            bounds = (i_val - i_val
                       * self.settings[std_p] * self.settings['max_std'],
                       i_val + i_val
-                      * self.settings[std_p] * self.settings['max_std']]
+                      * self.settings[std_p] * self.settings['max_std'])
         elif ptype in self.multiplicative:
-            bounds = [
+            bounds = (
                 i_val / (self.settings[std_p] * self.settings['max_std']),
-                i_val * (self.settings[std_p] * self.settings['max_std'])]
+                i_val * (self.settings[std_p] * self.settings['max_std']))
         else:
             raise NotImplementedError('Parameter not parametrised.')
         if ptype in self.zero_bound and min(bounds) < 0:
-            bounds[bounds.index(min(bounds))] = 0.0
+            tmp_b: list[float] = list(bounds)
+            tmp_b[bounds.index(min(bounds))] = 0.0
+            bounds: tuple[float, float] = (tmp_b[0], tmp_b[1])
         return bounds
 
     def within_boundaries(self,

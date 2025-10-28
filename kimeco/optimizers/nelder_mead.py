@@ -1,4 +1,5 @@
 from logging import Logger
+from re import I
 from typing import Any
 import numpy as np
 from scipy.optimize import minimize
@@ -10,11 +11,10 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.goat import GOATs
 from kimeco.sensitivity.linear import Linear
 from kimeco.element import Element
-from kimeco.enums import ElementStatus, Ptype
+from kimeco.enums import ElementStatus, Ptype, Pclass, Distrib
 from kimeco.parameters import SOP
 from kimeco.generation import Generation
 from kimeco.scoring_f.scoring import Scoring
-from kimeco.database.kimeco_db import dbs
 
 
 class NelderMead:
@@ -59,17 +59,195 @@ class NelderMead:
         return set(self.new_parameters) == \
             set(self.current_dimensions)
 
-    def get_initial_simplex(self) -> NDArray:
+    def get_initial_vertice(self) -> NDArray:
         vertice_0 = np.array([
-            self.last_vertice.parameters_names[p]
+            self.get_normalized(
+                parameter=p,
+                value=self.last_vertice.parameters_names[p])
             for p in self.current_dimensions
         ])
         return vertice_0
 
+    def get_initial_simplex(self) -> NDArray:
+        """Create the initial simplex depending on the uncertainties
+
+        Returns:
+            NDArray: Array of shape (n+1, n) with n the number of
+            dimensions. The first row is the initial vertice, and the
+            other rows are the initial vertice plus a step in each
+            dimension.
+        """
+        simplex = np.zeros(
+            (len(self.current_dimensions)+1, len(self.current_dimensions)))
+        for i in range(len(self.current_dimensions)+1):
+            if i == 0:
+                simplex[i] = np.array([
+                    self.get_normalized(
+                        parameter=p,
+                        value=self.last_vertice.parameters_names[p])
+                    for p in self.current_dimensions
+                ])
+            else:
+                dstep: float = self.calculate_dstep(
+                    uc=self.f_el.sop.uncertainties[self.current_dimensions[i-1]],
+                    param=self.current_dimensions[i-1],
+                    side=1)
+                simplex[i] = np.array([
+                    self.get_normalized(
+                        parameter=p,
+                        value=self.last_vertice.parameters_names[p])
+                    if p != self.current_dimensions[i-1]
+                    else self.get_normalized(
+                        parameter=p,
+                        value=self.last_vertice.parameters_names[p]
+                        + dstep)
+                    for p in self.current_dimensions
+                ])
+        return simplex
+
+    def calculate_dstep(self,
+                        uc: float,
+                        param: str,
+                        side: int) -> float:
+        """Calculate the size of the derivative
+        step depending on the type of parameter.
+
+        Args:
+            uc (float): uncertainty value for this parameter
+            param (str): full name of the parameter
+            side (int): side of the derivative
+
+        Returns:
+            float: derivative step
+        """
+        # Recognise type of parameter
+        ptype: Ptype = Ptype.WE
+        for ptype in Ptype:
+            if ptype.value in param:
+                break
+        scale: float = self.pert.get_scale(
+                ptype=ptype.value,
+                param=param
+            )
+        # Assymetric derivative for lognormal distribution
+        if self.pert.distribs[ptype] == Distrib.LOGNORMAL and side == -1:
+            dstep: float = scale/uc
+        else:
+            dstep = scale
+        return dstep * self.settings['nm_deriv_step_factor']
+
+    def get_normalized(self,
+                       parameter: str,
+                       value: float) -> float:
+        """Normalize the value to that it is centered
+        on 0 and normalized between bounds (-1, 1) for the
+        given parameter
+
+        Args:
+            parameter (str): parameter name, used to find the 0
+            value (float): value to normalize
+
+        Raises:
+            NotImplementedError: unknown parameter class
+
+        Returns:
+            float: the normalized value
+        """
+        bounds: tuple[float, float] = self.get_bound(parameter)
+        ptype = Ptype.WE
+        for pt in Ptype:
+            if pt.value in parameter:
+                ptype: Ptype = pt
+                break
+        pclass = Pclass.ADDITIVE
+        for pc in Pclass:
+            if ptype.value in pc.value:
+                pclass: Pclass = pc
+                break
+        if pclass == Pclass.ADDITIVE:
+            norm_param = (
+                value
+                - self.f_el.sop.parameters_names[parameter]) \
+                / abs(bounds[1] - self.f_el.sop.parameters_names[parameter])
+        elif pclass == Pclass.PERCENT:
+            norm_param = (
+                value
+                - self.f_el.sop.parameters_names[parameter]) \
+                / abs(bounds[1] - self.f_el.sop.parameters_names[parameter])
+        elif pclass == Pclass.MULTIPLICATIVE:
+            norm_param = (
+                value
+                - self.f_el.sop.parameters_names[parameter])
+            if norm_param < 0:
+                norm_param /= abs(
+                    self.f_el.sop.parameters_names[parameter] - bounds[0])
+            elif norm_param > 0:
+                norm_param /= abs(
+                    bounds[1] - self.f_el.sop.parameters_names[parameter])
+            else:
+                pass
+        else:
+            raise NotImplementedError(
+                f"Parameter class {pclass} not implemented.")
+        return norm_param
+
+    def get_absolute(self,
+                     param: str,
+                     value: float) -> float:
+        """Get absolute value from normalized value centered
+        on 0 and normalized between bounds (-1, 1) for the
+        given parameter
+
+        Args:
+            parameter (str): parameter name, used to find the 0
+            value (float): normalized value to back transform
+
+        Raises:
+            NotImplementedError: unknown parameter class
+
+        Returns:
+            float: the absolute value
+        """
+        bounds: tuple[float, float] = self.get_bound(param)
+        ptype = Ptype.WE
+        for pt in Ptype:
+            if pt.value in param:
+                ptype: Ptype = pt
+                break
+        pclass = Pclass.ADDITIVE
+        for pc in Pclass:
+            if ptype.value in pc.value:
+                pclass: Pclass = pc
+                break
+        if pclass == Pclass.ADDITIVE:
+            abs_param = value * \
+                abs(bounds[1] - self.f_el.sop.parameters_names[param])\
+                + self.f_el.sop.parameters_names[param]
+        elif pclass == Pclass.PERCENT:
+            abs_param = value * \
+                abs(bounds[1] - self.f_el.sop.parameters_names[param])\
+                + self.f_el.sop.parameters_names[param]
+        elif pclass == Pclass.MULTIPLICATIVE:
+            if value < 0:
+                abs_param = value * abs(
+                    self.f_el.sop.parameters_names[param] - bounds[0])\
+                    + self.f_el.sop.parameters_names[param]
+            elif value > 0:
+                abs_param = value * abs(
+                    bounds[1] - self.f_el.sop.parameters_names[param])\
+                    + self.f_el.sop.parameters_names[param]
+            else:
+                abs_param = self.f_el.sop.parameters_names[param]
+        else:
+            raise NotImplementedError(
+                f"Parameter class {pclass} not implemented.")
+        return abs_param
+
     def get_options(self,
-                    final: bool = False) -> dict[str, Any]:
+                    initial: bool = True) -> dict[str, Any]:
         options: dict[str, Any] = {'disp': True}
-        if not final:
+        if initial:
+            options['initial_simplex'] = self.get_initial_simplex()
             if self.settings['nm_fatol'] > 0.0:
                 self.klog.debug(
                     f"Setting Nelder-Mead fatol={self.settings['nm_fatol']}")
@@ -89,6 +267,7 @@ class NelderMead:
                 options['adaptive'] = True
                 # better performance in high D.
         else:
+            options['initial_simplex'] = self.restart_simplex()
             if self.settings['nm_final_fatol'] > 0.0:
                 self.klog.debug(
                     f"Setting final Nelder-Mead fatol={self.settings['nm_final_fatol']}")
@@ -109,6 +288,24 @@ class NelderMead:
                 # better performance in high D.
         return options
 
+    def restart_simplex(self) -> NDArray:
+        """Create a simplex from the best vertices encountered
+        in the previous iterations
+
+        Returns:
+            NDArray: 2D array of shape (n+1, n) with n the number of
+            dimensions. Each row corresponds to one of the best n+1
+            vertices.
+        """
+        simplex = np.zeros(
+            (len(self.current_dimensions)+1, len(self.current_dimensions)))
+        for i in range(len(self.current_dimensions)+1):
+            for j, p in enumerate(self.current_dimensions):
+                simplex[i][j] = self.get_normalized(
+                    parameter=p,
+                    value=self.latest_simplex[i].sop.parameters_names[p])
+        return simplex
+
     def update_iterations(self,
                           last_vertice: Element) -> None:
         """Keep track of the goat list in the goat file,
@@ -117,9 +314,9 @@ class NelderMead:
         Args:
             new_els (list[Element]): last vertive
         """
-        chosen: list[Element] = self.iterations.update_with_generation(
+        self.latest_simplex: list[Element] = self.iterations.update_with_generation(
             elements=[last_vertice],
-            goat_length=1
+            goat_length=len(self.current_dimensions) + 1
         )
         with open(self.wdir + '/NM_scores.txt', 'a', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
@@ -128,6 +325,7 @@ class NelderMead:
 
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization."""
+        initial = True
         while self.not_enough_dimensions or result['fun'] > 9:
             self.current_dimensions = self.new_parameters
             msg = "Current dimensions:\n"
@@ -136,11 +334,12 @@ class NelderMead:
             self.new_parameters = []
             result = minimize(
                 fun=self.objective_function,
-                x0=self.get_initial_simplex(),
+                x0=self.get_initial_vertice(),
                 method='Nelder-Mead',
-                bounds=self.get_bounds(),
-                options=self.get_options()
+                bounds=[(-1, 1) for _ in self.current_dimensions],
+                options=self.get_options(initial=initial)
             )
+            initial = False
             if result.success or result.nfev >= 100:
                 self.klog.info(result.x)
                 msg = "Running SA to check if minimum is full-dimensional"
@@ -163,15 +362,14 @@ class NelderMead:
         else:
             self.klog.info("The dimensionality has not changed.")
         msg: str = "\nIncreasing accuracy for last minimization.\n"
-        msg += "Score accuracy: 0.005\n"
 
         self.klog.info(msg)
         result = minimize(
             fun=self.objective_function,
-            x0=self.get_initial_simplex(),
+            x0=self.get_initial_vertice(),
             method='Nelder-Mead',
-            bounds=self.get_bounds(),
-            options=self.get_options(final=True)
+            bounds=[(-1,1) for _ in self.current_dimensions],
+            options=self.get_options(initial=False)
         )
         if result.success:
             self.klog.info(result.x)
@@ -183,8 +381,10 @@ class NelderMead:
                            params: NDArray) -> float:
         row = [
             v
-            if p not in self.settings['to_perturb']
-            else params[self.settings['to_perturb'].index(p)]
+            if p not in self.current_dimensions
+            else self.get_absolute(
+                param=p,
+                value=params[self.current_dimensions.index(p)])
             for p, v in self.f_el.sop.parameters_names.items()]
         # SOP from vertice
         self.last_vertice = SOP.from_db_row(
@@ -289,16 +489,28 @@ class NelderMead:
     def get_bounds(self):
         bounds = []
         for param in self.current_dimensions:
-            for ptype in Ptype:
-                if ptype.value in param.split(dbs)[1]:
-                    break
-            bounds.append(tuple(
-                self.pert.get_boundaries(
-                    ptype=ptype.value,
-                    i_val=self.f_el.sop.parameters_names[param]
-                ))
-            )
+            bounds.append(self.get_bound(param))
         return bounds
+
+    def get_bound(self,
+                  parameter: str) -> tuple[float, float]:
+        """Get the bounds for a given parameter
+
+        Args:
+            parameter (str): parameter in sop.parameters_names
+
+        Returns:
+            tuple[float, float]: absolute values of the bounds
+        """
+        pt = Ptype.WE
+        for ptype in Ptype:
+            if ptype.value in parameter:
+                pt: Ptype = ptype
+                break
+        return self.pert.get_boundaries(
+            ptype=pt.value,
+            i_val=self.f_el.sop.parameters_names[parameter]
+            )
 
     def print_stats(self,
                     params: NDArray) -> None:
