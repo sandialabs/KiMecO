@@ -44,13 +44,13 @@ class Pclass(Enum):
             Ptype.BE.value,
             Ptype.ETP.value}
     MULTIPLICATIVE = {
+            Ptype.IF.value,
             Ptype.SFC.value,
             Ptype.MRC.value,
             Ptype.BFC.value,
             Ptype.IFC.value
             }
     PERCENT = {
-            Ptype.IF.value,
             Ptype.HRS.value,
             Ptype.SIG.value,
             Ptype.EPSI.value,

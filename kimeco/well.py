@@ -67,28 +67,16 @@ class Well:
     @property
     def frequencies(self) -> NDArray[Any]:
         if self.freq_mode == FreqMode.BATCH:
-            return self._freq * self.bfc
+            if self.bfc == 1.0:
+                return self._freq
+            elif self.bfc < 1.0:
+                return self._freq / ((1 / self._freq) * (1 - self.bfc) * 100 + 1)
+            else:
+                return self._freq * ((1 / self._freq) * (self.bfc - 1) * 100 + 1)
         elif self.freq_mode == FreqMode.INDIVIDUAL:
             return self._freq * self.ifc
         else:
             raise AttributeError('Unknown FreqMode')
-        # freq = deepcopy(self._freq)
-
-        # if len(freq[self._freq <= 500.0]) > 0:
-        #     if self.lf_p >= 1:
-        #         freq[self._freq <= 500.0] *= \
-        #             (1 / freq[self._freq <= 500.0] * (self.lf_p - 1) * 100 + 1)
-        #     else:
-        #         freq[self._freq <= 500.0] /= \
-        #             (1 / freq[self._freq <= 500.0] * (1 - self.lf_p) * 100 + 1)
-        # if len(freq[self._freq > 500.0]) > 0:
-        #     if self.lf_p >= 1:
-        #         freq[self._freq > 500.0] *= \
-        #             (1 / freq[self._freq > 500.0] * (self.hf_p - 1) * 100 + 1)
-        #     else:
-        #         freq[self._freq > 500.0] /= \
-        #             (1 / freq[self._freq > 500.0] * (1 - self.hf_p) * 100 + 1)
-        # return freq
 
     @property
     def r_struct(self) -> str:

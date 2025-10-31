@@ -333,7 +333,7 @@ class NelderMead:
             initial = False
             if result.success or result.nfev >= 100:
                 self.klog.info(result.x)
-                msg = "Running SA to check if minimum is full-dimensional"
+                msg = "Running SA to check if centroid is full-dimensional"
                 self.klog.info(msg)
                 sensitivity = Linear(
                     elements=self.iterations.get_goat_for_gen(-1),
@@ -374,7 +374,7 @@ class NelderMead:
             else self.get_absolute(
                 param=p,
                 value=params[self.current_dimensions.index(p)])
-            for p, v in self.f_el.sop.parameters_names.items()]
+            for p, v in self.last_vertice.parameters_names.items()]
         # SOP from vertice
         self.last_vertice = SOP.from_db_row(
                 sop_tpl=self.f_el.sop,
