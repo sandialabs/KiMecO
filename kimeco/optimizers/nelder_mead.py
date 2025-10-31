@@ -1,5 +1,4 @@
 from logging import Logger
-from re import I
 from typing import Any
 import numpy as np
 from scipy.optimize import minimize
@@ -40,7 +39,7 @@ class NelderMead:
         self.pert: Perturbator = pert
         self.klog: Logger = klog
         self.new_parameters: list[str] = self.settings['to_perturb']
-        self.current_dimensions: list[str] = self.settings['to_perturb']
+        self.current_dimensions: list[str] = []
         self.wdir: str = self.settings['workdir']
         # Updated in objective function
         self.last_vertice: SOP = self.f_el.sop
@@ -55,8 +54,8 @@ class NelderMead:
                 score='SCORE'))
 
     @property
-    def not_enough_dimensions(self) -> bool:
-        return set(self.new_parameters) == \
+    def dimensionality_changed(self) -> bool:
+        return set(self.new_parameters) != \
             set(self.current_dimensions)
 
     def get_initial_vertice(self) -> NDArray:
@@ -134,7 +133,7 @@ class NelderMead:
             dstep: float = scale/uc
         else:
             dstep = scale
-        return dstep * self.settings['nm_deriv_step_factor']
+        return dstep * self.settings['nm_dstep']
 
     def get_normalized(self,
                        parameter: str,
@@ -175,17 +174,11 @@ class NelderMead:
                 - self.f_el.sop.parameters_names[parameter]) \
                 / abs(bounds[1] - self.f_el.sop.parameters_names[parameter])
         elif pclass == Pclass.MULTIPLICATIVE:
-            norm_param = (
-                value
-                - self.f_el.sop.parameters_names[parameter])
-            if norm_param < 0:
-                norm_param /= abs(
-                    self.f_el.sop.parameters_names[parameter] - bounds[0])
-            elif norm_param > 0:
-                norm_param /= abs(
-                    bounds[1] - self.f_el.sop.parameters_names[parameter])
-            else:
-                pass
+            norm_param: float = (
+                np.log(value) -
+                np.log(self.f_el.sop.parameters_names[parameter])) /\
+                (np.log(bounds[1]) -
+                 np.log(self.f_el.sop.parameters_names[parameter]))
         else:
             raise NotImplementedError(
                 f"Parameter class {pclass} not implemented.")
@@ -220,7 +213,7 @@ class NelderMead:
                 pclass: Pclass = pc
                 break
         if pclass == Pclass.ADDITIVE:
-            abs_param = value * \
+            abs_param: float = value * \
                 abs(bounds[1] - self.f_el.sop.parameters_names[param])\
                 + self.f_el.sop.parameters_names[param]
         elif pclass == Pclass.PERCENT:
@@ -228,16 +221,10 @@ class NelderMead:
                 abs(bounds[1] - self.f_el.sop.parameters_names[param])\
                 + self.f_el.sop.parameters_names[param]
         elif pclass == Pclass.MULTIPLICATIVE:
-            if value < 0:
-                abs_param = value * abs(
-                    self.f_el.sop.parameters_names[param] - bounds[0])\
-                    + self.f_el.sop.parameters_names[param]
-            elif value > 0:
-                abs_param = value * abs(
-                    bounds[1] - self.f_el.sop.parameters_names[param])\
-                    + self.f_el.sop.parameters_names[param]
-            else:
-                abs_param = self.f_el.sop.parameters_names[param]
+            abs_param = np.exp(
+                value * (np.log(bounds[1]) -
+                         np.log(self.f_el.sop.parameters_names[param])) +
+                np.log(self.f_el.sop.parameters_names[param]))
         else:
             raise NotImplementedError(
                 f"Parameter class {pclass} not implemented.")
@@ -248,16 +235,18 @@ class NelderMead:
         options: dict[str, Any] = {'disp': True}
         if initial:
             options['initial_simplex'] = self.get_initial_simplex()
-            if self.settings['nm_fatol'] > 0.0:
+            if self.settings['nm_fatol'] != 5e-3:
                 self.klog.debug(
                     f"Setting Nelder-Mead fatol={self.settings['nm_fatol']}")
                 options['fatol'] = self.settings['nm_fatol']
-                self.klog.debug("Using adaptive Nelder-Mead")
+            if self.settings['nm_xatol'] != 5e-3:
+                self.klog.debug(
+                    f"Setting Nelder-Mead fatol={self.settings['nm_xatol']}")
+                options['xatol'] = self.settings['nm_xatol']
             if self.settings['nm_maxiter'] > 0:
                 self.klog.debug(
                     f"Setting Nelder-Mead maxiter={self.settings['nm_maxiter']}")
                 options['maxiter'] = self.settings['nm_maxiter']
-                self.klog.debug("Using adaptive Nelder-Mead")
             if self.settings['nm_maxfev'] > 0:
                 self.klog.debug(
                     f"Setting Nelder-Mead maxfev={self.settings['nm_maxfev']}")
@@ -268,16 +257,18 @@ class NelderMead:
                 # better performance in high D.
         else:
             options['initial_simplex'] = self.restart_simplex()
-            if self.settings['nm_final_fatol'] > 0.0:
+            if self.settings['nm_final_fatol'] != 5e-3:
                 self.klog.debug(
                     f"Setting final Nelder-Mead fatol={self.settings['nm_final_fatol']}")
                 options['fatol'] = self.settings['nm_final_fatol']
-                self.klog.debug("Using adaptive Nelder-Mead")
+            if self.settings['nm_final_xatol'] != 5e-3:
+                self.klog.debug(
+                    f"Setting final Nelder-Mead fatol={self.settings['nm_final_xatol']}")
+                options['xatol'] = self.settings['nm_final_xatol']
             if self.settings['nm_final_maxiter'] > 0:
                 self.klog.debug(
                     f"Setting final Nelder-Mead maxiter={self.settings['nm_final_maxiter']}")
                 options['maxiter'] = self.settings['nm_final_maxiter']
-                self.klog.debug("Using adaptive Nelder-Mead")
             if self.settings['nm_maxfev'] > 0:
                 self.klog.debug(
                     f"Setting final Nelder-Mead maxfev={self.settings['nm_final_maxfev']}")
@@ -326,7 +317,7 @@ class NelderMead:
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization."""
         initial = True
-        while self.not_enough_dimensions or result['fun'] > 9:
+        while self.dimensionality_changed or result['fun'] > 9:
             self.current_dimensions = self.new_parameters
             msg = "Current dimensions:\n"
             msg += f'{self.current_dimensions}' + '\n'
@@ -345,9 +336,7 @@ class NelderMead:
                 msg = "Running SA to check if minimum is full-dimensional"
                 self.klog.info(msg)
                 sensitivity = Linear(
-                    elements=[Element(
-                        sop=self.last_vertice,
-                        id=0)],
+                    elements=self.iterations.get_goat_for_gen(-1),
                     settings=self.settings,
                     rc_tpl=self.input_tpl,
                     sf=self.sf,
@@ -368,7 +357,7 @@ class NelderMead:
             fun=self.objective_function,
             x0=self.get_initial_vertice(),
             method='Nelder-Mead',
-            bounds=[(-1,1) for _ in self.current_dimensions],
+            bounds=[(-1, 1) for _ in self.current_dimensions],
             options=self.get_options(initial=False)
         )
         if result.success:

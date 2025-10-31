@@ -119,6 +119,8 @@ class GOATs:
         SOP.from_db_row) and returns Element instances with proper ids and
         generation set.
         """
+        if generation_number == -1:
+            generation_number = len(self.generations) - 1
         if generation_number < 0 or generation_number >= len(self.generations):
             raise IndexError("Generation number out of range")
 

@@ -41,7 +41,9 @@ default_settings: dict[str, Any] = {
     # Type of optimizers
     "optimizer": "ga",
     # Parameter for nelder-mead optimizer
-    "nm_fatol": 0.0,
+    "nm_fatol": 1,
+    # Parameter for nelder-mead optimizer
+    "nm_xatol": 5e-1,
     # Parameter for nelder-mead optimizer
     "nm_maxiter": 0,
     # Parameter for nelder-mead optimizer
@@ -49,7 +51,9 @@ default_settings: dict[str, Any] = {
     # Parameter for nelder-mead optimizer
     "nm_adaptive": False,
     # Parameter for final nelder-mead optimizer
-    "nm_final_fatol": 0.0,
+    "nm_final_fatol": 5e-2,
+    # Parameter for final nelder-mead optimizer
+    "nm_final_xatol": 5e-3,
     # Parameter for final nelder-mead optimizer
     "nm_final_maxiter": 0,
     # Parameter for final nelder-mead optimizer
@@ -58,7 +62,7 @@ default_settings: dict[str, Any] = {
     "nm_final_adaptive": False,
     # Multiplicating factor for the derivative step used
     # to create the initial simplex in NM
-    "nm_deriv_step_factor": 0.2,
+    "nm_dstep": 0.5,
     # Type of genetic algorythm to use
     "ga_type": "tournament",
     # Length of the GOAT list
