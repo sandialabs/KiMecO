@@ -235,14 +235,12 @@ class NelderMead:
         options: dict[str, Any] = {'disp': True}
         if initial:
             options['initial_simplex'] = self.get_initial_simplex()
-            if self.settings['nm_fatol'] != 5e-3:
-                self.klog.debug(
-                    f"Setting Nelder-Mead fatol={self.settings['nm_fatol']}")
-                options['fatol'] = self.settings['nm_fatol']
-            if self.settings['nm_xatol'] != 5e-3:
-                self.klog.debug(
-                    f"Setting Nelder-Mead fatol={self.settings['nm_xatol']}")
-                options['xatol'] = self.settings['nm_xatol']
+            self.klog.debug(
+                f"Setting Nelder-Mead fatol={self.settings['nm_fatol']}")
+            options['fatol'] = self.settings['nm_fatol']
+            self.klog.debug(
+                f"Setting Nelder-Mead xatol={self.settings['nm_xatol']}")
+            options['xatol'] = self.settings['nm_xatol']
             if self.settings['nm_maxiter'] > 0:
                 self.klog.debug(
                     f"Setting Nelder-Mead maxiter={self.settings['nm_maxiter']}")
@@ -257,14 +255,12 @@ class NelderMead:
                 # better performance in high D.
         else:
             options['initial_simplex'] = self.restart_simplex()
-            if self.settings['nm_final_fatol'] != 5e-3:
-                self.klog.debug(
-                    f"Setting final Nelder-Mead fatol={self.settings['nm_final_fatol']}")
-                options['fatol'] = self.settings['nm_final_fatol']
-            if self.settings['nm_final_xatol'] != 5e-3:
-                self.klog.debug(
-                    f"Setting final Nelder-Mead fatol={self.settings['nm_final_xatol']}")
-                options['xatol'] = self.settings['nm_final_xatol']
+            self.klog.debug(
+                f"Setting final Nelder-Mead fatol={self.settings['nm_final_fatol']}")
+            options['fatol'] = self.settings['nm_final_fatol']
+            self.klog.debug(
+                f"Setting final Nelder-Mead xatol={self.settings['nm_final_xatol']}")
+            options['xatol'] = self.settings['nm_final_xatol']
             if self.settings['nm_final_maxiter'] > 0:
                 self.klog.debug(
                     f"Setting final Nelder-Mead maxiter={self.settings['nm_final_maxiter']}")
@@ -330,8 +326,7 @@ class NelderMead:
                 bounds=[(-1, 1) for _ in self.current_dimensions],
                 options=self.get_options(initial=initial)
             )
-            initial = False
-            if result.success or result.nfev >= 100:
+            if result.success:
                 self.klog.info(result.x)
                 msg = "Running SA to check if centroid is full-dimensional"
                 self.klog.info(msg)
@@ -350,6 +345,7 @@ class NelderMead:
                 raise RuntimeError("Nelder-Mead optimization failed.")
         else:
             self.klog.info("The dimensionality has not changed.")
+        initial = False
         msg: str = "\nIncreasing accuracy for last minimization.\n"
 
         self.klog.info(msg)

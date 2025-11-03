@@ -124,15 +124,16 @@ class RateCo:
         rows = []
         i = 0
         while not isfile(self.output_name):
+            time.sleep(2)
             if i == 10:
                 self.klog.info(f'{self.output_name} not found after 20s.')
+                i = 0
                 return rows
-            time.sleep(2)
             i += 1
         else:
             while not os.stat(self.output_name).st_size > 0:
                 time.sleep(2)
-        
+
         if self.software == 'mess':
             mor = MessOutputReader(filename=self.output_name,
                                    settings=self.set,

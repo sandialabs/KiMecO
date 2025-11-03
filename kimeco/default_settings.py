@@ -79,7 +79,7 @@ default_settings: dict[str, Any] = {
     # Values: name of the species in the mechanism file
     "ct_names": {},
     # CPU used per master equation job
-    "cpu_kin": 1,
+    "cpu_kin": 6,
     # Memory (Mb) used per master equation job
     "mem_kin": 1000,
     # CPU used per simulation job
@@ -149,7 +149,7 @@ default_settings: dict[str, Any] = {
     # RNG distribution for hindered rotors
     f"distrib_{Ptype.HRS.value}": f"{Distrib.NORMAL.value}",
     # RNG distribution for imaginary frequencies
-    f"distrib_{Ptype.IF.value}": f"{Distrib.NORMAL.value}",
+    f"distrib_{Ptype.IF.value}": f"{Distrib.LOGNORMAL.value}",
     # RNG distribution for energy transfer probability, factor
     f"distrib_{Ptype.ETF.value}": f"{Distrib.NORMAL.value}",
     # RNG distribution for energy transfer probability, exponent
