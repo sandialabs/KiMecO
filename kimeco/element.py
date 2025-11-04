@@ -15,7 +15,9 @@ class Element:
                  sop: SOP,
                  id: int,
                  gen: int = 0,
-                 status: str = ElementStatus.SOP.value) -> None:
+                 status: str = ElementStatus.SOP.value,
+                 pres: list[float] = [],
+                 temp: list[float] = []) -> None:
         """An element is part of a generation and has
         different attributes, such as an id and a status.
         It is mainly a container object.
@@ -29,10 +31,11 @@ class Element:
             gen (int): ID of the generation of origin
         """
         self.sop: SOP = sop
+        self.pres: list[float] = sop.pres
+        self.temp: list[float] = sop.temp
         self.gen: int = gen
         self.status: ElementStatus = ElementStatus(status)
         self.id: int = id
-        self.sop.id = self.id
         self.rateCoef: RateCo
         self.sim: SIM
         # Purely for debugging
@@ -121,8 +124,8 @@ class Element:
         start_idx = int(np.sum(all_tsteps[:sim_num]))
         tot_steps = int(all_tsteps[sim_num])
 
-        p: float = self.sop.rc_pres[sim_id // len(self.sop.rc_temp)]
-        t: float = self.sop.rc_temp[sim_id % len(self.sop.rc_temp)]
+        p: float = self.pres[sim_id // len(self.temp)]
+        t: float = self.temp[sim_id % len(self.temp)]
 
         to_watch: list[str] = self.sim.sc_species
         traces: dict[str, Any] = {}

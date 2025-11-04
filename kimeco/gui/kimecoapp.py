@@ -8,17 +8,12 @@ from kimeco.readers.mess_input import MessInputReader
 from logging import Logger, ERROR
 from kimeco.logger_config import setup_logger
 from kimeco.user_input import KMOInput
-from kimeco.scoring_f.weighteddif import WeightedDif
 from kimeco.parameters import SOP
-from kimeco.database.sop_db import SOP_DB
-from kimeco.database.kin_db import KIN_DB
-from kimeco.database.sim_db import SIM_DB
 from kimeco.goat import GOATs
 from kimeco.gui.sopsection import SOPSection
 from kimeco.gui.kinsection import KINSection
 from kimeco.gui.simsection import SIMSection
 from kimeco.gui.corsection import CORSection
-from kimeco.Perturbators.perturbator import Perturbator
 from kimeco import kimeco_path
 
 
@@ -67,7 +62,7 @@ class KimecoApp(KiMecO):
         self.kin_tot_g: int = len(self.kin_db.tables)
         self.sim_tot_g: int = len(self.sim_db.tables)
         # Construct GOATs object so GUI sections can request Element objects
-        goat_file = f"{self.settings['workdir']}/goat.txt"
+        goat_file: str = f"{self.settings['workdir']}/goat.txt"
         # Always construct GOATs from the same goat.txt used previously
         self.goats = GOATs.from_file(
             filename=goat_file,

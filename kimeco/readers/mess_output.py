@@ -17,8 +17,12 @@ class MessOutputReader:
         with open(file=filename, mode='r') as f:
             self.file: list[str] = f.readlines()
 
-        self.temp: list = settings["rc_temp"]
-        self.pres: list = settings["rc_pres"]
+        if settings['postprocess']:
+            self.temp: list = settings["pp_temp"]
+            self.pres: list = settings["pp_pres"]
+        else:
+            self.temp: list = settings["rc_temp"]
+            self.pres: list = settings["rc_pres"]
 
         self.species: list[str] = sop.wells_names
         self.species.extend(sop.bimols_names)

@@ -83,11 +83,16 @@ class KMOInput:
         self.klog.info(
             f"Pressure unit in input assumed in {self.json_file['pres_unit']}")
 
-    def create_initial_conditions(self) -> None:
+    def create_initial_conditions(self,
+                                  postprocess: bool = False) -> None:
         """Create the initial conditions for every experiments
         """
-        self.n_exp: int = \
-            len(self.json_file['rc_pres'])*len(self.json_file['rc_temp'])
+        if postprocess:
+            self.n_exp: int = \
+                len(self.json_file['pp_pres'])*len(self.json_file['pp_temp'])
+        else:
+            self.n_exp: int = \
+                len(self.json_file['rc_pres'])*len(self.json_file['rc_temp'])
         base_key = 'n2'
 
         if 'initial_X' in self.json_file:

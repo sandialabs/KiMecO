@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 import getpass
-from logging import DEBUG
+from logging import DEBUG, INFO
 from kimeco.enums import Distrib
 from kimeco.enums import Ptype
 from kimeco.enums import FreqMode
@@ -37,7 +37,7 @@ default_settings: dict[str, Any] = {
     # Name of the workdir folder
     "project_name": "KMO_Project",
     # Level of printing in the debugger
-    "log_level": DEBUG,
+    "log_level": INFO,
     # Type of optimizers
     "optimizer": "ga",
     # Parameter for nelder-mead optimizer
@@ -73,13 +73,17 @@ default_settings: dict[str, Any] = {
     "rc_temp": [],
     # List of pressures in Torr
     "rc_pres": [],
+    # List of temperatures in Kelvin
+    "pp_temp": [],
+    # List of pressures in Torr
+    "pp_pres": [],
     # User input unit of pressure
     "pres_unit": 'torr',
     # Keys: name of species in the initial mess file
     # Values: name of the species in the mechanism file
     "ct_names": {},
     # CPU used per master equation job
-    "cpu_kin": 6,
+    "cpu_kin": 1,
     # Memory (Mb) used per master equation job
     "mem_kin": 1000,
     # CPU used per simulation job

@@ -37,7 +37,6 @@ class KIN_DB(Kimeco_db):
                                     columns=self.columns,
                                     types=self.types)
 
-
     def get_kin_rc(self,
                    table: str,
                    From: str,

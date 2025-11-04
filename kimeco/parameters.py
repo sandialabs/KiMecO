@@ -26,8 +26,8 @@ class SOP:
         self.power: float
         self.factor: float
         self.sigmas: list[float] = []
-        self.rc_temp: list[float]
-        self.rc_pres: list[float]
+        self.temp: list[float]
+        self.pres: list[float]
         self.pres_unit: str
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
@@ -87,7 +87,7 @@ class SOP:
     @property
     def r_rc_temp(self) -> str:
         temps = ""
-        for temp in self.rc_temp:
+        for temp in self.temp:
             temps += f" {temp: 8.2f}"
         temps += '\n'
         return temps
@@ -95,7 +95,7 @@ class SOP:
     @property
     def r_rc_pres(self) -> str:
         press = ""
-        for pres in self.rc_pres:
+        for pres in self.pres:
             press += f" {pres: 8.2f}"
         press += '\n'
         return press

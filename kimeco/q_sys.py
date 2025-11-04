@@ -28,12 +28,12 @@ class JobStatus(Enum):
 class QueueingSystem:
     def __init__(self,
                  settings: dict[str, Any],
-                 nkin: int,
-                 nsim: int,
+                 nel: int,
                  nhlp: int,
                  klog: Logger,
                  q_type: str = 'slurm',
-                 q_name: str = 'day-long-cpu') -> None:
+                 q_name: str = 'day-long-cpu',
+                 ) -> None:
         """The queueing system is only meant to manage the number of jobs
         and the ressources used by the workflow. The run() method should
         only submit jobs to use a maximum of ressources. But it should not:
@@ -67,8 +67,7 @@ class QueueingSystem:
         self.mem_kin: int = self.settings['mem_kin']
         self.mem_sim: int = self.settings['mem_sim']
         self.current_user_jobs: int = 0
-        self.n_exp: int = \
-            len(self.settings['rc_temp']) * len(self.settings['rc_pres'])
+        self.n_exp: int = self.settings['n_exp']
 
         if q_type.casefold() == 'slurm':
             self.subtpl: str = slurmtpl
@@ -98,8 +97,8 @@ class QueueingSystem:
             ('mem', int32),
             ('type', str_, (3))])
 
-        self.kin_q: NDArray[Any] = np.empty(shape=(nkin), dtype=self.jobdata)
-        self.sim_q: NDArray[Any] = np.empty(shape=(nsim), dtype=self.jobdata)
+        self.kin_q: NDArray[Any] = np.empty(shape=(nel), dtype=self.jobdata)
+        self.sim_q: NDArray[Any] = np.empty(shape=(nel), dtype=self.jobdata)
         self.hlp_q: NDArray[Any] = np.empty(shape=(nhlp), dtype=self.jobdata)
         self.queues: list[NDArray] = [self.kin_q, self.sim_q, self.hlp_q]
         self.queues_order: list[str] = ['kin', 'sim', 'hlp']

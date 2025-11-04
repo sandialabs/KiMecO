@@ -27,7 +27,7 @@ class RateCo:
                  loc: str,
                  q_sys: QueueingSystem,
                  db: KIN_DB,
-                 klog: Logger
+                 klog: Logger,
                  ) -> None:
         self.klog: Logger = klog
         self.status: JobStatus = JobStatus.NOT_IN_QUEUE
@@ -36,7 +36,13 @@ class RateCo:
         self.software: str = settings['rc_software'].casefold()
         self.software_tpl: list[str] = software_tpl
         self.name: str = name
-        self.set: dict[str, Any] = settings
+        self.settings: dict[str, Any] = settings
+        if self.settings['postprocess']:
+            self.pres = self.settings['pp_pres']
+            self.temp = self.settings['pp_temp']
+        else:
+            self.pres = self.settings['rc_pres']
+            self.temp = self.settings['rc_temp']
         self.loc: str = loc + f'/{(self.id)//50:02d}'
         self.q_sys: QueueingSystem = q_sys
         self.db: KIN_DB = db
@@ -73,15 +79,15 @@ class RateCo:
         cols = self.db.get_col_names(table=table)
         row_ids: list[int] = [i for i in RangeIndex(
             start=(self.id *
-                   len(self.set['rc_pres']) *
-                   len(self.set['rc_temp']) *
+                   len(self.pres) *
+                   len(self.temp) *
                    len(cols[5:])),
             stop=(self.id *
-                  len(self.set['rc_pres']) *
-                  len(self.set['rc_temp']) *
+                  len(self.pres) *
+                  len(self.temp) *
                   len(cols[5:]) +
-                  len(self.set['rc_pres']) *
-                  len(self.set['rc_temp']) *
+                  len(self.pres) *
+                  len(self.temp) *
                   len(cols[5:])),
             step=1)]
         return db_row_ids == row_ids
@@ -93,14 +99,15 @@ class RateCo:
         if self.status in {
            JobStatus.NOT_IN_QUEUE,
            JobStatus.FAILED}:
-            cpu: int = self.set['cpu_kin']
-            mem: int = self.set['mem_kin']
+            cpu: int = self.settings['cpu_kin']
+            mem: int = self.settings['mem_kin']
             self.create_input()
-            self.q_sys.add_to_q(name=self.name,
-                                idx=self.id,
-                                location=self.loc,
-                                jtype='kin',
-                                ressources=(cpu, mem)
+            self.q_sys.add_to_q(
+                name=self.name,
+                idx=self.id,
+                location=self.loc,
+                jtype='kin',
+                ressources=(cpu, mem)
                                 )
 
     def create_input(self) -> None:
@@ -136,7 +143,7 @@ class RateCo:
 
         if self.software == 'mess':
             mor = MessOutputReader(filename=self.output_name,
-                                   settings=self.set,
+                                   settings=self.settings,
                                    sop=self.sop,
                                    klog=self.klog)
             mor.read()
@@ -165,11 +172,11 @@ class RateCo:
 
         row_id = int(
             self.id *
-            len(self.set['rc_pres']) *
-            len(self.set['rc_temp']) *
+            len(self.pres) *
+            len(self.temp) *
             len(names))
-        for pidx, p in enumerate(self.set['rc_pres']):
-            for tidx, t in enumerate(self.set['rc_temp']):
+        for pidx, p in enumerate(self.pres):
+            for tidx, t in enumerate(self.temp):
                 for From, specie in enumerate(names):
                     rows.append(
                         (row_id,

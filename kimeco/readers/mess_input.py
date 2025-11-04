@@ -13,7 +13,9 @@ import os
 class MessInputReader:
     """Class that read a mess input file and transforms it into
      an object with easily extractable data."""
-    def __init__(self, settings: dict) -> None:
+    def __init__(self,
+                 settings: dict,
+                 postprocess: bool = False) -> None:
         """Save the file content as a string for further manipulation
 
         Args:
@@ -25,8 +27,12 @@ class MessInputReader:
             settings["initial_mess"]
         self.SOP: SOP = SOP(score_species=settings['score_sp'],
                             freq_mode=settings['freq_mode'])
-        self.SOP.rc_temp = settings["rc_temp"]
-        self.SOP.rc_pres = settings["rc_pres"]
+        if postprocess:
+            self.SOP.temp = settings["pp_temp"]
+            self.SOP.pres = settings["pp_pres"]
+        else:
+            self.SOP.temp = settings["rc_temp"]
+            self.SOP.pres = settings["rc_pres"]
         self.SOP.ct_names = settings["ct_names"]
         self.SOP.pres_unit = settings["pres_unit"]
         self.files2copy: list[str] = []
@@ -348,7 +354,7 @@ class MessInputReader:
         Args:
             lnum (int): line number to read from in input file
         """
-        if self.SOP.rc_temp == []:
+        if self.SOP.temp == []:
             args: list[str] = self.file[lnum].split()
             temp_list: list = []
             arg_n = 1
@@ -358,7 +364,7 @@ class MessInputReader:
                                .isnumeric():
                 temp_list.append(float(args[arg_n]))
                 arg_n += 1
-            self.SOP.rc_temp = temp_list
+            self.SOP.temp = temp_list
 
     def save_pressures(self, lnum: int) -> None:
         """Save pressures to be used for RC calculation,
@@ -367,7 +373,7 @@ class MessInputReader:
         Args:
             lnum (int): line number to read from in input file
         """
-        if self.SOP.rc_pres == []:
+        if self.SOP.pres == []:
             args: list[str] = self.file[lnum].split()
             pres_list: list = []
             arg_n = 1
@@ -377,7 +383,7 @@ class MessInputReader:
                                .isnumeric():
                 pres_list.append(float(args[arg_n]))
                 arg_n += 1
-            self.SOP.rc_pres = pres_list
+            self.SOP.pres = pres_list
 
     def save_freq(self, name: str, lnum: int, nfreq: int) -> int:
         """Save the next frequencies encountered in Mess in

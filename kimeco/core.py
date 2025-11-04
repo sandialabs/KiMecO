@@ -48,7 +48,7 @@ class CoreRun:
         # Scoring function
         self.sf: Scoring = sf
         self.sim_hlpers = [
-            [] for i in range(self.settings['max_helpers'])
+            [] for _ in range(self.settings['max_helpers'])
             ]
 
         self.sop_db: SOP_DB = sop_db
@@ -59,13 +59,14 @@ class CoreRun:
             }
         self.timers['collecting_sim'] = 0.0
         self.create_tables()
+        self.pres: list[float] = settings["rc_pres"]
+        self.temp: list[float] = settings["rc_temp"]
+
         self.qs = QueueingSystem(
             settings=self.settings,
-            nkin=len(self.elements),
-            nsim=len(self.elements),
+            nel=len(self.elements),
             nhlp=self.settings['max_helpers'],
-            klog=self.klog
-            )
+            klog=self.klog)
         self.name = name
         self.clean_files()
         # Contain the time when a sim_id was first queried
@@ -286,8 +287,8 @@ class CoreRun:
         start_time: float = time.time()
         if len(self.sim_db._select) == 0:
             return
-        nsim: int = len(self.settings['rc_pres']) *\
-            len(self.settings['rc_temp'])
+        nsim: int = len(self.pres) *\
+            len(self.temp)
         collected: list[int] = []
         to_collect = self.sim_db._select[self.name]
         collecting: dict[str, dict[int, NDArray]] = self.sim_db.batch_select()
@@ -409,8 +410,8 @@ class CoreRun:
     def check_helpers_status(self) -> None:
         """Management of helpers status.
         """
-        nsim: int = len(self.settings['rc_pres']) *\
-            len(self.settings['rc_temp'])
+        nsim: int = len(self.pres) *\
+            len(self.temp)
         for i in range(len(self.sim_hlpers)):
             if self.qs.status(i, 'hlp') == JobStatus.FINISHED:
                 self.qs.pickUp(id=i,

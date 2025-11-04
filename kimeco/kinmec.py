@@ -15,7 +15,7 @@ class KiMec:
     def __init__(self,
                  file: str,
                  settings: dict[str, Any],
-                 sop_tpl: SOP) -> None:
+                 sop_tpl: SOP,) -> None:
         """Prepare the kinetic mechanism to be updated
         by MESS rate coefficients
 
@@ -28,6 +28,12 @@ class KiMec:
         self.settings: dict[str, Any] = settings
         self.SOP: SOP = sop_tpl
         self.file: str = file
+        if settings['postprocess']:
+            self.pres: list[float] = settings['pp_pres']
+            self.temp: list[float] = settings['pp_temp']
+        else:
+            self.pres: list[float] = settings['rc_pres']
+            self.temp: list[float] = settings['rc_temp']
         self.mech: ct.Solution = ct.Solution(file)
         self.ct_names: dict[str, str] = {
             ct: wf for wf, ct in settings['ct_names'].items()}
@@ -35,8 +41,8 @@ class KiMec:
         self.reactions = [rc for rc in self.mech.reactions()]
         # Create a yaml template for the rate coefficients of a reaction
         self.rc_tpl: str = ''
-        for pindex in range(len(self.settings["rc_pres"])):
-            for tindex in range(len(self.settings["rc_temp"])):
+        for pindex in range(len(self.pres)):
+            for tindex in range(len(self.temp)):
                 self.rc_tpl += f'rc_{pindex}_{tindex}: ' +\
                                 '{rates[' + f'{pindex}][{tindex}]' + '}' + '\n'
         self.new_reactions_tpls: dict[tuple[str, str], str] = {}
@@ -48,8 +54,8 @@ class KiMec:
         self.create_reactions_templates()
         # temporarily create reactions with 0 rate coefficients
         rc = np.zeros((
-            len(self.settings['rc_pres']),
-            len(self.settings['rc_temp']),
+            len(self.pres),
+            len(self.temp),
             1,
             1
         ))
