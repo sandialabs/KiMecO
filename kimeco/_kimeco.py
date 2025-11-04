@@ -51,7 +51,6 @@ class KiMecO:
         (self.init_SOP, self.input_tpl) = mr.read()
         self.init_SOP.set_uncertainties(settings=self.settings)
         self.first_sensi: bool = len(self.settings['to_perturb']) == 0
-        self.check_kinmech()
 
     def check_kinmech(self) -> None:
         kin_mech = KiMec(

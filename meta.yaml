@@ -12,3 +12,4 @@ build:
     entry_points:
         - kmo = kimeco.main:main
         - kmoui = kimeco.gui.kimecoapp:main
+        - kmopp = kimeco.postprocessing.postprocess:main

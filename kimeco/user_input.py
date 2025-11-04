@@ -487,6 +487,7 @@ class KMOInput:
             self.init_loc+self.json_file['project_name']
         self.json_file['input_file'] = self.input_file
         self.json_file['n_exp'] = self.n_exp
+        self.json_file['postprocess'] = False
 
         return self.json_file
 

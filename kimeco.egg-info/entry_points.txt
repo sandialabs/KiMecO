@@ -1,3 +1,4 @@
 [console_scripts]
 kmo = kimeco.main:main
+kmopp = kimeco.postprocessing.postprocess:main
 kmoui = kimeco.gui.kimecoapp:main
