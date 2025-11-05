@@ -3,6 +3,8 @@ import os
 from kimeco._kimeco import KiMecO
 from kimeco.database.kin_db import KIN_DB
 import time
+from kimeco.element import Element
+from kimeco.enums import ElementStatus
 from kimeco.goat import GOATs
 from kimeco.postprocessing.extrapolate import Extrapolate
 
@@ -17,14 +19,15 @@ class PostProcess(KiMecO):
             init_loc=init_loc,
             name=name)
         self.settings['postprocess'] = True
-        goat_file: str = f"{self.settings['workdir']}/goat.txt"
-        # Always construct GOATs from the same goat.txt used previously
-        self.goats: GOATs = GOATs.from_file(
-            filename=goat_file,
-            sop_db=self.sop_db,
-            kin_db=self.kin_db,
-            sim_db=self.sim_db,
+
+    def set_initial_sop(self) -> None:
+        """Overide parent method to link postprocess conditions
+        to the SOP
+        """
+        super().set_initial_sop(
+            postprocess=True
         )
+
 
     def initialize_databases(self) -> None:
         super().initialize_databases()
@@ -37,6 +40,19 @@ class PostProcess(KiMecO):
         msg = 'Extrapolation_DB initialized:'
         self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
 
+    def load_goats(self) -> None:
+        """Load the goat file from the run to create a
+        GOATs object for postprocessing.
+        """
+        goat_file: str = f"{self.settings['workdir']}/goats.txt"
+        # Always construct GOATs from the same goat.txt used previously
+        self.goats: GOATs = GOATs.from_file(
+            filename=goat_file,
+            sop_db=self.sop_db,
+            kin_db=self.kin_db,
+            sim_db=self.sim_db,
+        )
+
     def set_postprocessing(self) -> None:
         """Set parameters for postprocessing"""
         self.klog.info(f"{'Postprocessing parameters:':<65}")
@@ -45,8 +61,18 @@ class PostProcess(KiMecO):
         pu: str = f'{self.settings["pres_unit"]}'
         self.klog.info(
             f"{f'Pressures ({pu}):':<65}{str(self.settings['pp_pres']):>15}")
+        elements = []
+        prev_elements = {}
+        for idx, el in enumerate(self.goats.get_goat_for_gen(-1)):
+            elements.append(Element(
+                sop=el.sop,
+                id=idx,
+                gen=0,
+                status=ElementStatus.SOP.value
+            ))
+            prev_elements[idx] = el
         self.extrapolate = Extrapolate(
-            elements=self.goats.get_goat_for_gen(-1),
+            elements=elements,
             settings=self.settings,
             rc_tpl=self.input_tpl,
             sop_db=self.sop_db,
@@ -55,7 +81,7 @@ class PostProcess(KiMecO):
             sf=self.sf,
             pert=self.pert,
             klog=self.klog,
-            previous_el={}
+            previous_el=prev_elements
         )
 
 
@@ -84,5 +110,7 @@ def main() -> None:
     pp.initialize_databases()
     pp.set_scoring_function()
     pp.set_perturbator()
+    pp.load_goats()
     pp.set_postprocessing()
+    pp.extrapolate.run()
     

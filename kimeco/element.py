@@ -15,9 +15,7 @@ class Element:
                  sop: SOP,
                  id: int,
                  gen: int = 0,
-                 status: str = ElementStatus.SOP.value,
-                 pres: list[float] = [],
-                 temp: list[float] = []) -> None:
+                 status: str = ElementStatus.SOP.value) -> None:
         """An element is part of a generation and has
         different attributes, such as an id and a status.
         It is mainly a container object.

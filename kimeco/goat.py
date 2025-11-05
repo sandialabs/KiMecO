@@ -105,7 +105,9 @@ class GOATs:
                             ) from exc
                     gens.append(goats)
         except FileNotFoundError:
-            gens = []
+            raise FileNotFoundError(f"GOAT file '{filename}' not found")
+        except Exception as exc:
+            raise RuntimeError(f"Failed to read GOAT file '{filename}': {exc}")
         inst.generations = gens
         return inst
 

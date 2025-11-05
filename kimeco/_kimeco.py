@@ -45,12 +45,20 @@ class KiMecO:
         if not sim_job:
             self.klog.setLevel(self.settings['log_level'])
         self.klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
-        mr = MessInputReader(settings=self.settings)
         self.init_SOP: SOP
         self.input_tpl: list[str]
-        (self.init_SOP, self.input_tpl) = mr.read()
+        self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
         self.first_sensi: bool = len(self.settings['to_perturb']) == 0
+
+    def set_initial_sop(self,
+                        postprocess=False) -> None:
+        """Create the initial SOP with associated template
+        """
+        mr = MessInputReader(
+            settings=self.settings,
+            postprocess=postprocess)
+        (self.init_SOP, self.input_tpl) = mr.read()
 
     def check_kinmech(self) -> None:
         kin_mech = KiMec(

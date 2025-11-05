@@ -18,8 +18,8 @@ class MessOutputReader:
             self.file: list[str] = f.readlines()
 
         if settings['postprocess']:
-            self.temp: list = settings["pp_temp"]
-            self.pres: list = settings["pp_pres"]
+            self.temp: list[float] = settings["pp_temp"]
+            self.pres: list[float] = settings["pp_pres"]
         else:
             self.temp: list = settings["rc_temp"]
             self.pres: list = settings["rc_pres"]
