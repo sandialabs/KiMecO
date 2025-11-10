@@ -19,8 +19,15 @@ class Linear(CoreRun):
 
     @classmethod
     def total(cls) -> int:
-        """Return the total number of Generation instances."""
+        """Return the total number of
+        Linear sensitivity analysis instances."""
         return cls.__id
+
+    @classmethod
+    def reset(cls) -> None:
+        """Return the total number of
+        Linear sensitivity analysis instances."""
+        cls.__id = 0
 
     def __init__(self,
                  elements: list[Element],

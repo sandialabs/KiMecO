@@ -21,6 +21,7 @@ import concurrent.futures
 
 
 class CoreRun:
+
     def __init__(self,
                  elements: list[Element],
                  settings: dict[str, Any],

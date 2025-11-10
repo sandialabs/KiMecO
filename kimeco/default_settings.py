@@ -30,7 +30,7 @@ mandatory_keys: dict[str, Any] = {
     "exp_errors": []
                                   }
 
-now: str = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+now: str = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 default_settings: dict[str, Any] = {
     # Location of where the simulation will run
     "scratch_base": f"/scratch/{getpass.getuser()}/kmo/{now}/",

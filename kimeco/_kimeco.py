@@ -131,8 +131,10 @@ class KiMecO:
 
     def set_important_parameters(self) -> None:
         """Start with user specified parameters,
-        or run a first densitivity analysis
+        or run a first densitivity analysis.
         """
+        # User friendly for jupyter notebook use
+        Linear.reset()
         self.sensitivity = Linear(
             elements=[Element(
                 sop=self.init_SOP,

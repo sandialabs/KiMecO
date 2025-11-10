@@ -1,11 +1,13 @@
 import sys
 import os
+import numpy as np
 from kimeco._kimeco import KiMecO
 from kimeco.database.kin_db import KIN_DB
 import time
 from kimeco.element import Element
 from kimeco.enums import ElementStatus
 from kimeco.goat import GOATs
+from kimeco.parameters import SOP
 from kimeco.postprocessing.extrapolate import Extrapolate
 
 
@@ -20,14 +22,14 @@ class PostProcess(KiMecO):
             name=name)
         self.settings['postprocess'] = True
 
-    def set_initial_sop(self) -> None:
+    def set_initial_sop(self,
+                        postprocess=True) -> None:
         """Overide parent method to link postprocess conditions
         to the SOP
         """
         super().set_initial_sop(
-            postprocess=True
+            postprocess=postprocess
         )
-
 
     def initialize_databases(self) -> None:
         super().initialize_databases()
@@ -61,8 +63,30 @@ class PostProcess(KiMecO):
         pu: str = f'{self.settings["pres_unit"]}'
         self.klog.info(
             f"{f'Pressures ({pu}):':<65}{str(self.settings['pp_pres']):>15}")
+        rows = self.sop_db.get_table('G0001')
+        f_els = []
+        for idx, row in enumerate(rows):
+            f_els.append(
+                Element(
+                    sop=SOP.from_db_row(
+                        sop_tpl=self.init_SOP,
+                        row=np.asarray(row[1:]).tolist()
+                    ),
+                    id=idx,
+                    gen=1))
+        self.extrapolate_start = Extrapolate(
+            elements=f_els,
+            settings=self.settings,
+            rc_tpl=self.input_tpl,
+            sop_db=self.sop_db,
+            kin_db=self.pp_db,
+            sim_db=self.sim_db,
+            sf=self.sf,
+            pert=self.pert,
+            klog=self.klog
+        )
         elements = []
-        prev_elements = {}
+        # prev_elements = {}
         for idx, el in enumerate(self.goats.get_goat_for_gen(-1)):
             elements.append(Element(
                 sop=el.sop,
@@ -70,7 +94,7 @@ class PostProcess(KiMecO):
                 gen=0,
                 status=ElementStatus.SOP.value
             ))
-            prev_elements[idx] = el
+            # prev_elements[idx] = el
         self.extrapolate = Extrapolate(
             elements=elements,
             settings=self.settings,
@@ -80,8 +104,7 @@ class PostProcess(KiMecO):
             sim_db=self.sim_db,
             sf=self.sf,
             pert=self.pert,
-            klog=self.klog,
-            previous_el=prev_elements
+            klog=self.klog
         )
 
 
@@ -112,5 +135,6 @@ def main() -> None:
     pp.set_perturbator()
     pp.load_goats()
     pp.set_postprocessing()
+    pp.extrapolate_start.run()
     pp.extrapolate.run()
     

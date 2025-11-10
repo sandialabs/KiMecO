@@ -313,38 +313,38 @@ class NelderMead:
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization."""
         initial = True
-        while self.dimensionality_changed or result['fun'] > 9:
-            self.current_dimensions = self.new_parameters
-            msg = "Current dimensions:\n"
-            msg += f'{self.current_dimensions}' + '\n'
+        # while self.dimensionality_changed or result['fun'] > 9:
+        self.current_dimensions = self.new_parameters
+        msg = "Current dimensions:\n"
+        msg += f'{self.current_dimensions}' + '\n'
+        self.klog.info(msg)
+        self.new_parameters = []
+        result = minimize(
+            fun=self.objective_function,
+            x0=self.get_initial_vertice(),
+            method='Nelder-Mead',
+            bounds=[(-1, 1) for _ in self.current_dimensions],
+            options=self.get_options(initial=initial)
+        )
+        if result.success:
+            self.klog.info(result.x)
+            msg = "Running SA to check if centroid is full-dimensional"
             self.klog.info(msg)
-            self.new_parameters = []
-            result = minimize(
-                fun=self.objective_function,
-                x0=self.get_initial_vertice(),
-                method='Nelder-Mead',
-                bounds=[(-1, 1) for _ in self.current_dimensions],
-                options=self.get_options(initial=initial)
-            )
-            if result.success:
-                self.klog.info(result.x)
-                msg = "Running SA to check if centroid is full-dimensional"
-                self.klog.info(msg)
-                sensitivity = Linear(
-                    elements=self.iterations.get_goat_for_gen(-1),
-                    settings=self.settings,
-                    rc_tpl=self.input_tpl,
-                    sf=self.sf,
-                    pert=self.pert,
-                    klog=self.klog)
-                sensitivity.run()
-                self.new_parameters = sensitivity.selected
-                self.klog.info(f"New dimensions: {self.new_parameters}")
-            else:
-                self.klog.error(f"Optimization failed: {result.message}")
-                raise RuntimeError("Nelder-Mead optimization failed.")
+            sensitivity = Linear(
+                elements=self.iterations.get_goat_for_gen(-1),
+                settings=self.settings,
+                rc_tpl=self.input_tpl,
+                sf=self.sf,
+                pert=self.pert,
+                klog=self.klog)
+            sensitivity.run()
+            self.new_parameters = sensitivity.selected
+            self.klog.info(f"New dimensions: {self.new_parameters}")
         else:
-            self.klog.info("The dimensionality has not changed.")
+            self.klog.error(f"Optimization failed: {result.message}")
+            raise RuntimeError("Nelder-Mead optimization failed.")
+        # else:
+        #     self.klog.info("The dimensionality has not changed.")
         initial = False
         msg: str = "\nIncreasing accuracy for last minimization.\n"
 
@@ -354,7 +354,7 @@ class NelderMead:
             x0=self.get_initial_vertice(),
             method='Nelder-Mead',
             bounds=[(-1, 1) for _ in self.current_dimensions],
-            options=self.get_options(initial=False)
+            options=self.get_options(initial=initial)
         )
         if result.success:
             self.klog.info(result.x)

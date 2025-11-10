@@ -1,4 +1,6 @@
 from kimeco.parameters import SOP
+
+
 class MessWriter:
     """Object that writes a set of parameters into
     a Mess file input.
