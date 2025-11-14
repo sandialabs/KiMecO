@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Any
 import getpass
+import random
+import string
 from logging import DEBUG, INFO
 from kimeco.enums import Distrib
 from kimeco.enums import Ptype
@@ -31,9 +33,11 @@ mandatory_keys: dict[str, Any] = {
                                   }
 
 now: str = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+characters = string.ascii_letters + string.digits
+rng_name = ''.join(random.choice(characters) for _ in range(5))
 default_settings: dict[str, Any] = {
     # Location of where the simulation will run
-    "scratch_base": f"/scratch/{getpass.getuser()}/kmo/{now}/",
+    "scratch_base": f"/scratch/{getpass.getuser()}/kmo/{now}_{rng_name}/",
     # Name of the workdir folder
     "project_name": "KMO_Project",
     # Level of printing in the debugger

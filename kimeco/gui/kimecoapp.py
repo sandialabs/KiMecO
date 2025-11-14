@@ -43,7 +43,8 @@ class KimecoApp(KiMecO):
 
         self.species: list[str] = self.init_SOP.species
 
-        self.og_names: dict[str, str] = {v: k for k, v in self.settings['ct_names'].items()}
+        self.og_names: dict[str, str] = {
+            v: k for k, v in self.settings['ct_names'].items()}
         for ct_name, name in self.og_names.items():
             if name not in self.init_SOP.wells_names:
                 for bimol in self.init_SOP.bimolecular:
@@ -58,11 +59,8 @@ class KimecoApp(KiMecO):
     def initialize_databases(self) -> None:
         super().initialize_databases()
         self.init_vals = self.sop_db.get_table(table='G0000')[0]
-        self.sop_tot_g: int = len(self.sop_db.tables)
-        self.kin_tot_g: int = len(self.kin_db.tables)
-        self.sim_tot_g: int = len(self.sim_db.tables)
         # Construct GOATs object so GUI sections can request Element objects
-        goat_file: str = f"{self.settings['workdir']}/goat.txt"
+        goat_file: str = f"{self.settings['workdir']}/goats.txt"
         # Always construct GOATs from the same goat.txt used previously
         self.goats = GOATs.from_file(
             filename=goat_file,
@@ -70,6 +68,7 @@ class KimecoApp(KiMecO):
             kin_db=self.kin_db,
             sim_db=self.sim_db,
         )
+        self.n_gen: int = len(self.goats)
 
     def create_layout(self) -> None:
         self.app.layout = [
@@ -98,7 +97,7 @@ class KimecoApp(KiMecO):
                     html.H4('Number of generations.'),
                     dcc.Input(
                         min=1,
-                        max=self.sop_tot_g,
+                        max=self.n_gen,
                         type="number",
                         value=1,
                         placeholder="Number of generations",
@@ -108,14 +107,14 @@ class KimecoApp(KiMecO):
                     dcc.RangeSlider(
                         id='gen range slider',
                         min=0,
-                        max=self.sop_tot_g-1,
+                        max=self.n_gen-1,
                         step=1,
                         pushable=True,
                         value=[0],
                         marks={
                             0: 'Generation 0',
-                            self.sop_tot_g-1:
-                                f'Generation {self.sop_tot_g-1}'},
+                            self.n_gen-1:
+                                f'Generation {self.n_gen-1}'},
                         tooltip={
                             "always_visible": False,
                             "template": "Generation {value}"})
@@ -146,11 +145,11 @@ class KimecoApp(KiMecO):
                 list[int]: selected generations
             """
             while (len(selected_gen) != gen_num and
-                   len(selected_gen) < self.sop_tot_g and
+                   len(selected_gen) < self.n_gen and
                    len(selected_gen) >= 1):
 
                 if len(selected_gen) < gen_num:
-                    for i in range(self.sop_tot_g):
+                    for i in range(self.n_gen):
                         if i not in selected_gen:
                             selected_gen.append(i)
                             break

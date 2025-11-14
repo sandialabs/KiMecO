@@ -461,7 +461,7 @@ class KMOInput:
             self.klog.warning(
                 f"'restart' set to {self.json_file['restart'].value}")
         else:
-            self.klog.warning(f"'restart' has unknown type.")
+            self.klog.warning("'restart' has unknown type.")
             self.cancel_run = True
 
     def full_run_settings(self) -> dict[str, Any]:
