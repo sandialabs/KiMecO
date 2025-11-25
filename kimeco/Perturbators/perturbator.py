@@ -123,8 +123,9 @@ class Perturbator:
         Returns:
             bool: Wether or not within boundaries.
         """
-        boundaries: list[float] = self.get_boundaries(ptype=ptype,
-                                                      i_val=initial_val)
+        boundaries: tuple[float, float] = self.get_boundaries(
+            ptype=ptype,
+            i_val=initial_val)
         if perturbed_val > min(boundaries) and\
            perturbed_val < max(boundaries):
             return True
@@ -187,12 +188,14 @@ class Perturbator:
             float: the random number for requested parameter
         """
         if distrib == Distrib.UNIFORM:
-            bounds: list[float] = self.get_boundaries(ptype=ptype,
-                                                      i_val=i_val)
+            bounds: tuple[float, float] = self.get_boundaries(
+                ptype=ptype,
+                i_val=i_val)
             return float(np.random.uniform(low=bounds[0], high=bounds[1]))
         elif distrib == Distrib.LOGUNIFORM:
-            bounds: list[float] = self.get_boundaries(ptype=ptype,
-                                                      i_val=i_val)
+            bounds = self.get_boundaries(
+                ptype=ptype,
+                i_val=i_val)
             return float(np.exp(np.random.uniform(low=np.log(bounds[0]),
                                                   high=np.log(bounds[1]))))
         elif distrib == Distrib.NORMAL:
@@ -202,8 +205,9 @@ class Perturbator:
             return float(np.random.normal(loc=loc, scale=scale))
         elif distrib == Distrib.LOGNORMAL:
             # This shift is simply for negative values
-            bounds: list[float] = self.get_boundaries(ptype=ptype,
-                                                      i_val=i_val)
+            bounds = self.get_boundaries(
+                ptype=ptype,
+                i_val=i_val)
             # mean, sigma, shift = self.get_mean_sigma(
             #     param=param,
             #     ptype=ptype,
@@ -213,7 +217,8 @@ class Perturbator:
             loc: float = c_val
             scale: float = self.get_scale(param=param,
                                           ptype=ptype)
-            return float(np.exp(np.random.normal(loc=np.log(loc), scale=scale)))
+            return float(
+                np.exp(np.random.normal(loc=np.log(loc), scale=scale)))
         else:
             raise TypeError('Unknown Distribution in Perturbator')
 

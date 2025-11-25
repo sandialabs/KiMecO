@@ -82,7 +82,7 @@ class GeneticAlgorithm(ABC):
         if Generation.total() < 2:
             return False
         elif all([goat.score < self.settings['max_score']
-                  for goat in self.goat]) or all(
+                  for goat in self.goat]) and all(
                       [conv for conv in self.__converged.values()]):
             return True
         else:
@@ -147,27 +147,6 @@ class GeneticAlgorithm(ABC):
                 std=str_std,
                 status=status) + '\n'
         self.klog.info(msg)
-
-    # def write_score_update(self,
-    #                        gen: Generation) -> None:
-    #     """Write the next line in score_info
-
-    #     Args:
-    #         gen (Generation): next generation
-    #     """
-    #     score_line_tpl = '{gen_id:>10}{best_score:>15}{score_avrg:>15}\n'
-    #     if gen.id == 1:
-    #         with open(self.loc + '/score_info.txt', 'w') as f:
-    #             f.write(score_line_tpl.format(
-    #                     gen_id='GEN_ID',
-    #                     best_score='BEST SCORE',
-    #                     score_avrg='GOAT AVERAGE'))
-    #     goat_avrg = np.average([el.score for el in self.goat])
-    #     with open(self.loc + '/score_info.txt', 'a') as f:
-    #         f.write(score_line_tpl.format(
-    #             gen_id=f"G{gen.id:04d}",
-    #             best_score=f"{gen.best_score:.3f}",
-    #             score_avrg=f"{goat_avrg:.3f}"))
 
     def is_generation_finished(self,
                                gen_id: int) -> bool:

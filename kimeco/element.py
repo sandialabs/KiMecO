@@ -10,7 +10,6 @@ from kimeco.enums import ElementStatus
 
 
 class Element:
-
     def __init__(self,
                  sop: SOP,
                  id: int,
