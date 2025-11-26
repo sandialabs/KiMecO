@@ -13,10 +13,10 @@ class KIN_DB(Kimeco_db):
                  sop: SOP,
                  name: str,
                  path: str = '',
-                 thread: int = 1) -> None:
+                 threads: int = 1) -> None:
         super().__init__(name=name,
                          path=path,
-                         thread=thread)
+                         threads=threads)
 
         self.columns: list[str] = ['P', 'T', 'kin_id', 'specie']
         self.columns.extend(sop.wells_names)

@@ -19,50 +19,24 @@ class SIM:
                  loc: str,
                  q_sys: QueueingSystem,
                  set: dict[str, Any],
-                 klog: Logger  # ,
-                 #  reac_idx:  list[int] | None = None,
-                 #  species_sim: None | ct.Solution = None
+                 klog: Logger,
+                 thread_id: int = -1
                  ) -> None:
-        """Cantera simulation object.
-        Modify the cantera simulation provided by the user
-        depending on the set of parameters and the rate coefficiecients.
+        """Handles the simulations.
 
         Args:
-            sop (SOP): Set Of Parameters objects
-            kin (RateCo): Rate Constants object
-            ct_sim (str): Path to the YAML file provided by the user
-            ct_names (dict[str, str]): Key is name of species in worflow.
-                                       Value is name of species in mech file.
-            id (str): Base of each simulation's name
-            loc (str): In which folder to create the files.
-            species_sim (None | ct.Solution, optional):
-                Cantera solution object containing the mechanism + WF species.
-                Defaults to None.
-            reac_idx (None | list[int], optional):
-                List of indexes of reactions to replace in the mechanism.
-                Defaults to None.
-
-        Args:
-            sop (SOP): Set Of Parameters objects
-            kin (RateCo): Rate Constants object
-            ct_sim (str): Path to the YAML file provided by the user
-            ct_names (dict[str, str]): Key is name of species in worflow.
-                                       Value is name of species in mech file.
-            name (str): name of the simulation object
-            id (int):
-                Identifier of the simulation object.
-                Used to calculate the identifier of individual sim(P,T).
-            db (Kimeco_db): Kimeco SIM DB
-            loc (str): Where the files will be generated
-            q_sys (QueueingSystem): Kimeco Queuing system.
-            set (dict[str, Any]): Settings (JSON input file)
-            reac_idx (list[int] | None, optional):
-                Indexes of the reactions to change in the mechanism file.
-                Defaults to None.
-            species_sim (None | ct.Solution, optional):
-                Cantera object where the worflow species and
-                mechanism species are already combined.
-                Defaults to None.
+            sop (SOP): Set of Master equation parameters
+            kin (RateCo): Rate coefficients object
+            id (int): Identifier of the simulation
+            gen_name (str): Name of the generation
+            sc_species (list[str]): Species to score
+            db (SIM_DB): Simulation database
+            loc (str): Where to store the simulation files
+            q_sys (QueueingSystem): Queuing system
+            set (dict[str, Any]): Settings
+            klog (Logger): Logger
+            thread_id (int, optional):
+            Thread identifier. Used for nelder-mead multi-threading.
         """
         self.klog: Logger = klog
         self.status: JobStatus = JobStatus.NOT_IN_QUEUE
@@ -81,6 +55,10 @@ class SIM:
         self.db: SIM_DB = db
         self.profiles: list[NDArray | None] = [
             None] * len(set['exp_profiles'])
+        if thread_id == -1:
+            self.thread_id: int = self.id
+        else:
+            self.thread_id: int = thread_id
 
     def q_up(self) -> None:
         """Send job to the queuing system.
@@ -111,7 +89,7 @@ class SIM:
         with open(f'{self.loc}/{self.name}.py', 'w') as f:
             f.write(ct_job)
         self.q_sys.add_to_q(name=self.name,
-                            idx=self.id,
+                            idx=self.thread_id,
                             location=self.loc,
                             jtype='sim',
                             ressources=(cpu, mem))

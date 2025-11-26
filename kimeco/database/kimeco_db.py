@@ -33,7 +33,7 @@ class Kimeco_db:
     def __init__(self,
                  name: str,
                  path: str = '',
-                 thread: int = 1) -> None:
+                 threads: int = 1) -> None:
         """Class managing the information storage of KIMECO database.
         """
         self.name: str = name
@@ -44,9 +44,9 @@ class Kimeco_db:
         else:
             self.path: str = path
         self.eng: Engine = create_engine(f'sqlite:///{self.path}/{name}.db',
-                                         pool_size=thread,
+                                         pool_size=threads,
                                          max_overflow=0,
-                                         connect_args={'timeout': thread})
+                                         connect_args={'timeout': threads})
         if not database_exists(self.eng.url):
             create_database(self.eng.url)
         self.metadata = MetaData()

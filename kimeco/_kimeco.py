@@ -19,7 +19,7 @@ from kimeco.element import Element
 from kimeco.enums import Optimizers, RestartType
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
-from kimeco.optimizers.nelder_mead import NelderMead
+from optimizers.NelderMead.nelder_mead import NelderMead
 
 
 class KiMecO:
@@ -90,21 +90,21 @@ class KiMecO:
         start_time: float = time.time()
         self.sop_db = SOP_DB(sop=self.init_SOP,
                              name='KMO_DB_SOP',
-                             thread=self.settings['thread'],
+                             threads=self.settings['threads'],
                              path=self.settings['workdir'])
         sop_db_time: float = time.time() - start_time
         msg = 'SOP_DB initialized:'
         self.klog.info(f"{msg:<65}{sop_db_time:>15.1f}")
         self.kin_db = KIN_DB(sop=self.init_SOP,
                              name='KMO_DB_KIN',
-                             thread=self.settings['thread'],
+                             threads=self.settings['threads'],
                              path=self.settings['workdir'])
         kin_db_time: float = time.time() - start_time - sop_db_time
         msg = 'KIN_DB initialized:'
         self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
         self.sim_db = SIM_DB(sop=self.init_SOP,
                              name='KMO_DB_SIM',
-                             thread=self.settings['thread'],
+                             threads=self.settings['threads'],
                              path=self.settings['workdir'])
         sim_db_time: float = \
             time.time() - start_time - sop_db_time - kin_db_time

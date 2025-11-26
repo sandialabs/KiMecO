@@ -526,3 +526,19 @@ class NelderMead:
                 start=str_start,
                 current=str_current) + '\n'
         self.klog.info(msg)
+
+
+class GenerationForNM(Generation):
+    """Generation subclass that uses custom table names for NM instances."""
+    
+    def __init__(self, *args, name: str = None, **kwargs):
+        """Initialize with custom name (e.g., NM0000)."""
+        # Don't increment the global Generation counter
+        self.id = -1  # Placeholder
+        
+        # Call CoreRun init directly, bypassing Generation's counter logic
+        from kimeco.core import CoreRun
+        CoreRun.__init__(self, *args, name=name, **kwargs)
+        
+        # Override logger template
+        self.logger_tpl = '{message:<65}{number:>14.2f}'

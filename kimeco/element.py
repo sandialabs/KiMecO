@@ -39,6 +39,7 @@ class Element:
         self.reset: int = 0
         self.name: str = f'E{self.id:04d}'
         self.n_exp: int
+        self.thread_id: int
 
     def save_kin(self,
                  db: KIN_DB,

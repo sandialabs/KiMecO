@@ -10,10 +10,10 @@ class SOP_DB(Kimeco_db):
                  sop: SOP,
                  name: str,
                  path: str = '',
-                 thread: int = 1) -> None:
+                 threads: int = 1) -> None:
         super().__init__(name=name,
                          path=path,
-                         thread=thread)
+                         threads=threads)
 
         # Keep a reference to the SOP template used to build this DB
         # This allows other modules to reconstruct SOP objects from DB rows

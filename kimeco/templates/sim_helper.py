@@ -16,6 +16,7 @@ filenames = {filenames}
 
 collected = np.full(len(filenames), False)
 sims = [None for i in range(len(filenames))]
+tables = [None for i in range(len(filenames))]
 
 while not all(collected):
     for idx, fn in enumerate(filenames):
@@ -28,20 +29,21 @@ while not all(collected):
                     break
             with open(fn, 'r') as f:
                 sim = json.load(f)
+            tables[idx] = fn.split('/')[-1].split('E')[0]
             sims[idx] = sim
             collected[idx] = True
         # Helpers should not try to collect data from failed sims.
         else:
             raise FileNotFoundError(f'Could not find data for {{fn}}.')
 
-for sim in sims:
+for idxsim, sim in enumerate(sims):
     row_ids = sim['row_ids']
     sim.pop('row_ids', None)
     for idx, id in enumerate(row_ids):
         row_dict = {{}}
         for col in sim:
             row_dict[col] = sim[col][idx]
-        db.prepare_batch_upsert(table='{table}',
+        db.prepare_batch_upsert(table=tables[idxsim],
                                 id=id,
                                 values=row_dict)
 trying2connect = True

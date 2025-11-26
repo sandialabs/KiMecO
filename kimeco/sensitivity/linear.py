@@ -34,8 +34,8 @@ class Linear(CoreRun):
                  settings: dict[str, Any],
                  rc_tpl: list[str],
                  sf: Scoring,
-                 pert: Perturbator,
                  klog: Logger,
+                 pert: Perturbator | None = None,
                  restart: bool = True
                  ) -> None:
         self.id: int = Linear.__id
@@ -47,7 +47,7 @@ class Linear(CoreRun):
         self.selected: list[str] = []
         self.sop_tpl: SOP = elements[0].sop
         self.lin_fact: float = self.settings['sensi_d']
-        self.pert: Perturbator = pert
+        self.pert: Perturbator| None = pert
         self.sop_db = SOP_DB(sop=self.sop_tpl,
                              name='SA_DB_SOP',
                              path=self.settings['workdir'])

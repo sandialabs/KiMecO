@@ -28,6 +28,7 @@ class RateCo:
                  q_sys: QueueingSystem,
                  db: KIN_DB,
                  klog: Logger,
+                 thread_id: int = -1
                  ) -> None:
         self.klog: Logger = klog
         self.status: JobStatus = JobStatus.NOT_IN_QUEUE
@@ -51,6 +52,10 @@ class RateCo:
             self.output_name: str = f"{self.loc}/{self.name}.out"
         else:
             self.output_name = f"{self.loc}/{self.name}.out"
+        if thread_id >= 0:
+            self.thread_id: int = thread_id
+        else:
+            self.thread_id: int = self.id
 
     def set_status(self,
                    table: str) -> None:
@@ -104,7 +109,7 @@ class RateCo:
             self.create_input()
             self.q_sys.add_to_q(
                 name=self.name,
-                idx=self.id,
+                idx=self.thread_id,
                 location=self.loc,
                 jtype='kin',
                 ressources=(cpu, mem)

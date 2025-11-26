@@ -36,7 +36,7 @@ class PostProcess(KiMecO):
         start_time: float = time.time()
         self.pp_db = KIN_DB(sop=self.init_SOP,
                             name='PP_DB_KIN',
-                            thread=self.settings['thread'],
+                            threads=self.settings['threads'],
                             path=self.settings['workdir'])
         kin_db_time: float = time.time() - start_time
         msg = 'Extrapolation_DB initialized:'
