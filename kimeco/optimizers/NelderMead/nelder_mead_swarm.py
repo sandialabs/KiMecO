@@ -1,3 +1,4 @@
+import time
 from logging import Logger
 from typing import Any
 import os
@@ -7,6 +8,7 @@ from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
+from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.enums import ElementStatus
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.sensitivity.linear import Linear
@@ -30,7 +32,8 @@ class NelderMeadSwarm:
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
                  input_tpl: list[str],
-                 klog: Logger) -> None:
+                 klog: Logger,
+                 pert: Perturbator) -> None:
         """Initialize the NelderMeadSwarm.
         
         Args:
@@ -44,15 +47,18 @@ class NelderMeadSwarm:
             input_tpl: Rate constant template
             klog: Logger
         """
+        self.pert: Perturbator = pert
         self.elements: list[Element] = elements
         self.settings: dict[str, Any] = settings
         self.sf: Scoring = sf
-        self.sop_db: SOP_DB = sop_db
-        self.sim_db: SIM_DB = sim_db
-        self.kin_db: KIN_DB = kin_db
         self.input_tpl: list[str] = input_tpl
         self.klog: Logger = klog
         self.wdir: str = settings['workdir']
+        # Create swarm directory
+        self.swarm_dir: str = os.path.join(self.wdir, 'nm_swarm')
+        os.makedirs(self.swarm_dir, exist_ok=True)
+        os.chdir(self.swarm_dir)
+        self.initialize_databases()
         self.core = NMSRunner(
             settings=settings,
             sf=sf,
@@ -62,18 +68,48 @@ class NelderMeadSwarm:
             rc_tpl=input_tpl,
             klog=klog
         )
-
-        # Create swarm directory
-        self.swarm_dir = os.path.join(self.wdir, 'nm_swarm')
-        os.makedirs(self.swarm_dir, exist_ok=True)
-
-        # Determine dimensionality via sensitivity analysis on average element
+        # Determine dimensionality via sensitivity analysis
         self.dimensions: list[str] = []
         self.determine_dimensions()
 
         # Results storage
         self.nm_instances: list[NelderMeadInstance] = []
         self.results: list[dict[str, Any]] = []
+
+        # Determine number of workers
+        cpu_count: int = multiprocessing.cpu_count()
+        threads: int = self.settings['threads']
+        self.max_workers: int = min(cpu_count, threads)
+        self.klog.info(f"N-M Swarm with {len(self.elements)} instances")
+        self.klog.info(f"Using {self.max_workers} parallel workers" + '\n',
+                       f"(CPU count: {cpu_count}, threads limit: {threads})")
+
+    def initialize_databases(self) -> None:
+        """Create the three databases used by KiMecO
+        """
+        start_time: float = time.time()
+        self.sop_db = SOP_DB(sop=self.elements[0].sop,
+                             name='NMS_DB_SOP',
+                             threads=self.settings['threads'],
+                             path=self.swarm_dir)
+        sop_db_time: float = time.time() - start_time
+        msg = 'NMS_DB_SOP initialized:'
+        self.klog.info(f"{msg:<65}{sop_db_time:>15.1f}")
+        self.kin_db = KIN_DB(sop=self.elements[0].sop,
+                             name='NMS_DB_KIN',
+                             threads=self.settings['threads'],
+                             path=self.swarm_dir)
+        kin_db_time: float = time.time() - start_time - sop_db_time
+        msg = 'NMS_DB_KIN initialized:'
+        self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
+        self.sim_db = SIM_DB(sop=self.elements[0].sop,
+                             name='NMS_DB_SIM',
+                             threads=self.settings['threads'],
+                             path=self.swarm_dir)
+        sim_db_time: float = \
+            time.time() - start_time - sop_db_time - kin_db_time
+        msg = 'NMS_DB_SIM initialized:'
+        self.klog.info(f"{msg:<65}{sim_db_time:>15.1f}")
 
     def determine_dimensions(self) -> None:
         """Perform sensitivity analysis to determine dimensions.
@@ -101,76 +137,61 @@ class NelderMeadSwarm:
         Returns:
             List of best elements (one per NM instance)
         """
-        
-        # Determine number of workers
-        cpu_count = multiprocessing.cpu_count()
-        threads_limit = self.settings.get('threads', cpu_count)
-        max_workers = min(cpu_count, threads_limit)
-        
-        self.klog.info(f"Starting NelderMeadSwarm with {len(self.initial_elements)} instances")
-        self.klog.info(f"Using {max_workers} parallel workers (CPU count: {cpu_count}, threads limit: {threads_limit})")
         self.klog.info(f"Optimizing dimensions: {self.dimensions}")
-        
-        # Create per-NM subdirectories
-        for nm_id in range(len(self.initial_elements)):
-            nm_subdir = os.path.join(self.swarm_dir, f'NM{nm_id:04d}')
-            os.makedirs(nm_subdir, exist_ok=True)
-        
+
         # Launch parallel NM instances
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all tasks
             future_to_nm = {}
-            for nm_id, initial_el in enumerate(self.initial_elements):
+            for nm_id, el in enumerate(self.elements):
                 future = executor.submit(
                     self._run_single_nm,
                     nm_id=nm_id,
-                    initial_el=initial_el
+                    el=el
                 )
                 future_to_nm[future] = nm_id
-            
+
             # Collect results as they complete
             for future in concurrent.futures.as_completed(future_to_nm):
                 nm_id = future_to_nm[future]
                 try:
                     result = future.result()
                     self.results.append(result)
-                    self.klog.info(f"NelderMead {nm_id:04d} completed successfully")
+                    self.klog.info(
+                        f"NelderMead {nm_id:04d} completed successfully")
                 except Exception as exc:
-                    self.klog.error(f"NelderMead {nm_id:04d} failed with exception: {exc}")
+                    self.klog.error(
+                        f"NelderMead {nm_id:04d} failed with exception: {exc}")
                     self.results.append({
                         'nm_id': nm_id,
                         'success': False,
                         'error': str(exc),
                         'best_element': None
                     })
-        
-        # Write unified GOAT file
-        goat_file = os.path.join(self.swarm_dir, 'swarm_goats.txt')
-        self.registry.write_swarm_goat_file(goat_file)
-        
+
         # Return best elements
-        best_elements = [r.get('best_element') for r in self.results if r.get('success') and r.get('best_element')]
-        self.klog.info(f"NelderMeadSwarm completed: {len(best_elements)}/{len(self.initial_elements)} succeeded")
-        
+        best_elements: list[Element] = [
+            r['best_element'] for r in self.results if r['success']]
+        self.klog.info(
+            f"NM Swarm completed: {len(best_elements)}/{len(self.elements)}")
+
         return best_elements
-    
-    def _run_single_nm(self, nm_id: int, initial_el: Element) -> dict[str, Any]:
+
+    def _run_single_nm(self,
+                       nm_id: int,
+                       el: Element) -> dict[str, Any]:
         """Run a single Nelder-Mead optimization.
-        
+
         Args:
             nm_id: ID for this NM instance
             initial_el: Starting element
-            
+
         Returns:
             Dictionary with results
         """
-        
-        try:
-            # Create NM instance subdirectory
-            nm_subdir = os.path.join(self.swarm_dir, f'NM{nm_id:04d}')
-            
-            # Create instance
-            nm = NelderMeadInstance(
+
+        # Create instance
+        nm = NelderMeadInstance(
                 nm_id=nm_id,
                 settings=self.settings,
                 sf=self.sf,
@@ -178,33 +199,23 @@ class NelderMeadSwarm:
                 sop_db=self.sop_db,
                 sim_db=self.sim_db,
                 kin_db=self.kin_db,
-                f_el=initial_el,
+                f_el=el,
                 input_tpl=self.input_tpl,
                 klog=self.klog,
-                dimensions=self.dimensions,
-                nm_subdir=nm_subdir,
-                registry=self.registry
+                dimensions=self.dimensions,  # Will be set later
+                shared_core=self.core
             )
-            
-            # Run optimization
-            result_x = nm.run()
-            
-            # Register GOATs with registry
-            self.registry.register_nm_goats(nm_id, nm.iterations)
-            
-            # Get best element
-            best_el = nm.get_best_element()
-            
-            return {
-                'nm_id': nm_id,
-                'success': True,
-                'result_x': result_x,
-                'best_element': best_el,
-                'iterations': len(nm.iterations.generations)
-            }
-            
-        except Exception as exc:
-            self.klog.error(f"NelderMead {nm_id:04d} encountered error: {exc}")
-            import traceback
-            self.klog.error(traceback.format_exc())
-            raise
+
+        # Run optimization
+        result_x = nm.run()
+
+        # Get best element
+        best_el: Element = nm.get_best_element()
+
+        return {
+            'nm_id': nm_id,
+            'success': True,
+            'result_x': result_x,
+            'best_element': best_el,
+            'iterations': len(nm.iterations.generations)
+        }

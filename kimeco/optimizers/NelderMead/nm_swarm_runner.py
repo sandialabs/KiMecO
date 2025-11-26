@@ -186,7 +186,6 @@ class NMSRunner:
             self.check_helpers_status()
             self.collect_sim_profiles()
             self.qs.run()
-        self.elem_count -= 1
         self.thread_status[nm_el.thread_id] = ThreadStatus.IDLE
         self.klog.debug(
             f'Vertice {nm_el.id} in for NM {nm_el.gen} is done.')

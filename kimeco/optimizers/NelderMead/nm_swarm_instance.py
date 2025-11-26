@@ -12,6 +12,8 @@ from scipy.optimize import minimize
 from numpy.typing import NDArray
 from kimeco.parameters import SOP
 from kimeco.enums import ElementStatus
+from kimeco.optimizers.NelderMead.nm_swarm_runner import NMSRunner
+import numpy as np
 
 
 class NelderMeadInstance(NelderMead):
@@ -34,8 +36,7 @@ class NelderMeadInstance(NelderMead):
                  input_tpl: list[str],
                  klog: Logger,
                  dimensions: list[str],
-                 nm_subdir: str,
-                 registry: Any = None
+                 shared_core: NMSRunner
                  ) -> None:
         """Initialize NelderMeadInstance.
 
@@ -55,10 +56,8 @@ class NelderMeadInstance(NelderMead):
             registry: Optional SwarmRegistry for tracking elements
         """
         self.nm_id: int = nm_id
-        self.nm_subdir: str = nm_subdir
-        self.registry = registry
         self.element_counter = 0
-        self.fixed_dimensions: list[str] = dimensions
+        self.current_dimensions: list[str] = dimensions
 
         # Call parent init but override some behaviors
         super().__init__(
@@ -72,55 +71,23 @@ class NelderMeadInstance(NelderMead):
             input_tpl=input_tpl,
             klog=klog
         )
-
+        self.shared_core: NMSRunner = shared_core
         # Override name and working directory
-        self.name = f'NM{self.nm_id:04d}'
-        self.wdir = nm_subdir
-
-        # Override GOATs to use nm_subdir
-        self.iterations = GOATs(
-            sop_db=sop_db,
-            sim_db=sim_db,
-            kin_db=kin_db,
-            wdir=self.wdir
-        )
+        self.name: str = f'NM{self.nm_id:04d}'
 
         # Create instance-specific score file
-        self.score_file = f'{self.wdir}/NM_scores.txt'
+        self.score_file: str = \
+            f'{self.wdir}/nm_swarm/{self.name}_NM_scores.txt'
         with open(self.score_file, 'w', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
                 iter='ITERATION',
                 score='SCORE'))
 
-    @property
-    def dimensionality_changed(self) -> bool:
-        """For swarm instances, dimensions are fixed."""
-        return False
-
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization with fixed dimensions."""
         # Use fixed dimensions (no sensitivity analysis)
-        self.current_dimensions = self.fixed_dimensions
-        self.new_parameters = []
-
-        msg = f"NM{self.nm_id:04d} dimensions: {self.current_dimensions}\n"
-        self.klog.info(msg)
 
         # Run initial optimization
-        result = minimize(
-            fun=self.objective_function,
-            x0=self.get_initial_vertice(),
-            method='Nelder-Mead',
-            bounds=[(-1, 1) for _ in self.current_dimensions],
-            options=self.get_options(initial=True)
-        )
-
-        if not result.success:
-            self.klog.error(f"NM{self.nm_id:04d} optimization failed: {result.message}")
-            raise RuntimeError(f"Nelder-Mead {self.nm_id} optimization failed.")
-
-        # Run refined optimization
-        self.klog.info(f"NM{self.nm_id:04d}: Increasing accuracy for final minimization")
         result = minimize(
             fun=self.objective_function,
             x0=self.get_initial_vertice(),
@@ -130,11 +97,11 @@ class NelderMeadInstance(NelderMead):
         )
 
         if result.success:
-            self.klog.info(f"NM{self.nm_id:04d} optimization completed successfully")
-            self.klog.info(f"NM{self.nm_id:04d} final parameters: {result.x}")
+            self.klog.debug(f"NM{self.nm_id:04d} optimization completed")
+            self.klog.debug(f"NM{self.nm_id:04d} final parameters: {result.x}")
         else:
-            self.klog.error(f"NM{self.nm_id:04d} final optimization failed: {result.message}")
-            raise RuntimeError(f"Nelder-Mead {self.nm_id} final optimization failed.")
+            self.klog.error(
+                f"NM{self.nm_id:04d} optimization failed: {result.message}")
 
         return result.x
 
@@ -205,27 +172,11 @@ class NelderMeadInstance(NelderMead):
                 gen=self.nm_id)
 
         # Create a generation-like run but with NM table names
-        new_gen = GenerationForNM(
-            elements=[vertice],
-            settings=self.settings,
-            rc_tpl=self.input_tpl,
-            sop_db=self.sop_db,
-            kin_db=self.kin_db,
-            sim_db=self.sim_db,
-            sf=self.sf,
-            pert=self.pert,
-            klog=self.klog,
-            previous_el={self.element_counter: self.f_el},
-            name=table_name
-        )
-        new_gen.run()
+        self.shared_core.add_element(el=vertice)
+        finished_vertice: Element = self.shared_core.run(nm_el=vertice)
 
         # Increment element counter for next evaluation
         self.element_counter += 1
-
-        # Register with registry if provided
-        if self.registry is not None:
-            self.registry.register_nm_element(self.nm_id, new_gen.elements[0])
 
         self.print_stats(
             params=np.array([
@@ -233,9 +184,9 @@ class NelderMeadInstance(NelderMead):
                     param=p,
                     value=params[self.current_dimensions.index(p)])
                 for p in self.current_dimensions]))
-        self.update_iterations(last_vertice=new_gen.elements[0])
+        self.update_iterations(last_vertice=finished_vertice)
 
-        return new_gen.elements[0].score
+        return finished_vertice.score
 
     def is_vertice_finished(self,
                             nm_id: int,
@@ -248,7 +199,7 @@ class NelderMeadInstance(NelderMead):
         Returns:
             bool: Whether it is finished
         """
-        table_name = f"NM{nm_id:04d}"
+        table_name: str = f"NM{nm_id:04d}"
 
         if self.sop_db.table_exists(table_name) and\
            self.kin_db.table_exists(table_name) and\
@@ -263,37 +214,41 @@ class NelderMeadInstance(NelderMead):
                 table=table_name,
                 column_name='sim_id'))//len(self.settings['exp_profiles'])
             sim_ids = set(tmp.tolist())
-            if elem_id in sop_ids and elem_id in kin_ids and elem_id in sim_ids:
+            if elem_id in sop_ids and\
+               elem_id in kin_ids and\
+               elem_id in sim_ids:
                 return True
             else:
                 return False
         else:
             return False
-    
-    def update_iterations(self, last_vertice: Element) -> None:
-        """Keep track of the goat list and scores."""
-        self.latest_simplex: list[Element] = self.iterations.update_with_generation(
-            elements=[last_vertice],
-            goat_length=len(self.current_dimensions) + 1
-        )
+
+    def update_iterations(self,
+                          last_vertice: Element) -> None:
+        """Keep track of the scores."""
         with open(self.score_file, 'a', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
-                iter=last_vertice.id,  # Use element id instead of gen
+                iter=last_vertice.id,
                 score=f"{last_vertice.score:.3f}"))
-    
+
     def get_best_element(self) -> Element:
         """Get the best element found during optimization.
-        
+
         Returns:
             Element with lowest score
         """
-        if len(self.iterations.generations) == 0:
-            return self.f_el
-        
-        # Get the last generation (best elements)
-        last_simp = self.iterations.get_goat_for_gen(-1)
-        if len(last_simp) == 0:
-            return self.f_el
-        
+        all_vertices: list[Element] = []
+        rows = self.sop_db.get_table(table=f'NM{self.nm_id:04d}')
+        for row in rows:
+            el = SOP.from_db_row(
+                sop_tpl=self.f_el.sop,
+                row=row[1:])  # Skip id
+            element = Element(
+                sop=el,
+                id=row[0],  # id
+                gen=self.nm_id,
+                status=ElementStatus.DONE.value)
+            all_vertices.append(element)
+
         # Return element with best score
-        return min(last_simp, key=lambda el: el.score)
+        return min(all_vertices, key=lambda el: el.score)
