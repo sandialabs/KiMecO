@@ -9,7 +9,7 @@ from numpy import float64
 from numpy.typing import NDArray
 from scipy.constants import gas_constant
 import cantera.with_units as ctu
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 from kimeco.enums import Distrib, Optimizers, Pclass, Ptype
 from kimeco.enums import FreqMode, RestartType
 
@@ -25,17 +25,17 @@ class KMOInput:
     def __init__(self,
                  input_file: str,
                  init_loc: str,
-                 klog: Logger) -> None:
+                klog: KMOLogger) -> None:
         """Ensemble of different functions to check the
         user's input
 
         Args:
             input_file (str): path to user input
-            klog (Logger): logger
+            klog (KMOLogger): logger
         """
         self.init_loc: str = init_loc + '/'
         self.input_file: str = input_file
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.cancel_run: bool = False
         self.json_file: dict[str, Any] = self.load_input()
         self.n_exp: int
@@ -167,7 +167,7 @@ class KMOInput:
                         except ValueError as e:
                             self.cancel_run = True
                             self.klog.info('pres_unit was not recognised.')
-                            self.klog.info(e)
+                            self.klog.info(str(e))
                         for b in self.json_file['rc_temp']:
                             t = Q_(b, 'K')
                             if len(self.json_file['initial_X']) <= exp:
@@ -310,11 +310,9 @@ class KMOInput:
                                         if header in self.json_file['exclude_sp']:
                                             continue
                                         # Consider other species
-                                        if header not in species and\
-                                           header != 'time':
+                                        if header not in species and header != 'time':
                                             species.append(header)
-                                        if header not in exp_headers[-1] and\
-                                           header != 'time':
+                                        if header not in exp_headers[-1] and header != 'time':
                                             exp_headers[-1].append(header)
                                         if ln == 0:
                                             clean_profiles[-1][header] = []
@@ -322,42 +320,46 @@ class KMOInput:
                                             clean_profiles[-1][header].append(
                                                 float(line[header]))
                                         except TypeError as e:
-                                            self.klog.debug(e)
-                                            msg = 'Incorrect value detected' +\
-                                                f' line{ln} in file {file}' +\
+                                            self.klog.debug(str(e))
+                                            msg = (
+                                                'Incorrect value detected' +
+                                                f' line{ln} in file {file}' +
                                                 f' column {header}'
+                                            )
                                             self.klog.info(msg)
                                             self.cancel_run = True
                                 ln += 1
                         # Read experimental profiles errors
-                        with open(file_err, mode='r', encoding='utf-8-sig') as f:
-                            csv_DictReader = csv.DictReader(f)
-                            ln = 0
-                            for line in csv_DictReader:
-                                if 'time' not in line:
-                                    msg = "A column should be the 'time'" +\
-                                        f"column in file {file_err}."
-                                    self.klog.info(msg)
-                                    self.cancel_run = True
-                                else:
-                                    for header in line:
-                                        # Skip excluded species
-                                        if header in self.json_file['exclude_sp']:
-                                            continue
-                                        # Consider other species
-                                        if ln == 0:
-                                            clean_errors[-1][header] = []
-                                        try:
-                                            clean_errors[-1][header].append(
-                                                float(line[header]))
-                                        except TypeError as e:
-                                            self.klog.debug(e)
-                                            msg = 'Incorrect value detected' +\
-                                                f' line{ln} in file {file}' +\
-                                                f' column {header}'
-                                            self.klog.info(msg)
-                                            self.cancel_run = True
-                                ln += 1
+                    with open(file_err, mode='r', encoding='utf-8-sig') as f:
+                        csv_DictReader = csv.DictReader(f)
+                        ln = 0
+                        for line in csv_DictReader:
+                            if 'time' not in line:
+                                msg = "A column should be the 'time'" + \
+                                    f"column in file {file_err}."
+                                self.klog.info(msg)
+                                self.cancel_run = True
+                            else:
+                                for header in line:
+                                    # Skip excluded species
+                                    if header in self.json_file['exclude_sp']:
+                                        continue
+                                    # Consider other species
+                                    if ln == 0:
+                                        clean_errors[-1][header] = []
+                                    try:
+                                        clean_errors[-1][header].append(
+                                            float(line[header]))
+                                    except TypeError as e:
+                                        self.klog.debug(str(e))
+                                        msg = (
+                                            'Incorrect value detected' +
+                                            f' line{ln} in file {file}' +
+                                            f' column {header}'
+                                        )
+                                        self.klog.info(msg)
+                                        self.cancel_run = True
+                            ln += 1
                     # check the created profiles:
                     nstep: int = len(clean_profiles[-1]['time'])
                     if nstep != len(clean_errors[-1]['time']):
@@ -406,7 +408,8 @@ class KMOInput:
                 1.0/self.n_exp for i in range(self.n_exp)]
         # Error in input
         elif len(self.json_file['w_exp']) != self.n_exp:
-            self.klog.info(f"The number of weights in w_exp should be {self.n_exp}")
+            self.klog.info(
+                f"The number of weights in w_exp should be {self.n_exp}")
             self.cancel_run = True
         else:
             sum = 0.0

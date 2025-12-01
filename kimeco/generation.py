@@ -8,7 +8,7 @@ from kimeco.enums import ElementStatus
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
 import time
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 
 
 class Generation(CoreRun):
@@ -28,7 +28,7 @@ class Generation(CoreRun):
                  sim_db: SIM_DB,
                  sf: Scoring,
                  pert: Perturbator,
-                 klog: Logger,
+                 klog: KMOLogger,
                  previous_el: dict[int, Element] = {},
                  ) -> None:
         """Generation object manages the worflow of

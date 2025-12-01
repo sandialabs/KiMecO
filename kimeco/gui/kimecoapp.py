@@ -1,3 +1,4 @@
+import logging
 from dash import Dash, html, dcc, Output, Input, State
 from dash.exceptions import PreventUpdate
 import sys
@@ -5,7 +6,7 @@ import os
 from typing import Any
 from kimeco._kimeco import KiMecO
 from kimeco.readers.mess_input import MessInputReader
-from logging import Logger, ERROR
+from kimeco.logger_config import KMOLogger
 from kimeco.logger_config import setup_logger
 from kimeco.user_input import KMOInput
 from kimeco.parameters import SOP
@@ -28,8 +29,8 @@ class KimecoApp(KiMecO):
             settings (dict[str, Any]): user input
         """
         self.init_loc: str = init_loc
-        self.klog: Logger = setup_logger(f'{name}.log')
-        self.klog.setLevel(ERROR)
+        self.klog: KMOLogger = setup_logger(f'{name}.log')
+        self.klog.setLevel(logging.ERROR)
         self.raw_input = KMOInput(
             input_file=input_file,
             init_loc=init_loc,

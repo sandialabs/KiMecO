@@ -7,8 +7,7 @@ from kimeco.rotors.internalrotation import InternalRotation
 from ase.symbols import Symbols
 import numpy as np
 from numpy.typing import NDArray
-from logging import Logger
-from kimeco.logger_config import setup_logger
+from kimeco.logger_config import KMOLogger, create_logger
 from kimeco.enums import Ptype
 from kimeco.database.kimeco_db import dbs
 from kimeco.enums import FreqMode
@@ -57,8 +56,8 @@ class Well:
                 idx = int(name.split('(')[1].split(')')[0])
                 return self.r_scan(idx)
             except AttributeError as e:
-                klog: Logger = setup_logger(name='Well.log')
-                klog.debug(e)
+                klog: KMOLogger = create_logger(name='Well.log')
+                klog.debug(str(e))
                 raise AttributeError(
                     f'Well does not have the attribute {name}')
         else:

@@ -1,11 +1,10 @@
-from logging import Logger
 from typing import Any
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.scoring_f.scoring import Scoring
-from optimizers.NelderMead.nelder_mead import NelderMead
+from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
 from kimeco.element import Element
 from kimeco.goat import GOATs
 from scipy.optimize import minimize
@@ -13,6 +12,7 @@ from numpy.typing import NDArray
 from kimeco.parameters import SOP
 from kimeco.enums import ElementStatus
 from kimeco.optimizers.NelderMead.nm_swarm_runner import NMSRunner
+from kimeco.logger_config import KMOLogger
 import numpy as np
 
 
@@ -34,7 +34,7 @@ class NelderMeadInstance(NelderMead):
                  kin_db: KIN_DB,
                  f_el: Element,
                  input_tpl: list[str],
-                 klog: Logger,
+                 klog: KMOLogger,
                  dimensions: list[str],
                  shared_core: NMSRunner
                  ) -> None:
@@ -56,7 +56,7 @@ class NelderMeadInstance(NelderMead):
             registry: Optional SwarmRegistry for tracking elements
         """
         self.nm_id: int = nm_id
-        self.element_counter = 0
+        self.gen_counter = 0
         self.current_dimensions: list[str] = dimensions
 
         # Call parent init but override some behaviors
@@ -73,11 +73,11 @@ class NelderMeadInstance(NelderMead):
         )
         self.shared_core: NMSRunner = shared_core
         # Override name and working directory
-        self.name: str = f'NM{self.nm_id:04d}'
+        self.name: str = f'E{self.nm_id:04d}'
 
         # Create instance-specific score file
         self.score_file: str = \
-            f'{self.wdir}/nm_swarm/{self.name}_NM_scores.txt'
+            f'{self.wdir}/nm_swarm/NM{self.nm_id:04d}_scores.txt'
         with open(self.score_file, 'w', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
                 iter='ITERATION',
@@ -124,15 +124,15 @@ class NelderMeadInstance(NelderMead):
         # Check if this SOP already exists in our NM table
         table_name = f'NM{self.nm_id:04d}'
         if self.is_vertice_finished(nm_id=self.nm_id,
-                                    elem_id=self.element_counter):
+                                    elem_id=self.gen_counter):
             sop_in_db = True
             try:
                 db_row: list[float] = self.sop_db.get_sop_row(
                     table=table_name,
-                    id=self.element_counter)[1:]
+                    id=self.gen_counter)[1:]
             except Exception as e:
                 sop_in_db = False
-                self.klog.debug(e)
+                self.klog.debug(str(e))
 
             if sop_in_db:
                 db_sop: SOP = SOP.from_db_row(
@@ -152,31 +152,31 @@ class NelderMeadInstance(NelderMead):
                 if all(same_p):
                     vertice = Element(
                         sop=db_sop,
-                        id=self.element_counter,
-                        gen=self.nm_id,
+                        id=self.nm_id,
+                        gen=self.gen_counter,
                         status=ElementStatus.DONE.value)
                 else:
                     vertice = Element(
                         sop=self.last_vertice,
-                        id=self.element_counter,
-                        gen=self.nm_id)
+                        id=self.nm_id,
+                        gen=self.gen_counter)
             else:
                 vertice = Element(
                     sop=self.last_vertice,
-                    id=self.element_counter,
-                    gen=self.nm_id)
+                    id=self.nm_id,
+                    gen=self.gen_counter)
         else:
             vertice = Element(
                 sop=self.last_vertice,
-                id=self.element_counter,
-                gen=self.nm_id)
+                id=self.nm_id,
+                gen=self.gen_counter)
 
         # Create a generation-like run but with NM table names
         self.shared_core.add_element(el=vertice)
         finished_vertice: Element = self.shared_core.run(nm_el=vertice)
 
         # Increment element counter for next evaluation
-        self.element_counter += 1
+        self.gen_counter += 1
 
         self.print_stats(
             params=np.array([

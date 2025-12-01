@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 from typing import Any, List
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
@@ -34,9 +34,9 @@ class GeneticAlgorithm(ABC):
                  kin_db: KIN_DB,
                  f_el: Element,
                  input_tpl: list[str],
-                 klog: Logger
+                 klog: KMOLogger
                  ) -> None:
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.settings: dict[str, Any] = settings
         self.pert: Perturbator = pert
         self.sf: Scoring = sf

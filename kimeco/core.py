@@ -1,4 +1,3 @@
-
 from typing import Any
 import os
 import glob
@@ -14,9 +13,8 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.templates.sim_helper import sim_helper
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 import time
-import shutil
 import concurrent.futures
 
 
@@ -31,11 +29,11 @@ class CoreRun:
                  sim_db: SIM_DB,
                  sf: Scoring,
                  pert: Perturbator,
-                 klog: Logger,
+                 klog: KMOLogger,
                  previous_el: dict[int, Element] = {},
                  name: str = 'core') -> None:
 
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.elements: list[Element] = elements
         self.settings: dict[str, Any] = settings
         self.previous_el: dict[int, Element] = previous_el
@@ -81,8 +79,11 @@ class CoreRun:
                 core_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
             # Copy files necessary for MESS calculation
             for file in self.elements[0].sop.files2copy:
-                shutil.copyfile(f'{self.loc}/{file}',
-                                f'{core_dir}/{subfolder:02d}/{file}')
+                if os.path.isfile(f'{core_dir}/{subfolder:02d}/{file}'):
+                    continue
+                os.symlink(f'{self.loc}/{file}',
+                           f'{core_dir}/{subfolder:02d}/{file}',
+                           )
         os.chdir(core_dir)
 
     def clean_files(self) -> None:
@@ -192,7 +193,7 @@ class CoreRun:
         rst: int = el.reset
         self.elements[el.id] = Element(
             sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
-            id=el.id
+            id=el.id,
             )
         for file in glob.glob(f"{self.name}{el.name}*"):
             os.remove(file)
@@ -479,7 +480,7 @@ class CoreRun:
                 el.sop.scores[k] = scores[idx]
             el.status = ElementStatus.TO_SAVE
         except IndexError as e:
-            self.klog.debug(e)
+            self.klog.debug(str(e))
             # Occurs when a simulation didn't work so profiles were not saved
             el.status = ElementStatus.RESET
             self.klog.info(f'Resetting element {el.id}: error during scoring.')

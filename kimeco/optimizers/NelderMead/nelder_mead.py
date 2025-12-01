@@ -1,4 +1,3 @@
-from logging import Logger
 from typing import Any
 import numpy as np
 from scipy.optimize import minimize
@@ -14,6 +13,7 @@ from kimeco.enums import ElementStatus, Ptype, Pclass, Distrib
 from kimeco.parameters import SOP
 from kimeco.generation import Generation
 from kimeco.scoring_f.scoring import Scoring
+from kimeco.logger_config import KMOLogger
 
 
 class NelderMead:
@@ -26,7 +26,7 @@ class NelderMead:
                  kin_db: KIN_DB,
                  f_el: Element,
                  input_tpl: list[str],
-                 klog: Logger
+                 klog: KMOLogger
                  ) -> None:
         self.name = 'Nelder-Mead'
         self.sf: Scoring = sf
@@ -37,7 +37,7 @@ class NelderMead:
         self.f_el: Element = f_el
         self.settings: dict[str, Any] = settings
         self.pert: Perturbator = pert
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.new_parameters: list[str] = self.settings['to_perturb']
         self.current_dimensions: list[str] = []
         self.wdir: str = self.settings['workdir']
@@ -384,7 +384,7 @@ class NelderMead:
                         id=0)[1:]
             except Exception as e:
                 sop_in_db = False
-                self.klog.debug(e)
+                self.klog.debug(str(e))
 
             if sop_in_db:
                 db_sop: SOP = SOP.from_db_row(

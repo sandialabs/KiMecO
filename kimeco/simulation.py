@@ -5,7 +5,7 @@ from kimeco.parameters import SOP
 from kimeco.q_sys import QueueingSystem, JobStatus
 from kimeco.rate_coef import RateCo
 from kimeco.templates.sim_arr_tpl import ctjobtpl
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 
 
 class SIM:
@@ -19,7 +19,7 @@ class SIM:
                  loc: str,
                  q_sys: QueueingSystem,
                  set: dict[str, Any],
-                 klog: Logger,
+                 klog: KMOLogger,
                  thread_id: int = -1
                  ) -> None:
         """Handles the simulations.
@@ -34,11 +34,11 @@ class SIM:
             loc (str): Where to store the simulation files
             q_sys (QueueingSystem): Queuing system
             set (dict[str, Any]): Settings
-            klog (Logger): Logger
+            klog (KMOLogger): Logger
             thread_id (int, optional):
             Thread identifier. Used for nelder-mead multi-threading.
         """
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.status: JobStatus = JobStatus.NOT_IN_QUEUE
         self.gen_name: str = gen_name
         self.SOP: SOP = sop

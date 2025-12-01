@@ -7,16 +7,10 @@ from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.enums import ElementStatus
 from typing import Any
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 
 
 class Extrapolate(CoreRun):
-    __id = 0
-
-    @classmethod
-    def total(cls) -> int:
-        """Return the total number of Generation instances."""
-        return cls.__id
 
     def __init__(self,
                  elements: list[Element],
@@ -27,11 +21,10 @@ class Extrapolate(CoreRun):
                  sim_db: SIM_DB,
                  sf: Scoring,
                  pert: Perturbator,
-                 klog: Logger,
+                 klog: KMOLogger,
+                 name: str,
                  previous_el: dict[int, Element] = {},
                  ) -> None:
-        self.id: int = Extrapolate.__id
-        Extrapolate.__id += 1
         super().__init__(
                  elements=elements,
                  settings=settings,
@@ -43,7 +36,7 @@ class Extrapolate(CoreRun):
                  pert=pert,
                  klog=klog,
                  previous_el=previous_el,
-                 name=f'X{self.id:04d}')
+                 name=name)
         # Overwrite pressure and temperature grids for postprocessing
         self.pres: list[float] = settings["pp_pres"]
         self.temp: list[float] = settings["pp_temp"]

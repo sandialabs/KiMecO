@@ -1,6 +1,6 @@
 
 from copy import copy, deepcopy
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 from typing import Any
 
 from kimeco.barrier import Barrier
@@ -17,7 +17,7 @@ class Perturbator:
     def __init__(self,
                  settings: dict[str, Any],
                  initial_SOP: SOP,
-                 klog: Logger
+                 klog: KMOLogger
                  ) -> None:
         """Model class for perturbator.
         Cannot be used directly, but should be inherited
@@ -30,7 +30,7 @@ class Perturbator:
         # Initial set of parameters
         self.i_sop: SOP = deepcopy(initial_SOP)
         self.has_boundaries = True
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
 
         # List of parameters that should never be below 0
         self.zero_bound: set[str] = {

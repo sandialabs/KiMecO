@@ -8,10 +8,6 @@ import os
 
 hid = {hlp_idx}
 
-db = SIM_DB(name='{db.name}',
-             path='{db.path}',
-             tbl_name='{table}')
-
 filenames = {filenames}
 
 collected = np.full(len(filenames), False)
@@ -35,6 +31,10 @@ while not all(collected):
         # Helpers should not try to collect data from failed sims.
         else:
             raise FileNotFoundError(f'Could not find data for {{fn}}.')
+
+db = SIM_DB(name='{db.name}',
+             path='{db.path}',
+             tbl_name=tables[0])
 
 for idxsim, sim in enumerate(sims):
     row_ids = sim['row_ids']

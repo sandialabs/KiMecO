@@ -1,19 +1,19 @@
 import time
-from logging import Logger
 from typing import Any
 import os
 import multiprocessing
+import threading
 import concurrent.futures
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
 from kimeco.Perturbators.perturbator import Perturbator
-from kimeco.enums import ElementStatus
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.sensitivity.linear import Linear
-from optimizers.NelderMead.nm_swarm_instance import NelderMeadInstance
-from optimizers.NelderMead.nm_swarm_runner import NMSRunner
+from kimeco.optimizers.NelderMead.nm_swarm_instance import NelderMeadInstance
+from kimeco.optimizers.NelderMead.nm_swarm_runner import NMSRunner
+from kimeco.logger_config import KMOLogger
 
 
 class NelderMeadSwarm:
@@ -32,7 +32,7 @@ class NelderMeadSwarm:
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
                  input_tpl: list[str],
-                 klog: Logger,
+                 klog: KMOLogger,
                  pert: Perturbator) -> None:
         """Initialize the NelderMeadSwarm.
         
@@ -45,19 +45,21 @@ class NelderMeadSwarm:
             sim_db: Simulation database
             kin_db: Kinetics database
             input_tpl: Rate constant template
-            klog: Logger
+            klog: KMOLogger
         """
+        self.new_folder_lock = threading.Lock()
         self.pert: Perturbator = pert
         self.elements: list[Element] = elements
         self.settings: dict[str, Any] = settings
         self.sf: Scoring = sf
         self.input_tpl: list[str] = input_tpl
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.wdir: str = settings['workdir']
-        # Create swarm directory
         self.swarm_dir: str = os.path.join(self.wdir, 'nm_swarm')
-        os.makedirs(self.swarm_dir, exist_ok=True)
+        if not os.path.exists(self.swarm_dir):
+            os.makedirs(self.swarm_dir, exist_ok=True)
         os.chdir(self.swarm_dir)
+        # Create swarm directory
         self.initialize_databases()
         self.core = NMSRunner(
             settings=settings,
@@ -81,8 +83,10 @@ class NelderMeadSwarm:
         threads: int = self.settings['threads']
         self.max_workers: int = min(cpu_count, threads)
         self.klog.info(f"N-M Swarm with {len(self.elements)} instances")
-        self.klog.info(f"Using {self.max_workers} parallel workers" + '\n',
-                       f"(CPU count: {cpu_count}, threads limit: {threads})")
+        self.klog.info(
+            f"Using {self.max_workers} parallel workers" + "\n"
+            f"(CPU count: {cpu_count}, threads limit: {threads})"
+        )
 
     def initialize_databases(self) -> None:
         """Create the three databases used by KiMecO
@@ -184,7 +188,7 @@ class NelderMeadSwarm:
 
         Args:
             nm_id: ID for this NM instance
-            initial_el: Starting element
+            el: Starting element
 
         Returns:
             Dictionary with results
@@ -219,3 +223,17 @@ class NelderMeadSwarm:
             'best_element': best_el,
             'iterations': len(nm.iterations.generations)
         }
+
+    def create_dir(self,
+                   el: Element) -> None:
+        with self.new_folder_lock:
+            dir_name: str = f"{self.swarm_dir}/G{el.gen:04d}"
+            if not os.path.exists(dir_name):
+                os.makedirs(dir_name, exist_ok=True)
+                os.makedirs(dir_name + '/logs', exist_ok=True)
+                for file in el.sop.files2copy:
+                    src: str = f"{self.wdir}/{file}"
+                    dst: str = f"{dir_name}/{file}"
+                    if os.path.exists(src) and not os.path.exists(dst):
+                        os.symlink(src, dst)
+

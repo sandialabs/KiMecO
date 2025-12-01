@@ -11,7 +11,7 @@ from kimeco.readers.mess_output import MessOutputReader
 import os
 import numpy as np
 from numpy.typing import NDArray
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 
 
 class RateCo:
@@ -27,10 +27,10 @@ class RateCo:
                  loc: str,
                  q_sys: QueueingSystem,
                  db: KIN_DB,
-                 klog: Logger,
+                 klog: KMOLogger,
                  thread_id: int = -1
                  ) -> None:
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.status: JobStatus = JobStatus.NOT_IN_QUEUE
         self.id: int = id
         self.sop: SOP = sop

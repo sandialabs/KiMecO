@@ -81,6 +81,8 @@ default_settings: dict[str, Any] = {
     "pp_temp": [],
     # List of pressures in Torr
     "pp_pres": [],
+    # List of ensembles for postprocessing
+    "pp_ensembles": ["G0001", "GT-1"],
     # User input unit of pressure
     "pres_unit": 'torr',
     # Keys: name of species in the initial mess file

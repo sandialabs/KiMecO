@@ -63,49 +63,93 @@ class PostProcess(KiMecO):
         pu: str = f'{self.settings["pres_unit"]}'
         self.klog.info(
             f"{f'Pressures ({pu}):':<65}{str(self.settings['pp_pres']):>15}")
-        rows = self.sop_db.get_table('G0001')
-        f_els = []
-        for idx, row in enumerate(rows):
-            f_els.append(
-                Element(
-                    sop=SOP.from_db_row(
-                        sop_tpl=self.init_SOP,
-                        row=np.asarray(row[1:]).tolist()
-                    ),
-                    id=idx,
-                    gen=1))
-        self.extrapolate_start = Extrapolate(
-            elements=f_els,
-            settings=self.settings,
-            rc_tpl=self.input_tpl,
-            sop_db=self.sop_db,
-            kin_db=self.pp_db,
-            sim_db=self.sim_db,
-            sf=self.sf,
-            pert=self.pert,
-            klog=self.klog
-        )
-        elements = []
-        # prev_elements = {}
-        for idx, el in enumerate(self.goats.get_goat_for_gen(-1)):
-            elements.append(Element(
-                sop=el.sop,
-                id=idx,
-                gen=0,
-                status=ElementStatus.SOP.value
-            ))
-            # prev_elements[idx] = el
-        self.extrapolate = Extrapolate(
-            elements=elements,
-            settings=self.settings,
-            rc_tpl=self.input_tpl,
-            sop_db=self.sop_db,
-            kin_db=self.pp_db,
-            sim_db=self.sim_db,
-            sf=self.sf,
-            pert=self.pert,
-            klog=self.klog
-        )
+        # Loop over user-requested ensembles
+        ensembles: list[str] = self.settings['pp_ensembles']
+
+        for token in ensembles:
+            name: str = token
+            elements: list[Element] = []
+
+            # Precompute token type flags
+            cond_g = token.startswith('G') and len(token) == 5 and \
+                token[1:].isdigit()
+            cond_gt = token.startswith('GT') and len(token) == 6 and \
+                token[2:].isdigit()
+
+            # Generation table: G####
+            if cond_g:
+                try:
+                    rows = self.sop_db.get_table(token)
+                except Exception as e:
+                    self.klog.warning(f"Could not read table {token}: {e}")
+                    continue
+                for idx, row in enumerate(rows):
+                    elements.append(
+                        Element(
+                            sop=SOP.from_db_row(
+                                sop_tpl=self.init_SOP,
+                                row=np.asarray(row[1:]).tolist()
+                            ),
+                            id=idx,
+                            gen=int(token[1:])
+                        )
+                    )
+
+            # GOATs generation: GT####
+            elif cond_gt:
+                gen_id = int(token[2:])
+                try:
+                    goats_elements = self.goats.get_goat_for_gen(gen_id)
+                except Exception as e:
+                    self.klog.warning(f"Could not load GOATs for {token}: {e}")
+                    continue
+                for idx, el in enumerate(goats_elements):
+                    elements.append(Element(
+                        sop=el.sop,
+                        id=idx,
+                        gen=el.gen,
+                        status=ElementStatus.SOP.value
+                    ))
+                name = f"GT{gen_id:04d}"
+
+            # Latest GOATs: GT-1
+            elif token == 'GT-1':
+                latest_gen_id = len(self.goats) - 1
+                try:
+                    goats_elements = self.goats.get_goat_for_gen(-1)
+                except Exception as e:
+                    self.klog.warning(f"Could not load latest GOATs: {e}")
+                    continue
+                for idx, el in enumerate(goats_elements):
+                    elements.append(Element(
+                        sop=el.sop,
+                        id=idx,
+                        gen=el.gen,
+                        status=ElementStatus.SOP.value
+                    ))
+                name = f"GT{latest_gen_id:04d}"
+
+            else:
+                self.klog.warning(
+                    f"Unknown pp_ensemble token '{token}', skipping.")
+                continue
+
+            # Run extrapolation for this ensemble
+            if not elements:
+                self.klog.warning(f"No elements found for {name}, skipping.")
+                continue
+            Extrapolate(
+                elements=elements,
+                settings=self.settings,
+                rc_tpl=self.input_tpl,
+                sop_db=self.sop_db,
+                kin_db=self.pp_db,
+                sim_db=self.sim_db,
+                sf=self.sf,
+                pert=self.pert,
+                klog=self.klog,
+                name=name
+            ).run()
 
 
 def main() -> None:
@@ -135,6 +179,5 @@ def main() -> None:
     pp.set_perturbator()
     pp.load_goats()
     pp.set_postprocessing()
-    pp.extrapolate_start.run()
-    pp.extrapolate.run()
+    # Extrapolations are executed inside set_postprocessing()
     

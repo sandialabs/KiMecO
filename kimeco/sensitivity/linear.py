@@ -11,7 +11,7 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 
 
 class Linear(CoreRun):
@@ -34,13 +34,13 @@ class Linear(CoreRun):
                  settings: dict[str, Any],
                  rc_tpl: list[str],
                  sf: Scoring,
-                 klog: Logger,
+                 klog: KMOLogger,
                  pert: Perturbator | None = None,
                  restart: bool = True
                  ) -> None:
         self.id: int = Linear.__id
         Linear.__id += 1
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.settings: dict[str, Any] = settings
         self.name: str = f'SA{self.id:04d}'
         self.to_test: list[bool] = []
@@ -96,7 +96,7 @@ class Linear(CoreRun):
                 table=self.name,
                 id=0)[1:]
         except Exception as e:
-            self.klog.debug(e)
+            self.klog.debug(str(e))
             return False
 
         db_sop: SOP = SOP.from_db_row(

@@ -1,4 +1,4 @@
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.database.sop_db import SOP_DB
@@ -21,7 +21,7 @@ class Tournament(GeneticAlgorithm):
                  kin_db: KIN_DB,
                  f_el: Element,
                  input_tpl: list[str],
-                 klog: Logger) -> None:
+                 klog: KMOLogger) -> None:
         super().__init__(
             settings=settings,
             sf=sf,

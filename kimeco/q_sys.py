@@ -12,7 +12,7 @@ from numpy import int16, int32, ndarray, str_
 from typing import Any
 import getpass
 import os
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 import time
 
 
@@ -30,7 +30,7 @@ class QueueingSystem:
                  settings: dict[str, Any],
                  nel: int,
                  nhlp: int,
-                 klog: Logger,
+                 klog: KMOLogger,
                  q_type: str = 'slurm',
                  q_name: str = 'day-long-cpu',
                  ) -> None:
@@ -57,7 +57,7 @@ class QueueingSystem:
             location (str, optional): Where jobs should be submitted from.
                                       Defaults to local.
         """
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         self.settings: dict[str, Any] = settings
         self._max_jobs: int = self.settings['max_jobs']
         self._max_cpu: int = self.settings['max_cpu']

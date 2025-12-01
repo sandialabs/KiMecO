@@ -1,12 +1,11 @@
-
 import os
-import shutil
 import time
 from typing import Any
+import shutil
 from kimeco.readers.mess_input import MessInputReader
 from kimeco.parameters import SOP
-from logging import Logger, WARNING
-from kimeco.logger_config import setup_logger
+import logging
+from kimeco.logger_config import create_logger, KMOLogger
 from kimeco.user_input import KMOInput
 from kimeco.kinmec import KiMec
 from kimeco.database.kin_db import KIN_DB
@@ -19,7 +18,7 @@ from kimeco.element import Element
 from kimeco.enums import Optimizers, RestartType
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
-from optimizers.NelderMead.nelder_mead import NelderMead
+from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
 
 
 class KiMecO:
@@ -34,9 +33,11 @@ class KiMecO:
             settings (dict[str, Any]): user input
         """
         self.init_loc: str = init_loc
-        self.klog: Logger = setup_logger(f'{name}.log')
+        # Create logger with level from settings (after raw_input is parsed)
+        # Will be set to proper level after settings are loaded
+        self.klog: KMOLogger = create_logger(f'{name}.log', level=logging.INFO)
         if sim_job:
-            self.klog.setLevel(WARNING)
+            self.klog.setLevel(logging.ERROR)
         self.raw_input = KMOInput(
             input_file=input_file,
             init_loc=init_loc,
@@ -80,7 +81,7 @@ class KiMecO:
             f.writelines(self.input_tpl)
 
         for file in self.init_SOP.files2copy:
-            shutil.copyfile(
+            shutil.copy(
                 f'{self.init_loc}/{file}',
                 f'{self.settings["workdir"]}/{file}')
 

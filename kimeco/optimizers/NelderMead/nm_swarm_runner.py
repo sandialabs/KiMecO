@@ -1,6 +1,7 @@
 import time
 import os
 import glob
+import threading
 from numpy.typing import NDArray
 from typing import Any
 from kimeco.database.kin_db import KIN_DB
@@ -13,14 +14,7 @@ from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
 from kimeco.q_sys import QueueingSystem, JobStatus
 from kimeco.templates.sim_helper import sim_helper
-from logging import Logger
-import shutil
-from enum import Enum
-
-
-class ThreadStatus(Enum):
-    IDLE = 'IDLE'
-    BUSY = 'BUSY'
+from kimeco.logger_config import KMOLogger
 
 
 class NMSRunner:
@@ -31,7 +25,7 @@ class NMSRunner:
                  kin_db: KIN_DB,
                  sim_db: SIM_DB,
                  sf: Scoring,
-                 klog: Logger,
+                 klog: KMOLogger,
                  ) -> None:
         """Generation object manages the worflow of
         a given set of elements, going from creating them
@@ -47,12 +41,17 @@ class NMSRunner:
             rc_tpl: Template for rate constant calculation.
             loc: Location. Absolute path of where the gen folder should be.
         """
-        self.thread_status: dict[int, ThreadStatus] = {
-            i: ThreadStatus.IDLE for i in range(self.settings['threads'])
-        }
-        self.klog: Logger = klog
-        self.elements: list[Element] = []
+        self.klog: KMOLogger = klog
+        self.elements: list = [None for _ in range(settings['threads'])]
         self.settings: dict[str, Any] = settings
+        # Thread-safe locks
+        self._tables_lock = threading.Lock()
+        self._elements_lock: dict[int, threading.Lock] = {
+            i: threading.Lock() for i in range(self.settings['threads'])
+        }
+        self._helpers_lock: dict[int, threading.Lock] = {
+            i: threading.Lock() for i in range(self.settings['max_helpers'])
+        }
         # List of species names used by cantera
         self.sc_species: list[str] = self.settings['score_sp']
         # Rate coefficients template
@@ -88,42 +87,44 @@ class NMSRunner:
     def clean_files(self,
                     el: Element) -> None:
         """Remove files from previous runs for an element."""
-        name: str = f'NM{el.gen:04d}/'
-        if el.status != ElementStatus.DONE:
-            for file in glob.glob(
-                f"{name}{el.name}*"
-            ):
-                os.remove(file)
+        name: str = f'G{el.gen:04d}/'
+        for file in glob.glob(
+            f"{name}{el.name}*"
+        ):
+            os.remove(file)
 
     def add_element(self,
                     el: Element) -> None:
         """Add an element to the generation."""
+        if el.status == ElementStatus.DONE:
+            return
         for thread in self.thread_status:
             if self.thread_status[thread] == ThreadStatus.IDLE:
                 self.thread_status[thread] = ThreadStatus.BUSY
                 el.thread_id = thread
                 break
-        self.elements.append(el)
+        self.elements[el.thread_id] = el
         self.elem_count += 1
-        self.create_tables(el)
+        with self._tables_lock:
+            self.create_tables(el)
+            if self.elem_count % 1000 == 0:
+                self.sop_db.defragmentate()
+                self.kin_db.defragmentate()
+                self.sim_db.defragmentate()
         self.clean_files(el)
-        name: str = f'NM{el.gen:04d}'
+        name: str = f'G{el.gen:04d}'
         # Create core directory
-        core_dir: str = self.swarm_loc
-        nm_dir: str = f'{core_dir}/{name}'
-        os.makedirs(nm_dir + '/logs', exist_ok=True)
-        for subfolder in range(el.id//50+1):
+        nm_dir: str = f'{self.swarm_loc}/{name}'
+        if not os.path.isdir(nm_dir):
+            os.makedirs(nm_dir + '/logs', exist_ok=True)
+        subfolder = f'/{el.id//50+1:02d}'
+        if not os.path.isdir(nm_dir + subfolder):
             os.makedirs(
                 nm_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
             # Copy files necessary for MESS calculation
             for file in el.sop.files2copy:
-                shutil.copyfile(f'{self.loc}/{file}',
-                                f'{nm_dir}/{subfolder:02d}/{file}')
-        os.chdir(core_dir)
-        if self.elem_count % 1000 == 0:
-            self.sop_db.defragmentate()
-            self.kin_db.defragmentate()
-            self.sim_db.defragmentate()
+                os.symlink(f'{self.loc}/{file}',
+                           f'{nm_dir}/{subfolder:02d}/{file}')
 
     def create_tables(self,
                       el: Element) -> None:
@@ -131,7 +132,7 @@ class NMSRunner:
         """
         # Create table for gen in SOP, KIN and SIM
         # SOP
-        tbl_name: str = f'NM{el.gen:04d}'
+        tbl_name: str = f'G{el.gen:04d}'
         if tbl_name not in self.sop_db.tables:
             self.sop_db.create_new_table(
                 name=tbl_name
@@ -154,39 +155,40 @@ class NMSRunner:
         self.add_element(nm_el)
         while not nm_el.status == ElementStatus.DONE:
             for idx, el in enumerate(self.elements):
-                # Safeguard
-                if self.elements[idx].id != el.id:
-                    raise IndexError(
-                        'Incorrect ordering of the elements.')
-                if el.status == ElementStatus.DONE:
+                if self._elements_lock[idx].locked():
                     continue
-                if el.status == ElementStatus.RESET:
-                    el.sop.scores = {
-                        k: float('inf') for k in el.sop.scores}
-                    self.klog.warning(
-                        f'Vertice ({el.gen} {el.id}) failed.',
-                        'Returned with a high score.')
-                    el.status = ElementStatus.DONE
-                    continue
-                if el.status == ElementStatus.SOP:
-                    self.calculate_rate_coefficients(el)
-                elif el.status == ElementStatus.KIN:
-                    self.run_simulation(el)
-                elif el.status == ElementStatus.SIM:
-                    self.recover_simulation_data(el)
-                # Only accessed on restart if RestartType is RESCORE
-                elif el.status == ElementStatus.RESCORE:
-                    self.recalc_score(el)
-                elif el.status == ElementStatus.SCORING:
-                    self.calc_score(el)
-                if el.status == ElementStatus.TO_SAVE:
-                    self.finalize_element(el)
-            self.sop_db.batch_upsert()
-            self.kin_db.batch_upsert()
+                else:
+                    # Acquire lock for this element
+                    with self._elements_lock[idx]:
+                        if el.status == ElementStatus.DONE:
+                            continue
+                        if el.status == ElementStatus.RESET:
+                            el.sop.scores = {
+                                k: float('inf') for k in el.sop.scores}
+                            self.klog.warning(
+                                f'Vertice ({el.gen} {el.id}) failed.',
+                                'Returned with a high score.')
+                            el.status = ElementStatus.DONE
+                            continue
+                        if el.status == ElementStatus.SOP:
+                            self.calculate_rate_coefficients(el)
+                        elif el.status == ElementStatus.KIN:
+                            self.run_simulation(el)
+                        elif el.status == ElementStatus.SIM:
+                            self.recover_simulation_data(el)
+                        # Only accessed on restart if RestartType is RESCORE
+                        elif el.status == ElementStatus.RESCORE:
+                            self.recalc_score(el)
+                        elif el.status == ElementStatus.SCORING:
+                            self.calc_score(el)
+                        if el.status == ElementStatus.TO_SAVE:
+                            self.finalize_element(el)
+            with self._tables_lock:
+                self.sop_db.batch_upsert()
+                self.kin_db.batch_upsert()
             self.check_helpers_status()
             self.collect_sim_profiles()
             self.qs.run()
-        self.thread_status[nm_el.thread_id] = ThreadStatus.IDLE
         self.klog.debug(
             f'Vertice {nm_el.id} in for NM {nm_el.gen} is done.')
         # Might not be 100% safe in multi-threading
@@ -196,7 +198,7 @@ class NMSRunner:
     def calculate_rate_coefficients(self,
                                     el: Element) -> None:
         """Calculate rate coefficients for an element."""
-        name: str = f'NM{el.gen:04d}'
+        name: str = f'G{el.gen:04d}'
         start_time: float = time.time()
         el.rateCoef = RateCo(
             sop=el.sop,
@@ -221,7 +223,7 @@ class NMSRunner:
     def run_simulation(self,
                        el: Element) -> None:
         """Run the simulation for an element."""
-        name: str = f'NM{el.gen:04d}'
+        name: str = f'G{el.gen:04d}'
         start_time: float = time.time()
         el.sim = SIM(
             sop=el.sop,
@@ -245,7 +247,7 @@ class NMSRunner:
                                 el: Element) -> None:
         """Recover simulation data for an element."""
 
-        name: str = f'NM{el.gen:04d}'
+        name: str = f'G{el.gen:04d}'
         # Avoid large batch_select causing I/O errors
         start_time: float = time.time()
         if len(self.sim_db._select) > 2000:
@@ -272,7 +274,7 @@ class NMSRunner:
     def finalize_element(self,
                          el: Element) -> None:
         """Make sure element is saved before changing status."""
-        name: str = f'NM{el.gen:04d}'
+        name: str = f'G{el.gen:04d}'
         start_time: float = time.time()
         if self.sop_db.entry_exist(table=name,
                                    id=el.id):
@@ -286,16 +288,14 @@ class NMSRunner:
         """Batch recovery of the concentration profiles to avoid
         multiple db transactions.
         """
-        start_time: float = time.time()
         if len(self.sim_db._select) == 0:
             return
-        nsim: int = len(self.pres) *\
-            len(self.temp)
+        nsim: int = self.settings['n_exp']
         collected: dict[str, list[int]] = {}
         to_collect: dict[str, list[int]] = self.sim_db._select.copy()
         collecting: dict[str, dict[int, NDArray]] = self.sim_db.batch_select()
         for name in collecting.keys():
-            nm_id = int(name[2:6])
+            nm_id = int(name[1:5])
             for sim_id, db_data in collecting[name].items():
                 # There is only one Element per nm_id
                 el: Element = [
@@ -444,7 +444,7 @@ class NMSRunner:
         Args:
             el (Element): Element
         """
-        name = f'NM{el.gen:04d}'
+        name = f'G{el.gen:04d}'
         el.rateCoef = RateCo(
             sop=el.sop,
             settings=self.settings,
@@ -491,7 +491,7 @@ class NMSRunner:
                 el.sop.scores[k] = scores[idx]
             el.status = ElementStatus.TO_SAVE
         except IndexError as e:
-            self.klog.debug(e)
+            self.klog.debug(str(e))
             # Occurs when a simulation didn't work so profiles were not saved
             el.status = ElementStatus.RESET
             self.klog.info(f'Resetting element {el.id}: error during scoring.')
@@ -501,21 +501,24 @@ class NMSRunner:
     def check_helpers_status(self) -> None:
         """Management of helpers status.
         """
-        nsim: int = len(self.pres) *\
-            len(self.temp)
         for i in range(len(self.sim_hlpers)):
-            if self.qs.status(i, 'hlp') == JobStatus.FINISHED:
-                self.qs.pickUp(id=i,
-                               jtype='hlp')
-            if self.qs.status(i, 'hlp') == JobStatus.FAILED:
-                self.klog.warning(f'Helper {i} failed to collect sim profiles.')
-                self.klog.warning('Corresponding sim_ids are reset')
-                for sim_id in self.sim_hlpers[i]:
-                    el: Element = self.elements[sim_id // nsim]
-                    el.status = ElementStatus.RESET
-                self.sim_hlpers[i] = []
-            elif self.qs.status(i, 'hlp') == JobStatus.NOT_IN_QUEUE:
-                self.sim_hlpers[i] = []
+            if self._helpers_lock[i].locked():
+                continue
+            else:
+                with self._helpers_lock[i]:
+                    if self.qs.status(i, 'hlp') == JobStatus.FINISHED:
+                        self.qs.pickUp(id=i,
+                                    jtype='hlp')
+                    if self.qs.status(i, 'hlp') == JobStatus.FAILED:
+                        self.klog.warning(f'Helper {i} failed to collect sim profiles.')
+                        self.klog.warning('Corresponding sim_ids are reset')
+                        for sim_id in self.sim_hlpers[i]:
+                            el: Element = self.elements[
+                                sim_id // self.settings['n_exp']]
+                            el.status = ElementStatus.RESET
+                        self.sim_hlpers[i] = []
+                    elif self.qs.status(i, 'hlp') == JobStatus.NOT_IN_QUEUE:
+                        self.sim_hlpers[i] = []
 
     @property
     def best_score(self) -> float:
