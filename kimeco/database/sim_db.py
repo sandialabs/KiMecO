@@ -95,9 +95,10 @@ class SIM_DB(Kimeco_db):
             table (str): name of the table
             sim_id (int): simulation ID to select
         """
-        if table not in self._select:
-            self._select[table] = []
-        self._select[table].append(sim_id)
+        with self._select_lock:
+            if table not in self._select:
+                self._select[table] = []
+            self._select[table].append(sim_id)
 
     def batch_select(self) -> dict[str, dict[int, NDArray]]:
         """Execute batch select requests stored in the _select dictionary.
@@ -108,9 +109,18 @@ class SIM_DB(Kimeco_db):
                 int: sim_id within this table.
                 NDArray: [rows, [sim_id, time, concentrations]]
         """
+        # Take snapshot and clear under lock
+        with self._select_lock:
+            if len(self._select) == 0:
+                return {}
+            
+            select_snapshot = {k: v.copy() for k, v in self._select.items()}
+            self._select = {}
+        
+        # Execute outside the lock
         results: dict[str, dict[int, NDArray]] = {}
-        for table in self._select:
-            sim_ids = self._select[table]
+        for table in select_snapshot:
+            sim_ids = select_snapshot[table]
             query = select(
                 self.tables[table].c.sim_id,
                 self.tables[table].c.time,
@@ -161,5 +171,4 @@ class SIM_DB(Kimeco_db):
                         db_rslt[:, 0] == sim_id
                         ]
 
-        self._select = {}  # Clear the _select dictionary after processing
         return results

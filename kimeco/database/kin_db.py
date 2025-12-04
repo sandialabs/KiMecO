@@ -125,23 +125,25 @@ class KIN_DB(Kimeco_db):
             From (str): specie name
             To (str): specie name
         """
+        with self._select_lock:
+            if table not in self._select:
+                self._select[table] = {}
+            if kin_id not in self._select[table]:
+                self._select[table][kin_id] = {
+                    'pres': [],
+                    'temp': [],
+                    'From': [],
+                    'To': []
+                }
+            self._select[table][kin_id]['pres'].append(p)
+            self._select[table][kin_id]['temp'].append(t)
+            self._select[table][kin_id]['To'].append(To)
+            self._select[table][kin_id]['From'].append(From)
 
-        if table not in self._select:
-            self._select[table] = {}
-        if kin_id not in self._select[table]:
-            self._select[table][kin_id] = {
-                'pres': [],
-                'temp': [],
-                'From': [],
-                'To': []
-            }
-        self._select[table][kin_id]['pres'].append(p)
-        self._select[table][kin_id]['temp'].append(t)
-        self._select[table][kin_id]['To'].append(To)
-        self._select[table][kin_id]['From'].append(From)
-
-    def batch_select(self
-                     ) -> dict[str, dict[int, dict[tuple[float, float, str, str], NDArray]]]:
+    def batch_select(
+            self
+    ) -> dict[str, dict[int, dict[tuple[float, float, str, str],
+                                  NDArray]]]:
         """Execute batch select requests stored in the _select dictionary.
 
         Returns:
@@ -151,18 +153,38 @@ class KIN_DB(Kimeco_db):
                 tuple: (p, t, from, to)
                 NDArray: db_row
         """
-        results: dict[str, dict[int, dict[tuple[float, float, str, str], NDArray]]] = {}
-        for table in self._select:
-            kin_ids = [kid for kid in self._select[table].keys()]
+        # Take snapshot and clear under lock
+        with self._select_lock:
+            if len(self._select) == 0:
+                return {}
+            
+            select_snapshot = {}
+            for table in self._select:
+                select_snapshot[table] = {}
+                for kin_id in self._select[table]:
+                    select_snapshot[table][kin_id] = {
+                        'pres': self._select[table][kin_id]['pres'].copy(),
+                        'temp': self._select[table][kin_id]['temp'].copy(),
+                        'From': self._select[table][kin_id]['From'].copy(),
+                        'To': self._select[table][kin_id]['To'].copy()
+                    }
+            self._select = {}
+        
+        # Execute outside the lock
+        results: dict[
+            str, dict[int, dict[tuple[float, float, str, str], NDArray]]
+        ] = {}
+        for table in select_snapshot:
+            kin_ids = [kid for kid in select_snapshot[table].keys()]
             tmp_pres = []
             tmp_temp = []
             tmp_From = []
             tmp_To = []
             for kin_id in kin_ids:
-                tmp_pres.extend(self._select[table][kin_id]['pres'])
-                tmp_temp.extend(self._select[table][kin_id]['temp'])
-                tmp_From.extend(self._select[table][kin_id]['From'])
-                tmp_To.extend(self._select[table][kin_id]['To'])
+                tmp_pres.extend(select_snapshot[table][kin_id]['pres'])
+                tmp_temp.extend(select_snapshot[table][kin_id]['temp'])
+                tmp_From.extend(select_snapshot[table][kin_id]['From'])
+                tmp_To.extend(select_snapshot[table][kin_id]['To'])
             pres = set(tmp_pres)
             temp = set(tmp_temp)
             To = set(tmp_To)
@@ -213,5 +235,4 @@ class KIN_DB(Kimeco_db):
                                         results[table][int(kin_id)][key] =\
                                             db_arr[condition][to][0]
 
-        self._select = {}  # Clear the _select dictionary after processing
         return results

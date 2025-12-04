@@ -1,4 +1,5 @@
 import os
+import threading
 from time import sleep
 from typing import Literal, Sequence
 from sqlalchemy import (
@@ -21,8 +22,7 @@ from sqlalchemy_utils import database_exists, create_database
 import pandas as pd
 from typing import Any
 from sqlalchemy.exc import OperationalError
-from logging import Logger
-from kimeco.logger_config import setup_logger
+from kimeco.logger_config import KMOLogger
 import numpy
 
 # Database separator
@@ -63,11 +63,17 @@ class Kimeco_db:
         }
         self._upsert: dict = {}
         self._select: dict = {}
-        # Set PRAGMA statements for db stability
-        # with self.eng.begin() as conn:
-        #     conn.execute(text("PRAGMA journal_mode=WAL;"))
-        #     conn.execute(text("PRAGMA synchronous=FULL;"))
-        #     conn.execute(text("PRAGMA busy_timeout=10000;"))
+
+        # Thread-safe locks for batch operations
+        self._upsert_lock = threading.Lock()
+        self._select_lock = threading.Lock()
+
+        # Enable WAL mode and optimizations for thread safety
+        with self.eng.begin() as conn:
+            conn.execute(text("PRAGMA journal_mode=WAL;"))
+            conn.execute(text("PRAGMA synchronous=NORMAL;"))
+            conn.execute(text("PRAGMA busy_timeout=30000;"))
+            conn.execute(text("PRAGMA cache_size=-64000;"))  # 64MB cache
 
     def defragmentate(self) -> None:
         with self.eng.begin() as conn:
@@ -201,15 +207,15 @@ class Kimeco_db:
                         self.sleep_time += 5
                         sleep(self.sleep_time)
                     else:
-                        klog: Logger = setup_logger(name='db.log')
+                        klog: KMOLogger = KMOLogger(filename='db.log')
                         klog.warning('An OperationalError occured in the db:')
                         klog.warning(e)
                 except Exception as e:
-                    klog: Logger = setup_logger(name='db.log')
+                    klog: KMOLogger = KMOLogger(filename='db.log')
                     klog.warning('An error occured in the database:')
                     klog.warning(e)
             else:
-                klog: Logger = setup_logger(name='db.log')
+                klog: KMOLogger = KMOLogger(filename='db.log')
                 msg: str = \
                     f'DB locked for {self.sleep_time*tot_try/60:.2f} min.'
                 klog.warning(msg)
@@ -258,27 +264,39 @@ class Kimeco_db:
             id (int): row id
             values (dict[str, Any]): dictionary of param name - value
         """
-        if table not in self._upsert:
-            self._upsert[table] = {}
-        self._upsert[table][id] = values
+        with self._upsert_lock:
+            if table not in self._upsert:
+                self._upsert[table] = {}
+            self._upsert[table][id] = values
 
     def batch_upsert(self) -> None:
         """Upsert entries perpapred with the
         prepare_batch_upsert() method
         """
-        if len(self._upsert) == 0:
-            return
-        for table in self._upsert:
+        # Take snapshot and clear under lock
+        with self._upsert_lock:
+            if len(self._upsert) == 0:
+                return
+            
+            # Copy the data
+            upsert_snapshot = {}
+            for table in self._upsert:
+                upsert_snapshot[table] = self._upsert[table].copy()
+            
+            # Clear immediately
+            self._upsert = {}
+        
+        # Execute outside the lock
+        for table in upsert_snapshot:
             ids: list[int] = []
             values: list[dict] = []
-            for id in self._upsert[table]:
+            for id in upsert_snapshot[table]:
                 ids.append(id)
-                values.append(self._upsert[table][id])
+                values.append(upsert_snapshot[table][id])
             self.upsert_entries(
                 table=table,
                 ids=ids,
                 values=values)
-        self._upsert = {}
 
     def save_data(self,
                   table: str,

@@ -35,7 +35,7 @@ class NelderMeadSwarm:
                  klog: KMOLogger,
                  pert: Perturbator) -> None:
         """Initialize the NelderMeadSwarm.
-        
+
         Args:
             elements: List of starting elements (one per NM instance)
             settings: Configuration dictionary
@@ -55,11 +55,7 @@ class NelderMeadSwarm:
         self.input_tpl: list[str] = input_tpl
         self.klog: KMOLogger = klog
         self.wdir: str = settings['workdir']
-        self.swarm_dir: str = os.path.join(self.wdir, 'nm_swarm')
-        if not os.path.exists(self.swarm_dir):
-            os.makedirs(self.swarm_dir, exist_ok=True)
-        os.chdir(self.swarm_dir)
-        # Create swarm directory
+        self.pert: Perturbator = pert
         self.initialize_databases()
         self.core = NMSRunner(
             settings=settings,
@@ -72,7 +68,7 @@ class NelderMeadSwarm:
         )
         # Determine dimensionality via sensitivity analysis
         self.dimensions: list[str] = []
-        self.determine_dimensions()
+        # self.determine_dimensions()
 
         # Results storage
         self.nm_instances: list[NelderMeadInstance] = []
@@ -92,24 +88,30 @@ class NelderMeadSwarm:
         """Create the three databases used by KiMecO
         """
         start_time: float = time.time()
-        self.sop_db = SOP_DB(sop=self.elements[0].sop,
-                             name='NMS_DB_SOP',
-                             threads=self.settings['threads'],
-                             path=self.swarm_dir)
+        self.sop_db = SOP_DB(
+            sop=self.elements[0].sop,
+            name='NMS_DB_SOP',
+            threads=self.settings['threads'],
+            path=self.wdir,
+        )
         sop_db_time: float = time.time() - start_time
         msg = 'NMS_DB_SOP initialized:'
         self.klog.info(f"{msg:<65}{sop_db_time:>15.1f}")
-        self.kin_db = KIN_DB(sop=self.elements[0].sop,
-                             name='NMS_DB_KIN',
-                             threads=self.settings['threads'],
-                             path=self.swarm_dir)
+        self.kin_db = KIN_DB(
+            sop=self.elements[0].sop,
+            name='NMS_DB_KIN',
+            threads=self.settings['threads'],
+            path=self.wdir,
+        )
         kin_db_time: float = time.time() - start_time - sop_db_time
         msg = 'NMS_DB_KIN initialized:'
         self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
-        self.sim_db = SIM_DB(sop=self.elements[0].sop,
-                             name='NMS_DB_SIM',
-                             threads=self.settings['threads'],
-                             path=self.swarm_dir)
+        self.sim_db = SIM_DB(
+            sop=self.elements[0].sop,
+            name='NMS_DB_SIM',
+            threads=self.settings['threads'],
+            path=self.wdir,
+        )
         sim_db_time: float = \
             time.time() - start_time - sop_db_time - kin_db_time
         msg = 'NMS_DB_SIM initialized:'
@@ -126,7 +128,8 @@ class NelderMeadSwarm:
             settings=self.settings,
             rc_tpl=self.input_tpl,
             sf=self.sf,
-            klog=self.klog
+            klog=self.klog,
+            pert=self.pert
         )
         sensitivity.run()
 
@@ -144,7 +147,9 @@ class NelderMeadSwarm:
         self.klog.info(f"Optimizing dimensions: {self.dimensions}")
 
         # Launch parallel NM instances
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.max_workers
+        ) as executor:
             # Submit all tasks
             future_to_nm = {}
             for nm_id, el in enumerate(self.elements):
@@ -206,8 +211,9 @@ class NelderMeadSwarm:
                 f_el=el,
                 input_tpl=self.input_tpl,
                 klog=self.klog,
-                dimensions=self.dimensions,  # Will be set later
-                shared_core=self.core
+                dimensions=self.dimensions,
+                shared_core=self.core,
+                prefix='NMS'
             )
 
         # Run optimization
@@ -224,16 +230,4 @@ class NelderMeadSwarm:
             'iterations': len(nm.iterations.generations)
         }
 
-    def create_dir(self,
-                   el: Element) -> None:
-        with self.new_folder_lock:
-            dir_name: str = f"{self.swarm_dir}/G{el.gen:04d}"
-            if not os.path.exists(dir_name):
-                os.makedirs(dir_name, exist_ok=True)
-                os.makedirs(dir_name + '/logs', exist_ok=True)
-                for file in el.sop.files2copy:
-                    src: str = f"{self.wdir}/{file}"
-                    dst: str = f"{dir_name}/{file}"
-                    if os.path.exists(src) and not os.path.exists(dst):
-                        os.symlink(src, dst)
-
+    # create_dir no longer needed; infrastructure handled by NMSRunner

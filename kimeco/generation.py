@@ -30,7 +30,7 @@ class Generation(CoreRun):
                  pert: Perturbator,
                  klog: KMOLogger,
                  previous_el: dict[int, Element] = {},
-                 ) -> None:
+                 prefix: str = 'G') -> None:
         """Generation object manages the worflow of
         a given set of elements, going from creating them
         (perturbed SOPs) to calculating the rate constants
@@ -58,7 +58,7 @@ class Generation(CoreRun):
                  pert=pert,
                  klog=klog,
                  previous_el=previous_el,
-                 name=f'G{self.id:04d}')
+                 prefix=prefix)
 
         if self.id % 10 == 0:
             self.sop_db.defragmentate()
@@ -88,48 +88,6 @@ class Generation(CoreRun):
             self.logger_tpl.format(
                 message='Best score:',
                 number=self.best_score))
-        self.klog.debug(
-            self.logger_tpl.format(
-                message='Rate coefficients:',
-                number=self.timers[ElementStatus.SOP]
-            )
-        )
-        self.klog.debug(
-            self.logger_tpl.format(
-                message='Preparing simulations:',
-                number=self.timers[ElementStatus.KIN]
-            )
-        )
-        self.klog.debug(
-            self.logger_tpl.format(
-                message='Requesting simulations:',
-                number=self.timers[ElementStatus.SIM]
-            )
-        )
-        self.klog.debug(
-            self.logger_tpl.format(
-                message='Collecting simulations:',
-                number=self.timers['collecting_sim']
-            )
-        )
-        self.klog.debug(
-            self.logger_tpl.format(
-                message='Scoring:',
-                number=self.timers[ElementStatus.SCORING]
-            )
-        )
-        self.klog.debug(
-            self.logger_tpl.format(
-                message='Saving SOP:',
-                number=self.timers[ElementStatus.TO_SAVE]
-            )
-        )
-        self.klog.debug(
-            self.logger_tpl.format(
-                message='Resetting elements',
-                number=self.timers[ElementStatus.RESET]
-            )
-        )
 
     def reset_element(self, el: Element) -> None:
         """Reset a failed element."""

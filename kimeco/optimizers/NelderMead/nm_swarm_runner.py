@@ -1,23 +1,28 @@
-import time
 import os
-import glob
 import threading
-from numpy.typing import NDArray
-from typing import Any
+from typing import Any, Optional
+from kimeco.core import CoreRun
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
 from kimeco.scoring_f.scoring import Scoring
-from kimeco.enums import RestartType, ElementStatus
-from kimeco.rate_coef import RateCo
-from kimeco.simulation import SIM
-from kimeco.q_sys import QueueingSystem, JobStatus
-from kimeco.templates.sim_helper import sim_helper
+from kimeco.Perturbators.perturbator import Perturbator
+from kimeco.enums import ElementStatus
 from kimeco.logger_config import KMOLogger
+from kimeco.q_sys import QueueingSystem
 
 
-class NMSRunner:
+class NMSRunner(CoreRun):
+    """NelderMead Swarm Runner - manages dynamic element pool for NM.
+
+    Key differences from CoreRun:
+    - Elements are added dynamically via add_element()
+    - Each element routes to table based on el.gen (e.g., G0000, G0001)
+    - Element pool has fixed size (thread count) but contents change
+    - Tables/folders created on-demand per generation
+    """
+
     def __init__(self,
                  settings: dict[str, Any],
                  rc_tpl: list[str],
@@ -26,500 +31,275 @@ class NMSRunner:
                  sim_db: SIM_DB,
                  sf: Scoring,
                  klog: KMOLogger,
-                 ) -> None:
-        """Generation object manages the worflow of
-        a given set of elements, going from creating them
-        (perturbed SOPs) to calculating the rate constants
-        and doing the cantera Simulation
+                 pert: Optional[Perturbator] = None) -> None:
+        """Initialize NMSRunner.
 
         Args:
-            sop (SOP): Initial set of parameters to be perturbed
-            n (int): number of elements in the generation
-            pert (Perturbator): Perturbator object used to perturb the SOP
-                                of this generation
-            set (dict): Settings.
-            rc_tpl: Template for rate constant calculation.
-            loc: Location. Absolute path of where the gen folder should be.
+            settings: Configuration dictionary
+            rc_tpl: Rate coefficient template
+            sop_db: SOP database
+            kin_db: Kinetics database
+            sim_db: Simulation database
+            sf: Scoring function
+            klog: Logger
+            pert: Perturbator (unused, kept for compatibility)
         """
-        self.klog: KMOLogger = klog
-        self.elements: list = [None for _ in range(settings['threads'])]
-        self.settings: dict[str, Any] = settings
-        # Thread-safe locks
-        self._tables_lock = threading.Lock()
-        self._elements_lock: dict[int, threading.Lock] = {
-            i: threading.Lock() for i in range(self.settings['threads'])
-        }
-        self._helpers_lock: dict[int, threading.Lock] = {
-            i: threading.Lock() for i in range(self.settings['max_helpers'])
-        }
-        # List of species names used by cantera
-        self.sc_species: list[str] = self.settings['score_sp']
-        # Rate coefficients template
-        self.rc_tpl: list[str] = rc_tpl
-        self.loc: str = settings['workdir']
-        self.swarm_loc: str = f"{self.loc}/nm_swarm"
-        # Scoring function
-        self.sf: Scoring = sf
-        self.sim_hlpers = [
-            [] for _ in range(self.settings['max_helpers'])
-            ]
-        self.elem_count: int = 0
-        self.sop_db: SOP_DB = sop_db
-        self.kin_db: KIN_DB = kin_db
-        self.sim_db: SIM_DB = sim_db
-        self.timers: dict[Any, float] = {
-            estat: 0.0 for estat in ElementStatus
-            }
-        self.timers['collecting_sim'] = 0.0
-        self.pres: list[float] = settings["rc_pres"]
-        self.temp: list[float] = settings["rc_temp"]
-
+        # Override elements with dynamic pool (consistent name)
+        self.elements: list[Element | None] = [None] * settings['threads']
+        # Initialize with empty element list
+        super().__init__(
+            elements=[],
+            settings=settings,
+            rc_tpl=rc_tpl,
+            sop_db=sop_db,
+            kin_db=kin_db,
+            sim_db=sim_db,
+            sf=sf,
+            pert=pert,
+            klog=klog,
+            previous_el={},
+            prefix='NMSG'  # Swarm Generation
+        )
+        # Override QueueingSystem with updated element count
         self.qs = QueueingSystem(
             settings=self.settings,
-            nel=self.settings['threads'],
-            nhlp=self.settings['max_helpers'],
+            nel=settings['threads'],
+            nhlp=0,  # Helpers removed - no longer used
             klog=self.klog)
-        # Contain the time when a sim_id was first queried
-        self.requeue_timer = {}
 
-        self.logger_tpl = '{message:<65}{number:>14.2f}'
+        # Pool-level lock to guard mutations and snapshots
+        self.pool_lock = threading.Lock()
 
-    def clean_files(self,
-                    el: Element) -> None:
-        """Remove files from previous runs for an element."""
-        name: str = f'G{el.gen:04d}/'
-        for file in glob.glob(
-            f"{name}{el.name}*"
-        ):
-            os.remove(file)
+        # Track which tables have been created
+        self.created_tables: set[str] = set()
 
-    def add_element(self,
-                    el: Element) -> None:
-        """Add an element to the generation."""
+        # Lock for table creation
+        self.table_creation_lock = threading.Lock()
+
+        # Lock to guard el_locks dict creation
+        self.el_locks_lock = threading.Lock()
+
+        # Element counter for defragmentation
+        self.elem_count: int = 0
+
+    def add_element(self, el: Element) -> bool:
+        """Add an element to the first available pool slot.
+
+        Args:
+            el: Element to add
+
+        Returns:
+            True if added successfully, False if no slots available
+        """
+        if el.status == ElementStatus.DONE:
+            return False
+
+        # Find first available slot
+        with self.pool_lock:
+            for idx in range(self.settings['threads']):
+                if len(self.elements) < idx + 1:
+                    self.elements.append(None)
+                if self.elements[idx] is None:
+                    el.thread_id = idx
+                    self.elements[idx] = el
+
+                    # Ensure tables and folders exist
+                    self._ensure_infrastructure_exists(el)
+
+                    # Track element count
+                    self.elem_count += 1
+
+                    return True
+
+        # No slots available
+        return False
+
+    def remove_element(self, el: Element) -> Element:
+        """Remove an element from the pool and return it.
+
+        Args:
+            el: Element to remove
+
+        Returns:
+            The removed element
+        """
+        if hasattr(el, 'thread_id') and el.thread_id is not None:
+            idx: int = el.thread_id
+            with self.pool_lock:
+                if self.elements[idx] is None:
+                    raise ValueError(f"Element {el.id} not found in pool")
+                removed_el = self.elements[idx]
+                self.elements[idx] = None
+                if removed_el is None:
+                    raise ValueError(f"Element {el.id} not found in pool")
+                return removed_el
+            
+        else:
+            # Fallback: search for element
+            with self.pool_lock:
+                for idx in range(len(self.elements)):
+                    if self.elements[idx] is el:
+                        self.elements[idx] = None
+                        return el
+            raise ValueError(f"Element {el.id} not found in pool")
+
+    def _ensure_infrastructure_exists(self, el: Element) -> None:
+        """Ensure tables and folders exist for element's generation.
+
+        Args:
+            el: Element whose infrastructure to create
+        """
+        table_name: str = self.get_table_name(el)
+
+        # Thread-safe table creation
+        with self.table_creation_lock:
+            if table_name not in self.created_tables:
+                # Create database tables
+                if table_name not in self.sop_db.tables:
+                    self.sop_db.create_new_table(name=table_name)
+                if table_name not in self.kin_db.tables:
+                    self.kin_db.create_new_table(name=table_name)
+                if table_name not in self.sim_db.tables:
+                    self.sim_db.create_new_table(name=table_name)
+
+                self.created_tables.add(table_name)
+
+        # Create folder structure
+        gen_folder: str = self.get_gen_folder(el)
+        if not os.path.exists(gen_folder):
+            os.makedirs(gen_folder + '/logs', exist_ok=True)
+
+        # Create subfolder for element (50 elements per subfolder)
+        subfolder: str = self.get_element_subfolder(el)
+        if not os.path.exists(subfolder):
+            os.makedirs(subfolder + '/logs', exist_ok=True)
+
+            # Symlink necessary files
+            for file in el.sop.files2copy:
+                src: str = f'{self.loc}/{file}'
+                dst: str = f'{subfolder}/{file}'
+                if os.path.exists(src) and not os.path.exists(dst):
+                    os.symlink(src, dst)
+
+    def run(self, el: Element) -> Element:
+        """Process an element until it reaches DONE status.
+
+        This is the main entry point for NelderMead swarm instances.
+
+        Args:
+            el: Element to process
+
+        Returns:
+            The processed element (status == DONE)
+        """
+        # Add element to pool
+        if not self.add_element(el):
+            raise RuntimeError("No available slots in element pool")
+
+        # Ensure lock exists for this element
+        with self.el_locks_lock:
+            if (el.gen, el.id) not in self.el_locks:
+                self.el_locks[(el.gen, el.id)] = threading.Lock()
+
+        # Process until done
+        while el.status != ElementStatus.DONE:
+            self._process_single_element(el)
+
+        # Remove and return
+        return self.remove_element(el)
+
+    def _process_single_element(self, el: Element) -> None:
+        """Process one iteration of a single element.
+
+        Args:
+            el: Element to process
+        """
         if el.status == ElementStatus.DONE:
             return
-        for thread in self.thread_status:
-            if self.thread_status[thread] == ThreadStatus.IDLE:
-                self.thread_status[thread] = ThreadStatus.BUSY
-                el.thread_id = thread
-                break
-        self.elements[el.thread_id] = el
-        self.elem_count += 1
-        with self._tables_lock:
-            self.create_tables(el)
-            if self.elem_count % 1000 == 0:
-                self.sop_db.defragmentate()
-                self.kin_db.defragmentate()
-                self.sim_db.defragmentate()
-        self.clean_files(el)
-        name: str = f'G{el.gen:04d}'
-        # Create core directory
-        nm_dir: str = f'{self.swarm_loc}/{name}'
-        if not os.path.isdir(nm_dir):
-            os.makedirs(nm_dir + '/logs', exist_ok=True)
-        subfolder = f'/{el.id//50+1:02d}'
-        if not os.path.isdir(nm_dir + subfolder):
-            os.makedirs(
-                nm_dir + f'/{subfolder:02d}' + '/logs', exist_ok=True)
-            # Copy files necessary for MESS calculation
-            for file in el.sop.files2copy:
-                os.symlink(f'{self.loc}/{file}',
-                           f'{nm_dir}/{subfolder:02d}/{file}')
 
-    def create_tables(self,
-                      el: Element) -> None:
-        """Create the tables in all databases
-        """
-        # Create table for gen in SOP, KIN and SIM
-        # SOP
-        tbl_name: str = f'G{el.gen:04d}'
-        if tbl_name not in self.sop_db.tables:
-            self.sop_db.create_new_table(
-                name=tbl_name
-                )
-        # KIN
-        if tbl_name not in self.kin_db.tables:
-            self.kin_db.create_new_table(
-                name=tbl_name
-                )
-        # SIM
-        if tbl_name not in self.sim_db.tables:
-            self.sim_db.create_new_table(
-                name=tbl_name
-                )
-
-    def run(self,
-            nm_el: Element) -> Element:
-        """Run a generation until all of its elements are scored.
-        """
-        self.add_element(nm_el)
-        while not nm_el.status == ElementStatus.DONE:
-            for idx, el in enumerate(self.elements):
-                if self._elements_lock[idx].locked():
-                    continue
-                else:
-                    # Acquire lock for this element
-                    with self._elements_lock[idx]:
-                        if el.status == ElementStatus.DONE:
-                            continue
-                        if el.status == ElementStatus.RESET:
-                            el.sop.scores = {
-                                k: float('inf') for k in el.sop.scores}
-                            self.klog.warning(
-                                f'Vertice ({el.gen} {el.id}) failed.',
-                                'Returned with a high score.')
-                            el.status = ElementStatus.DONE
-                            continue
-                        if el.status == ElementStatus.SOP:
-                            self.calculate_rate_coefficients(el)
-                        elif el.status == ElementStatus.KIN:
-                            self.run_simulation(el)
-                        elif el.status == ElementStatus.SIM:
-                            self.recover_simulation_data(el)
-                        # Only accessed on restart if RestartType is RESCORE
-                        elif el.status == ElementStatus.RESCORE:
-                            self.recalc_score(el)
-                        elif el.status == ElementStatus.SCORING:
-                            self.calc_score(el)
-                        if el.status == ElementStatus.TO_SAVE:
-                            self.finalize_element(el)
-            with self._tables_lock:
-                self.sop_db.batch_upsert()
-                self.kin_db.batch_upsert()
-            self.check_helpers_status()
-            self.collect_sim_profiles()
-            self.qs.run()
-        self.klog.debug(
-            f'Vertice {nm_el.id} in for NM {nm_el.gen} is done.')
-        # Might not be 100% safe in multi-threading
-        nm_idx: int = self.elements.index(nm_el)
-        return self.elements.pop(nm_idx)
-
-    def calculate_rate_coefficients(self,
-                                    el: Element) -> None:
-        """Calculate rate coefficients for an element."""
-        name: str = f'G{el.gen:04d}'
-        start_time: float = time.time()
-        el.rateCoef = RateCo(
-            sop=el.sop,
-            settings=self.settings,
-            software_tpl=self.rc_tpl,
-            id=el.id,
-            thread_id=el.thread_id,
-            name=f'{name}{el.name}',
-            loc=f'{self.swarm_loc}/{name}',
-            q_sys=self.qs,
-            db=self.kin_db,
-            klog=self.klog
-        )
-        el.rateCoef.set_status(table=name)
-        if el.rateCoef.status == JobStatus.NOT_IN_QUEUE:
-            el.rateCoef.q_up()
-        elif el.rateCoef.status == JobStatus.FINISHED:
-            el.save_kin(db=self.kin_db, table=name)
-        self.timers[ElementStatus.SOP] += \
-            (time.time() - start_time)
-
-    def run_simulation(self,
-                       el: Element) -> None:
-        """Run the simulation for an element."""
-        name: str = f'G{el.gen:04d}'
-        start_time: float = time.time()
-        el.sim = SIM(
-            sop=el.sop,
-            kin=el.rateCoef,
-            id=el.id,
-            thread_id=el.thread_id,
-            db=self.sim_db,
-            gen_name=name,
-            sc_species=self.sc_species,
-            loc=f'{self.swarm_loc}/{name}',
-            q_sys=self.qs,
-            set=self.settings,
-            klog=self.klog
-        )
-        el.sim.q_up()
-        self.timers[ElementStatus.KIN] += \
-            (time.time() - start_time)
-        el.status = ElementStatus.SIM
-
-    def recover_simulation_data(self,
-                                el: Element) -> None:
-        """Recover simulation data for an element."""
-
-        name: str = f'G{el.gen:04d}'
-        # Avoid large batch_select causing I/O errors
-        start_time: float = time.time()
-        if len(self.sim_db._select) > 2000:
-            self.klog.debug(f'Already {len(self.sim_db._select)} selected')
+        # Try to acquire lock (non-blocking)
+        if not self.el_locks[(el.gen, el.id)].acquire(blocking=False):
             return
 
-        # Change status from RUNNING to FINISHED (may have failed)
-        el.sim.set_status()
-        if el.sim.status == JobStatus.FINISHED:
-            self.qs.pickUp(id=el.id, jtype='sim')
-            el.sim.set_status()
-        # If successful, do the request
-        if el.sim.status == JobStatus.PICKED_UP or\
-           el.sim.status == JobStatus.NOT_IN_QUEUE:
-            if any([prof is None for prof in el.sim.profiles]):
-                el.request_sim_profiles(sim_db=self.sim_db,
-                                        table=name)
-        # Reset Element if simulation had an error
-        elif el.sim.status == JobStatus.FAILED:
-            el.status = ElementStatus.RESET
-        self.timers[ElementStatus.SIM] += \
-            (time.time() - start_time)
+        # Process element with lock held
+        try:
+            self._process_element_locked(el)
+        except Exception as e:
+            self.klog.error(f'Error processing element {el.id}: {e}')
+            raise e
 
-    def finalize_element(self,
-                         el: Element) -> None:
-        """Make sure element is saved before changing status."""
-        name: str = f'G{el.gen:04d}'
-        start_time: float = time.time()
-        if self.sop_db.entry_exist(table=name,
-                                   id=el.id):
-            el.status = ElementStatus.DONE
-        else:
-            el.prepare_upsert(db=self.sop_db, table=name)
-        self.timers[ElementStatus.TO_SAVE] += \
-            (time.time() - start_time)
+        # Batch database operations (per element)
+        self.sop_db.batch_upsert()
+        self.kin_db.batch_upsert()
+        self.sim_db.batch_upsert()
+
+        # Collect simulation profiles for this element
+        self.collect_sim_profiles()
+
+        # Run queuing system
+        with self.qs_lock:
+            self.qs.run()
+
+    def reset_element(self, el: Element) -> None:
+        raise NotImplementedError('NMS cannot reset elements.')
 
     def collect_sim_profiles(self) -> None:
-        """Batch recovery of the concentration profiles to avoid
-        multiple db transactions.
+        """Override: Map DB profiles back to active elements by (gen,id).
+
+        This version scans self.elements (thread-indexed) to find
+        the matching element rather than relying on CoreRun.elements.
         """
         if len(self.sim_db._select) == 0:
             return
         nsim: int = self.settings['n_exp']
-        collected: dict[str, list[int]] = {}
-        to_collect: dict[str, list[int]] = self.sim_db._select.copy()
-        collecting: dict[str, dict[int, NDArray]] = self.sim_db.batch_select()
-        for name in collecting.keys():
-            nm_id = int(name[1:5])
-            for sim_id, db_data in collecting[name].items():
-                # There is only one Element per nm_id
-                el: Element = [
-                    el for el in self.elements if el.gen == nm_id][0]
-                supposed_el_id: int = sim_id // nsim
-                if el.id != supposed_el_id:
-                    raise IndexError(
-                        f'Incorrect sim_id {sim_id} for element id {el.id}'
-                        f' (expected {supposed_el_id})'
-                    )
-                sim: int = sim_id % nsim
+
+        collecting = self.sim_db.batch_select()
+
+        # Process each table's results
+        for table_name, profiles in collecting.items():
+            gen_id = int(table_name[1:5])  # Extract from G#### or SG####
+
+            for sim_id, db_data in profiles.items():
+                el_id = sim_id // nsim
+                sim_idx = sim_id % nsim
+
+                # Find element with matching ID and generation
+                el = None
+                with self.pool_lock:
+                    for e in self.elements:
+                        if e is not None and e.id == el_id and e.gen == gen_id:
+                            el = e
+                            break
+                if el is None:
+                    continue
+
                 # number of timesteps
-                nsteps: int = len(self.settings['exp_profiles'][sim][0])
-                # Happens because of data concurrency
+                nsteps: int = len(self.settings['exp_profiles'][sim_idx][0])
+
+                # Validate data completeness
                 if len(db_data) != nsteps:
                     continue
-                # The data are correct, free the queuing system
-                el.sim.profiles[sim] = db_data
+
+                el.sim.profiles[sim_idx] = db_data
 
                 # Scoring needs all the profiles
                 if all([prof is not None for prof in el.sim.profiles]):
                     el.status = ElementStatus.SCORING
-                if name not in collected:
-                    collected[name] = []
-                collected[name].append(sim_id)
-        if collected == to_collect:
-            msg = 'Collected all requested sim profiles.'
-            self.klog.debug(msg)
-            self.timers['collecting_sim'] += (
-                time.time() - start_time)
-            return
-        elif self.settings['restart'] == RestartType.RESCORE:
-            msg = f'Collected {len(collected)}/{len(to_collect)} sim profiles.'
-            msg += 'Waiting for the others from DB.'
-            self.klog.debug(msg)
-            # Only True for Linear sensitivity analysis
-            if not hasattr(self, 'selected'):
-                return
-        else:
-            msg = f'Collected {len(collected)}/{len(to_collect)} sim profiles.'
-            msg += 'Requesting the others from helpers.'
-            self.klog.debug(msg)
-        # Some profiles are not saved in the database yet
-        hlp_idx: int = -1
-        # Look if helpers are available
-        for idx, hlp in enumerate(self.sim_hlpers):
-            if len(hlp) == 0:
-                hlp_idx = idx
-                break
-        # Don't create helpers if none available
-        if hlp_idx == -1:
-            return
-        # Create helpers if needed
-        need_helper: list[tuple[str, int]] = []
-        for name in to_collect.keys():
-            if name not in collected:
-                need_helper.append(
-                    (name, to_collect[name][0])
-                )
-            
-        filenames = []
-        # Avoid asking multiple helpers to do the same
-        assigned_ids = set()  # Set to track already assigned sim_ids
 
-        # Collect all sim_ids that are already assigned to helpers
-        for hlp in self.sim_hlpers:
-            assigned_ids.update(hlp)
-
-        # Filter need_helper to remove any sim_ids that are already assigned
-        for (name, sim_id) in need_helper:
-            nm_id = int(name[2:6])
-            el: Element = [el for el in self.elements if el.gen == nm_id][0]
-            supposed_el_id: int = sim_id // nsim
-            if el.id != supposed_el_id:
-                raise IndexError(
-                    f'Incorrect sim_id {sim_id} for element id {el.id}'
-                    f' (expected {supposed_el_id})'
-                )
-            el: Element = self.elements[sim_id // nsim]
-            sim: int = sim_id % nsim
-            flnm: str = \
-                f'{self.swarm_loc}/{name}/{el.id//50:02d}' +\
-                f'/{name}{el.name}S{sim:02d}.json'
-            # Happens because of long write times
-            if os.path.isfile(flnm):
-                if len(self.sim_hlpers[hlp_idx]) < 50:
-                    if (name, sim_id) not in assigned_ids:
-                        self.sim_hlpers[hlp_idx].append((name, sim_id))
-                        filenames.append(flnm)
-                # The job has finished without error, but didn't write
-                # json file
-                else:
-                    break
-            else:
-                if sim_id not in self.requeue_timer:
-                    self.requeue_timer[sim_id] = time.time()
-                # Wait maximum 30 sec for file to be written
-                elif time.time() - self.requeue_timer[sim_id] < 30.0:
-                    continue
-                # or resubmit
-                else:
-                    self.requeue_timer[sim_id] = time.time()
-                    msg: str = f'Missing file: {el.name}S{sim:02d}.json'
-                    msg += ' Sim re-submitted.'
-                    self.klog.info(msg)
-                    el.sim.q_up()
-                continue
-        if len(self.sim_hlpers[hlp_idx]) == 0:
-            self.timers['collecting_sim'] += (time.time() - start_time)
-            return
-
-        self.submit_helper(hlp_idx=hlp_idx,
-                           filenames=filenames)
-        self.timers['collecting_sim'] += (time.time() - start_time)
-
-    def submit_helper(self,
-                      hlp_idx: int,
-                      filenames: list[str]) -> None:
-        """Submit a helper job to process simulation profiles.
-
-        Args:
-            hlp_idx (int): Index of the helper.
-            filenames (list[str]): List of filenames to process.
-        """
-        hlp_name: str = f'hlp_{hlp_idx}'
-        hlp_job: str = sim_helper.format(
-            db=self.sim_db,
-            hlp_idx=hlp_idx,
-            filenames=filenames
-            )
-        with open(f'{self.swarm_loc}/{hlp_name}.py', 'w') as f:
-            f.write(hlp_job)
-        self.qs.add_to_q(
-            name=hlp_name,
-            idx=hlp_idx,
-            location=f'{self.swarm_loc}',
-            jtype='hlp',
-            ressources=(self.settings['cpu_kin'], self.settings['mem_hlp'])
-            )
-
-    def recalc_score(self,
-                     el: Element) -> None:
-        """Reload the simulated profiles from the db, and rescore them.
-        Save the new score by overwritting the old one.
-
-        Args:
-            el (Element): Element
-        """
-        name = f'G{el.gen:04d}'
-        el.rateCoef = RateCo(
-            sop=el.sop,
-            settings=self.settings,
-            software_tpl=self.rc_tpl,
-            id=el.id,
-            thread_id=el.thread_id,
-            name=f'{name}{el.name}',
-            loc=f'{self.swarm_loc}/{name}',
-            q_sys=self.qs,
-            db=self.kin_db,
-            klog=self.klog
-        )
-        el.sim = SIM(
-            sop=el.sop,
-            kin=el.rateCoef,
-            id=el.id,
-            db=self.sim_db,
-            gen_name=name,
-            sc_species=self.sc_species,
-            loc=f'{self.swarm_loc}/{name}',
-            q_sys=self.qs,
-            set=self.settings,
-            klog=self.klog
-        )
-        if any([prof is None for prof in el.sim.profiles]):
-            el.request_sim_profiles(sim_db=self.sim_db,
-                                    table=name)
-
-    def calc_score(self,
-                   el: Element) -> None:
-        """Calculate the score of the element
-        using the user requested function.
-        If the elif statement for a new scoring function
-        is missing, also add the chosen string to
-        the implemented_sf list in default_settings.py.
-
-        Args:
-            settings (dict[str, Any]): User input + default settings
-        """
-        start_time: float = time.time()
-        try:
-            scores: list[float] = self.sf.score(sim=el.sim)
-            for idx, k in enumerate(el.sop.scores):
-                el.sop.scores[k] = scores[idx]
-            el.status = ElementStatus.TO_SAVE
-        except IndexError as e:
-            self.klog.debug(str(e))
-            # Occurs when a simulation didn't work so profiles were not saved
-            el.status = ElementStatus.RESET
-            self.klog.info(f'Resetting element {el.id}: error during scoring.')
-        self.timers[ElementStatus.SCORING] += \
-            (time.time() - start_time)
-
-    def check_helpers_status(self) -> None:
-        """Management of helpers status.
-        """
-        for i in range(len(self.sim_hlpers)):
-            if self._helpers_lock[i].locked():
-                continue
-            else:
-                with self._helpers_lock[i]:
-                    if self.qs.status(i, 'hlp') == JobStatus.FINISHED:
-                        self.qs.pickUp(id=i,
-                                    jtype='hlp')
-                    if self.qs.status(i, 'hlp') == JobStatus.FAILED:
-                        self.klog.warning(f'Helper {i} failed to collect sim profiles.')
-                        self.klog.warning('Corresponding sim_ids are reset')
-                        for sim_id in self.sim_hlpers[i]:
-                            el: Element = self.elements[
-                                sim_id // self.settings['n_exp']]
-                            el.status = ElementStatus.RESET
-                        self.sim_hlpers[i] = []
-                    elif self.qs.status(i, 'hlp') == JobStatus.NOT_IN_QUEUE:
-                        self.sim_hlpers[i] = []
+    @property
+    def finished(self) -> bool:
+        """Check if all elements in pool are done."""
+        return all([
+            el is None or el.status == ElementStatus.DONE
+            for el in self.elements
+        ])
 
     @property
     def best_score(self) -> float:
-        return min([el.score for el in self.elements])
+        """Get best score from active elements."""
+        active_elements = [
+            el for el in self.elements if el is not None
+        ]
+        if not active_elements:
+            return float('inf')
+        return min([el.score for el in active_elements])

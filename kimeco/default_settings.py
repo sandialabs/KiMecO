@@ -100,6 +100,8 @@ default_settings: dict[str, Any] = {
     "mem_hlp": 500,
     # Maximum number of memory (Mb) used per generation
     "max_mem": 1000000,
+    # Default start for NMS
+    'NMS_start': '',
     # Maximum number of cpu used per generation
     "max_cpu": 2000,
     # Maximum number of jobs submitted per generation

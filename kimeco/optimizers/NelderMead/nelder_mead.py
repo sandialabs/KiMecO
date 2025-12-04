@@ -26,7 +26,8 @@ class NelderMead:
                  kin_db: KIN_DB,
                  f_el: Element,
                  input_tpl: list[str],
-                 klog: KMOLogger
+                 klog: KMOLogger,
+                 prefix: str = 'NM'
                  ) -> None:
         self.name = 'Nelder-Mead'
         self.sf: Scoring = sf
@@ -41,14 +42,16 @@ class NelderMead:
         self.new_parameters: list[str] = self.settings['to_perturb']
         self.current_dimensions: list[str] = []
         self.wdir: str = self.settings['workdir']
+        self.prefix: str = prefix
         # Updated in objective function
         self.last_vertice: SOP = self.f_el.sop
-        self.iterations = GOATs(sop_db=sop_db,
-                                sim_db=sim_db,
-                                kin_db=kin_db,
-                                wdir=self.wdir)
+        self.goats = GOATs(sop_db=sop_db,
+                           sim_db=sim_db,
+                           kin_db=kin_db,
+                           wdir=self.wdir,
+                           prefix=self.prefix)
         self.score_line_tpl = '{iter:>10}{score:>15}\n'
-        with open(self.wdir + '/NM_scores.txt', 'w', encoding='utf-8') as f:
+        with open(self.wdir + f'/{self.prefix}_scores.txt', 'w', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
                 iter='ITERATION',
                 score='SCORE'))
@@ -88,7 +91,9 @@ class NelderMead:
                 ])
             else:
                 dstep: float = self.calculate_dstep(
-                    uc=self.f_el.sop.uncertainties[self.current_dimensions[i-1]],
+                    uc=self.f_el.sop.uncertainties[
+                        self.current_dimensions[i-1]
+                    ],
                     param=self.current_dimensions[i-1],
                     side=1)
                 simplex[i] = np.array([
@@ -236,18 +241,22 @@ class NelderMead:
         if initial:
             options['initial_simplex'] = self.get_initial_simplex()
             self.klog.debug(
-                f"Setting Nelder-Mead fatol={self.settings['nm_fatol']}")
+                f"Setting Nelder-Mead fatol="
+                f"{self.settings['nm_fatol']}")
             options['fatol'] = self.settings['nm_fatol']
             self.klog.debug(
-                f"Setting Nelder-Mead xatol={self.settings['nm_xatol']}")
+                f"Setting Nelder-Mead xatol="
+                f"{self.settings['nm_xatol']}")
             options['xatol'] = self.settings['nm_xatol']
             if self.settings['nm_maxiter'] > 0:
                 self.klog.debug(
-                    f"Setting Nelder-Mead maxiter={self.settings['nm_maxiter']}")
+                    f"Setting Nelder-Mead maxiter="
+                    f"{self.settings['nm_maxiter']}")
                 options['maxiter'] = self.settings['nm_maxiter']
             if self.settings['nm_maxfev'] > 0:
                 self.klog.debug(
-                    f"Setting Nelder-Mead maxfev={self.settings['nm_maxfev']}")
+                    f"Setting Nelder-Mead maxfev="
+                    f"{self.settings['nm_maxfev']}")
                 options['maxfev'] = self.settings['nm_maxfev']
             if self.settings['nm_adaptive']:
                 self.klog.debug("Using adaptive Nelder-Mead")
@@ -256,18 +265,22 @@ class NelderMead:
         else:
             options['initial_simplex'] = self.restart_simplex()
             self.klog.debug(
-                f"Setting final Nelder-Mead fatol={self.settings['nm_final_fatol']}")
+                f"Setting final Nelder-Mead fatol="
+                f"{self.settings['nm_final_fatol']}")
             options['fatol'] = self.settings['nm_final_fatol']
             self.klog.debug(
-                f"Setting final Nelder-Mead xatol={self.settings['nm_final_xatol']}")
+                f"Setting final Nelder-Mead xatol="
+                f"{self.settings['nm_final_xatol']}")
             options['xatol'] = self.settings['nm_final_xatol']
             if self.settings['nm_final_maxiter'] > 0:
                 self.klog.debug(
-                    f"Setting final Nelder-Mead maxiter={self.settings['nm_final_maxiter']}")
+                    f"Setting final Nelder-Mead maxiter="
+                    f"{self.settings['nm_final_maxiter']}")
                 options['maxiter'] = self.settings['nm_final_maxiter']
             if self.settings['nm_maxfev'] > 0:
                 self.klog.debug(
-                    f"Setting final Nelder-Mead maxfev={self.settings['nm_final_maxfev']}")
+                    f"Setting final Nelder-Mead maxfev="
+                    f"{self.settings['nm_final_maxfev']}")
                 options['maxfev'] = self.settings['nm_final_maxfev']
             if self.settings['nm_adaptive']:
                 self.klog.debug("Using adaptive for final Nelder-Mead")
@@ -301,10 +314,11 @@ class NelderMead:
         Args:
             new_els (list[Element]): last vertive
         """
-        self.latest_simplex: list[Element] = self.iterations.update_with_generation(
-            elements=[last_vertice],
-            goat_length=len(self.current_dimensions) + 1
-        )
+        self.latest_simplex: list[Element] = \
+            self.goats.update_with_generation(
+                elements=[last_vertice],
+                goat_length=len(self.current_dimensions) + 1
+            )
         with open(self.wdir + '/NM_scores.txt', 'a', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
                 iter=last_vertice.gen,
@@ -331,7 +345,7 @@ class NelderMead:
             msg = "Running SA to check if centroid is full-dimensional"
             self.klog.info(msg)
             sensitivity = Linear(
-                elements=self.iterations.get_goat_for_gen(-1),
+                elements=self.goats.get_goat_for_gen(-1),
                 settings=self.settings,
                 rc_tpl=self.input_tpl,
                 sf=self.sf,
@@ -433,7 +447,8 @@ class NelderMead:
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog,
-                previous_el={0: self.f_el}
+                previous_el={0: self.f_el},
+                prefix=self.prefix
                 )
         new_gen.run()
         self.print_stats(
@@ -527,18 +542,3 @@ class NelderMead:
                 current=str_current) + '\n'
         self.klog.info(msg)
 
-
-class GenerationForNM(Generation):
-    """Generation subclass that uses custom table names for NM instances."""
-    
-    def __init__(self, *args, name: str = None, **kwargs):
-        """Initialize with custom name (e.g., NM0000)."""
-        # Don't increment the global Generation counter
-        self.id = -1  # Placeholder
-        
-        # Call CoreRun init directly, bypassing Generation's counter logic
-        from kimeco.core import CoreRun
-        CoreRun.__init__(self, *args, name=name, **kwargs)
-        
-        # Override logger template
-        self.logger_tpl = '{message:<65}{number:>14.2f}'

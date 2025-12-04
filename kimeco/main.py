@@ -30,3 +30,4 @@ def main() -> None:
     kmo.set_important_parameters()
     kmo.set_optimizer()
     kmo.optimizer.run()
+    kmo.finalize()

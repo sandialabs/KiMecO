@@ -32,7 +32,8 @@ class GOATs:
                  kin_db: KIN_DB,
                  sim_db: SIM_DB,
                  wdir: str = '.',
-                 overwrite: bool = True) -> None:
+                 overwrite: bool = True,
+                 prefix: str = 'G') -> None:
         """Load GOATs from a file and keep references to databases.
 
         Args:
@@ -49,6 +50,7 @@ class GOATs:
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
         self.wdir: str = wdir
+        self.prefix: str = prefix
 
         # generations is a list where each index corresponds to a
         # generation number and stores a list of (gen_id, el_id) tuples
@@ -157,8 +159,8 @@ class GOATs:
         # Map rows to Elements
         for gen_id, el_id in zip(gen_ids, el_ids):
             # drop the id column and reconstruct SOP
-            table = np.array(rows[f'G{gen_id:04d}'])
-            row = table[table[:, 0] == el_id][:,1:]
+            table = np.array(rows[f'{self.prefix}{gen_id:04d}'])
+            row: str = table[table[:, 0] == el_id][:,1:]
             if len(row) != 1:
                 msg = "Expected exactly one row for id "
                 msg += f"{el_id} in table G{gen_id:04d}, found {len(row)}"
@@ -276,7 +278,7 @@ class GOATs:
         # rate_pair. gen_elements stores tuples (elem_gen, elem_id).
         for gen_id in gen_ids:
             for (elem_gen, elem_id) in self.generations[gen_id]:
-                table: str = f"G{elem_gen:04d}"
+                table: str = f"{self.prefix}{elem_gen:04d}"
                 kin_id = int(elem_id)
                 for (p, t) in req_conditions:
                     # KIN_DB expects From, To parameter names

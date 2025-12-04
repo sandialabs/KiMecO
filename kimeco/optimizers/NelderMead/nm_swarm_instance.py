@@ -6,7 +6,6 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
 from kimeco.element import Element
-from kimeco.goat import GOATs
 from scipy.optimize import minimize
 from numpy.typing import NDArray
 from kimeco.parameters import SOP
@@ -36,7 +35,8 @@ class NelderMeadInstance(NelderMead):
                  input_tpl: list[str],
                  klog: KMOLogger,
                  dimensions: list[str],
-                 shared_core: NMSRunner
+                 shared_core: NMSRunner,
+                 prefix: str = ''
                  ) -> None:
         """Initialize NelderMeadInstance.
 
@@ -56,9 +56,10 @@ class NelderMeadInstance(NelderMead):
             registry: Optional SwarmRegistry for tracking elements
         """
         self.nm_id: int = nm_id
-        self.gen_counter = 0
         self.current_dimensions: list[str] = dimensions
-
+        self.gen_prefix: str = prefix + 'G'
+        self.prefix: str = prefix + f'{nm_id:04d}'
+        self.gen_counter = 0
         # Call parent init but override some behaviors
         super().__init__(
             settings=settings,
@@ -69,15 +70,15 @@ class NelderMeadInstance(NelderMead):
             kin_db=kin_db,
             f_el=f_el,
             input_tpl=input_tpl,
-            klog=klog
+            klog=klog,
+            prefix=self.prefix
         )
         self.shared_core: NMSRunner = shared_core
         # Override name and working directory
         self.name: str = f'E{self.nm_id:04d}'
 
         # Create instance-specific score file
-        self.score_file: str = \
-            f'{self.wdir}/nm_swarm/NM{self.nm_id:04d}_scores.txt'
+        self.score_file: str = f'{self.wdir}/{self.prefix}_scores.txt'
         with open(self.score_file, 'w', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
                 iter='ITERATION',
@@ -86,6 +87,11 @@ class NelderMeadInstance(NelderMead):
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization with fixed dimensions."""
         # Use fixed dimensions (no sensitivity analysis)
+        """Run the Nelder-Mead optimization."""
+        initial = True
+        # while self.dimensionality_changed or result['fun'] > 9:
+        self.current_dimensions = self.new_parameters
+        self.new_parameters = []
 
         # Run initial optimization
         result = minimize(
@@ -93,7 +99,7 @@ class NelderMeadInstance(NelderMead):
             x0=self.get_initial_vertice(),
             method='Nelder-Mead',
             bounds=[(-1, 1) for _ in self.current_dimensions],
-            options=self.get_options(initial=False)
+            options=self.get_options(initial=initial)
         )
 
         if result.success:
@@ -122,9 +128,9 @@ class NelderMeadInstance(NelderMead):
         )
 
         # Check if this SOP already exists in our NM table
-        table_name = f'NM{self.nm_id:04d}'
-        if self.is_vertice_finished(nm_id=self.nm_id,
-                                    elem_id=self.gen_counter):
+        table_name: str = f'{self.gen_prefix}{self.gen_counter:04d}'
+        if self.is_vertice_finished(gen_id=self.gen_counter,
+                                    elem_id=self.nm_id):
             sop_in_db = True
             try:
                 db_row: list[float] = self.sop_db.get_sop_row(
@@ -172,24 +178,23 @@ class NelderMeadInstance(NelderMead):
                 gen=self.gen_counter)
 
         # Create a generation-like run but with NM table names
-        self.shared_core.add_element(el=vertice)
-        finished_vertice: Element = self.shared_core.run(nm_el=vertice)
+        finished_vertice: Element = self.shared_core.run(el=vertice)
 
         # Increment element counter for next evaluation
         self.gen_counter += 1
 
-        self.print_stats(
-            params=np.array([
-                self.get_absolute(
-                    param=p,
-                    value=params[self.current_dimensions.index(p)])
-                for p in self.current_dimensions]))
+        # self.print_stats(
+        #     params=np.array([
+        #         self.get_absolute(
+        #             param=p,
+        #             value=params[self.current_dimensions.index(p)])
+        #         for p in self.current_dimensions]))
         self.update_iterations(last_vertice=finished_vertice)
 
         return finished_vertice.score
 
     def is_vertice_finished(self,
-                            nm_id: int,
+                            gen_id: int,
                             elem_id: int) -> bool:
         """Check if a table is finished.
 
@@ -199,7 +204,7 @@ class NelderMeadInstance(NelderMead):
         Returns:
             bool: Whether it is finished
         """
-        table_name: str = f"NM{nm_id:04d}"
+        table_name: str = f"{self.gen_prefix}{gen_id:04d}"
 
         if self.sop_db.table_exists(table_name) and\
            self.kin_db.table_exists(table_name) and\

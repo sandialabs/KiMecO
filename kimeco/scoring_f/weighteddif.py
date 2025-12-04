@@ -31,7 +31,7 @@ class WeightedDif(Scoring):
         for p in range(len(self.settings['rc_pres'])):
             for t in range(len(self.settings['rc_temp'])):
                 sim_index: int = p*len(self.settings['rc_temp']) + t
-                sim_prof: NDArray = sim.profiles[sim_index].T[2:]
+                sim_prof: NDArray = sim.profiles[sim_index]
                 exp_prof: NDArray = self.settings['exp_profiles'][sim_index][1:]
                 exp_errs: NDArray = self.settings['exp_errors'][sim_index][1:]
                 sp_weight: NDArray = self.settings['weights'][sim_index]

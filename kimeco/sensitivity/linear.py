@@ -42,20 +42,21 @@ class Linear(CoreRun):
         Linear.__id += 1
         self.klog: KMOLogger = klog
         self.settings: dict[str, Any] = settings
-        self.name: str = f'SA{self.id:04d}'
+        self.prefix = 'SA'
+        self.name: str = f'{self.prefix}{self.id:04d}'
         self.to_test: list[bool] = []
         self.selected: list[str] = []
         self.sop_tpl: SOP = elements[0].sop
         self.lin_fact: float = self.settings['sensi_d']
-        self.pert: Perturbator| None = pert
+        self.pert: Perturbator | None = pert
         self.sop_db = SOP_DB(sop=self.sop_tpl,
-                             name='SA_DB_SOP',
+                             name=f'{self.prefix}_DB_SOP',
                              path=self.settings['workdir'])
         self.kin_db = KIN_DB(sop=self.sop_tpl,
-                             name='SA_DB_KIN',
+                             name=f'{self.prefix}_DB_KIN',
                              path=self.settings['workdir'])
         self.sim_db = SIM_DB(sop=self.sop_tpl,
-                             name='SA_DB_SIM',
+                             name=f'{self.prefix}_DB_SIM',
                              path=self.settings['workdir'])
         if self.SA_is_in_db() and restart:
             self.klog.debug('SA is in DB. Reading results.')
@@ -78,7 +79,7 @@ class Linear(CoreRun):
             sim_db=self.sim_db,
             sf=sf,
             pert=pert,
-            name=self.name,
+            prefix=self.prefix,
             klog=self.klog)
         # Clean the SIM database
         if self.sim_db.table_exists(self.name) and not self.finished:
@@ -267,7 +268,8 @@ class Linear(CoreRun):
         # List to hold the new SOP objects
         new_elements: list[Element] = [
             Element(sop=base_sop,
-                    id=0)
+                    id=0,
+                    gen=self.id)
         ]
 
         # Get the parameters names and their current values
@@ -301,7 +303,8 @@ class Linear(CoreRun):
                 new_elements.append(
                     Element(
                         sop=new_sop,
-                        id=el_id))
+                        id=el_id,
+                        gen=self.id))
         return new_elements
 
     def run(self) -> None:

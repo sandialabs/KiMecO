@@ -2,6 +2,7 @@ import os
 import time
 from typing import Any
 import shutil
+from kimeco.goat import GOATs
 from kimeco.readers.mess_input import MessInputReader
 from kimeco.parameters import SOP
 import logging
@@ -15,10 +16,11 @@ from kimeco.scoring_f.weighteddif import WeightedDif
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.sensitivity.linear import Linear
 from kimeco.element import Element
-from kimeco.enums import Optimizers, RestartType
+from kimeco.enums import ElementStatus, Optimizers, RestartType
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
 from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
+from kimeco.optimizers.NelderMead.nelder_mead_swarm import NelderMeadSwarm
 
 
 class KiMecO:
@@ -222,3 +224,82 @@ class KiMecO:
         else:
             raise NotImplementedError('Unknown optimizer requested')
         self.klog.info(f"{'OPTIMIZER:':<65}{self.optimizer.name}")
+
+    def get_ensemble(self, name: str) -> list[Element]:
+        """
+        Resolve an ensemble name to a list of Elements.
+
+        Supported formats:
+        - 'Gdddd' e.g., 'G0001': optimizer generation dddd
+        - 'GT-1': last GOATs generation
+        - 'GTxxxx': specific GOATs generation
+        """
+        name = name.strip()
+        elements: list[Element] = []
+        if name.startswith('G') and len(name) == 5 and name[1:].isdigit():
+            gen = int(name[1:])
+            if gen != 1:
+                raise NotImplementedError("Only generation 1 is supported")
+                # TODO: Add previous el in SOP_db to know all elems
+                #  of a generation, and not only the new ones.
+            table: str = f'G{gen:04d}'
+            f_el_row = self.sop_db.get_table(table=table)[0]
+            f_el = Element(
+                sop=SOP.from_db_row(
+                    sop_tpl=self.init_SOP,
+                    row=f_el_row[1:]),
+                id=0,
+                gen=0)
+            elements.append(f_el)
+            if self.sop_db.table_exists(table):
+                rows = self.sop_db.get_table(table=table)
+                for row in rows:
+                    sop: SOP = SOP.from_db_row(
+                        sop_tpl=self.init_SOP,
+                        row=row[1:])
+                    elements.append(
+                        Element(sop=sop,
+                                id=row[0],
+                                gen=gen))
+        elif name.startswith('GT'):
+            # GOATs ensemble resolution from optimizer.goats
+            if hasattr(self.optimizer, 'goats'):
+                goats: GOATs = self.optimizer.goats
+                # 'GT-1' means last generation
+                if name == 'GT-1':
+                    elements = goats.get_goat_for_gen(-1)
+                else:
+                    # 'GTxxxx' means specific generation
+                    gen = int(name[2:])
+                    elements = goats.get_goat_for_gen(gen)
+            else:
+                self.klog.warning(
+                    f"No GOATs object for ensemble '{name}'.")
+        if not elements:
+            self.klog.warning(f"Ensemble '{name}' not found or empty.")
+        return elements
+
+    def run_nms(self, elements: list[Element]) -> None:
+        """Run NelderMeadSwarm starting from provided elements."""
+        if not elements:
+            return
+        swarm = NelderMeadSwarm(
+            elements=elements,
+            settings=self.settings,
+            sf=self.sf,
+            sop_db=self.sop_db,
+            sim_db=self.sim_db,
+            kin_db=self.kin_db,
+            input_tpl=self.input_tpl,
+            klog=self.klog,
+            pert=self.pert,
+        )
+        best = swarm.run()
+        self.klog.info(f"NMS completed with {len(best)} best elements")
+
+    def finalize(self) -> None:
+        # Optionally run NMS after optimizer based on settings
+        start_key = self.settings['NMS_start']
+        if isinstance(start_key, str) and start_key.strip():
+            ens = self.get_ensemble(start_key.strip())
+            self.run_nms(ens)
