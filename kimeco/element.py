@@ -140,7 +140,7 @@ class Element:
         for idx, i in enumerate(to_watch):
             traces[i] = np.full(
                 tot_steps,
-                self.sim.profiles[sim_num][:, idx+2]).tolist()
+                self.sim.profiles[sim_num][idx]).tolist()
             names.append(i)
         for idx, id in enumerate(row_ids):
             row_dict = {}

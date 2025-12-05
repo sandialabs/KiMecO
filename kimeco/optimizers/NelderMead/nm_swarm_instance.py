@@ -56,7 +56,6 @@ class NelderMeadInstance(NelderMead):
             registry: Optional SwarmRegistry for tracking elements
         """
         self.nm_id: int = nm_id
-        self.current_dimensions: list[str] = dimensions
         self.gen_prefix: str = prefix + 'G'
         self.prefix: str = prefix + f'{nm_id:04d}'
         self.gen_counter = 0
@@ -73,6 +72,8 @@ class NelderMeadInstance(NelderMead):
             klog=klog,
             prefix=self.prefix
         )
+        self.new_parameters: list[str] = dimensions
+        self.current_dimensions: list[str] = []
         self.shared_core: NMSRunner = shared_core
         # Override name and working directory
         self.name: str = f'E{self.nm_id:04d}'

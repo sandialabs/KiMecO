@@ -68,7 +68,7 @@ class NelderMeadSwarm:
         )
         # Determine dimensionality via sensitivity analysis
         self.dimensions: list[str] = []
-        # self.determine_dimensions()
+        self.determine_dimensions()
 
         # Results storage
         self.nm_instances: list[NelderMeadInstance] = []
