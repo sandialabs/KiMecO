@@ -44,8 +44,6 @@ class NMSRunner(CoreRun):
             klog: Logger
             pert: Perturbator (unused, kept for compatibility)
         """
-        # Override elements with dynamic pool (consistent name)
-        self.elements: list[Element | None] = [None] * settings['threads']
         # Initialize with empty element list
         super().__init__(
             elements=[],
@@ -60,6 +58,8 @@ class NMSRunner(CoreRun):
             previous_el={},
             prefix='NMSG'  # Swarm Generation
         )
+        # Override elements with dynamic pool (consistent name)
+        self.elements: list[Element | None] = [None] * settings['threads']
         # Override QueueingSystem with updated element count
         self.qs = QueueingSystem(
             settings=self.settings,
@@ -82,37 +82,28 @@ class NMSRunner(CoreRun):
         # Element counter for defragmentation
         self.elem_count: int = 0
 
-    def add_element(self, el: Element) -> bool:
+    def add_element(self, el: Element) -> None:
         """Add an element to the first available pool slot.
 
         Args:
             el: Element to add
 
         Returns:
-            True if added successfully, False if no slots available
+            None
         """
-        if el.status == ElementStatus.DONE:
-            return False
 
         # Find first available slot
-        with self.pool_lock:
-            for idx in range(self.settings['threads']):
-                if len(self.elements) < idx + 1:
-                    self.elements.append(None)
-                if self.elements[idx] is None:
-                    el.thread_id = idx
-                    self.elements[idx] = el
-
-                    # Ensure tables and folders exist
-                    self._ensure_infrastructure_exists(el)
-
-                    # Track element count
-                    self.elem_count += 1
-
-                    return True
-
-        # No slots available
-        return False
+        for idx in range(self.settings['threads']):
+            if self.elements[idx] is None:
+                el.thread_id = idx
+                self.elements[idx] = el
+                self.klog.debug(
+                    f'Element {el.id} (Gen {el.gen}) added to pool at thread {idx}.')
+                break
+        if el not in self.elements:
+            raise RuntimeError("Failed to add element to pool")
+        # Ensure tables and folders exist
+        self._ensure_infrastructure_exists(el)
 
     def remove_element(self, el: Element) -> Element:
         """Remove an element from the pool and return it.
@@ -123,25 +114,11 @@ class NMSRunner(CoreRun):
         Returns:
             The removed element
         """
-        if hasattr(el, 'thread_id') and el.thread_id is not None:
-            idx: int = el.thread_id
-            with self.pool_lock:
-                if self.elements[idx] is None:
-                    raise ValueError(f"Element {el.id} not found in pool")
-                removed_el = self.elements[idx]
-                self.elements[idx] = None
-                if removed_el is None:
-                    raise ValueError(f"Element {el.id} not found in pool")
-                return removed_el
-            
-        else:
-            # Fallback: search for element
-            with self.pool_lock:
-                for idx in range(len(self.elements)):
-                    if self.elements[idx] is el:
-                        self.elements[idx] = None
-                        return el
-            raise ValueError(f"Element {el.id} not found in pool")
+        with self.pool_lock:
+            self.elements[el.thread_id] = None
+
+        self.klog.debug(f'Element {el.id} (Gen {el.gen}) removed from pool.')
+        self.klog.debug(f'Thread {el.thread_id} is now available.')
 
     def _ensure_infrastructure_exists(self, el: Element) -> None:
         """Ensure tables and folders exist for element's generation.
@@ -192,18 +169,26 @@ class NMSRunner(CoreRun):
         Returns:
             The processed element (status == DONE)
         """
-        # Add element to pool
-        if not self.add_element(el):
-            raise RuntimeError("No available slots in element pool")
+        # Add element to pool with safeguard
+        with self.pool_lock:
+            if self.elements.count(None) == 0:
+                raise RuntimeError("No available slots in element pool")
+            else:
+                self.add_element(el)
 
         # Ensure lock exists for this element
-        with self.el_locks_lock:
-            if (el.gen, el.id) not in self.el_locks:
-                self.el_locks[(el.gen, el.id)] = threading.Lock()
+        if (el.gen, el.id) not in self.el_locks:
+            self.el_locks[(el.gen, el.id)] = threading.Lock()
 
         # Process until done
         while el.status != ElementStatus.DONE:
-            self._process_single_element(el)
+            try:
+                self._process_single_element(el)
+            except Exception as e:
+                self.remove_element(el)
+                self.klog.error(f'Error processing element {el.id}: {e}')
+                self.klog.error(f'Status of element {el.id}: {el.status}')
+                raise e
 
         # Remove and return
         return self.remove_element(el)
@@ -234,7 +219,8 @@ class NMSRunner(CoreRun):
         self.sim_db.batch_upsert()
 
         # Collect simulation profiles for this element
-        self.collect_sim_profiles()
+        if el:
+            self.collect_sim_profiles()
 
         # Run queuing system
         with self.qs_lock:

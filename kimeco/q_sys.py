@@ -271,7 +271,7 @@ class QueueingSystem:
     def _pickup_sim(self,
                     job) -> bool:
         clear_err = True
-        successful: int = True
+        successful: bool = True
         for exp in range(self.n_exp):
             lfile: str = f"{job['loc']}/logs/{job['name']}_{exp}"
             while not (os.path.exists(f"{lfile}.err")):

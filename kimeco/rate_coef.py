@@ -23,12 +23,12 @@ class RateCo:
                  settings: dict,
                  software_tpl: list[str],
                  id: int,
+                 q_idx: int,
                  name: str,
                  loc: str,
                  q_sys: QueueingSystem,
                  db: KIN_DB,
-                 klog: KMOLogger,
-                 thread_id: int = -1
+                 klog: KMOLogger
                  ) -> None:
         self.klog: KMOLogger = klog
         self.status: JobStatus = JobStatus.NOT_IN_QUEUE
@@ -52,14 +52,11 @@ class RateCo:
             self.output_name: str = f"{self.loc}/{self.name}.out"
         else:
             self.output_name = f"{self.loc}/{self.name}.out"
-        if thread_id >= 0:
-            self.thread_id: int = thread_id
-        else:
-            self.thread_id: int = self.id
+        self.q_idx: int = q_idx
 
     def set_status(self,
                    table: str) -> None:
-        status: JobStatus = self.q_sys.status(id=self.id,
+        status: JobStatus = self.q_sys.status(id=self.q_idx,
                                               jtype='kin')
         if (status == JobStatus.NOT_IN_QUEUE
            and os.path.isfile(self.output_name)
@@ -109,7 +106,7 @@ class RateCo:
             self.create_input()
             self.q_sys.add_to_q(
                 name=self.name,
-                idx=self.thread_id,
+                idx=self.q_idx,
                 location=self.loc,
                 jtype='kin',
                 ressources=(cpu, mem)

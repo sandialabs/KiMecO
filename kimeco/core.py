@@ -161,7 +161,7 @@ class CoreRun:
             return
 
         # Get unique generations from elements
-        generations = set(el.gen for el in self.elements)
+        generations: set[int] = set(el.gen for el in self.elements)
 
         for gen in generations:
             tbl_name: str = f'{self.prefix}{gen:04d}'
@@ -242,7 +242,8 @@ class CoreRun:
         finally:
             self.el_locks[(el.gen, el.id)].release()
 
-    def reset_element(self, el: Element) -> None:
+    def reset_element(self,
+                      el: Element) -> None:
         """Reset a failed element."""
         rst: int = el.reset
         table_name: str = self.get_table_name(el)
@@ -259,12 +260,16 @@ class CoreRun:
     def calculate_rate_coefficients(self, el: Element) -> None:
         """Calculate rate coefficients for an element."""
         table_name: str = self.get_table_name(el)
-
+        if hasattr(el, 'thread_id'):
+            q_idx: int = el.thread_id
+        else:
+            q_idx = el.id
         el.rateCoef = RateCo(
             sop=el.sop,
             settings=self.settings,
             software_tpl=self.rc_tpl,
             id=el.id,
+            q_idx=q_idx,
             name=f'{table_name}{el.name}',
             loc=self.get_gen_folder(el),
             q_sys=self.qs,
@@ -281,11 +286,15 @@ class CoreRun:
                        el: Element) -> None:
         """Run the simulation for an element."""
         table_name: str = self.get_table_name(el)
-        
+        if hasattr(el, 'thread_id'):
+            q_idx: int = el.thread_id
+        else:
+            q_idx = el.id
         el.sim = SIM(
             sop=el.sop,
             kin=el.rateCoef,
             id=el.id,
+            q_idx=q_idx,
             db=self.sim_db,
             gen_name=table_name,
             sc_species=self.sc_species,
@@ -307,7 +316,7 @@ class CoreRun:
         el.sim.set_status()
         if el.sim.status == JobStatus.FINISHED:
             with self.qs_lock:
-                self.qs.pickUp(id=el.id, jtype='sim')
+                self.qs.pickUp(id=el.sim.q_idx, jtype='sim')
             el.sim.set_status()
 
         # Reset Element if simulation had an error
@@ -437,12 +446,16 @@ class CoreRun:
             el (Element): Element
         """
         table_name = self.get_table_name(el)
-        
+        if hasattr(el, 'thread_id'):
+            q_idx: int = el.thread_id
+        else:
+            q_idx = el.id
         el.rateCoef = RateCo(
             sop=el.sop,
             settings=self.settings,
             software_tpl=self.rc_tpl,
             id=el.id,
+            q_idx=q_idx,
             name=f'{table_name}{el.name}',
             loc=self.get_gen_folder(el),
             q_sys=self.qs,
@@ -453,6 +466,7 @@ class CoreRun:
             sop=el.sop,
             kin=el.rateCoef,
             id=el.id,
+            q_idx=q_idx,
             db=self.sim_db,
             gen_name=table_name,
             sc_species=self.sc_species,

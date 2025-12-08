@@ -1,6 +1,5 @@
 import time
 from typing import Any
-import os
 import multiprocessing
 import threading
 import concurrent.futures
@@ -56,7 +55,9 @@ class NelderMeadSwarm:
         self.klog: KMOLogger = klog
         self.wdir: str = settings['workdir']
         self.pert: Perturbator = pert
-        self.initialize_databases()
+        self.sop_db: SOP_DB = sop_db
+        self.kin_db: KIN_DB = kin_db
+        self.sim_db: SIM_DB = sim_db
         self.core = NMSRunner(
             settings=settings,
             sf=sf,
@@ -227,7 +228,7 @@ class NelderMeadSwarm:
             'success': True,
             'result_x': result_x,
             'best_element': best_el,
-            'iterations': len(nm.iterations.generations)
+            'iterations': nm.gen_counter
         }
 
     # create_dir no longer needed; infrastructure handled by NMSRunner

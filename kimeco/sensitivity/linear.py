@@ -46,7 +46,7 @@ class Linear(CoreRun):
         self.name: str = f'{self.prefix}{self.id:04d}'
         self.to_test: list[bool] = []
         self.selected: list[str] = []
-        self.sop_tpl: SOP = elements[0].sop
+        self.sop_tpl: SOP = self.average([el.sop for el in elements])
         self.lin_fact: float = self.settings['sensi_d']
         self.pert: Perturbator | None = pert
         self.sop_db = SOP_DB(sop=self.sop_tpl,

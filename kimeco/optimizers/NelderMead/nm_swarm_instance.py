@@ -85,6 +85,39 @@ class NelderMeadInstance(NelderMead):
                 iter='ITERATION',
                 score='SCORE'))
 
+    def get_options(self,
+                    initial: bool = True) -> dict[str, Any]:
+        options: dict[str, Any] = {'disp': True}
+        options['initial_simplex'] = self.get_initial_simplex()
+
+        self.klog.debug(
+            f"Setting final Nelder-Mead fatol="
+            f"{self.settings['nm_final_fatol']}")
+        options['fatol'] = self.settings['nm_final_fatol']
+
+        self.klog.debug(
+            f"Setting final Nelder-Mead xatol="
+            f"{self.settings['nm_final_xatol']}")
+        options['xatol'] = self.settings['nm_final_xatol']
+
+        if self.settings['nm_final_maxiter'] > 0:
+            self.klog.debug(
+                f"Setting final Nelder-Mead maxiter="
+                f"{self.settings['nm_final_maxiter']}")
+            options['maxiter'] = self.settings['nm_final_maxiter']
+
+        if self.settings['nm_maxfev'] > 0:
+            self.klog.debug(
+                f"Setting final Nelder-Mead maxfev="
+                f"{self.settings['nm_final_maxfev']}")
+            options['maxfev'] = self.settings['nm_final_maxfev']
+
+        if self.settings['nm_adaptive']:
+            self.klog.debug("Using adaptive for final Nelder-Mead")
+            options['adaptive'] = True
+            # better performance in high D.
+        return options
+
     def run(self) -> NDArray:
         """Run the Nelder-Mead optimization with fixed dimensions."""
         # Use fixed dimensions (no sensitivity analysis)
@@ -136,7 +169,7 @@ class NelderMeadInstance(NelderMead):
             try:
                 db_row: list[float] = self.sop_db.get_sop_row(
                     table=table_name,
-                    id=self.gen_counter)[1:]
+                    id=self.nm_id)[1:]
             except Exception as e:
                 sop_in_db = False
                 self.klog.debug(str(e))
@@ -234,7 +267,7 @@ class NelderMeadInstance(NelderMead):
         """Keep track of the scores."""
         with open(self.score_file, 'a', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
-                iter=last_vertice.id,
+                iter=self.gen_counter,
                 score=f"{last_vertice.score:.3f}"))
 
     def get_best_element(self) -> Element:
@@ -244,7 +277,7 @@ class NelderMeadInstance(NelderMead):
             Element with lowest score
         """
         all_vertices: list[Element] = []
-        rows = self.sop_db.get_table(table=f'NM{self.nm_id:04d}')
+        rows = self.sop_db.get_table(table=f'{self.gen_prefix}{self.nm_id:04d}')
         for row in rows:
             el = SOP.from_db_row(
                 sop_tpl=self.f_el.sop,

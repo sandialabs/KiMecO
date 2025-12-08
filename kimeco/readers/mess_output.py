@@ -1,7 +1,7 @@
 import numpy as np
 from kimeco.parameters import SOP
 import re
-from logging import Logger
+from kimeco.logger_config import KMOLogger
 
 
 class MessOutputReader:
@@ -11,9 +11,9 @@ class MessOutputReader:
                  filename: str,
                  settings: dict,
                  sop: SOP,
-                 klog: Logger) -> None:
+                 klog: KMOLogger) -> None:
 
-        self.klog: Logger = klog
+        self.klog: KMOLogger = klog
         with open(file=filename, mode='r') as f:
             self.file: list[str] = f.readlines()
 
@@ -21,8 +21,8 @@ class MessOutputReader:
             self.temp: list[float] = settings["pp_temp"]
             self.pres: list[float] = settings["pp_pres"]
         else:
-            self.temp: list = settings["rc_temp"]
-            self.pres: list = settings["rc_pres"]
+            self.temp = settings["rc_temp"]
+            self.pres = settings["rc_pres"]
 
         self.species: list[str] = sop.wells_names
         self.species.extend(sop.bimols_names)

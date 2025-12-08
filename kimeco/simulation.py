@@ -13,14 +13,14 @@ class SIM:
                  sop: SOP,
                  kin: RateCo,
                  id: int,
+                 q_idx: int,
                  gen_name: str,
                  sc_species: list[str],
                  db: SIM_DB,
                  loc: str,
                  q_sys: QueueingSystem,
                  set: dict[str, Any],
-                 klog: KMOLogger,
-                 thread_id: int = -1
+                 klog: KMOLogger
                  ) -> None:
         """Handles the simulations.
 
@@ -28,6 +28,7 @@ class SIM:
             sop (SOP): Set of Master equation parameters
             kin (RateCo): Rate coefficients object
             id (int): Identifier of the simulation
+            q_idx (int): Queuing system index
             gen_name (str): Name of the generation
             sc_species (list[str]): Species to score
             db (SIM_DB): Simulation database
@@ -35,8 +36,6 @@ class SIM:
             q_sys (QueueingSystem): Queuing system
             set (dict[str, Any]): Settings
             klog (KMOLogger): Logger
-            thread_id (int, optional):
-            Thread identifier. Used for nelder-mead multi-threading.
         """
         self.klog: KMOLogger = klog
         self.status: JobStatus = JobStatus.NOT_IN_QUEUE
@@ -55,10 +54,7 @@ class SIM:
         self.db: SIM_DB = db
         self.profiles: list[NDArray | None] = [
             None] * len(set['exp_profiles'])
-        if thread_id == -1:
-            self.thread_id: int = self.id
-        else:
-            self.thread_id: int = thread_id
+        self.q_idx: int = q_idx
 
     def q_up(self) -> None:
         """Send job to the queuing system.
@@ -89,7 +85,7 @@ class SIM:
         with open(f'{self.loc}/{self.name}.py', 'w') as f:
             f.write(ct_job)
         self.q_sys.add_to_q(name=self.name,
-                            idx=self.thread_id,
+                            idx=self.q_idx,
                             location=self.loc,
                             jtype='sim',
                             ressources=(cpu, mem))
@@ -98,5 +94,5 @@ class SIM:
     def set_status(self) -> None:
 
         self.status = self.q_sys.status(
-            id=self.id,
+            id=self.q_idx,
             jtype='sim')
