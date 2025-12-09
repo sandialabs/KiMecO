@@ -158,9 +158,9 @@ class RateCo:
         names: NDArray[Any] = np.full(shape=(len(self.tbl_map)),
                                       fill_value='',
                                       dtype='<U5')
-        self.q_sys.pickUp(id=self.id,
+        self.q_sys.pickUp(id=self.q_idx,
                           jtype='kin')
-        if (self.q_sys.status(id=self.id, jtype='kin')
+        if (self.q_sys.status(id=self.q_idx, jtype='kin')
            == JobStatus.FAILED):
             self.klog.info(f'Resetting KIN job {self.id}')
             self.status = JobStatus.FAILED

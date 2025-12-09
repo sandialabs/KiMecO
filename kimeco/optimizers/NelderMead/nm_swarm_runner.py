@@ -186,12 +186,12 @@ class NMSRunner(CoreRun):
                 self._process_single_element(el)
             except Exception as e:
                 self.remove_element(el)
-                self.klog.error(f'Error processing element {el.id}: {e}')
                 self.klog.error(f'Status of element {el.id}: {el.status}')
                 raise e
 
         # Remove and return
-        return self.remove_element(el)
+        self.remove_element(el)
+        return el
 
     def _process_single_element(self, el: Element) -> None:
         """Process one iteration of a single element.

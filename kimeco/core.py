@@ -51,6 +51,7 @@ class CoreRun:
         self.loc: str = settings['workdir']
         # Scoring function
         self.sf: Scoring = sf
+        self._best_score = float('inf')
 
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
@@ -277,8 +278,10 @@ class CoreRun:
             klog=self.klog
         )
         el.rateCoef.set_status(table=table_name)
+        self.klog.debug(f'Rate coefficient calc status for element {el.id}: {el.rateCoef.status.value}')
         if el.rateCoef.status == JobStatus.NOT_IN_QUEUE:
             el.rateCoef.q_up()
+            self.klog.debug(f'Queued rate coefficient calc for element {el.id}.')
         elif el.rateCoef.status == JobStatus.FINISHED:
             el.save_kin(db=self.kin_db, table=table_name)
 
@@ -503,4 +506,8 @@ class CoreRun:
 
     @property
     def best_score(self) -> float:
-        return min([el.score for el in self.elements])
+        if self._best_score > min(
+           [el.score for el in self.elements if el is not None]):
+            self._best_score: float = min(
+                [el.score for el in self.elements if el is not None])
+        return self._best_score

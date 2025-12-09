@@ -14,6 +14,7 @@ class Extrapolate(CoreRun):
 
     def __init__(self,
                  elements: list[Element],
+                 prefix: str,
                  settings: dict[str, Any],
                  rc_tpl: list[str],
                  sop_db: SOP_DB,
@@ -22,7 +23,6 @@ class Extrapolate(CoreRun):
                  sf: Scoring,
                  pert: Perturbator,
                  klog: KMOLogger,
-                 name: str,
                  previous_el: dict[int, Element] = {},
                  ) -> None:
         super().__init__(
@@ -37,7 +37,7 @@ class Extrapolate(CoreRun):
                  klog=klog,
                  previous_el=previous_el,
                  base_dir='',
-                 prefix='SA')
+                 prefix=prefix)
         # Overwrite pressure and temperature grids for postprocessing
         self.pres: list[float] = settings["pp_pres"]
         self.temp: list[float] = settings["pp_temp"]

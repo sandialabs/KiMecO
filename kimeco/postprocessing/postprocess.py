@@ -1,6 +1,7 @@
 import sys
 import os
 import numpy as np
+import element
 from kimeco._kimeco import KiMecO
 from kimeco.database.kin_db import KIN_DB
 import time
@@ -68,36 +69,21 @@ class PostProcess(KiMecO):
 
         for token in ensembles:
             name: str = token
-            elements: list[Element] = []
 
             # Precompute token type flags
             cond_g = token.startswith('G') and len(token) == 5 and \
                 token[1:].isdigit()
-            cond_gt = token.startswith('GT') and len(token) == 6 and \
-                token[2:].isdigit()
+            cond_nmsg = token.startswith('NMSG') and len(token) == 8 and \
+                token[4:].isdigit()
+            cond_gt = token.startswith('GT') and token[2:].isdigit()
 
             # Generation table: G####
             if cond_g:
-                try:
-                    rows = self.sop_db.get_table(token)
-                except Exception as e:
-                    self.klog.warning(f"Could not read table {token}: {e}")
-                    continue
-                for idx, row in enumerate(rows):
-                    elements.append(
-                        Element(
-                            sop=SOP.from_db_row(
-                                sop_tpl=self.init_SOP,
-                                row=np.asarray(row[1:]).tolist()
-                            ),
-                            id=idx,
-                            gen=int(token[1:])
-                        )
-                    )
-
+                elements: list[Element] = self.get_generation(token)
             # GOATs generation: GT####
             elif cond_gt:
                 gen_id = int(token[2:])
+                elements: list[Element] = []
                 try:
                     goats_elements = self.goats.get_goat_for_gen(gen_id)
                 except Exception as e:
@@ -110,25 +96,58 @@ class PostProcess(KiMecO):
                         gen=el.gen,
                         status=ElementStatus.SOP.value
                     ))
-                name = f"GT{gen_id:04d}"
+                if gen_id >= 0:
+                    name = token
+                else:
+                    name = f"GT{len(self.goats) - 1:04d}"
 
-            # Latest GOATs: GT-1
-            elif token == 'GT-1':
-                latest_gen_id = len(self.goats) - 1
-                try:
-                    goats_elements = self.goats.get_goat_for_gen(-1)
-                except Exception as e:
-                    self.klog.warning(f"Could not load latest GOATs: {e}")
-                    continue
-                for idx, el in enumerate(goats_elements):
-                    elements.append(Element(
-                        sop=el.sop,
-                        id=idx,
-                        gen=el.gen,
-                        status=ElementStatus.SOP.value
-                    ))
-                name = f"GT{latest_gen_id:04d}"
-
+            # NMSG Nelder-Mead Swarm Generation: NMSG####
+            elif cond_nmsg:
+                elements = []
+                # Precompute token type flags
+                nms_cond_g = self.settings['NMS_start'].startswith('G') and len(token) == 5 and \
+                    token[1:].isdigit()
+                nms_cond_gt = self.settings['NMS_start'].startswith('GT') and len(token) == 6 and \
+                    token[2:].isdigit()
+                if nms_cond_g:
+                    tot_elem: int = self.settings['n_elem']
+                elif nms_cond_gt:
+                    tot_elem = self.settings['goat_length']
+                else:
+                    raise NotImplementedError(
+                        "NMS_start format not recognized for NMSG postprocessing.")
+                NMS_gens: list[int] = [
+                    int(tbl_name.split('NMSG')[-1])
+                    for tbl_name in self.sop_db.tables
+                    if tbl_name.startswith('NMSG')]
+                if not NMS_gens:
+                    raise ValueError(
+                        "No NMSG tables found in SOP DB for postprocessing.")
+                max_NMS_gen: int = max(NMS_gens)
+                els2load: list[float] = [i for i in range(tot_elem)]
+                for gen in range(max_NMS_gen, -1, -1):
+                    table_name: str = f'NMSG{gen:04d}'
+                    try:
+                        rows = self.sop_db.get_table(table_name)
+                    except Exception as e:
+                        raise ValueError(
+                            f"Could not read table {table_name}: {e}")
+                    for idx, row in enumerate(rows):
+                        el_id = int(row[0])
+                        if el_id in els2load:
+                            elements.append(
+                                Element(
+                                    sop=SOP.from_db_row(
+                                        sop_tpl=self.init_SOP,
+                                        row=np.asarray(row[1:]).tolist()
+                                    ),
+                                    id=el_id,
+                                    gen=gen
+                                )
+                            )
+                            els2load.pop(els2load.index(el_id))
+                    if not els2load:
+                        break
             else:
                 self.klog.warning(
                     f"Unknown pp_ensemble token '{token}', skipping.")
@@ -148,9 +167,30 @@ class PostProcess(KiMecO):
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog,
-                name=name
+                prefix=name
             ).run()
 
+    def get_generation(self,
+                       token: str) -> list[Element]:
+        """Retrieve all elements from a generation table in the SOP DB."""
+        elements: list[Element] = []
+        try:
+            rows = self.sop_db.get_table(token)
+        except Exception as e:
+            raise ValueError(
+                f"Could not read table {token}: {e}")
+        for idx, row in enumerate(rows):
+            elements.append(
+                Element(
+                    sop=SOP.from_db_row(
+                        sop_tpl=self.init_SOP,
+                        row=np.asarray(row[1:]).tolist()
+                    ),
+                    id=idx,
+                    gen=int(token[1:])
+                )
+            )
+        return elements
 
 def main() -> None:
 
