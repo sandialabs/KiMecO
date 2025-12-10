@@ -21,7 +21,7 @@ from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
 from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
 from kimeco.optimizers.NelderMead.nelder_mead_swarm import NelderMeadSwarm
-from writers.mess import MessWriter
+from kimeco.writers.mess import MessWriter
 
 
 class KiMecO:

@@ -1,7 +1,6 @@
 import sys
 import os
 import numpy as np
-import element
 from kimeco._kimeco import KiMecO
 from kimeco.database.kin_db import KIN_DB
 import time
@@ -71,10 +70,9 @@ class PostProcess(KiMecO):
             name: str = token
 
             # Precompute token type flags
-            cond_g = token.startswith('G') and len(token) == 5 and \
+            cond_g: bool = token.startswith('G') and len(token) == 5 and \
                 token[1:].isdigit()
-            cond_nmsg = token.startswith('NMSG') and len(token) == 8 and \
-                token[4:].isdigit()
+            cond_nms: bool = token == 'NMS'
             cond_gt = token.startswith('GT') and token[2:].isdigit()
 
             # Generation table: G####
@@ -102,20 +100,21 @@ class PostProcess(KiMecO):
                     name = f"GT{len(self.goats) - 1:04d}"
 
             # NMSG Nelder-Mead Swarm Generation: NMSG####
-            elif cond_nmsg:
+            elif cond_nms:
                 elements = []
-                # Precompute token type flags
-                nms_cond_g = self.settings['NMS_start'].startswith('G') and len(token) == 5 and \
-                    token[1:].isdigit()
-                nms_cond_gt = self.settings['NMS_start'].startswith('GT') and len(token) == 6 and \
-                    token[2:].isdigit()
+                # Find the size of the ensemble
+                nms_cond_g = self.settings['NMS_start'].startswith('G') and \
+                    self.settings['NMS_start'][1:].isdigit()
+                nms_cond_gt = self.settings['NMS_start'].startswith('GT') and \
+                    self.settings['NMS_start'][2:].lstrip('-').isdigit()
                 if nms_cond_g:
                     tot_elem: int = self.settings['n_elem']
                 elif nms_cond_gt:
                     tot_elem = self.settings['goat_length']
                 else:
                     raise NotImplementedError(
-                        "NMS_start format not recognized for NMSG postprocessing.")
+                        "NMS_start not recognized for NMSG postprocessing.")
+                # Find all NMSG tables in the SOP DB
                 NMS_gens: list[int] = [
                     int(tbl_name.split('NMSG')[-1])
                     for tbl_name in self.sop_db.tables
@@ -124,6 +123,8 @@ class PostProcess(KiMecO):
                     raise ValueError(
                         "No NMSG tables found in SOP DB for postprocessing.")
                 max_NMS_gen: int = max(NMS_gens)
+                # Load elements from NMSG tables, starting from the
+                # highest generation until all elements are found
                 els2load: list[float] = [i for i in range(tot_elem)]
                 for gen in range(max_NMS_gen, -1, -1):
                     table_name: str = f'NMSG{gen:04d}'
