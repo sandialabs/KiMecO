@@ -16,11 +16,12 @@ from kimeco.scoring_f.weighteddif import WeightedDif
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.sensitivity.linear import Linear
 from kimeco.element import Element
-from kimeco.enums import ElementStatus, Optimizers, RestartType
+from kimeco.enums import Optimizers, RestartType
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
 from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
 from kimeco.optimizers.NelderMead.nelder_mead_swarm import NelderMeadSwarm
+from writers.mess import MessWriter
 
 
 class KiMecO:
@@ -294,8 +295,23 @@ class KiMecO:
             klog=self.klog,
             pert=self.pert,
         )
-        best = swarm.run()
-        self.klog.info(f"NMS completed with {len(best)} best elements")
+        bests = swarm.run()
+        self.klog.info(
+            f"NMS completed: {len(bests)} NM finished successfully.")
+        best_el: Element = bests[
+            bests.index(min(bests, key=lambda el: el.score))]
+        msg = f"{'Best element after NMS:':<65}"
+        msg += "\n" + f"ID: {best_el.id}, Score: {best_el.score:.4f}"
+        msg += "\nParameters:\n"
+        for k, v in best_el.sop.parameters_names.items():
+            msg += f"  {k}: {v}\n"
+        self.klog.info(msg)
+        mw = MessWriter(
+            SOP=best_el.sop,
+            tpl=self.input_tpl)
+        mw.write(
+            loc=self.settings['workdir'],
+            filename='best_after_nms.inp')
 
     def finalize(self) -> None:
         # Optionally run NMS after optimizer based on settings
