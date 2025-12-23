@@ -37,7 +37,7 @@ class Extrapolate(CoreRun):
                  klog=klog,
                  previous_el=previous_el,
                  base_dir='',
-                 prefix=prefix)
+                 prefix='X' + prefix)
         # Overwrite pressure and temperature grids for postprocessing
         self.pres: list[float] = settings["pp_pres"]
         self.temp: list[float] = settings["pp_temp"]

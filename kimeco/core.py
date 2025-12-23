@@ -1,4 +1,5 @@
 from _thread import LockType
+import re
 from typing import Any, Optional
 import os
 import glob
@@ -84,7 +85,10 @@ class CoreRun:
             generations_present = set(el.gen for el in self.elements)
 
             for gen in generations_present:
-                gen_name = f'{self.prefix}{gen:04d}'
+                if self.prefix.startswith('X'):
+                    gen_name = f'{self.prefix}'
+                else:
+                    gen_name = f'{self.prefix}{gen:04d}'
                 gen_dir = f'{base_path}/{gen_name}'
                 os.makedirs(gen_dir + '/logs', exist_ok=True)
 
@@ -122,7 +126,10 @@ class CoreRun:
         Returns:
             Table name (e.g., 'G0000')
         """
-        return f'{self.prefix}{el.gen:04d}'
+        if self.prefix.startswith('X'):
+            return f'{self.prefix}'
+        else:
+            return f'{self.prefix}{el.gen:04d}'
 
     def get_gen_folder(self, el: Element) -> str:
         """Get the generation folder path for an element.
@@ -165,7 +172,10 @@ class CoreRun:
         generations: set[int] = set(el.gen for el in self.elements)
 
         for gen in generations:
-            tbl_name: str = f'{self.prefix}{gen:04d}'
+            if self.prefix.startswith('X'):
+                tbl_name = f'{self.prefix}'
+            else:
+                tbl_name = f'{self.prefix}{gen:04d}'
 
             # SOP
             if tbl_name not in self.sop_db.tables:

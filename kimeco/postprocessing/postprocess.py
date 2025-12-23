@@ -73,7 +73,7 @@ class PostProcess(KiMecO):
             cond_g: bool = token.startswith('G') and len(token) == 5 and \
                 token[1:].isdigit()
             cond_nms: bool = token == 'NMS'
-            cond_gt = token.startswith('GT') and token[2:].isdigit()
+            cond_gt = token.startswith('GT')
 
             # Generation table: G####
             if cond_g:

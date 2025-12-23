@@ -157,7 +157,7 @@ class KIN_DB(Kimeco_db):
         with self._select_lock:
             if len(self._select) == 0:
                 return {}
-            
+
             select_snapshot = {}
             for table in self._select:
                 select_snapshot[table] = {}
@@ -169,7 +169,7 @@ class KIN_DB(Kimeco_db):
                         'To': self._select[table][kin_id]['To'].copy()
                     }
             self._select = {}
-        
+
         # Execute outside the lock
         results: dict[
             str, dict[int, dict[tuple[float, float, str, str], NDArray]]

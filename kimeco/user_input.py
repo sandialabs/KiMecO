@@ -25,7 +25,7 @@ class KMOInput:
     def __init__(self,
                  input_file: str,
                  init_loc: str,
-                klog: KMOLogger) -> None:
+                 klog: KMOLogger) -> None:
         """Ensemble of different functions to check the
         user's input
 
