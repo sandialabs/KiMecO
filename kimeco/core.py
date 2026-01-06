@@ -1,5 +1,4 @@
 from _thread import LockType
-import re
 from typing import Any, Optional
 import os
 import glob
@@ -71,7 +70,8 @@ class CoreRun:
         self.requeue_timer = {}
 
         # Thread-safe locks
-        self.el_locks: dict[tuple[int, int], LockType] = {(el.gen, el.id): threading.Lock() for el in self.elements}
+        self.el_locks: dict[tuple[int, int], LockType] = {
+            (el.gen, el.id): threading.Lock() for el in self.elements}
         self.qs_lock = threading.Lock()
         self.requeue_lock = threading.Lock()
         self.file_locks = {}
@@ -288,7 +288,9 @@ class CoreRun:
             klog=self.klog
         )
         el.rateCoef.set_status(table=table_name)
-        self.klog.debug(f'Rate coefficient calc status for element {el.id}: {el.rateCoef.status.value}')
+        self.klog.debug(
+            f'Rate coefficient calc status for element {el.id}:' +
+            f'{el.rateCoef.status.value}')
         if el.rateCoef.status == JobStatus.NOT_IN_QUEUE:
             el.rateCoef.q_up()
             self.klog.debug(f'Queued rate coefficient calc for element {el.id}.')

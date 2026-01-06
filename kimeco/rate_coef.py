@@ -164,6 +164,12 @@ class RateCo:
            == JobStatus.FAILED):
             self.klog.info(f'Resetting KIN job {self.id}')
             self.status = JobStatus.FAILED
+        if np.isnan(self.rc).any():
+            self.status = JobStatus.FAILED
+            self.klog.warning(
+                f'Resetting element {self.id}: NaN detected in rate coefficients.')
+            self.klog.warning(
+                'The master equation likely didn\'t converge properly.')
 
         # Happens with convergence issues in Mess calculation
         if self.tbl_map == {}:

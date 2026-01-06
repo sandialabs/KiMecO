@@ -227,7 +227,11 @@ class NMSRunner(CoreRun):
             self.qs.run()
 
     def reset_element(self, el: Element) -> None:
-        raise NotImplementedError('NMS cannot reset elements.')
+        self.klog.warning(
+            f'Error detected for NelderMead {el.id}.',
+            'Setting high score to vertice.'
+        )
+        el.status = ElementStatus.DONE
 
     def collect_sim_profiles(self) -> None:
         """Override: Map DB profiles back to active elements by (gen,id).

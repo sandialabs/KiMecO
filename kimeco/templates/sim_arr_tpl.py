@@ -83,8 +83,6 @@ for idx, i in enumerate(spec):
         names.append(i.name)
 
 # For instrument response function
-cumul_zero = copy.deepcopy(traces)
-cumul = copy.deepcopy(cumul_zero)
 current_time = -10
 
 n_micro = 10  # number of micro-steps for instrument response function
@@ -93,7 +91,7 @@ for idx, t in enumerate(times):
     # Instrument response function  # Uncoment if response on
     if idx < len(times)-1: # avoid error for last time, uses last dt
         dt = times[idx+1] - times[idx]
-    cumul = copy.deepcopy(cumul_zero)
+
     for micro_step in np.linspace(t-dt/2, t+dt/2, n_micro):
         if micro_step <= 0:
             continue
@@ -102,7 +100,7 @@ for idx, t in enumerate(times):
             net.advance(current_time)
         for snum, i in enumerate(spec):
             if i.name in to_watch:
-                cumul[i.name][idx] += (gas.X[snum] * ntot.magnitude)/n_micro
+                traces[i.name][idx] += (gas.X[snum] * ntot.magnitude)/n_micro
     # net.advance(t) # Remove if response on
     # for snum, i in enumerate(spec):
     #     if i.name in to_watch:

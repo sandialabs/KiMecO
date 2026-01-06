@@ -32,7 +32,7 @@ class SOP:
         self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
         self.files2copy: list[str] = []
-        self._default_score = 999999.9
+        self._default_score = float('inf')
         self.scores: dict[str, float] = {
             sp: self._default_score for sp in self.sc_species
             }

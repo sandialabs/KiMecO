@@ -137,7 +137,7 @@ class GOATs:
 
         for gen_id, el_id in self.generations[generation_number]:
             # Table name in DBs follows the pattern G{gen_id:04d}
-            table: str = f"G{gen_id:04d}"
+            table: str = f"{self.prefix}{gen_id:04d}"
             if table not in tables:
                 tables[table] = []
             tables[table].append(el_id)

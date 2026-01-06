@@ -394,7 +394,7 @@ class NelderMead:
             sop_in_db = True
             try:
                 db_row: list[float] = self.sop_db.get_sop_row(
-                        table=f'G{Generation.total():04d}',
+                        table=f'{self.prefix}{Generation.total():04d}',
                         id=0)[1:]
             except Exception as e:
                 sop_in_db = False
@@ -470,7 +470,7 @@ class NelderMead:
         Returns:
             bool: Wether it is finished
         """
-        gen_name: str = f"G{gen_id:04d}"
+        gen_name: str = f"{self.prefix}{gen_id:04d}"
         if self.sop_db.table_exists(gen_name) and\
            self.kin_db.table_exists(gen_name) and\
            self.sim_db.table_exists(gen_name):
