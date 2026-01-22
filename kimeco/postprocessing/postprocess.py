@@ -73,7 +73,8 @@ class PostProcess(KiMecO):
             cond_g: bool = token.startswith('G') and len(token) == 5 and \
                 token[1:].isdigit()
             cond_nms: bool = token == 'NMS'
-            cond_gt = token.startswith('GT')
+            cond_gt: bool = token.startswith('GT')
+            cond_nm: bool = token.startswith('NM')
 
             # Generation table: G####
             if cond_g:
@@ -149,6 +150,37 @@ class PostProcess(KiMecO):
                             els2load.pop(els2load.index(el_id))
                     if not els2load:
                         break
+            # Nelder-Mead Generation: NM####
+            elif cond_nm:
+                elements = []
+                gen_id = int(token[2:])
+                # Find the size of the ensemble
+                tot_elem: int = 1
+                # Find all NM tables in the SOP DB
+                NM_gens: list[int] = [
+                    int(tbl_name.split('NM')[-1])
+                    for tbl_name in self.sop_db.tables
+                    if tbl_name.startswith('NM') and not tbl_name.startswith('NMSG')]
+                if gen_id >= 0:
+                    name = token
+                else:
+                    name = f"NM{len(NM_gens) - 1:04d}"
+                if not NM_gens:
+                    raise ValueError(
+                        "No NM tables found in SOP DB for postprocessing.")
+                elif name not in self.sop_db.tables:
+                    raise ValueError(
+                        f"Table {name} not found in SOP DB for postprocessing.")
+                elements.append(
+                    Element(
+                        sop=SOP.from_db_row(
+                            sop_tpl=self.init_SOP,
+                            row=self.sop_db.get_table(name)[0][1:]),
+                        id=0,
+                        gen=gen_id
+                    )
+                )
+            # Unknown token
             else:
                 self.klog.warning(
                     f"Unknown pp_ensemble token '{token}', skipping.")

@@ -75,6 +75,9 @@ class Kimeco_db:
             conn.execute(text("PRAGMA busy_timeout=30000;"))
             conn.execute(text("PRAGMA cache_size=-64000;"))  # 64MB cache
 
+    def load_metadata(self) -> None:
+        self.metadata.reflect(bind=self.eng)
+
     def defragmentate(self) -> None:
         with self.eng.begin() as conn:
             conn.execute(text('VACUUM'))
