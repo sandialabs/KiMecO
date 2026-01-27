@@ -85,20 +85,21 @@ class Perturbator:
         Returns:
             list[float]: boundaries [lower, upper]
         """
+        mult = self.settings['max_std']
         bounds: tuple[float, float]
         std_p: str = 'std_' + ptype
         if ptype in self.additive:
-            bounds = (i_val - self.settings[std_p] * self.settings['max_std'],
-                      i_val + self.settings[std_p] * self.settings['max_std'])
+            bounds = (i_val - self.settings[std_p] * mult,
+                      i_val + self.settings[std_p] * mult)
         elif ptype in self.percent:
             bounds = (i_val - i_val
-                      * self.settings[std_p] * self.settings['max_std'],
+                      * self.settings[std_p] * mult,
                       i_val + i_val
-                      * self.settings[std_p] * self.settings['max_std'])
+                      * self.settings[std_p] * mult)
         elif ptype in self.multiplicative:
             bounds = (
-                i_val / (self.settings[std_p] * self.settings['max_std']),
-                i_val * (self.settings[std_p] * self.settings['max_std']))
+                i_val / (1 + (self.settings[std_p]-1) * mult),
+                i_val * (1 + (self.settings[std_p]-1) * mult))
         else:
             raise NotImplementedError('Parameter not parametrised.')
         if ptype in self.zero_bound and min(bounds) < 0:
@@ -502,6 +503,8 @@ class Perturbator:
     def perturb_ifreq(self,
                       bar: Barrier) -> None:
         """Perturb the imaginary frequency of a barrier by a given percentage.
+        i_val: initial value before perturbation
+        c_val: current value
 
         Args:
             bar (Barrier) : Barrier object
