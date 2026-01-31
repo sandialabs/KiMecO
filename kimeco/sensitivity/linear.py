@@ -108,8 +108,8 @@ class Linear(CoreRun):
             True if ('score' in p and 'score' in q)
             else
             (p == q and
-                db_sop.parameters_names[p] ==
-                self.sop_tpl.parameters_names[q])
+                round(db_sop.parameters_names[p], 6) ==
+                round(self.sop_tpl.parameters_names[q], 6))
             for p, q in
             zip(db_sop.parameters_names,
                 self.sop_tpl.parameters_names)
@@ -263,17 +263,15 @@ class Linear(CoreRun):
     def prepare_elements(self,
                          elements: list[Element]) -> list[Element]:
 
-        base_sop: SOP = self.average(
-                sop_list=[e.sop for e in elements])
         # List to hold the new SOP objects
         new_elements: list[Element] = [
-            Element(sop=base_sop,
+            Element(sop=self.sop_tpl,
                     id=0,
                     gen=self.id)
         ]
 
         # Get the parameters names and their current values
-        pn: dict[str, Any] = base_sop.parameters_names
+        pn: dict[str, Any] = self.sop_tpl.parameters_names
 
         el_id = 0
         # direction of the derivative
@@ -297,7 +295,7 @@ class Linear(CoreRun):
                     side=side
                 )
                 new_sop = SOP.from_db_row(
-                    sop_tpl=base_sop,
+                    sop_tpl=self.sop_tpl,
                     row=[v+(dstep*side) if k == key else v
                          for k, v in pn.items()])
                 new_elements.append(

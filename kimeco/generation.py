@@ -4,7 +4,6 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.element import Element
 from kimeco.core import CoreRun
-from kimeco.enums import ElementStatus
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
 import time
@@ -60,7 +59,7 @@ class Generation(CoreRun):
                  previous_el=previous_el,
                  prefix=prefix)
 
-        if self.id % 10 == 0:
+        if self.id % 10 == 0 and not self.finished:
             self.sop_db.defragmentate()
             self.kin_db.defragmentate()
             self.sim_db.defragmentate()

@@ -3,6 +3,7 @@ from typing import Any
 import multiprocessing
 import threading
 import concurrent.futures
+from kimeco.optimizers.NelderMead.db_query_saver import DBQuerySaver
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
@@ -58,6 +59,14 @@ class NelderMeadSwarm:
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
+        
+        # Accelerates restart
+        self.dbqs: DBQuerySaver = DBQuerySaver(
+            sop_db=self.sop_db,
+            kin_db=self.kin_db,
+            sim_db=self.sim_db,
+            settings=self.settings
+        )
         self.core = NMSRunner(
             settings=settings,
             sf=sf,
@@ -214,6 +223,7 @@ class NelderMeadSwarm:
                 klog=self.klog,
                 dimensions=self.dimensions,
                 shared_core=self.core,
+                dbqs=self.dbqs,
                 prefix='NMS'
             )
 

@@ -7,6 +7,7 @@ from kimeco.simulation import SIM
 from typing import Any
 import numpy as np
 from kimeco.enums import ElementStatus
+from kimeco.database.kimeco_db import dbs
 
 
 class Element:
@@ -76,6 +77,18 @@ class Element:
                 sim_db.prepare_batch_select(
                     table=table,
                     sim_id=sim_id)
+
+    def get_p_val(self,
+                  param: str) -> float:
+        """Return the value of the given parameter in the SOP.
+
+        Args:
+            param (str): parameter name
+
+        Returns:
+            float: value of the parameter
+        """
+        return self.sop.parameters_names[param]
 
     @property
     def scores(self) -> list[float]:

@@ -5,6 +5,7 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
+from kimeco.optimizers.NelderMead.db_query_saver import DBQuerySaver
 from kimeco.element import Element
 from scipy.optimize import minimize
 from numpy.typing import NDArray
@@ -36,6 +37,7 @@ class NelderMeadInstance(NelderMead):
                  klog: KMOLogger,
                  dimensions: list[str],
                  shared_core: NMSRunner,
+                 dbqs: DBQuerySaver,
                  prefix: str = ''
                  ) -> None:
         """Initialize NelderMeadInstance.
@@ -59,6 +61,7 @@ class NelderMeadInstance(NelderMead):
         self.gen_prefix: str = prefix + 'G'
         self.prefix: str = prefix + f'{nm_id:04d}'
         self.gen_counter = 0
+        self.dbqs: DBQuerySaver = dbqs
         # Call parent init but override some behaviors
         super().__init__(
             settings=settings,
@@ -163,8 +166,11 @@ class NelderMeadInstance(NelderMead):
 
         # Check if this SOP already exists in our NM table
         table_name: str = f'{self.gen_prefix}{self.gen_counter:04d}'
-        if self.is_vertice_finished(gen_id=self.gen_counter,
-                                    elem_id=self.nm_id):
+        if self.dbqs.is_vertice_finished(gen_id=self.gen_counter,
+                                         el_id=self.nm_id,
+                                         prefix=self.gen_prefix):
+            self.klog.debug(
+                f"NM{self.nm_id:04d} call {self.gen_counter} is in db.")
             sop_in_db = True
             try:
                 db_row: list[float] = self.sop_db.get_sop_row(
@@ -227,40 +233,40 @@ class NelderMeadInstance(NelderMead):
 
         return finished_vertice.score
 
-    def is_vertice_finished(self,
-                            gen_id: int,
-                            elem_id: int) -> bool:
-        """Check if a table is finished.
+    # def is_vertice_finished(self,
+    #                         gen_id: int,
+    #                         elem_id: int) -> bool:
+    #     """Check if a table is finished.
 
-        Args:
-            nm_id: ID of the nelder-mead instance
-            elem_id: Element ID to check
-        Returns:
-            bool: Whether it is finished
-        """
-        table_name: str = f"{self.gen_prefix}{gen_id:04d}"
+    #     Args:
+    #         nm_id: ID of the nelder-mead instance
+    #         elem_id: Element ID to check
+    #     Returns:
+    #         bool: Whether it is finished
+    #     """
+    #     table_name: str = f"{self.gen_prefix}{gen_id:04d}"
 
-        if self.sop_db.table_exists(table_name) and\
-           self.kin_db.table_exists(table_name) and\
-           self.sim_db.table_exists(table_name):
-            sop_ids = set(self.sop_db.get_column(
-                table=table_name,
-                column_name='id'))
-            kin_ids = set(self.kin_db.get_column(
-                table=table_name,
-                column_name='kin_id'))
-            tmp = np.array(self.sim_db.get_column(
-                table=table_name,
-                column_name='sim_id'))//len(self.settings['exp_profiles'])
-            sim_ids = set(tmp.tolist())
-            if elem_id in sop_ids and\
-               elem_id in kin_ids and\
-               elem_id in sim_ids:
-                return True
-            else:
-                return False
-        else:
-            return False
+    #     if self.sop_db.table_exists(table_name) and\
+    #        self.kin_db.table_exists(table_name) and\
+    #        self.sim_db.table_exists(table_name):
+    #         sop_ids = set(self.sop_db.get_column(
+    #             table=table_name,
+    #             column_name='id'))
+    #         kin_ids = set(self.kin_db.get_column(
+    #             table=table_name,
+    #             column_name='kin_id'))
+    #         tmp = np.array(self.sim_db.get_column(
+    #             table=table_name,
+    #             column_name='sim_id'))//len(self.settings['exp_profiles'])
+    #         sim_ids = set(tmp.tolist())
+    #         if elem_id in sop_ids and\
+    #            elem_id in kin_ids and\
+    #            elem_id in sim_ids:
+    #             return True
+    #         else:
+    #             return False
+    #     else:
+    #         return False
 
     def update_iterations(self,
                           last_vertice: Element) -> None:

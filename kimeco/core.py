@@ -288,12 +288,13 @@ class CoreRun:
             klog=self.klog
         )
         el.rateCoef.set_status(table=table_name)
-        self.klog.debug(
-            f'Rate coefficient calc status for element {el.id}:' +
-            f'{el.rateCoef.status.value}')
+        if el.rateCoef.status == JobStatus.FINISHED:
+            self.klog.debug(
+                f'Rate coefficient calc status for element {el.id}:' +
+                f'{el.rateCoef.status.value}')
         if el.rateCoef.status == JobStatus.NOT_IN_QUEUE:
             el.rateCoef.q_up()
-            self.klog.debug(f'Queued rate coefficient calc for element {el.id}.')
+            # self.klog.debug(f'Queued rate coefficient calc for element {el.id}.')
         elif el.rateCoef.status == JobStatus.FINISHED:
             el.save_kin(db=self.kin_db, table=table_name)
 
@@ -400,10 +401,8 @@ class CoreRun:
         """Make sure element is saved before changing status."""
         table_name = self.get_table_name(el)
 
-        if self.sop_db.entry_exist(table=table_name, id=el.id):
-            el.status = ElementStatus.DONE
-        else:
-            el.prepare_upsert(db=self.sop_db, table=table_name)
+        el.prepare_upsert(db=self.sop_db, table=table_name)
+        el.status = ElementStatus.DONE
 
     def collect_sim_profiles(self) -> None:
         """Batch recovery of concentration profiles from the database.

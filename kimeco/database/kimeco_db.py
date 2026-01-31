@@ -280,15 +280,15 @@ class Kimeco_db:
         with self._upsert_lock:
             if len(self._upsert) == 0:
                 return
-            
+
             # Copy the data
             upsert_snapshot = {}
             for table in self._upsert:
                 upsert_snapshot[table] = self._upsert[table].copy()
-            
+
             # Clear immediately
             self._upsert = {}
-        
+
         # Execute outside the lock
         for table in upsert_snapshot:
             ids: list[int] = []
