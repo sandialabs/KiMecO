@@ -283,15 +283,16 @@ class NelderMeadInstance(NelderMead):
             Element with lowest score
         """
         all_vertices: list[Element] = []
-        rows = self.sop_db.get_table(table=f'{self.gen_prefix}{self.nm_id:04d}')
+        rows = self.sop_db.get_table(
+            table=f'{self.gen_prefix}{self.gen_counter:04d}')
         for row in rows:
-            el = SOP.from_db_row(
+            sop = SOP.from_db_row(
                 sop_tpl=self.f_el.sop,
                 row=row[1:])  # Skip id
             element = Element(
-                sop=el,
+                sop=sop,
                 id=row[0],  # id
-                gen=self.nm_id,
+                gen=self.gen_counter,
                 status=ElementStatus.DONE.value)
             all_vertices.append(element)
 
