@@ -50,7 +50,7 @@ class SIM:
         self.name: str = f'{gen_name}{self.el_name}S'
         self.loc: str = loc + f'/{(self.id)//50:02d}'
         self.q_sys: QueueingSystem = q_sys
-        self.ctjobtpl: str = ctjobtpl
+        self.ctjobtpl: str = self.settings['cantera_tpl']
         self.db: SIM_DB = db
         self.profiles: list[NDArray | None] = [
             None] * len(set['exp_profiles'])

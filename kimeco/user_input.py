@@ -70,6 +70,51 @@ class KMOInput:
                         continue
                 self.klog.info(f"{key} is a mandatory keyword.")
                 self.cancel_run = True
+            elif key == 'cantera_tpl':
+                if not os.path.isfile(self.init_loc+self.json_file[key]):
+                    self.klog.info(
+                        f"Cantera tpl file {self.json_file[key]} not found.")
+                    self.cancel_run = True
+                    continue
+                # If file exist try to open it
+                try:
+                    with open(
+                        self.init_loc+self.json_file[key],
+                        mode='r') as f:
+                        cantera_tpl: str = f.read()
+                except Exception as e:
+                    self.klog.info(
+                        f"Cannot read {self.json_file[key]}.")
+                    self.klog.info(str(e))
+                    self.cancel_run = True
+                    continue
+                # if file can be read, check if it contains the keywords
+                if not cantera_tpl:
+                    raise ValueError("Cantera tpl file is empty.")
+                try:
+                    _: str = cantera_tpl.format(
+                        init_loc='test',
+                        input_file='test',
+                        scratchdir='test',
+                        el_num=0,
+                        db='test',
+                        tbl_map='test',
+                        rates='test',
+                        time='test',
+                        all_tsteps='test',
+                        gen_name='test',
+                        to_watch='test'
+                        )
+                except KeyError as e:
+                    msg: str = f"Keyword {e} not in the Cantera tpl.\n"
+                    msg += "It should contain the following keywords:\n"
+                    msg += "init_loc, input_file, scratchdir, el_num, db,"
+                    msg += " tbl_map, rates, time, all_tsteps,"
+                    msg += " gen_name, to_watch"
+                    self.klog.info(msg)
+                    self.cancel_run = True
+                    continue
+                self.json_file[key] = cantera_tpl
             elif not isinstance(self.json_file[key], type(value)):
                 if isinstance(value, float) and \
                    isinstance(self.json_file[key], int):

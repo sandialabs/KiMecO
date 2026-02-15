@@ -29,7 +29,10 @@ mandatory_keys: dict[str, Any] = {
     # the reaction profiles.
     # list of str corresponding to the path of the profiles
     # order is eP1T1, eP1T2, ..., eP2T1, eP2T2,...
-    "exp_errors": []
+    "exp_errors": [],
+    # template file for cantera simulation
+    # Should be the relative path to the file
+    "cantera_tpl": ""
                                   }
 
 now: str = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
