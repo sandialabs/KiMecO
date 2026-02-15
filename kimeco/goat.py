@@ -94,6 +94,8 @@ class GOATs:
             with open(filename, "r", encoding="utf-8") as fh:
                 for lineno, raw in enumerate(fh):
                     goat_list: List[str] = raw.strip().split()
+                    if not goat_list:
+                        continue
                     goats: List[Tuple[int, int]] = []
                     for el in goat_list:
                         try:
@@ -187,7 +189,8 @@ class GOATs:
         Returns the list of selected Element objects.
         """
         if not elements:
-            return []
+            raise ValueError(
+                "No elements provided for update_with_generation")
 
         gen_id: int = max(el.gen for el in elements)
 
@@ -300,7 +303,7 @@ class GOATs:
                 key = (p, t, from_to[1], from_to[0])
                 out[gen_id][(p, t)] = []
                 for (elem_gen, elem_id) in self.generations[gen_id]:
-                    table = f"G{elem_gen:04d}"
+                    table = f"{self.prefix}{elem_gen:04d}"
                     kin_id = int(elem_id)
                     out[gen_id][(p, t)].append(
                         float(raw_results[table][kin_id][key]))
@@ -321,7 +324,7 @@ class GOATs:
         """
 
         for (gen_origin, el_id) in self.generations[gen_id]:
-            table: str = f"G{gen_origin:04d}"
+            table: str = f"{self.prefix}{gen_origin:04d}"
             self.sop_db.prepare_batch_select(table=table, row_id=el_id)
 
         # Execute batched select once
