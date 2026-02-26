@@ -53,7 +53,7 @@ class KiMecO:
         self.input_tpl: list[str]
         self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
-        self.first_sensi: bool = len(self.settings['to_perturb']) == 0
+        self.first_sensi: bool = len(self.settings['active_p']) == 0
 
     def set_initial_sop(self,
                         postprocess=False) -> None:
@@ -153,7 +153,7 @@ class KiMecO:
         else:
             self.klog.info(f"{'SA read from DB':<65}")
         self.sensitivity.run()  # Only actually run if necessary
-        self.settings['to_perturb'] = self.sensitivity.selected
+        self.settings['active_p'] = self.sensitivity.selected
         self.f_el: Element = self.sensitivity.elements[0]
         if not self.sensitivity.elements_from_db or \
             (self.settings['restart'] == RestartType.RESCORE and
@@ -166,7 +166,7 @@ class KiMecO:
 
         msg = f"{'Parameters selected for perturbation:':<80}"
         msg += '\n'
-        msg += "{}".format(self.settings['to_perturb']).replace("'", '"')
+        msg += "{}".format(self.settings['active_p']).replace("'", '"')
         self.klog.info(msg)
 
         # Reinitialize the perturbator once the list of parameters to perturb
@@ -231,7 +231,7 @@ class KiMecO:
         Resolve an ensemble name to a list of Elements.
 
         Supported formats:
-        - 'Gdddd' e.g., 'G0001': optimizer generation dddd
+        - 'Gdddd' e.g., 'G0001': GA generation dddd
         - 'GT-1': last GOATs generation
         - 'GTxxxx': specific GOATs generation
         """

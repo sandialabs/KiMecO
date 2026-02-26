@@ -39,7 +39,7 @@ class NelderMead:
         self.settings: dict[str, Any] = settings
         self.pert: Perturbator = pert
         self.klog: KMOLogger = klog
-        self.new_parameters: list[str] = self.settings['to_perturb']
+        self.new_parameters: list[str] = self.settings['active_p']
         self.current_dimensions: list[str] = []
         self.wdir: str = self.settings['workdir']
         self.prefix: str = prefix

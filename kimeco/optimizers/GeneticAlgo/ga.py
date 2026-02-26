@@ -412,11 +412,11 @@ class GeneticAlgorithm(ABC):
             selected = sensitivity.selected
         new_params = [
             p for p in selected
-            if p not in self.settings['to_perturb']
+            if p not in self.settings['active_p']
                         ]
         new_p: bool = len(new_params) > 0
         for p in new_params:
-            self.settings['to_perturb'].append(p)
+            self.settings['active_p'].append(p)
         if new_p:
             msg = 'Perturbing the following new parameters:\n'
             msg += "{}".format(new_params).replace("'", '"')
@@ -467,7 +467,7 @@ class GeneticAlgorithm(ABC):
         for sop in sop_list:
             parameters: dict[str, Any] = sop.parameters_names
             for key, value in parameters.items():
-                if key not in self.settings['to_perturb']:
+                if key not in self.settings['active_p']:
                     continue
                 # for ptype in Ptype:
                 #     if ptype.value in key.split(dbs)[1]:

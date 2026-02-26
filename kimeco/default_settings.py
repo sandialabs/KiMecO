@@ -123,21 +123,23 @@ default_settings: dict[str, Any] = {
     "max_std": 4,
     # Standard deviation of energy (kcal/mol) perturbation for wells
     # and bimolecular species
-    f"std_{Ptype.WE.value}": 0.5,
+    # Ref for barriers:
+    # https://pubs.rsc.org/it-it/content/articlehtml/2025/cp/d5cp01181g
+    f"std_{Ptype.WE.value}": 1.0,
     # Standard deviation of energy (kcal/mol) perturbation for barriers
-    f"std_{Ptype.BE.value}": 0.5,
+    f"std_{Ptype.BE.value}": 1.5,
     # Mode for frequency perturbation/saving
     "freq_mode": f"{FreqMode.BATCH.value}",
     # Standard deviation percentage perturbation for wells
     # and bimolecular individual vibrations
-    f"std_{Ptype.IFC.value}": 0.05,
+    f"std_{Ptype.IFC.value}": 1.1,
     # Standard deviation percentage for batch perturbation of wells
     # and bimolecular vibrations
-    f"std_{Ptype.BFC.value}": 0.1,
+    f"std_{Ptype.BFC.value}": 1.05,
     # Standard deviation percentage perturbation for hindered rotors
     f"std_{Ptype.HRS.value}": 0.1,
-    # Standard deviation percentage perturbation for imaginary frequencies
-    f"std_{Ptype.IF.value}": 0.1,
+    # Standard deviation multiplicative perturbation for imaginary frequencies
+    f"std_{Ptype.IF.value}": 1.1,
     # Energy transfer probability, factor, percentage
     f"std_{Ptype.ETF.value}": 0.25,
     # Energy transfer probability, exponent, absolute
@@ -149,7 +151,7 @@ default_settings: dict[str, Any] = {
     # Multiplicating/dividing factor for sym  factor of bl reactions
     f"std_{Ptype.SFC.value}": 2.0,
     # Multiplicating/dividing factor for sym factor of M-D rotors
-    f"std_{Ptype.MRC.value}": 2.0,
+    f"std_{Ptype.MRC.value}": 1.5,
     # RNG distribution of energy (kcal/mol) perturbation for wells
     # and bimolecular species
     f"distrib_{Ptype.WE.value}": f"{Distrib.NORMAL.value}",
@@ -203,15 +205,13 @@ default_settings: dict[str, Any] = {
     # Number of elements per generation
     "n_elem": 500,
     # Value of score above which a generation won't converge
-    "max_score": 9.0,
+    "max_score": 4.0,
     # Value of score under which a generation has converged
     "score_conv": 0.01,
     # Maximum number of generations
     "max_gen": 10,
     # Percentage of deviation of means and stds of parameters to converge
     "param_conv": 0.01,
-    # Numbers of helpers to save the simulations profiles
-    "max_helpers": 10,
     # Multiplicating factors of std parameters for derivative in
     # sensitivity analysis
     "sensi_d": 0.1,
@@ -219,7 +219,7 @@ default_settings: dict[str, Any] = {
     # important parameters to perturb
     "cumul_sensi": 0.95,
     # User given list of parameters to perturb. All if empty.
-    "to_perturb": [],
+    "active_p": [],
     # Frequency of the sensitivity analysis
     "SA_freq": 1000,
     # From which generation to start the sensitivity analysis
