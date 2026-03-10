@@ -192,22 +192,42 @@ class KimecoApp(KiMecO):
         self.app.run(port=PORT, host=ADDRESS)
 
 
-def main() -> None:
-    # Call the setup function to configure logging
-    if len(sys.argv) != 2:
-        print("""
-    KIMECO needs various parameters to be set in a JSON input file.
-    This JSON input file should be supplied as the first and only
-    argument.
+def _print_help() -> None:
+    print(
+        """
+KiMecO UI (kmoui)
+Launch the KiMecO web interface to analyze optimization results.
 
-    Usage:  kmo path/to/JSON/input/file.json
-    """)
-        sys.exit()
+This command reads a JSON input file, initializes the KiMecO databases/work
+context, and starts a Dash server for interactive exploration of SOP/KIN/SIM
+and correlation views.
+
+Usage:
+  kmoui INPUT_JSON
+
+Arguments:
+  INPUT_JSON    Path to the KiMecO JSON configuration file.
+
+Options:
+  -h, --help    Show this help message and exit.
+""".strip()
+    )
+
+
+def main() -> None:
+    if len(sys.argv) == 2 and sys.argv[1] in {'-h', '--help'}:
+        _print_help()
+        sys.exit(0)
+
+    if len(sys.argv) != 2:
+        _print_help()
+        sys.exit(1)
+
     try:
         kmoui = KimecoApp(input_file=sys.argv[1])
     except IndexError as e:
         print(e)
-        print('To use KIMECO, supply the input file as argument.')
+        print('To use KiMecO UI, supply the input file as argument.')
         sys.exit(-1)
     kmoui.initialize_workdir()
     kmoui.copy_necessary_files()

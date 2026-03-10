@@ -1,13 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0",
-            "ase>=3.22.1",
-            "cantera>=3.0.0",
-            "numpy>=2",
-            "pandas>=2.2",
-            "sqlalchemy",
-            "sqlalchemy-utils",
-            "dash",
-            "pint"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -34,6 +26,18 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.10",
     "Topic :: Scientific/Engineering :: Chemistry"
+]
+dependencies = [
+    "ase>=3.22.1",
+    "cantera>=3.0.0",
+    "numpy>=2",
+    "pandas>=2.2",
+    "sqlalchemy",
+    "sqlalchemy-utils",
+    "dash",
+    "scipy>=1.10",
+  "plotly>=5",
+  "pint"
 ]
 
 [project.scripts]

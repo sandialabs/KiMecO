@@ -221,28 +221,50 @@ class PostProcess(KiMecO):
                     ),
                     id=idx,
                     gen=int(token[1:])
+
+
                 )
             )
         return elements
 
+
 def main() -> None:
 
-    # Call the setup function to configure logging
-    if len(sys.argv) != 2:
-        print("""
-    KIMECO needs various parameters to be set in a JSON input file.
-    This JSON input file should be supplied as the first and only
-    argument.
+    def _print_help() -> None:
+        print(
+            """
+KiMecO PostProcess (kmopp)
+Run postprocessing and extrapolation on a completed KiMecO run.
 
-    Usage:  kmo path/to/JSON/input/file.json
-    """)
-        sys.exit()
+This command reads a JSON input file, loads existing run databases/GOAT
+ensembles, and executes postprocessing ensembles configured with pp_* keys
+(for example pp_ensembles, pp_temp, pp_pres).
+
+Usage:
+  kmopp INPUT_JSON
+
+Arguments:
+  INPUT_JSON    Path to the KiMecO JSON configuration file.
+
+Options:
+  -h, --help    Show this help message and exit.
+""".strip()
+        )
+
+    if len(sys.argv) == 2 and sys.argv[1] in {'-h', '--help'}:
+        _print_help()
+        sys.exit(0)
+
+    if len(sys.argv) != 2:
+        _print_help()
+        sys.exit(1)
+
     try:
         pp = PostProcess(
             input_file=sys.argv[1])
     except IndexError as e:
         print(e)
-        print('To use KIMECO, supply the input file as argument.')
+        print('To use KiMecO PostProcess, supply the input file as argument.')
         sys.exit(-1)
 
     pp.initialize_workdir()
@@ -253,4 +275,3 @@ def main() -> None:
     pp.load_goats()
     pp.set_postprocessing()
     # Extrapolations are executed inside set_postprocessing()
-    

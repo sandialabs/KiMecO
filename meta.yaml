@@ -5,11 +5,56 @@ package:
     name: {{ name|lower }}
     version: {{ version }}
 
+source:
+    path: .
+
 build:
     noarch: python
-    script: {{ PYTHON }} -m pip install . -vv
+    skip: true  # [not linux]
+    script: {{ PYTHON }} -m pip install . -vv --no-deps
     number: 0
     entry_points:
         - kmo = kimeco.main:main
         - kmoui = kimeco.gui.kimecoapp:main
         - kmopp = kimeco.postprocessing.postprocess:main
+
+requirements:
+    host:
+        - python >=3.10
+        - pip
+        - setuptools >=61.0
+        - wheel
+    run:
+        - python >=3.10
+        - ase >=3.22.1
+        - cantera >=3.0.0
+        - numpy >=2
+        - pandas >=2.2
+        - sqlalchemy
+        - sqlalchemy-utils
+        - dash
+        - scipy >=1.10
+        - plotly >=5
+        - pint
+        - mess-static
+
+test:
+    imports:
+        - kimeco
+        - kimeco.core
+        - kimeco.database.kimeco_db
+        - kimeco.gui.kimecoapp
+        - pint
+    commands:
+        - kmo --help
+        - kmoui --help
+        - kmopp --help
+
+about:
+    home: https://github.com/csoulie/GAME
+    summary: Kinetic Mechanism Optimizer
+    license: BSD-3-Clause
+
+extra:
+    recipe-maintainers:
+        - csoulie

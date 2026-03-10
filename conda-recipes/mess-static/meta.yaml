@@ -1,0 +1,36 @@
+{% set name = "mess-static" %}
+{% set version = "0.0.0" %}
+{% set git_rev = "main" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  git_url: https://github.com/Auto-Mech/MESS.git
+  git_rev: {{ git_rev }}
+
+build:
+  skip: true  # [not linux]
+  number: 0
+  script: bash build.sh
+
+requirements:
+  host:
+    - bash
+  run:
+    - bash
+
+test:
+  commands:
+    - test -x "$PREFIX/bin/mess"
+    - mess -h || mess --help || true
+
+about:
+  home: https://github.com/Auto-Mech/MESS.git
+  summary: Prebuilt static MESS executables packaged for conda (no rebuild)
+  license: BSD-3-Clause
+
+extra:
+  recipe-maintainers:
+    - csoulie

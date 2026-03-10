@@ -1,16 +1,56 @@
-image: python:3.10.16
+image: ubuntu:22.04
 
 stages:
-  - test
+  - installation
+  - unit_tests
+  - functional_tests
 
-test:
-  stage: test
+variables:
+  CONDA_DIR: "$CI_PROJECT_DIR/miniforge"
+  ENV_NAME: "kimeco-ci"
+  PIP_NO_BUILD_ISOLATION: "1"
+
+.common_rules: &common_rules
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+installation:
+  stage: installation
   before_script:
+    - apt-get update
+    - apt-get install -y wget bzip2 ca-certificates git
+    - wget -qO miniforge.sh https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+    - bash miniforge.sh -b -p "$CONDA_DIR"
+    - source "$CONDA_DIR/etc/profile.d/conda.sh"
+    - conda --version
+    - conda config --add channels conda-forge
+    - conda config --set channel_priority strict
+    - conda create -n "$ENV_NAME" -c conda-forge python=3.10 pip -y
+    - conda activate "$ENV_NAME"
     - python -V
-    - pip install --upgrade pip
-    - pip install -r [requirements.txt](http://_vscodecontentref_/0)
-    - pip install -e .
-    - pip install pytest
+    - conda install -c conda-forge mamba -y
+    - mamba --version
+    - mamba install -c conda-forge --file requirements.txt -y
+    - mamba install -c conda-forge setuptools wheel pytest -y
+    - pip install --no-build-isolation --no-deps -e .
+  script:
+    - source "$CONDA_DIR/etc/profile.d/conda.sh"
+    - conda activate "$ENV_NAME"
+    - python -c "import kimeco; print('Installation phase completed.')"
+  artifacts:
+    paths:
+      - miniforge/
+    expire_in: 1 day
+  <<: *common_rules
+
+unit_tests:
+  stage: unit_tests
+  dependencies:
+    - installation
+  before_script:
+    - source "$CONDA_DIR/etc/profile.d/conda.sh"
+    - conda activate "$ENV_NAME"
   script:
     - |
       pytest -q
@@ -20,6 +60,23 @@ test:
         exit 0
       fi
       exit $rc
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  <<: *common_rules
+
+functional_tests:
+  stage: functional_tests
+  dependencies:
+    - installation
+  before_script:
+    - source "$CONDA_DIR/etc/profile.d/conda.sh"
+    - conda activate "$ENV_NAME"
+  script:
+    - |
+      python - <<'PY'
+      import kimeco
+      import ase, cantera, dash, numpy, pandas, pint, plotly, scipy, sqlalchemy
+      print("Import checks passed")
+      PY
+    - kmo --help
+    - kmoui --help
+    - kmopp --help
+  <<: *common_rules

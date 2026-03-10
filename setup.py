@@ -20,10 +20,11 @@ setup(
                           "cantera>=3.0.0",
                           "numpy>=2",
                           "pandas>=2.2",
-                          "setuptools>=61.0",
                           "sqlalchemy",
                           "sqlalchemy-utils",
                           "dash",
+                          "scipy>=1.10",
+                          "plotly>=5",
                           "pint"],
 
         keywords=['python',
