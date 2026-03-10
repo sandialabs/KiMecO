@@ -1,0 +1,25 @@
+image: python:3.10.16
+
+stages:
+  - test
+
+test:
+  stage: test
+  before_script:
+    - python -V
+    - pip install --upgrade pip
+    - pip install -r [requirements.txt](http://_vscodecontentref_/0)
+    - pip install -e .
+    - pip install pytest
+  script:
+    - |
+      pytest -q
+      rc=$?
+      if [ $rc -eq 5 ]; then
+        echo "No tests collected yet. CI is active and passing."
+        exit 0
+      fi
+      exit $rc
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
