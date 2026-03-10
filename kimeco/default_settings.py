@@ -88,9 +88,9 @@ default_settings: dict[str, Any] = {
     "pp_ensembles": ["G0001", "GT-1"],
     # User input unit of pressure
     "pres_unit": 'torr',
-    # Keys: name of species in the initial mess file
-    # Values: name of the species in the mechanism file
-    "ct_names": {},
+    # Allow species present in MESS but absent from mechanism file.
+    # If False, run stops when a missing species is encountered.
+    "force_new_molecules": False,
     # CPU used per master equation job
     "cpu_kin": 1,
     # Memory (Mb) used per master equation job

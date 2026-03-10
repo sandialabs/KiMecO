@@ -15,12 +15,11 @@ from kimeco.enums import FreqMode
 
 class Well:
     """Well object.
-    Has a name (from MESS input), and a ct_name used in cantera.
+    Has a single species name used in MESS and mechanism.
     It also has a structure (ASE Atoms), and can have an energy.
     """
     def __init__(self,
                  name: str,
-                 ct_name: str = "",
                  pert_e: bool = True,
                  freq_mode: FreqMode = FreqMode.BATCH
                  ) -> None:
@@ -29,7 +28,6 @@ class Well:
         self._freq: NDArray
         self.m_rotors: list[MultiRotor] = []
         self.h_rotors: list[HinRotor] = []
-        self.ct_name: str = ct_name
         self.energy: float
         self.structure: Atoms
         # batch frequency coefficient

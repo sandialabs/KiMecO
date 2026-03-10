@@ -10,16 +10,12 @@ class Bimolecular:
     It must have a name and an energy."""
     def __init__(self,
                  name: str,
-                 ct_names: dict[str, str],
                  freq_mode: FreqMode = FreqMode.BATCH
                  ) -> None:
         self.freq_mode: FreqMode = freq_mode
         self.name: str = name
         self.fragments: list[Well] = []
-        self.ct_names: dict[str, str] = ct_names
         self.energy: float
-        # Not actualy used in cantera, but for data storage in db
-        self.ct_name: str = name
         self.dummy = False
         self.uncertainties: dict[str, float] = {}
 
@@ -37,15 +33,7 @@ class Bimolecular:
         Args:
             name (str): fragment's name
         """
-        if name in self.ct_names:
-            if self.ct_names[name] == "":
-                ct_name: str = name
-            else:
-                ct_name: str = self.ct_names[name]
-        else:
-            ct_name: str = name
         frag = Well(name=name,
-                    ct_name=ct_name,
                     freq_mode=self.freq_mode,
                     pert_e=False)
         self.fragments.append(frag)

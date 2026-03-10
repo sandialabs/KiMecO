@@ -103,35 +103,21 @@ class KINSection(Section):
             display_to_db: dict[Tuple[str, str],
                                 Tuple[Optional[str], Optional[str]]] = {}
             for disp_to in To:
-                tmp_to = next(
-                    (k for k, v in self.settings['ct_names'].items()
-                     if v == disp_to),
-                    None,
-                )
-                if tmp_to is None:
-                    continue
-                if tmp_to in self.init_SOP.wells_names:
-                    to_db_candidate = tmp_to
+                if disp_to in self.init_SOP.wells_names:
+                    to_db_candidate = disp_to
                 else:
                     to_db_candidate = next(
                         (bim.name for bim in self.init_SOP.bimolecular
-                         if tmp_to in bim.frag_names),
+                         if disp_to in bim.frag_names),
                         None,
                     )
                 for disp_frm in From:
-                    tmp_frm = next(
-                        (k for k, v in self.settings['ct_names'].items()
-                         if v == disp_frm),
-                        None,
-                    )
-                    if tmp_frm is None:
-                        continue
-                    if tmp_frm in self.init_SOP.wells_names:
-                        frm_db_candidate = tmp_frm
+                    if disp_frm in self.init_SOP.wells_names:
+                        frm_db_candidate = disp_frm
                     else:
                         frm_db_candidate = next(
                             (bim.name for bim in self.init_SOP.bimolecular
-                             if tmp_frm in bim.frag_names),
+                             if disp_frm in bim.frag_names),
                             None,
                         )
                     rate_pairs_db.append((frm_db_candidate, to_db_candidate))

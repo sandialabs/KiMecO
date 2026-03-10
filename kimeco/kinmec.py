@@ -26,7 +26,7 @@ class KiMec:
                 (the value of the parameters don't matter)
         """
         self.settings: dict[str, Any] = settings
-        self.SOP: SOP = sop_tpl
+        self.SOP: SOP
         self.file: str = file
         if settings['postprocess']:
             self.pres: list[float] = settings['pp_pres']
@@ -35,8 +35,6 @@ class KiMec:
             self.pres: list[float] = settings['rc_pres']
             self.temp: list[float] = settings['rc_temp']
         self.mech: ct.Solution = ct.Solution(file)
-        self.ct_names: dict[str, str] = {
-            ct: wf for wf, ct in settings['ct_names'].items()}
         self.species = [sp for sp in self.mech.species()]
         self.reactions = [rc for rc in self.mech.reactions()]
         # Create a yaml template for the rate coefficients of a reaction
@@ -46,6 +44,15 @@ class KiMec:
                 self.rc_tpl += f'rc_{pindex}_{tindex}: ' +\
                                 '{rates[' + f'{pindex}][{tindex}]' + '}' + '\n'
         self.new_reactions_tpls: dict[tuple[str, str], str] = {}
+
+    def add_SOP(self, sop: SOP) -> None:
+        """Add the SOP to the KiMec object to be able to create the reaction
+        templates.
+
+        Args:
+            sop (SOP): SOP object corresponding to the system
+        """
+        self.SOP = sop
 
     def prepare_mech(self):
         """Prepare the mechanism for modifications of the reactions
@@ -72,21 +79,6 @@ class KiMec:
         for idx in reversed(self.find_redundant_idx(new_reactions)):
             self.reactions.pop(idx)
 
-    def check_species(self) -> None:
-        """Check if the species from the workflow
-        are in the mechanism
-
-        Args:
-            kmo_species (list[str]): species in the workflow
-        """
-        mech_names = [sp.name for sp in self.species]
-        sp_in_mech = 0
-        for kmo_sp in self.SOP.species:
-            if kmo_sp in mech_names:
-                sp_in_mech += 1
-        if sp_in_mech == 0:
-            raise ValueError('No MESS species in Kinetic Mechanism.')
-
     def add_species(self) -> None:
         """Add the missing species from the SOP
         to the cantera Simulation.
@@ -98,8 +90,8 @@ class KiMec:
                               self.species[0].thermo.coeffs)
         for specie in self.SOP.species:
             if specie not in mech_names:
-                well: Well = self.SOP.items[self.ct_names[specie]]
-                new_specie: ct.Species = ct.Species(name=well.ct_name,
+                well: Well = self.SOP.items[specie]
+                new_specie: ct.Species = ct.Species(name=well.name,
                                                     composition=well.compo
                                                     )
                 new_specie.thermo = thermo
@@ -124,19 +116,19 @@ class KiMec:
             for product in self.SOP.wells:
                 if reactant == product:
                     continue
-                self.new_reactions_tpls[(reactant.ct_name, product.ct_name)] =\
+                self.new_reactions_tpls[(reactant.name, product.name)] =\
                     self.create_reaction_template(reactant=reactant,
                                                   product=product)
         # Create well to bimolecular reactions
         for reactant in self.SOP.wells:
             for product in self.SOP.bimolecular:
-                self.new_reactions_tpls[(reactant.ct_name, product.ct_name)] =\
+                self.new_reactions_tpls[(reactant.name, product.name)] =\
                     self.create_reaction_template(reactant=reactant,
                                                   product=product)
         # Create bimolecular to well reactions
         for reactant in self.SOP.bimolecular:
             for product in self.SOP.wells:
-                self.new_reactions_tpls[(reactant.ct_name, product.ct_name)] =\
+                self.new_reactions_tpls[(reactant.name, product.name)] =\
                     self.create_reaction_template(reactant=reactant,
                                                   product=product)
         # Create bimolecular to bimolecular reactions
@@ -144,7 +136,7 @@ class KiMec:
             for product in self.SOP.bimolecular:
                 if reactant == product:
                     continue
-                self.new_reactions_tpls[(reactant.ct_name, product.ct_name)] =\
+                self.new_reactions_tpls[(reactant.name, product.name)] =\
                     self.create_reaction_template(reactant=reactant,
                                                   product=product)
 
@@ -187,19 +179,19 @@ class KiMec:
         """
         eq: str = ""
         if isinstance(reactant, Well):
-            eq += reactant.ct_name
+            eq += reactant.name
         elif isinstance(reactant, Bimolecular):
-            eq += f'{reactant.fragments[0].ct_name}'
+            eq += f'{reactant.fragments[0].name}'
             eq += ' + '
-            eq += f'{reactant.fragments[1].ct_name}'
+            eq += f'{reactant.fragments[1].name}'
 
         eq += ' => '
         if isinstance(product, Well):
-            eq += product.ct_name
+            eq += product.name
         elif isinstance(product, Bimolecular):
-            eq += f'{product.fragments[0].ct_name}'
+            eq += f'{product.fragments[0].name}'
             eq += ' + '
-            eq += f'{product.fragments[1].ct_name}'
+            eq += f'{product.fragments[1].name}'
 
         return eq
 
@@ -256,7 +248,7 @@ class KiMec:
                     continue
                 new_reactions.append(ct.Reaction.from_yaml(
                     self.new_reactions_tpls[
-                        (reactant.ct_name, product.ct_name)
+                        (reactant.name, product.name)
                         ].format(
                         rates=self.select_convert_rates(
                             reactant=reactant,
@@ -273,7 +265,7 @@ class KiMec:
             for product in self.SOP.bimolecular:
                 new_reactions.append(ct.Reaction.from_yaml(
                     self.new_reactions_tpls[
-                        (reactant.ct_name, product.ct_name)
+                        (reactant.name, product.name)
                         ].format(
                         rates=self.select_convert_rates(
                             reactant=reactant,
@@ -290,7 +282,7 @@ class KiMec:
             for product in self.SOP.wells:
                 new_reactions.append(ct.Reaction.from_yaml(
                     self.new_reactions_tpls[
-                        (reactant.ct_name, product.ct_name)
+                        (reactant.name, product.name)
                         ].format(
                         rates=self.select_convert_rates(
                             reactant=reactant,
@@ -309,7 +301,7 @@ class KiMec:
                     continue
                 new_reactions.append(ct.Reaction.from_yaml(
                     self.new_reactions_tpls[
-                        (reactant.ct_name, product.ct_name)
+                        (reactant.name, product.name)
                         ].format(
                         rates=self.select_convert_rates(
                             reactant=reactant,

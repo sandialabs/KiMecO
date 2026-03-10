@@ -134,8 +134,6 @@ class SOPSection(Section):
             filtered_param: list[dict[str, str]] = []
             for col in self.sop_db.columns:
                 molec: str = col.split('__')[0]
-                if molec in self.settings['ct_names']:
-                    molec = self.settings['ct_names'][molec]
                 param: str = col.split(dbs)[1]
                 for ptype in ptypes:
                     if ptype in param:
@@ -266,10 +264,7 @@ class SOPSection(Section):
             'unit': ''
         }
         raw_molec: str = col.split(dbs)[0]
-        if raw_molec in self.settings['ct_names']:
-            molec = self.settings['ct_names'][raw_molec]
-        else:
-            molec: str = raw_molec
+        molec: str = raw_molec
         param: str = col.split(dbs)[1]
         for ptype in ptypes:
             if ptype in param:
@@ -277,37 +272,23 @@ class SOPSection(Section):
         if ptype == Ptype.IF.value:
             bar: Barrier = self.init_SOP.items[raw_molec]
             if isinstance(bar.connected[0], Well):
-                if bar.connected[0].name in self.settings['ct_names']:
-                    From: str = \
-                        self.settings['ct_names'][bar.connected[0].name]
-                else:
-                    From = bar.connected[0].name
+                From: str = bar.connected[0].name
             elif isinstance(bar.connected[0], Bimolecular):
                 From = ''
                 for idx, frag in enumerate(bar.connected[0].frag_names):
                     if idx == 1:
                         From += ' + '
-                    if frag in self.settings['ct_names']:
-                        From += self.settings['ct_names'][frag]
-                    else:
-                        From += frag
+                    From += frag
             else:
                 raise NotImplementedError('Unknown reactant object.')
             if isinstance(bar.connected[0], Well):
-                if bar.connected[1].name in self.settings['ct_names']:
-                    To: str = \
-                        self.settings['ct_names'][bar.connected[1].name]
-                else:
-                    To = bar.connected[1].name
+                To: str = bar.connected[1].name
             elif isinstance(bar.connected[1], Bimolecular):
                 To = ''
                 for idx, frag in enumerate(bar.connected[1].frag_names):
                     if idx == 1:
                         To += ' + '
-                    if frag in self.settings['ct_names']:
-                        To += self.settings['ct_names'][frag]
-                    else:
-                        To += frag
+                    To += frag
             else:
                 raise NotImplementedError('Unknown reactant object.')
             molec = f'{From} to {To}'

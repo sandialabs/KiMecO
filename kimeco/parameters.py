@@ -29,7 +29,6 @@ class SOP:
         self.temp: list[float]
         self.pres: list[float]
         self.pres_unit: str
-        self.ct_names: dict[str, str]
         self.epsilons: list[float] = []
         self.files2copy: list[str] = []
         self._default_score = float('inf')
@@ -60,14 +59,14 @@ class SOP:
     def species(self) -> list[str]:
         species: list[str] = []
         for well in self.wells:
-            species.append(well.ct_name)
+            species.append(well.name)
         for bm in self.bimolecular:
             if bm.dummy:
                 continue
-            if bm.fragments[0].ct_name not in species:
-                species.append(bm.fragments[0].ct_name)
-            if bm.fragments[1].ct_name not in species:
-                species.append(bm.fragments[1].ct_name)
+            if bm.fragments[0].name not in species:
+                species.append(bm.fragments[0].name)
+            if bm.fragments[1].name not in species:
+                species.append(bm.fragments[1].name)
         return species
 
     @property
@@ -119,14 +118,7 @@ class SOP:
         Args:
             name (str): Well's name
         """
-        if name in self.ct_names:
-            if self.ct_names[name] == "":
-                self.ct_names[name] = name
-        else:
-            self.ct_names[name] = name
-        ct_name: str = self.ct_names[name]
         self.items[name] = Well(name=name,
-                                ct_name=ct_name,
                                 freq_mode=self.freq_mode)
         self.wells.append(self.items[name])
 
@@ -149,9 +141,9 @@ class SOP:
         Args:
             name (str): name of the bimolecular object
         """
-        self.items[name] = Bimolecular(name,
-                                       self.ct_names,
-                                       freq_mode=self.freq_mode)
+        self.items[name] = Bimolecular(
+            name=name,
+            freq_mode=self.freq_mode)
         self.bimolecular.append(self.items[name])
 
     @property

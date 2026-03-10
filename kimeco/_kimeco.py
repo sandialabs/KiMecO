@@ -49,10 +49,15 @@ class KiMecO:
         if not sim_job:
             self.klog.setLevel(self.settings['log_level'])
         self.klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
+        self.mech = KiMec(
+            file=f"{self.init_loc}/{self.settings['ct_yaml']}",
+            settings=self.settings,
+            sop_tpl=self.init_SOP)
         self.init_SOP: SOP
         self.input_tpl: list[str]
         self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
+        self.mech.add_SOP(self.init_SOP)
         self.first_sensi: bool = len(self.settings['active_p']) == 0
 
     def set_initial_sop(self,
@@ -61,15 +66,15 @@ class KiMecO:
         """
         mr = MessInputReader(
             settings=self.settings,
+            mechanism_species=self.mech.species,
+            klog=self.klog,
             postprocess=postprocess)
         (self.init_SOP, self.input_tpl) = mr.read()
-
-    def check_kinmech(self) -> None:
-        kin_mech = KiMec(
-            file=f"{self.init_loc}/{self.settings['ct_yaml']}",
-            settings=self.settings,
-            sop_tpl=self.init_SOP)
-        kin_mech.check_species()
+        if mr._trigger_stop:
+            raise ValueError(
+                "Input file reading failed due to missing species in the "
+                "mechanism file. Check the log for details."
+            )
 
     def initialize_workdir(self) -> None:
         """Create and access the working directory

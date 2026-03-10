@@ -6,6 +6,7 @@ from kimeco.barrier import Barrier
 from kimeco.bimolecular import Bimolecular
 from kimeco.rotors.internalrotation import InternalRotation
 from kimeco.rotors.mrotor import MultiRotor
+from kimeco.logger_config import KMOLogger
 
 import os
 
@@ -15,6 +16,8 @@ class MessInputReader:
      an object with easily extractable data."""
     def __init__(self,
                  settings: dict,
+                 mechanism_species: list[str],
+                 klog: KMOLogger,
                  postprocess: bool = False) -> None:
         """Save the file content as a string for further manipulation
 
@@ -33,8 +36,10 @@ class MessInputReader:
         else:
             self.SOP.temp = settings["rc_temp"]
             self.SOP.pres = settings["rc_pres"]
-        self.SOP.ct_names = settings["ct_names"]
         self.SOP.pres_unit = settings["pres_unit"]
+        self.klog: KMOLogger = klog
+        self.mechanism_species: set[str] = set(mechanism_species)
+        self.force_new_molecules: bool = settings['force_new_molecules']
         self.files2copy: list[str] = []
         if os.path.isfile(path=self.filename):
             with open(file=self.filename, mode='r') as f:
@@ -45,6 +50,28 @@ class MessInputReader:
             )
 
         self.template: list[str] = []
+        # Set to true if a species from MESS input is not present
+        # in the mechanism file and 'force_new_molecules' is False,
+        # to trigger the stop of the program after reading the input file.
+        self._trigger_stop = False
+
+    def validate_species(self,
+                         species: str,
+                         species_type: str) -> None:
+        if species in self.mechanism_species:
+            return
+        msg = (
+            f"{species_type} '{species}' from MESS input is not present "
+            "in the mechanism file."
+        )
+        self.klog.warning(msg)
+        if not self.force_new_molecules:
+            err = (
+                f"{msg} Set 'force_new_molecules' to true to continue "
+                "with species from MESS input."
+            )
+            self.klog.error(err)
+            self._trigger_stop = True
 
     def read(self) -> tuple[SOP, list[str]]:
         """Reads a mess input file and transforms it into a
@@ -106,6 +133,8 @@ class MessInputReader:
                 last_item = 'well'
                 name: str = line.split()[1]
                 if name not in self.SOP.items:
+                    self.validate_species(species=name,
+                                          species_type='Well')
                     self.SOP.add_new_well(name=name)
                 new_line: str = line.split()[0] \
                     + " {" \
@@ -160,6 +189,8 @@ class MessInputReader:
                 fname: str = line.split()[1]
                 if isinstance(self.SOP.items[name], Bimolecular):
                     if fname not in self.SOP.items[name].frag_names:
+                        self.validate_species(species=fname,
+                                              species_type='Fragment')
                         self.SOP.items[name].add_new_frag(fname)
                         if fname not in self.SOP.items:
                             self.SOP.items[fname] = \

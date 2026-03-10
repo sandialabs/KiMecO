@@ -5,7 +5,7 @@ import sys
 import os
 from typing import Any
 from kimeco._kimeco import KiMecO
-from kimeco.readers.mess_input import MessInputReader
+from kimeco.kinmec import KiMec
 from kimeco.logger_config import KMOLogger
 from kimeco.logger_config import setup_logger
 from kimeco.user_input import KMOInput
@@ -36,21 +36,16 @@ class KimecoApp(KiMecO):
             init_loc=init_loc,
             klog=self.klog)
         self.settings: dict[str, Any] = self.raw_input.full_run_settings()
-        mr = MessInputReader(settings=self.settings)
+        self.mech = KiMec(
+            file=f"{self.init_loc}/{self.settings['ct_yaml']}",
+            settings=self.settings,
+            sop_tpl=self.init_SOP)
         self.init_SOP: SOP
         self.input_tpl: list[str]
-        (self.init_SOP, self.input_tpl) = mr.read()
+        self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
 
         self.species: list[str] = self.init_SOP.species
-
-        self.og_names: dict[str, str] = {
-            v: k for k, v in self.settings['ct_names'].items()}
-        for ct_name, name in self.og_names.items():
-            if name not in self.init_SOP.wells_names:
-                for bimol in self.init_SOP.bimolecular:
-                    if name in bimol.frag_names:
-                        self.og_names[ct_name] = bimol.name
 
         # GOAT file will be handled by a GOATs instance after DB init
         # Initialize app
