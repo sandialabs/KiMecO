@@ -20,7 +20,7 @@ installation:
   before_script:
     - apt-get update
     - apt-get install -y curl bzip2 ca-certificates git
-    - curl -fsSL "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh" -o miniforge.sh
+    - curl -kfsSL "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh" -o miniforge.sh
     - bash miniforge.sh -b -p "$CONDA_DIR"
     - source "$CONDA_DIR/etc/profile.d/conda.sh"
     - conda --version
