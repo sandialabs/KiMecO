@@ -14,8 +14,8 @@ variables:
     - if: $CI_PIPELINE_SOURCE == "push"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-install:
-  stage: install
+installation:
+  stage: installation
 
   before_script:
     - conda init
