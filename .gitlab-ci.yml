@@ -19,8 +19,8 @@ installation:
   stage: installation
   before_script:
     - apt-get update
-    - apt-get install -y wget bzip2 ca-certificates git
-    - wget -qO miniforge.sh "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh"
+    - apt-get install -y curl bzip2 ca-certificates git
+    - curl -fsSL "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh" -o miniforge.sh
     - bash miniforge.sh -b -p "$CONDA_DIR"
     - source "$CONDA_DIR/etc/profile.d/conda.sh"
     - conda --version
