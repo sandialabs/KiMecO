@@ -7,6 +7,7 @@ stages:
 
 variables:
   ENV_NAME: kimeco-ci
+  CONDA_ENV_PATH: "$CI_PROJECT_DIR/.ci/conda-env"
   PIP_NO_BUILD_ISOLATION: "1"
 
 .common_rules: &common_rules
@@ -21,19 +22,11 @@ installation:
     - source /opt/conda/etc/profile.d/conda.sh
     - mamba --version
     - conda config --set ssl_verify false
-
-    # create environment
-    - mamba create -n $ENV_NAME python=3.10 pip -y
-    - conda activate $ENV_NAME
-
-    # install dependencies
+    - mkdir -p "$CI_PROJECT_DIR/.ci"
+    - mamba create -p "$CONDA_ENV_PATH" python=3.10 pip -y
+    - conda activate "$CONDA_ENV_PATH"
     - mamba install --file requirements.txt pytest setuptools wheel -y
-
-    # install project
     - pip install --no-build-isolation --no-deps -e .
-
-    # quick import check
-    - python -c "import kimeco; print('Installation OK')"
   
   script:
     - python - <<'PY'
@@ -47,8 +40,8 @@ installation:
 
   artifacts:
     paths:
-      - /opt/conda/envs/$ENV_NAME
-    expire_in: 1 day
+      - .ci/conda-env/
+    expire_in: 3 days
 
   <<: *common_rules
 
@@ -59,8 +52,8 @@ unit_tests:
   dependencies:
     - installation
   before_script:
-    - source "$CONDA_DIR/etc/profile.d/conda.sh"
-    - conda activate "$ENV_NAME"
+    - source /opt/conda/etc/profile.d/conda.sh
+    - conda activate "$CONDA_ENV_PATH"
   script:
     - |
       pytest -q
@@ -77,8 +70,8 @@ functional_tests:
   dependencies:
     - installation
   before_script:
-    - source "$CONDA_DIR/etc/profile.d/conda.sh"
-    - conda activate "$ENV_NAME"
+    - source /opt/conda/etc/profile.d/conda.sh
+    - conda activate "$CONDA_ENV_PATH"
   script:
     - |
       pytest -q
