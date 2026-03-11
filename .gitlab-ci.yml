@@ -18,11 +18,11 @@ install:
 
   script:
     - mamba --version
+    - conda config --set ssl_verify false
 
     # create environment
     - mamba create -n $ENV_NAME python=3.10 pip -y
     - conda activate $ENV_NAME
-    - conda config --set ssl_verify false
 
     # install dependencies
     - mamba install --file requirements.txt pytest setuptools wheel -y
