@@ -1,7 +1,7 @@
 image: condaforge/mambaforge
 
 stages:
-  - install
+  - installation
   - unit_tests
   - functional_tests
 
