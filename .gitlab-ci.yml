@@ -2,7 +2,8 @@ image: condaforge/mambaforge
 
 stages:
   - install
-  - test
+  - unit_tests
+  - functional_tests
 
 variables:
   ENV_NAME: kimeco-ci
