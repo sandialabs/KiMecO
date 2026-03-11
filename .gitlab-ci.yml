@@ -24,6 +24,7 @@ installation:
     - bash miniforge.sh -b -p "$CONDA_DIR"
     - source "$CONDA_DIR/etc/profile.d/conda.sh"
     - conda --version
+    - conda install certifi -y
     - conda config --add channels conda-forge
     - conda config --set channel_priority strict
     - conda create -n "$ENV_NAME" -c conda-forge python=3.10 pip -y
@@ -31,6 +32,7 @@ installation:
     - python -V
     - conda install -c conda-forge mamba -y
     - mamba --version
+    - mamba install certifi -y
     - mamba install -c conda-forge --file requirements.txt -y
     - mamba install -c conda-forge setuptools wheel pytest -y
     - pip install --no-build-isolation --no-deps -e .
