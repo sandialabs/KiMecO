@@ -18,7 +18,7 @@ installation:
   stage: installation
 
   before_script:
-    - conda init
+    - source /opt/conda/etc/profile.d/conda.sh
     - mamba --version
     - conda config --set ssl_verify false
 
