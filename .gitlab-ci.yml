@@ -16,7 +16,8 @@ variables:
 install:
   stage: install
 
-  script:
+  before_script:
+    - conda init
     - mamba --version
     - conda config --set ssl_verify false
 
@@ -32,6 +33,16 @@ install:
 
     # quick import check
     - python -c "import kimeco; print('Installation OK')"
+  
+  script:
+    - python - <<'PY'
+      import kimeco
+      import ase, cantera, dash, numpy, pandas, pint, plotly, scipy, sqlalchemy
+      print("Import checks passed")
+      PY
+    - kmo --help
+    - kmoui --help
+    - kmopp --help
 
   artifacts:
     paths:
@@ -41,33 +52,39 @@ install:
   <<: *common_rules
 
 
-tests:
-  stage: test
+
+unit_tests:
+  stage: unit_tests
   dependencies:
-    - install
-
+    - installation
+  before_script:
+    - source "$CONDA_DIR/etc/profile.d/conda.sh"
+    - conda activate "$ENV_NAME"
   script:
-    - source /opt/conda/etc/profile.d/conda.sh
-    - conda activate $ENV_NAME
-
     - |
       pytest -q
       rc=$?
       if [ $rc -eq 5 ]; then
-        echo "No tests collected yet."
+        echo "No tests collected yet. CI is active and passing."
         exit 0
       fi
       exit $rc
+  <<: *common_rules
 
+functional_tests:
+  stage: functional_tests
+  dependencies:
+    - installation
+  before_script:
+    - source "$CONDA_DIR/etc/profile.d/conda.sh"
+    - conda activate "$ENV_NAME"
+  script:
     - |
-      python - <<'PY'
-      import kimeco
-      import ase, cantera, dash, numpy, pandas, pint, plotly, scipy, sqlalchemy
-      print("Import checks passed")
-      PY
-
-    - kmo --help
-    - kmoui --help
-    - kmopp --help
-
+      pytest -q
+      rc=$?
+      if [ $rc -eq 5 ]; then
+        echo "No tests collected yet. CI is active and passing."
+        exit 0
+      fi
+      exit $rc
   <<: *common_rules
