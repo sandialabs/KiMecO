@@ -39,10 +39,11 @@ installation:
     - kmoui --help
     - kmopp --help
 
-  artifacts:
+  cache:
+    key: "conda-env-$CI_PIPELINE_ID"
     paths:
       - .ci/conda-env/
-    expire_in: 3 days
+    policy: push
 
   <<: *common_rules
 
@@ -50,8 +51,11 @@ installation:
 
 unit_tests:
   stage: unit_tests
-  dependencies:
-    - installation
+  cache:
+    key: "conda-env-$CI_PIPELINE_ID"
+    paths:
+      - .ci/conda-env/
+    policy: pull
   before_script:
     - source /opt/conda/etc/profile.d/conda.sh
     - conda activate "$CONDA_ENV_PATH"
@@ -68,8 +72,11 @@ unit_tests:
 
 functional_tests:
   stage: functional_tests
-  dependencies:
-    - installation
+  cache:
+    key: "conda-env-$CI_PIPELINE_ID"
+    paths:
+      - .ci/conda-env/
+    policy: pull
   before_script:
     - source /opt/conda/etc/profile.d/conda.sh
     - conda activate "$CONDA_ENV_PATH"
