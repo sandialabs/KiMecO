@@ -29,7 +29,8 @@ installation:
     - pip install --no-build-isolation --no-deps -e .
   
   script:
-    - python - <<'PY'
+    - |
+      python - <<'PY'
       import kimeco
       import ase, cantera, dash, numpy, pandas, pint, plotly, scipy, sqlalchemy
       print("Import checks passed")
