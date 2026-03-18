@@ -3,7 +3,7 @@ from typing import Any
 import getpass
 import random
 import string
-from logging import DEBUG, INFO
+from logging import INFO
 from kimeco.enums import Distrib
 from kimeco.enums import Ptype
 from kimeco.enums import FreqMode
@@ -12,7 +12,7 @@ from kimeco.enums import RestartType
 
 mandatory_keys: dict[str, Any] = {
     # MESS input file containing the nominal parameters
-    "initial_mess": "",
+    "mess_inputs": [],
     # path to Cantera mechanism file
     "ct_yaml": "",
     # Dictionary {'ct_name': float} of initial density (molecules/cm^3).

@@ -1,5 +1,8 @@
+import numpy as np
 from copy import deepcopy
 from typing import Any
+
+from ase.atoms import Atoms
 from kimeco.enums import FreqMode
 from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
@@ -118,9 +121,13 @@ class SOP:
         Args:
             name (str): Well's name
         """
-        self.items[name] = Well(name=name,
-                                freq_mode=self.freq_mode)
-        self.wells.append(self.items[name])
+        if name in self.items.keys():
+            self.items[name].in_multiple_pes = True
+        else:
+            self.wells.append(
+                Well(name=name,
+                     freq_mode=self.freq_mode))
+            self.items[name] = self.wells[-1]
 
     @property
     def bimols_names(self) -> list[str]:
@@ -141,10 +148,14 @@ class SOP:
         Args:
             name (str): name of the bimolecular object
         """
-        self.items[name] = Bimolecular(
-            name=name,
-            freq_mode=self.freq_mode)
-        self.bimolecular.append(self.items[name])
+        if name in self.items.keys():
+            self.items[name].in_multiple_pes = True
+        else:
+            self.bimolecular.append(
+                Bimolecular(
+                    name=name,
+                    freq_mode=self.freq_mode))
+            self.items[name] = self.bimolecular[-1]
 
     @property
     def barriers_names(self) -> list:
@@ -196,11 +207,16 @@ class SOP:
             lside (str): name of the reactant
             rside (str): name of the product
         """
-        self.items[name] = Barrier(name=name,
-                                   freq_mode=self.freq_mode,
-                                   lside=self.items[lside],
-                                   rside=self.items[rside])
-        self.barriers.append(self.items[name])
+        if name in self.items.keys():
+            raise KeyError(
+                f'Multiple barriers have the same name: {name}')
+        self.barriers.append(
+            Barrier(
+                name=name,
+                freq_mode=self.freq_mode,
+                lside=self.items[lside],
+                rside=self.items[rside]))
+        self.items[name] = self.barriers[-1]
 
     def set_freqs(self,
                   name: str,
@@ -212,8 +228,28 @@ class SOP:
             freqs (list[float]): list of frequencies (cm-1)
         """
         if isinstance(self.items[name], Bimolecular):
+            if hasattr(self.items[name].fragments[-1], 'frequencies'):
+                f_arr = np.array(freqs)
+                if not np.array_equal(
+                   self.items[name].fragments[-1]._freq, f_arr):
+                    msg = f"Fragment {self.items[name].fragments[-1].name}"
+                    msg += "\n"
+                    msg += "was already set with different frequencies."
+                    msg += "\n"
+                    msg += "Make your inputs consistents."
+                    raise ValueError(msg)
             self.items[name].fragments[-1].set_frequencies(freqs)
         else:
+            if hasattr(self.items[name], 'frequencies'):
+                f_arr = np.array(freqs)
+                if not np.array_equal(
+                   self.items[name]._freq, f_arr):
+                    msg = f"Well {self.items[name].name}"
+                    msg += "\n"
+                    msg += "was already set with different frequencies."
+                    msg += "\n"
+                    msg += "Make your inputs consistents."
+                    raise ValueError(msg)
             self.items[name].set_frequencies(freqs)
 
     def set_hrotor(self,
@@ -308,9 +344,29 @@ class SOP:
             geom (list[list[float]]): 3D geometry
         """
         if isinstance(self.items[name], Bimolecular):
+            if hasattr(self.items[name].fragments[-1], 'structure'):
+                atm = Atoms(symbols=symbols,
+                            positions=geom)
+                if self.items[name].fragments[-1].structure != atm:
+                    msg = f"Fragment {self.items[name].fragments[-1].name}"
+                    msg += "\n"
+                    msg += "was already set with a different structure."
+                    msg += "\n"
+                    msg += "Make your inputs consistents."
+                    raise ValueError(msg)
             self.items[name].fragments[-1].set_structure(symbols,
                                                          geom)
         else:
+            if hasattr(self.items[name], 'structure'):
+                atm = Atoms(symbols=symbols,
+                            positions=geom)
+                if self.items[name].structure != atm:
+                    msg = f"Well {self.items[name].name}"
+                    msg += "\n"
+                    msg += "was already set with a different structure."
+                    msg += "\n"
+                    msg += "Make your inputs consistents."
+                    raise ValueError(msg)
             self.items[name].set_structure(symbols,
                                            geom)
 

@@ -28,6 +28,7 @@ class Well:
         self._freq: NDArray
         self.m_rotors: list[MultiRotor] = []
         self.h_rotors: list[HinRotor] = []
+        self.in_multiple_pes: bool = False
         self.energy: float
         self.structure: Atoms
         # batch frequency coefficient
@@ -215,6 +216,22 @@ class Well:
             symmetry (int): symmetry
             scan (list[float]): scan
         """
+        for hr in self.h_rotors:
+            if hr.group == group and hr.axis == axis:
+                if (hr.fourier and
+                    fexp == hr.fexp and
+                    fcoef == hr.fcoef and
+                    hr.symmetry == symmetry and
+                    hr.ThermalPowerMax == thermalpowermax and
+                    np.array_equal(hr._scan, np.array(scan, dtype=np.float32))):
+                    break
+                else:
+                    msg = f"Well {self.name} already has a rotor with:"
+                    msg += "\n"
+                    msg += f"Group: {group}, Axis: {axis}."
+                    msg += "\n"
+                    msg += "make the inputs consistents"
+                    raise ValueError(msg)
         self.h_rotors.append(HinRotor(
             ThermalPowerMax=thermalpowermax,
             group=group,
@@ -239,6 +256,22 @@ class Well:
             qlem: float: quantumLevelEnergyMax
             irs: list[InternalRotation]
         """
+        for mr in self.m_rotors:
+            for ir, irs_ir in zip(irs, mr.internal_rot):
+                if ir.group == irs_ir.group and ir.axis == irs_ir.axis:
+                    if (mr.sfc == sf and
+                        mr.iem == iem and
+                        mr.file == pes and
+                        mr.qlem == qlem and
+                        ir == irs_ir):
+                        break
+                    else:
+                        msg = f"Well {self.name} already has a rotor with:"
+                        msg += "\n"
+                        msg += f"Group: {ir.group}, Axis: {ir.axis}."
+                        msg += "\n"
+                        msg += "make the inputs consistents"
+                        raise ValueError(msg)
         self.m_rotors.append(MultiRotor(
             symmetryFactor=sf,
             interpolationEnergyMax=iem,

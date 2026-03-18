@@ -61,8 +61,7 @@ unit_tests:
     - conda activate "$CONDA_ENV_PATH"
   script:
     - |
-      pytest -q
-      rc=$?
+      pytest -q | rc=$?
       if [ $rc -eq 5 ]; then
         echo "No tests collected yet. CI is active and passing."
         exit 0
@@ -82,8 +81,7 @@ functional_tests:
     - conda activate "$CONDA_ENV_PATH"
   script:
     - |
-      pytest -q
-      rc=$?
+      pytest -q |rc=$?
       if [ $rc -eq 5 ]; then
         echo "No tests collected yet. CI is active and passing."
         exit 0

@@ -15,6 +15,7 @@ class Bimolecular:
         self.freq_mode: FreqMode = freq_mode
         self.name: str = name
         self.fragments: list[Well] = []
+        self.in_multiple_pes: bool = False
         self.energy: float
         self.dummy = False
         self.uncertainties: dict[str, float] = {}

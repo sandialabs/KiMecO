@@ -24,3 +24,10 @@ class InternalRotation:
         self.hamiltonsizemin: int = hamiltonsizemin
         self.hamiltonsizemax: int = hamiltonsizemax
         self.gridsize: int = gridsize
+
+    def __eq__(self, other):
+        if not isinstance(other, InternalRotation):
+            raise NotImplementedError(
+                f"Cannot compare InternalRotation with {type(other)}"
+            )
+        return self.__dict__ == other.__dict__
