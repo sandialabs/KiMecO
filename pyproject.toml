@@ -40,6 +40,9 @@ dependencies = [
   "pint"
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=9.0.2"]
+
 [project.scripts]
 kmo = "kimeco.main:main"
 kmoui = "kimeco.gui.kimecoapp:main"

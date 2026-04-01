@@ -4,8 +4,8 @@ from uu import Error
 from kimeco.parameters import SOP
 from kimeco.barrier import Barrier
 from kimeco.bimolecular import Bimolecular
+from kimeco.well import Well
 from kimeco.rotors.internalrotation import InternalRotation
-from kimeco.rotors.mrotor import MultiRotor
 from kimeco.logger_config import KMOLogger
 
 import os
@@ -75,12 +75,13 @@ class MessInputReader:
             self.klog.error(err)
             self._trigger_stop = True
 
-    def read(self) -> tuple[SOP, list[str]]:
+    def read(self) -> tuple[SOP, list[list[str]]]:
         """Reads a mess input file and transforms it into a
         SetOfParameter object and a mess_template file.
 
         Returns:
-            list[SOP, list[str]]: [SetOfParameters, mess_template]
+            list[SOP, list[list[str]]]:
+            [SetOfParameters, mess_templates]
         """
         name = ''
         skip = 0
@@ -115,6 +116,7 @@ class MessInputReader:
                                 Using the first one encountered: "
                                 f"{self.SOP.factor}."
                             )
+                            self._trigger_stop = True
                     tpl.append(line.split()[0] + " {SOP.factor}\n")
                     continue
                 elif line.lstrip().casefold().startswith('power'):
@@ -126,6 +128,7 @@ class MessInputReader:
                             msg += "\n"
                             msg += f" Saved value: {self.SOP.power}."
                             self.klog.warning(msg)
+                            self._trigger_stop = True
                     tpl.append(line.split()[0] + " {SOP.power}\n")
                     continue
                 elif line.lstrip().casefold().startswith('epsilons'):
@@ -146,13 +149,15 @@ class MessInputReader:
                             if arg.replace('.', ''
                                            ).replace('-', ''
                                                      ).isnumeric():
-                                if float(arg) != self.SOP.epsilons[eps_idx]:
+                                if eps_idx == 0 and \
+                                   float(arg) != self.SOP.epsilons[eps_idx]:
                                     msg = f"Different epsilon {eps_idx}"
                                     msg += f"in {self.filenames[fid]}."
                                     msg += "\n"
                                     msg += " Saved value:"
                                     msg += f" {self.SOP.epsilons[eps_idx]}."
                                     self.klog.warning(msg)
+                                    self._trigger_stop = True
                             else:
                                 break
                     continue
@@ -173,13 +178,15 @@ class MessInputReader:
                             if arg.replace('.', ''
                                            ).replace('-', ''
                                                      ).isnumeric():
-                                if float(arg) != self.SOP.sigmas[sig_idx]:
+                                if sig_idx == 0 and \
+                                   float(arg) != self.SOP.sigmas[sig_idx]:
                                     msg = f"Different sigma {sig_idx}"
                                     msg += f"in {self.filenames[fid]}."
                                     msg += "\n"
                                     msg += " Saved value:"
                                     msg += f" {self.SOP.sigmas[sig_idx]}."
                                     self.klog.warning(msg)
+                                    self._trigger_stop = True
                             else:
                                 break
                     continue
@@ -194,7 +201,16 @@ class MessInputReader:
                     if name not in self.SOP.items:
                         self.validate_species(species=name,
                                               species_type='Well')
-                        self.SOP.add_new_well(name=name)
+                        self.SOP.add_new_well(name=name,
+                                              pes_id=fid)
+                    else:
+                        error: bool = self.SOP.check_well(
+                            name=name,
+                            pes_id=fid)
+                        if error:
+                            msg = f"Well {name} already exists in the same PES."
+                            self.klog.warning(msg)
+                            self._trigger_stop = True
                     new_line: str = line.split()[0] \
                         + " {" \
                         + f"{name}.name" \
@@ -206,7 +222,14 @@ class MessInputReader:
                     last_item = 'bimo'
                     name: str = line.split()[1]
                     if name not in self.SOP.items:
-                        self.SOP.add_new_bimol(name=name)
+                        self.SOP.add_new_bimol(name=name,
+                                               pes_id=fid)
+                    else:
+                        initial_file: int = self.SOP.items[name].pes_ids[0]
+                        msg = f"Bimolecular {name} already exists"
+                        msg += f" in { self.filenames[initial_file]}."
+                        self.klog.warning(msg)
+                        # self._trigger_stop = True
                     new_line: str = line.split()[0] \
                         + " {" \
                         + f"{name}.name" \
@@ -216,11 +239,30 @@ class MessInputReader:
                 # BARRIER
                 elif line.lstrip().casefold().startswith('barrier'):
                     last_item = 'barr'
-                    name, lside, rside = line.split()[1:4]
+                    tokens = line.split()[1:4]
+                    if len(tokens) < 3:
+                        err = (
+                            f"Malformed BARRIER directive in {self.filenames[fid]} "
+                            f"at line {lnum + 1}.\n"
+                            f"Expected: Barrier <name> <left_side> <right_side>\n"
+                            f"Got: {line.rstrip()}\n"
+                            f"Only {len(tokens)} token(s) found: {tokens}"
+                        )
+                        self.klog.error(err)
+                        self._trigger_stop = True
+                        continue
+                    name, lside, rside = tokens
                     if name not in self.SOP.items:
                         self.SOP.add_new_barrier(name=name,
                                                  lside=lside,
-                                                 rside=rside)
+                                                 rside=rside,
+                                                 pes_id=fid)
+                    else:
+                        msg = f"Barrier {name} already exists"
+                        msg += f" in {self.filenames[self.SOP.items[name].pes_ids[0]]}."
+                        msg += " Duplicate barriers across input files are not allowed."
+                        self.klog.warning(msg)
+                        self._trigger_stop = True
                     new_line: str = line.split()[0]
                     new_line += " {" + f"{name}.name" + "}"
                     new_line += " {" + f"{lside}.name" + "}"
@@ -255,10 +297,16 @@ class MessInputReader:
                                 self.validate_species(
                                     species=fname,
                                     species_type='Fragment')
-                                self.SOP.items[name].add_new_frag(fname)
                                 if fname not in self.SOP.items:
+                                    # Fragments don't get a pes_id because
+                                    # they are not part of
+                                    # the same pes as the bimol
+                                    self.SOP.items[name].add_new_frag(fname)
                                     self.SOP.items[fname] = \
                                         self.SOP.items[name].fragments[-1]
+                                else:
+                                    self.SOP.items[name].fragments.append(
+                                        self.SOP.items[fname])
                             # if the bimol has twice the same fragment,
                             # don't recreate the object
                             else:
@@ -330,7 +378,7 @@ class MessInputReader:
                 # HINDERED ROTOR
                 elif line.lstrip().casefold().startswith('rotor') and\
                         line.split()[1].casefold() == 'hindered':
-                    self.template.append(line)
+                    tpl.append(line)
                     if last_item == 'frag':
                         skip += self.save_rotor(name=fname,
                                                 lnum=lnum)
@@ -342,7 +390,7 @@ class MessInputReader:
                 # MULTI ROTOR
                 elif (line.lstrip().casefold().startswith('core') and
                       line.split()[1].casefold() == 'multirotor'):
-                    self.template.append(line)
+                    tpl.append(line)
                     if last_item == 'frag':
                         skip += self.save_multirotor(name=fname,
                                                      lnum=lnum)
@@ -357,7 +405,8 @@ class MessInputReader:
                     if last_item == 'frag':
                         self.save_energy(name=fname,
                                          energy=energy,
-                                         lnum=lnum)
+                                         lnum=lnum,
+                                         frag=True)
                     else:
                         self.save_energy(name=name,
                                          energy=energy,
@@ -374,7 +423,7 @@ class MessInputReader:
                 # TUNNELING
                 elif line.lstrip().casefold().startswith('tunneling'):
                     tun_type = str(line.split()[1])
-                    self.template.append(line)
+                    tpl.append(line)
                     skip += self.save_tunneling(name=name,
                                                 tun_type=tun_type,
                                                 lnum=lnum)
@@ -382,15 +431,16 @@ class MessInputReader:
 
                 # All other lines
                 else:
-                    self.template.append(line)
+                    tpl.append(line)
 
         for bar in self.SOP.barriers:
             for well_idx in range(len(bar.connected)):
+                # Set the enegy of dummies from tunneling logic
                 if bar.connected[well_idx].dummy:
-                    bar.connected[well_idx].energy = \
+                    bar.connected[well_idx]._energy = \
                         bar.energy - bar._well_depth[well_idx]
         self.SOP.files2copy = self.files2copy
-        return (self.SOP, self.template)
+        return (self.SOP, self.tpls)
 
     def save_phasespacetheory(self,
                               name: str,
@@ -406,28 +456,32 @@ class MessInputReader:
         """
         bar: Barrier = self.SOP.items[name]
         skip = 0
+        fid: int = len(self.tpls)-1
+        file: list[str] = self.pes_files[fid]
+        tpl = self.tpls[-1]
+
         # Read the file
-        for lnum2, line in enumerate(self.file[lnum+1:]):
+        for lnum2, line in enumerate(file[lnum+1:]):
             if line.lstrip().casefold().startswith('symmetryfactor'):
                 bar._symFact = float(line.split()[1])
                 new_line: str = f"{line.split()[0]}" \
                                 + " {" + f"{name}" \
                                 + ".symFact}\n"
                 skip += 1
-                self.template.append(new_line)
+                tpl.append(new_line)
             elif line.lstrip().casefold().startswith('potentialprefactor'):
                 bar.pp = float(line.split()[1])
                 skip += 1
-                self.template.append(line)
+                tpl.append(line)
             elif line.lstrip().casefold().startswith('potentialpowerexponent'):
                 bar.ppe = float(line.split()[1])
                 skip += 1
-                self.template.append(line)
+                tpl.append(line)
             elif line.lstrip().casefold().startswith('end'):
                 return skip
             else:
                 skip += 1
-                self.template.append(line)
+                tpl.append(line)
         raise Error(f'Incorrect termination of phasespacetheory core for {name}')
 
     def save_rotd(self,
@@ -444,26 +498,29 @@ class MessInputReader:
         """
         bar: Barrier = self.SOP.items[name]
         skip = 0
+        fid: int = len(self.tpls)-1
+        file: list[str] = self.pes_files[fid]
+        tpl: list[str] = self.tpls[-1]
         # Read the file
-        for lnum2, line in enumerate(self.file[lnum+1:]):
+        for lnum2, line in enumerate(file[lnum+1:]):
             if line.lstrip().casefold().startswith('symmetryfactor'):
                 bar._symFact = float(line.split()[1])
                 new_line: str = f"{line.split()[0]}" \
                                 + " {" + f"{name}" \
                                 + ".symFact}\n"
                 skip += 1
-                self.template.append(new_line)
+                tpl.append(new_line)
             elif line.lstrip().casefold().startswith('file'):
                 bar.file = line.split()[1]
                 if bar.file not in self.files2copy:
                     self.files2copy.append(bar.file)
                 skip += 1
-                self.template.append(line)
+                tpl.append(line)
             elif line.lstrip().casefold().startswith('end'):
                 return skip
             else:
                 skip += 1
-                self.template.append(line)
+                tpl.append(line)
         raise Error(f'Incorrect termination of rotd core for {name}')
 
     def save_temperatures(self, lnum: int) -> None:
@@ -473,8 +530,11 @@ class MessInputReader:
         Args:
             lnum (int): line number to read from in input file
         """
+
+        fid: int = len(self.tpls)-1
+        file: list[str] = self.pes_files[fid]
         if self.SOP.temp == []:
-            args: list[str] = self.file[lnum].split()
+            args: list[str] = file[lnum].split()
             temp_list: list = []
             arg_n = 1
             # There should be no negative numbers in the list
@@ -492,8 +552,10 @@ class MessInputReader:
         Args:
             lnum (int): line number to read from in input file
         """
+        fid: int = len(self.tpls)-1
+        file: list[str] = self.pes_files[fid]
         if self.SOP.pres == []:
-            args: list[str] = self.file[lnum].split()
+            args: list[str] = file[lnum].split()
             pres_list: list = []
             arg_n = 1
             # There should be no negative numbers in the list
@@ -567,17 +629,21 @@ class MessInputReader:
         # default
         thermalpowermax = 0.0
         scan: list[float] = []
-        fexp: list[float] = []
+        fexp: list[int] = []
         fcoef: list[float] = []
         npot: int = 0
         skip: int = 0
         symmetry: int = 0
         local_skip: int = 0
         rot_num: int = len(self.SOP.items[name].h_rotors)
+        saved_f: int = 0
+        group: list[int] = []
+        axis: list[int] = []
         # Read the file
         fid: int = len(self.tpls)-1
         file: list[str] = self.pes_files[fid]
         for lnum2, line in enumerate(file[lnum+1:]):
+            stripped = line.lstrip()
             # SCAN
             if local_skip:
                 local_skip -= 1
@@ -613,13 +679,14 @@ class MessInputReader:
             elif line.lstrip().casefold().startswith('fourierexpansion'):
                 self.tpls[-1].append(line)
                 nexp = int(line.split()[1])
+                abs_idx = lnum + 1 + lnum2
                 fexp = [
-                    exp_line.split()[0]
-                    for exp_line in file[lnum2+1:lnum2+nexp]]
+                    int(exp_line.split()[0])
+                    for exp_line in file[abs_idx+1:abs_idx+1+nexp]]
                 fcoef = [
-                    exp_line.split()[1]
-                    for exp_line in file[lnum2+1:lnum2+nexp]]
-                for li in file[lnum2+1:lnum2+nexp]:
+                    float(exp_line.split()[1])
+                    for exp_line in file[abs_idx+1:abs_idx+1+nexp]]
+                for li in file[abs_idx+1:abs_idx+1+nexp]:
                     self.tpls[-1].append(li)
                 skip += 1 + nexp
                 continue
@@ -633,7 +700,7 @@ class MessInputReader:
             elif line.lstrip().casefold().startswith('group'):
                 group: list[int] = []
                 for nmbr in line.split()[1:]:
-                    if isdigit(nmbr):
+                    if nmbr.lstrip('+-').isdigit():
                         group.append(int(nmbr))
                     else:
                         raise TypeError('Incorrect type for rotor group.')
@@ -643,7 +710,7 @@ class MessInputReader:
             elif line.lstrip().casefold().startswith('axis'):
                 axis: list[int] = []
                 for nmbr in line.split()[1:]:
-                    if isdigit(nmbr):
+                    if nmbr.lstrip('+-').isdigit():
                         axis.append(int(nmbr))
                     else:
                         raise TypeError('Incorrect type for rotor axis.')
@@ -677,10 +744,7 @@ class MessInputReader:
                 self.tpls[-1].append(line)
                 skip += 1
                 return skip
-            elif (line.lstrip().startswith('#') or
-                  line.lstrip().startswith('!') or
-                  line.lstrip().startswith('') or
-                  line.lstrip().startswith('+++')):
+            elif line.strip() == '' or stripped.startswith(('#', '!', '+++')):
                 self.tpls[-1].append(line)
                 skip += 1
                 continue
@@ -712,16 +776,22 @@ class MessInputReader:
         rot_idx = len(self.SOP.items[name].m_rotors)
         irs: list[InternalRotation] = []
         ir_skip: int = 0
+        sf: float | None = None
+        iem: float | None = None
+        pes: str | None = None
+        qlem: float | None = None
         fid: int = len(self.tpls)-1
         file: list[str] = self.pes_files[fid]
 
         for lnum2, line in enumerate(file[lnum+1:]):
+            lower_line = line.lstrip().casefold()
+            is_blank = line.strip() == ''
             # Skip through the lines of internal rotation
             if ir_skip != 0:
                 ir_skip -= 1
                 continue
             # SymmetryFactor
-            if line.lstrip().casefold().startswith('symmetryfactor'):
+            if lower_line.startswith('symmetryfactor'):
                 sf = float(line.split()[1])
                 new_line: str = f"{file[lnum2+lnum+1].split()[0]}" \
                                 + " {" + f"{name}.m_rotors[{rot_idx}]" \
@@ -731,7 +801,7 @@ class MessInputReader:
                 continue
 
             # InterpolationEnergyMax
-            elif line.lstrip().casefold().startswith('interpolationenergymax'):
+            elif lower_line.startswith('interpolationenergymax'):
                 iem = float(line.split()[1])
                 new_line: str = f"{file[lnum2+lnum+1].split()[0]}" \
                                 + " {" + f"{name}.m_rotors[{rot_idx}]" \
@@ -741,7 +811,7 @@ class MessInputReader:
                 continue
 
             # PotentialEnergySurface
-            elif line.lstrip().casefold().startswith('potentialenergysurface'):
+            elif lower_line.startswith('potentialenergysurface'):
                 pes = line.split()[1]
                 if pes not in self.files2copy:
                     self.files2copy.append(pes)
@@ -753,7 +823,7 @@ class MessInputReader:
                 continue
 
             # QuantumLevelEnergyMax
-            elif line.lstrip().casefold().startswith('quantumlevelenergymax'):
+            elif lower_line.startswith('quantumlevelenergymax'):
                 qlem = float(line.split()[1])
                 new_line: str = f"{file[lnum2+lnum+1].split()[0]}" \
                                 + " {" + f"{name}.m_rotors[{rot_idx}]" \
@@ -763,7 +833,7 @@ class MessInputReader:
                 continue
 
             # InternalRotation
-            elif line.lstrip().casefold().startswith('internalrotation'):
+            elif lower_line.startswith('internalrotation'):
                 self.tpls[-1].append(line)
                 skip += 1
                 ir_skip, ir = self.create_internal_rotation(
@@ -773,7 +843,25 @@ class MessInputReader:
                 skip += ir_skip
                 continue
             # END
-            elif line.lstrip().casefold().startswith('end'):
+            elif lower_line.startswith('end'):
+                missing: list[str] = []
+                if sf is None:
+                    missing.append('SymmetryFactor')
+                if iem is None:
+                    missing.append('InterpolationEnergyMax')
+                if pes is None:
+                    missing.append('PotentialEnergySurface')
+                if qlem is None:
+                    missing.append('QuantumLevelEnergyMax')
+                if missing:
+                    miss = ', '.join(missing)
+                    raise TypeError(
+                        f"Missing MultiRotor keyword(s) for {name}: {miss}"
+                    )
+                assert sf is not None
+                assert iem is not None
+                assert pes is not None
+                assert qlem is not None
                 self.SOP.set_mrotor(
                     name=name,
                     sf=sf,
@@ -785,10 +873,7 @@ class MessInputReader:
                 self.tpls[-1].append(line)
                 skip += 1
                 return skip
-            elif (line.lstrip().casefold().startswith('#') or
-                  line.lstrip().casefold().startswith('!') or
-                  line.lstrip().casefold().startswith('') or
-                  line.lstrip().casefold().startswith('+++')):
+            elif is_blank or lower_line.startswith(('#', '!', '+++')):
                 self.tpls[-1].append(line)
                 skip += 1
                 continue  # ignore comments
@@ -818,9 +903,17 @@ class MessInputReader:
         skip = 0
         fid: int = len(self.tpls)-1
         file: list[str] = self.pes_files[fid]
+        group: list[int] | None = None
+        axis: list[int] | None = None
+        symmetry: int | None = None
+        mes: int | None = None
+        pes: int | None = None
+        hamiltonsizemin: int | None = None
+        hamiltonsizemax: int | None = None
+        gridsize: int | None = None
         for lnum2, line in enumerate(file[lnum+1:]):
             if line.lstrip().casefold().startswith('group'):
-                group: list[int] = []
+                group = []
                 for nmbr in line.split()[1:]:
                     if isdigit(nmbr):
                         group.append(int(nmbr))
@@ -830,7 +923,7 @@ class MessInputReader:
                 skip += 1
                 continue
             elif line.lstrip().casefold().startswith('axis'):
-                axis: list[int] = []
+                axis = []
                 for nmbr in line.split()[1:]:
                     if isdigit(nmbr):
                         axis.append(int(nmbr))
@@ -870,6 +963,38 @@ class MessInputReader:
                 skip += 1
                 continue
             elif line.lstrip().casefold().startswith('end'):
+                missing: list[str] = []
+                if group is None:
+                    missing.append('Group')
+                if axis is None:
+                    missing.append('Axis')
+                if symmetry is None:
+                    missing.append('Symmetry')
+                if mes is None:
+                    missing.append('MassExpansionSize')
+                if pes is None:
+                    missing.append('PotentialExpansionSize')
+                if hamiltonsizemin is None:
+                    missing.append('HamiltonSizeMin')
+                if hamiltonsizemax is None:
+                    missing.append('HamiltonSizeMax')
+                if gridsize is None:
+                    missing.append('GridSize')
+                if missing:
+                    miss = ', '.join(missing)
+                    msg = "Missing InternalRotation keyword(s) "
+                    msg += f"for {name}: {miss}"
+                    raise TypeError(
+                        msg
+                    )
+                assert group is not None
+                assert axis is not None
+                assert symmetry is not None
+                assert mes is not None
+                assert pes is not None
+                assert hamiltonsizemin is not None
+                assert hamiltonsizemax is not None
+                assert gridsize is not None
                 ir = InternalRotation(
                     group=group,
                     axis=axis,
@@ -885,13 +1010,14 @@ class MessInputReader:
                 return (skip, ir)
             elif (line.lstrip().startswith('#') or
                   line.lstrip().startswith('!') or
-                  line.lstrip().startswith('') or
+                  line.strip() == '' or
                   line.lstrip().startswith('+++')):
                 self.tpls[-1].append(line)
                 skip += 1
                 continue
             else:
                 raise AttributeError('Unknown keyword for InternalRotation')
+        raise Error(f'Incorrect termination of internalrotation for {name}')
 
     def save_geom(self,
                   name: str,
@@ -906,20 +1032,49 @@ class MessInputReader:
             natom (int): Number of atoms in the geometry
             fid (int): File ID
         """
-        symbols: str = ''
+        symbols: list[str] = []
         geom: list = []
-        file: list[str] = self.pes_files[-1]
-        for line in file[lnum+1:lnum+natom+1]:
-            symbols += line.split()[0]
-            x, y, z = line.split()[1:4]
-            geom.append([float(x), float(y), float(z)])
+        fid: int = len(self.tpls)-1
+        file: list[str] = self.pes_files[fid]
+        for idx, line in enumerate(file[lnum+1:lnum+natom+1], start=lnum+1):
+            tokens = line.split()
+            if len(tokens) < 4:
+                err = (
+                    f"Malformed geometry line in {self.filenames[-1]} "
+                    f"at line {idx + 1}.\n"
+                    f"Expected at least: <symbol> <x> <y> <z>\n"
+                    f"Got: {line.rstrip()}\n"
+                    f"Only {len(tokens)} token(s) found: {tokens}"
+                )
+                self.klog.error(err)
+                self._trigger_stop = True
+                break
+            symbols.append(tokens[0])
+            try:
+                x, y, z = tokens[1:4]
+                geom.append([float(x), float(y), float(z)])
+            except ValueError:
+                err = (
+                    f"Invalid coordinate values in {self.filenames[-1]} "
+                    f"at line {idx + 1}.\n"
+                    f"Expected numbers for x, y, z but got: {tokens[1:4]}\n"
+                    f"Full line: {line.rstrip()}"
+                )
+                self.klog.error(err)
+                self._trigger_stop = True
+                break
 
-        self.SOP.set_structure(name, symbols, geom)
+        self.SOP.set_structure(
+            name,
+            symbols,
+            geom,
+            self.klog)
 
     def save_energy(self,
                     name: str,
                     energy: float,
-                    lnum: int) -> None:
+                    lnum: int,
+                    frag=False) -> None:
         """Save the energy of the object 'name'
         in the SOP object.
 
@@ -933,11 +1088,18 @@ class MessInputReader:
         if isinstance(self.SOP.items[name], Barrier):
             self.SOP.items[name]._energy = energy
         else:
-            self.SOP.items[name].energy = energy
-        new_line: str = f"{file[lnum].split()[0]}" \
-                        + " {" + f"{name}" \
-                        + ".energy}\n"
-        self.tpls[-1].append(new_line)
+            # Do not change the energy of a specie
+            # if it is encountered as a frag
+            if not frag:
+                self.SOP.items[name]._energy = energy
+        if not frag:
+            new_line: str = f"{file[lnum].split()[0]}" \
+                            + " {" + f"{name}" \
+                            + ".energy}\n"
+            self.tpls[-1].append(new_line)
+        else:
+            self.tpls[-1].append(file[lnum])
+
 
     def save_tunneling(self,
                        name: str,

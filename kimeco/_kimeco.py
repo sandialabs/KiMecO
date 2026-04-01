@@ -54,7 +54,7 @@ class KiMecO:
             settings=self.settings,
             sop_tpl=self.init_SOP)
         self.init_SOP: SOP
-        self.input_tpl: list[str]
+        self.input_tpls: list[list[str]]
         self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
         self.mech.add_SOP(self.init_SOP)
@@ -69,7 +69,7 @@ class KiMecO:
             mechanism_species=self.mech.species,
             klog=self.klog,
             postprocess=postprocess)
-        (self.init_SOP, self.input_tpl) = mr.read()
+        (self.init_SOP, self.input_tpls) = mr.read()
         if mr._trigger_stop:
             raise ValueError(
                 "Input file reading failed due to missing species in the "
@@ -85,8 +85,9 @@ class KiMecO:
 
     def copy_necessary_files(self) -> None:
         """Copy files necessary for MESS calculation"""
-        with open('mess_tpl', 'w') as f:
-            f.writelines(self.input_tpl)
+        for idx, input_tpl_lines in enumerate(self.input_tpls):
+            with open(f'mess_tpl_PES{idx:02d}', 'w') as f:
+                f.writelines(input_tpl_lines)
 
         for file in self.init_SOP.files2copy:
             shutil.copy(
@@ -149,7 +150,7 @@ class KiMecO:
                 sop=self.init_SOP,
                 id=0)],
             settings=self.settings,
-            rc_tpl=self.input_tpl,
+            rc_tpls=self.input_tpls,
             sf=self.sf,
             pert=self.pert,
             klog=self.klog)
@@ -197,7 +198,7 @@ class KiMecO:
                     settings=self.settings,
                     sf=self.sf,
                     pert=self.pert,
-                    input_tpl=self.input_tpl,
+                    input_tpls=self.input_tpls,
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
@@ -208,7 +209,7 @@ class KiMecO:
                     settings=self.settings,
                     sf=self.sf,
                     pert=self.pert,
-                    input_tpl=self.input_tpl,
+                    input_tpls=self.input_tpls,
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
@@ -221,7 +222,7 @@ class KiMecO:
                     settings=self.settings,
                     sf=self.sf,
                     pert=self.pert,
-                    input_tpl=self.input_tpl,
+                    input_tpls=self.input_tpls,
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
@@ -296,7 +297,7 @@ class KiMecO:
             sop_db=self.sop_db,
             sim_db=self.sim_db,
             kin_db=self.kin_db,
-            input_tpl=self.input_tpl,
+            input_tpls=self.input_tpls,
             klog=self.klog,
             pert=self.pert,
         )
@@ -313,7 +314,7 @@ class KiMecO:
         self.klog.info(msg)
         mw = MessWriter(
             SOP=best_el.sop,
-            tpl=self.input_tpl)
+            tpl=self.input_tpls)
         mw.write(
             loc=self.settings['workdir'],
             filename='best_after_nms.inp')

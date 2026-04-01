@@ -32,7 +32,7 @@ class Linear(CoreRun):
     def __init__(self,
                  elements: list[Element],
                  settings: dict[str, Any],
-                 rc_tpl: list[str],
+                 rc_tpls: list[list[str]],
                  sf: Scoring,
                  klog: KMOLogger,
                  pert: Perturbator | None = None,
@@ -73,7 +73,7 @@ class Linear(CoreRun):
         super().__init__(
             elements=self.elements,
             settings=self.settings,
-            rc_tpl=rc_tpl,
+            rc_tpls=rc_tpls,
             sop_db=self.sop_db,
             kin_db=self.kin_db,
             sim_db=self.sim_db,

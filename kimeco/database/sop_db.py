@@ -69,14 +69,12 @@ class SOP_DB(Kimeco_db):
             self._select[table] = []
         self._select[table].append(row_id)
 
-    def batch_select(self
-                     ) -> dict[int, list[list[Any]]]:
+    def batch_select(self) -> list[Row[Any]]:
         """Execute batch select requests stored in the _select dictionary.
 
         Returns:
-            dict[int, list[list[Any]]]:
-            A dictionary with sop_id as keys and lists
-            of their corresponding data as values.
+            list[Row[Any]]:
+            List of selected rows across requested tables.
         """
         all_db_rslt = []
         for table in self._select:
@@ -92,14 +90,13 @@ class SOP_DB(Kimeco_db):
         self._select = {}  # Clear the _select dictionary after processing
         return all_db_rslt
 
-    def batch_select_to_dict(self
-                            ) -> dict[int, list[list[Any]]]:
+    def batch_select_to_dict(self) -> dict[str, list[Row[Any]]]:
         """Execute batch select requests stored in the _select dictionary.
 
         Returns:
-            dict[int, list[list[Any]]]:
-            A dictionary with sop_id as keys and lists
-            of their corresponding data as values.
+            dict[str, list[Row[Any]]]:
+            A dictionary with table names as keys and lists
+            of their corresponding rows as values.
         """
         all_db_rslt = {}
         for table in self._select:

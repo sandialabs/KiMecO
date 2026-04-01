@@ -13,7 +13,6 @@ from kimeco.parameters import SOP
 from kimeco.enums import ElementStatus
 from kimeco.optimizers.NelderMead.nm_swarm_runner import NMSRunner
 from kimeco.logger_config import KMOLogger
-import numpy as np
 
 
 class NelderMeadInstance(NelderMead):
@@ -33,7 +32,7 @@ class NelderMeadInstance(NelderMead):
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
                  f_el: Element,
-                 input_tpl: list[str],
+                 input_tpls: list[list[str]],
                  klog: KMOLogger,
                  dimensions: list[str],
                  shared_core: NMSRunner,
@@ -51,7 +50,7 @@ class NelderMeadInstance(NelderMead):
             sim_db: Simulation database
             kin_db: Kinetics database
             f_el: Initial element
-            input_tpl: Rate constant template
+            input_tpls: Rate constant templates
             klog: Logger
             dimensions: Fixed list of parameters to optimize
             nm_subdir: Subdirectory for this instance's files
@@ -71,7 +70,7 @@ class NelderMeadInstance(NelderMead):
             sim_db=sim_db,
             kin_db=kin_db,
             f_el=f_el,
-            input_tpl=input_tpl,
+            input_tpls=input_tpls,
             klog=klog,
             prefix=self.prefix
         )

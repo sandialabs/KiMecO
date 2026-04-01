@@ -2,7 +2,6 @@ from genericpath import isfile
 import time
 from typing import Any
 
-from pandas import RangeIndex
 from kimeco.database.kin_db import KIN_DB
 from kimeco.parameters import SOP
 from kimeco.q_sys import QueueingSystem, JobStatus
@@ -10,7 +9,6 @@ from kimeco.writers.mess import MessWriter
 from kimeco.readers.mess_output import MessOutputReader
 import os
 import numpy as np
-from numpy.typing import NDArray
 from kimeco.logger_config import KMOLogger
 
 
@@ -21,7 +19,7 @@ class RateCo:
     def __init__(self,
                  sop: SOP,
                  settings: dict,
-                 software_tpl: list[str],
+                 software_tpls: list[list[str]],
                  id: int,
                  q_idx: int,
                  name: str,
@@ -35,7 +33,13 @@ class RateCo:
         self.id: int = id
         self.sop: SOP = sop
         self.software: str = settings['rc_software'].casefold()
-        self.software_tpl: list[str] = software_tpl
+        self.software_tpls: list[list[str]] = software_tpls
+        if len(self.software_tpls) != len(self.sop.pes_ids):
+            raise ValueError(
+                'MESS template count does not match SOP PES count: '
+                f'{len(self.software_tpls)} templates for '
+                f'{len(self.sop.pes_ids)} PES IDs.'
+            )
         self.name: str = name
         self.settings: dict[str, Any] = settings
         if self.settings['postprocess']:
@@ -49,9 +53,15 @@ class RateCo:
         self.db: KIN_DB = db
         # Modulable if something else than mess is used.
         if self.software == 'mess':
-            self.output_name: str = f"{self.loc}/{self.name}.out"
+            self.output_names: list[str] = [
+                f"{self.loc}/{self.name}P{pes_id:02d}.out"
+                for pes_id in range(len(self.software_tpls))
+            ]
         else:
-            self.output_name = f"{self.loc}/{self.name}.out"
+            self.output_names: list[str] = [
+                f"{self.loc}/{self.name}P{pes_id:02d}.out"
+                for pes_id in range(len(self.software_tpls))
+            ]
         self.q_idx: int = q_idx
 
     def set_status(self,
@@ -59,7 +69,8 @@ class RateCo:
         status: JobStatus = self.q_sys.status(id=self.q_idx,
                                               jtype='kin')
         if (status == JobStatus.NOT_IN_QUEUE
-           and os.path.isfile(self.output_name)
+           and all(os.path.isfile(output_name)
+                   for output_name in self.output_names)
            and self.is_in_db(table=table)):
             self.status = JobStatus.FINISHED
         else:
@@ -78,21 +89,9 @@ class RateCo:
         """
         db_row_ids: list[int] = self.db.get_ids_from_kin_id(table=table,
                                                             kin_id=self.id)
-        cols = self.db.get_col_names(table=table)
-        row_ids: list[int] = [i for i in RangeIndex(
-            start=(self.id *
-                   len(self.pres) *
-                   len(self.temp) *
-                   len(cols[5:])),
-            stop=(self.id *
-                  len(self.pres) *
-                  len(self.temp) *
-                  len(cols[5:]) +
-                  len(self.pres) *
-                  len(self.temp) *
-                  len(cols[5:])),
-            step=1)]
-        return db_row_ids == row_ids
+        n_pairs: int = len(list(self.sop.reaction_iterator()))
+        expected_rows: int = len(self.pres) * len(self.temp) * n_pairs
+        return len(db_row_ids) == expected_rows
 
     def q_up(self) -> None:
         """Generate and submit a Kinetic
@@ -119,81 +118,91 @@ class RateCo:
             NotImplementedError: Writter for this software doesn't exist yet
         """
         if self.software == 'mess':
-            mw = MessWriter(SOP=self.sop, tpl=self.software_tpl)
-            mw.write(loc=self.loc,
-                     filename=f'{self.name}.inp')
+            for pes_id, software_tpl in enumerate(self.software_tpls):
+                mw = MessWriter(SOP=self.sop, tpl=software_tpl)
+                mw.write(loc=self.loc,
+                         filename=f'{self.name}P{pes_id:02d}.inp')
         else:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")
 
     def recover_rslts(self
-                      ) -> list[tuple[Any]]:
+                      ) -> list[
+                          tuple[int, Any, Any, int, int, str, str, float]]:
         """Wait for the results of the Kinetic constants calculations
         """
-        rows = []
-        i = 0
-        while not isfile(self.output_name):
-            time.sleep(2)
-            if i == 10:
-                self.klog.info(f'{self.output_name} not found after 20s.')
-                i = 0
-                return rows
-            i += 1
-        else:
-            while not os.stat(self.output_name).st_size > 0:
+        rows: list[tuple[int, Any, Any, int, int, str, str, float]] = []
+        outputs: dict[int, MessOutputReader] = {}
+        for pes_id, output_name in enumerate(self.output_names):
+            i = 0
+            while not isfile(output_name):
                 time.sleep(2)
+                if i == 10:
+                    self.klog.info(f'{output_name} not found after 20s.')
+                    i = 0
+                    return rows
+                i += 1
+            else:
+                while not os.stat(output_name).st_size > 0:
+                    time.sleep(2)
 
-        if self.software == 'mess':
-            mor = MessOutputReader(filename=self.output_name,
-                                   settings=self.settings,
-                                   sop=self.sop,
-                                   klog=self.klog)
-            mor.read()
-        else:
-            raise NotImplementedError('Unknown master equation software.')
-        self.rc: np.ndarray = mor.rc
-        self.rc[self.rc < 0] = 0.0
-        # self.hp_rc: np.ndarray = mor.hp_rc  # Not used for now
-        self.tbl_map: dict[str, int] = mor.tbl_map
-        names: NDArray[Any] = np.full(shape=(len(self.tbl_map)),
-                                      fill_value='',
-                                      dtype='<U5')
+            if self.software == 'mess':
+                mor = MessOutputReader(filename=output_name,
+                                       settings=self.settings,
+                                       sop=self.sop,
+                                       klog=self.klog)
+                mor.read()
+                mor.rc[mor.rc < 0] = 0.0
+                outputs[pes_id] = mor
+            else:
+                raise NotImplementedError('Unknown master equation software.')
+
         self.q_sys.pickUp(id=self.q_idx,
                           jtype='kin')
         if (self.q_sys.status(id=self.q_idx, jtype='kin')
            == JobStatus.FAILED):
             self.klog.info(f'Resetting KIN job {self.id}')
             self.status = JobStatus.FAILED
-        if np.isnan(self.rc).any():
-            self.status = JobStatus.FAILED
-            self.klog.warning(
-                f'Resetting element {self.id}: NaN detected in rate coefficients.')
-            self.klog.warning(
-                'The master equation likely didn\'t converge properly.')
 
-        # Happens with convergence issues in Mess calculation
-        if self.tbl_map == {}:
-            return rows
+        for mor in outputs.values():
+            if np.isnan(mor.rc).any():
+                self.status = JobStatus.FAILED
+                self.klog.warning(
+                    f'Resetting element {self.id}: '
+                    'NaN detected in rate coefficients.'
+                )
+                self.klog.warning(
+                    'The master equation likely didn\'t converge properly.')
 
-        for k, v in self.tbl_map.items():
-            names[v] = k
-
+        all_pairs: list[tuple[int, str, str]] = list(
+            self.sop.reaction_iterator()
+        )
         row_id = int(
-            self.id *
-            len(self.pres) *
-            len(self.temp) *
-            len(names))
+            self.id * len(self.pres) * len(self.temp) * len(all_pairs)
+        )
         for pidx, p in enumerate(self.pres):
             for tidx, t in enumerate(self.temp):
-                for From, specie in enumerate(names):
+                for pes_id, from_name, to_name in all_pairs:
+                    k_value: float = 0.0
+                    if pes_id in outputs:
+                        mor = outputs[pes_id]
+                        if (from_name in mor.tbl_map and
+                                to_name in mor.tbl_map and
+                                mor.tbl_map != {}):
+                            from_idx: int = mor.tbl_map[from_name]
+                            to_idx: int = mor.tbl_map[to_name]
+                            k_value = float(
+                                mor.rc[pidx, tidx, from_idx, to_idx]
+                            )
                     rows.append(
                         (row_id,
                          p,
                          t,
                          self.id,
-                         specie,
-                         *[self.rc[pidx, tidx, From, To]
-                           for To in range(len(names))])
+                         pes_id,
+                         from_name,
+                         to_name,
+                         k_value)
                     )
                     row_id += 1
         return rows

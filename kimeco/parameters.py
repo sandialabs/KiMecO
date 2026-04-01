@@ -1,6 +1,6 @@
 import numpy as np
 from copy import deepcopy
-from typing import Any
+from typing import Any, Iterator
 
 from ase.atoms import Atoms
 from kimeco.enums import FreqMode
@@ -10,6 +10,7 @@ from kimeco.barrier import Barrier
 from kimeco.rotors.internalrotation import InternalRotation
 from kimeco.database.kimeco_db import dbs
 from kimeco.enums import Ptype
+from kimeco.logger_config import KMOLogger
 
 
 class SOP:
@@ -73,6 +74,44 @@ class SOP:
         return species
 
     @property
+    def pes_ids(self) -> list[int]:
+        """Return all PES identifiers present in the SOP.
+
+        Returns:
+            list[int]: sorted unique PES ids found on wells and bimoleculars.
+        """
+        ids: set[int] = set()
+        for well in self.wells:
+            ids.update(well.pes_ids)
+        for bim in self.bimolecular:
+            ids.update(bim.pes_ids)
+        return sorted(ids)
+
+    def wells_in(self,
+                 pes_id: int) -> list[Well]:
+        """Return well objects belonging to a specific PES."""
+        return [well for well in self.wells if pes_id in well.pes_ids]
+
+    def bimols_in(self,
+                  pes_id: int) -> list[Bimolecular]:
+        """Return bimolecular objects belonging to a specific PES."""
+        return [bim for bim in self.bimolecular if pes_id in bim.pes_ids]
+
+    def species_names_in_pes(self,
+                             pes_id: int) -> list[str]:
+        """Return sorted species names (wells + bimolecular) within one PES."""
+        names: set[str] = set()
+        names.update(well.name for well in self.wells_in(pes_id))
+        names.update(
+            bim.name for bim in self.bimols_in(pes_id) if not bim.dummy
+        )
+        return sorted(names)
+
+    def reaction_iterator(self) -> "PESReactionIterator":
+        """Return iterator yielding PES-scoped from/to combinations."""
+        return PESReactionIterator(self)
+
+    @property
     def r_epsilons(self) -> str:
         eps = ''
         for ep in self.epsilons:
@@ -115,19 +154,36 @@ class SOP:
         return names
 
     def add_new_well(self,
-                     name: str) -> None:
+                     name: str,
+                     pes_id: int) -> None:
         """Procedure to create a new Well
 
         Args:
             name (str): Well's name
+            pes_id (int): PES ID
         """
-        if name in self.items.keys():
-            self.items[name].in_multiple_pes = True
+        self.wells.append(
+            Well(name=name,
+                 freq_mode=self.freq_mode,
+                 pes_ids=[pes_id]))
+        self.items[name] = self.wells[-1]
+
+    def check_well(self,
+                   name: str,
+                   pes_id: int) -> bool:
+        """Procedure when a well might be in different PESs
+
+        Args:
+            name (str): Well's name
+            pes_id (int): PES ID
+        """
+        error = False
+        if self.items[name].pes_ids[0] == pes_id:
+            error = True
         else:
-            self.wells.append(
-                Well(name=name,
-                     freq_mode=self.freq_mode))
-            self.items[name] = self.wells[-1]
+            self.items[name].in_multiple_pes = True
+            self.items[name].pes_ids.append(pes_id)
+        return error
 
     @property
     def bimols_names(self) -> list[str]:
@@ -142,11 +198,13 @@ class SOP:
         return names
 
     def add_new_bimol(self,
-                      name: str) -> None:
+                      name: str,
+                      pes_id: int) -> None:
         """Procedure to create a new bimolecular object
 
         Args:
             name (str): name of the bimolecular object
+            pes_id (int): PES ID
         """
         if name in self.items.keys():
             self.items[name].in_multiple_pes = True
@@ -154,6 +212,7 @@ class SOP:
             self.bimolecular.append(
                 Bimolecular(
                     name=name,
+                    pes_ids=[pes_id],
                     freq_mode=self.freq_mode))
             self.items[name] = self.bimolecular[-1]
 
@@ -199,13 +258,15 @@ class SOP:
     def add_new_barrier(self,
                         name: str,
                         lside: str,
-                        rside: str) -> None:
+                        rside: str,
+                        pes_id: int) -> None:
         """Procedure to add a new barrier in the SOP
 
         Args:
             name (str): name of the Barrier object
             lside (str): name of the reactant
             rside (str): name of the product
+            pes_id (int): PES ID
         """
         if name in self.items.keys():
             raise KeyError(
@@ -215,7 +276,8 @@ class SOP:
                 name=name,
                 freq_mode=self.freq_mode,
                 lside=self.items[lside],
-                rside=self.items[rside]))
+                rside=self.items[rside],
+                pes_id=pes_id))
         self.items[name] = self.barriers[-1]
 
     def set_freqs(self,
@@ -228,10 +290,11 @@ class SOP:
             freqs (list[float]): list of frequencies (cm-1)
         """
         if isinstance(self.items[name], Bimolecular):
-            if hasattr(self.items[name].fragments[-1], 'frequencies'):
+            if hasattr(self.items[name].fragments[-1], '_freq'):
                 f_arr = np.array(freqs)
-                if not np.array_equal(
-                   self.items[name].fragments[-1]._freq, f_arr):
+                if not np.allclose(
+                   self.items[name].fragments[-1]._freq, f_arr,
+                   rtol=0.05, atol=0):
                     msg = f"Fragment {self.items[name].fragments[-1].name}"
                     msg += "\n"
                     msg += "was already set with different frequencies."
@@ -240,10 +303,11 @@ class SOP:
                     raise ValueError(msg)
             self.items[name].fragments[-1].set_frequencies(freqs)
         else:
-            if hasattr(self.items[name], 'frequencies'):
+            if hasattr(self.items[name], '_freq'):
                 f_arr = np.array(freqs)
-                if not np.array_equal(
-                   self.items[name]._freq, f_arr):
+                if not np.allclose(
+                   self.items[name]._freq, f_arr,
+                   rtol=0.05, atol=0):
                     msg = f"Well {self.items[name].name}"
                     msg += "\n"
                     msg += "was already set with different frequencies."
@@ -334,13 +398,14 @@ class SOP:
 
     def set_structure(self,
                       name: str,
-                      symbols: str,
-                      geom: list[list[float]]) -> None:
+                      symbols: str | list[str],
+                      geom: list[list[float]],
+                      logger: KMOLogger) -> None:
         """Set the structure for the item name.
 
         Args:
             name (str): name of the item
-            symbols (str): Chemical elements
+            symbols (str | list[str]): Chemical elements
             geom (list[list[float]]): 3D geometry
         """
         if isinstance(self.items[name], Bimolecular):
@@ -352,8 +417,9 @@ class SOP:
                     msg += "\n"
                     msg += "was already set with a different structure."
                     msg += "\n"
-                    msg += "Make your inputs consistents."
-                    raise ValueError(msg)
+                    msg += "Make your inputs consistents"
+                    msg += " to suppress this warning."
+                    logger.warning(msg)
             self.items[name].fragments[-1].set_structure(symbols,
                                                          geom)
         else:
@@ -366,7 +432,7 @@ class SOP:
                     msg += "was already set with a different structure."
                     msg += "\n"
                     msg += "Make your inputs consistents."
-                    raise ValueError(msg)
+                    logger.warning(msg)
             self.items[name].set_structure(symbols,
                                            geom)
 
@@ -405,7 +471,13 @@ class SOP:
         param_name: str = key.split(dbs)[-1]
         # Energies
         if param_name == Ptype.WE.value:
-            self.items[item_name].energy = value
+            item = self.items[item_name]
+            if isinstance(item, Well) and not isinstance(item, Barrier):
+                item.dE = float(value) - float(item._energy)
+            else:
+                raise KeyError(
+                    f"Unexpected WE parameter for non-well item: {item_name}"
+                )
         elif param_name == Ptype.BE.value:
             self.items[item_name]._energy = value
         # Imaginary frequencies
@@ -455,3 +527,26 @@ class SOP:
             sp: Well | Barrier | Bimolecular
             sp.set_uncertainties(settings)
             self.uncertainties.update(sp.uncertainties)
+
+
+class PESReactionIterator:
+    """Iterator over all valid (pes_id, from_name, to_name) combinations."""
+
+    def __init__(self,
+                 sop: SOP) -> None:
+        self.sop: SOP = sop
+
+    @staticmethod
+    def make_name(pes_id: int,
+                  from_name: str,
+                  to_name: str) -> str:
+        return f"P{pes_id:02d}:{from_name}->{to_name}"
+
+    def __iter__(self) -> Iterator[tuple[int, str, str]]:
+        for pes_id in self.sop.pes_ids:
+            species_names: list[str] = self.sop.species_names_in_pes(pes_id)
+            for from_name in species_names:
+                for to_name in species_names:
+                    if from_name == to_name:
+                        continue
+                    yield (pes_id, from_name, to_name)

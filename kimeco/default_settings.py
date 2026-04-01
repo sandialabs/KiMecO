@@ -84,6 +84,14 @@ default_settings: dict[str, Any] = {
     "pp_temp": [],
     # List of pressures in Torr
     "pp_pres": [],
+    # Postprocessing initial molar fractions.
+    # Same format as initial_X, one entry per pp P/T condition.
+    "pp_initial_X": [],
+    # List of times for postprocessing simulations.
+    # One list per pp P/T condition, ordered like pp_pres/pp_temp.
+    "pp_times": [[]],
+    # Species to save during postprocessing simulations.
+    "pp_species": [],
     # List of ensembles for postprocessing
     "pp_ensembles": ["G0001", "GT-1"],
     # User input unit of pressure
@@ -224,7 +232,8 @@ default_settings: dict[str, Any] = {
     "SA_freq": 1000,
     # From which generation to start the sensitivity analysis
     "SA_start": 1,
-    # Key: generation number. Value: List of parameters added at that generation
+    # Key: generation number.
+    # Value: list of parameters added at that generation
     "SA_restart": {},
     # Number of threads in the main process for I/O operations
     "threads": 1

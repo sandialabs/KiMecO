@@ -31,7 +31,7 @@ class NelderMeadSwarm:
                  sop_db: SOP_DB,
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
-                 input_tpl: list[str],
+                 input_tpls: list[list[str]],
                  klog: KMOLogger,
                  pert: Perturbator) -> None:
         """Initialize the NelderMeadSwarm.
@@ -44,7 +44,7 @@ class NelderMeadSwarm:
             sop_db: SOP database
             sim_db: Simulation database
             kin_db: Kinetics database
-            input_tpl: Rate constant template
+            input_tpls: Rate constant templates
             klog: KMOLogger
         """
         self.new_folder_lock = threading.Lock()
@@ -52,14 +52,14 @@ class NelderMeadSwarm:
         self.elements: list[Element] = elements
         self.settings: dict[str, Any] = settings
         self.sf: Scoring = sf
-        self.input_tpl: list[str] = input_tpl
+        self.input_tpls: list[list[str]] = input_tpls
         self.klog: KMOLogger = klog
         self.wdir: str = settings['workdir']
         self.pert: Perturbator = pert
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
-        
+
         # Accelerates restart
         self.dbqs: DBQuerySaver = DBQuerySaver(
             sop_db=self.sop_db,
@@ -73,7 +73,7 @@ class NelderMeadSwarm:
             sop_db=sop_db,
             sim_db=sim_db,
             kin_db=kin_db,
-            rc_tpl=input_tpl,
+            rc_tpls=input_tpls,
             klog=klog
         )
         # Determine dimensionality via sensitivity analysis
@@ -136,7 +136,7 @@ class NelderMeadSwarm:
         sensitivity = Linear(
             elements=self.elements,
             settings=self.settings,
-            rc_tpl=self.input_tpl,
+            rc_tpls=self.input_tpls,
             sf=self.sf,
             klog=self.klog,
             pert=self.pert
@@ -219,7 +219,7 @@ class NelderMeadSwarm:
                 sim_db=self.sim_db,
                 kin_db=self.kin_db,
                 f_el=el,
-                input_tpl=self.input_tpl,
+                input_tpls=self.input_tpls,
                 klog=self.klog,
                 dimensions=self.dimensions,
                 shared_core=self.core,

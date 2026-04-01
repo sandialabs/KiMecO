@@ -3,6 +3,7 @@ import os
 import numpy as np
 from kimeco._kimeco import KiMecO
 from kimeco.database.kin_db import KIN_DB
+from kimeco.database.sim_db import SIM_DB
 import time
 from kimeco.element import Element
 from kimeco.enums import ElementStatus
@@ -21,6 +22,122 @@ class PostProcess(KiMecO):
             init_loc=init_loc,
             name=name)
         self.settings['postprocess'] = True
+        self.prepare_postprocess_settings()
+
+    def _normalize_initial_X(self,
+                             compositions: list[dict[str, float | str]],
+                             n_exp: int,
+                             key: str) -> list[dict[str, float]]:
+        if not isinstance(compositions, list) or len(compositions) != n_exp:
+            raise ValueError(
+                f"{key} should contain one composition dictionary per pp "
+                f"condition ({n_exp} expected)."
+            )
+
+        normalized: list[dict[str, float]] = []
+        for idx, exp in enumerate(compositions):
+            if not isinstance(exp, dict):
+                raise ValueError(f"{key}[{idx}] should be a dictionary.")
+
+            base_key = 'n2'
+            base_given = False
+            total = 0.0
+            clean_exp: dict[str, float] = {}
+            for species, value in exp.items():
+                if not isinstance(species, str):
+                    raise ValueError(
+                        f"{key}[{idx}] keys should be species names."
+                    )
+                if isinstance(value, str):
+                    if value.casefold() != 'base':
+                        raise ValueError(
+                            f"{key}[{idx}]['{species}'] should be a "
+                            "float or 'base'."
+                        )
+                    if base_given:
+                        raise ValueError(
+                            f"{key}[{idx}] defines more than one base "
+                            "species."
+                        )
+                    base_key = species
+                    base_given = True
+                    continue
+                if not isinstance(value, (float, int)):
+                    raise ValueError(
+                        f"{key}[{idx}]['{species}'] should be numeric "
+                        "or 'base'."
+                    )
+                clean_exp[species] = float(value)
+                total += float(value)
+
+            if total > 1.0:
+                raise ValueError(
+                    f"{key}[{idx}] exceeds a total molar fraction of 1.0."
+                )
+
+            clean_exp[base_key] = 1.0 - total
+            normalized.append(clean_exp)
+
+        return normalized
+
+    def _normalize_pp_times(self,
+                            pp_times: list[list[float]],
+                            n_exp: int) -> list[list[float]]:
+        if not isinstance(pp_times, list) or len(pp_times) != n_exp:
+            raise ValueError(
+                "pp_times should contain one time list per pp condition."
+            )
+
+        normalized: list[list[float]] = []
+        for idx, times in enumerate(pp_times):
+            if not isinstance(times, list) or len(times) == 0:
+                raise ValueError(
+                    f"pp_times[{idx}] should be a non-empty list."
+                )
+            clean_times: list[float] = []
+            previous_time: float | None = None
+            for value in times:
+                if not isinstance(value, (float, int)):
+                    raise ValueError(
+                        f"pp_times[{idx}] should only contain numeric "
+                        "values."
+                    )
+                time_value = float(value)
+                if previous_time is not None and time_value < previous_time:
+                    raise ValueError(
+                        f"pp_times[{idx}] should be sorted in ascending "
+                        "order."
+                    )
+                clean_times.append(time_value)
+                previous_time = time_value
+            normalized.append(clean_times)
+
+        return normalized
+
+    def prepare_postprocess_settings(self) -> None:
+        n_pp_exp = (
+            len(self.settings['pp_pres']) * len(self.settings['pp_temp'])
+        )
+        if n_pp_exp == 0:
+            raise ValueError(
+                'pp_pres and pp_temp should both be non-empty for '
+                'postprocessing.'
+            )
+        if (not isinstance(self.settings['pp_species'], list) or
+                len(self.settings['pp_species']) == 0):
+            raise ValueError(
+                'pp_species should contain at least one species to save.'
+            )
+
+        self.settings['pp_initial_X'] = self._normalize_initial_X(
+            compositions=self.settings['pp_initial_X'],
+            n_exp=n_pp_exp,
+            key='pp_initial_X',
+        )
+        self.settings['pp_times'] = self._normalize_pp_times(
+            pp_times=self.settings['pp_times'],
+            n_exp=n_pp_exp,
+        )
 
     def set_initial_sop(self,
                         postprocess=True) -> None:
@@ -41,6 +158,15 @@ class PostProcess(KiMecO):
         kin_db_time: float = time.time() - start_time
         msg = 'Extrapolation_DB initialized:'
         self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
+        start_time = time.time()
+        self.pp_sim_db = SIM_DB(
+            species=self.settings['pp_species'],
+            name='PP_DB_SIM',
+            threads=self.settings['threads'],
+            path=self.settings['workdir'])
+        sim_db_time: float = time.time() - start_time
+        msg = 'Extrapolation_SIM_DB initialized:'
+        self.klog.info(f"{msg:<65}{sim_db_time:>15.1f}")
 
     def load_goats(self) -> None:
         """Load the goat file from the run to create a
@@ -160,7 +286,8 @@ class PostProcess(KiMecO):
                 NM_gens: list[int] = [
                     int(tbl_name.split('NM')[-1])
                     for tbl_name in self.sop_db.tables
-                    if tbl_name.startswith('NM') and not tbl_name.startswith('NMSG')]
+                    if (tbl_name.startswith('NM') and
+                        not tbl_name.startswith('NMSG'))]
                 if gen_id >= 0:
                     name = token
                 else:
@@ -170,7 +297,9 @@ class PostProcess(KiMecO):
                         "No NM tables found in SOP DB for postprocessing.")
                 elif name not in self.sop_db.tables:
                     raise ValueError(
-                        f"Table {name} not found in SOP DB for postprocessing.")
+                        f"Table {name} not found in SOP DB for "
+                        "postprocessing."
+                    )
                 elements.append(
                     Element(
                         sop=SOP.from_db_row(
@@ -193,10 +322,10 @@ class PostProcess(KiMecO):
             Extrapolate(
                 elements=elements,
                 settings=self.settings,
-                rc_tpl=self.input_tpl,
+                rc_tpls=self.input_tpls,
                 sop_db=self.sop_db,
                 kin_db=self.pp_db,
-                sim_db=self.sim_db,
+                sim_db=self.pp_sim_db,
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog,

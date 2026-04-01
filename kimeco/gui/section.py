@@ -15,6 +15,7 @@ class Section(ABC):
         self.sop_db: SOP_DB = gapp.sop_db
         self.kin_db: KIN_DB = gapp.kin_db
         self.sim_db: SIM_DB = gapp.sim_db
+        self.pp_sim_db: SIM_DB | None = getattr(gapp, 'pp_sim_db', None)
         self.init_SOP: SOP = gapp.init_SOP
         self.n_plots = 0
         self.species: list[str] = gapp.species

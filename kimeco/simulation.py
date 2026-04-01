@@ -4,7 +4,6 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.parameters import SOP
 from kimeco.q_sys import QueueingSystem, JobStatus
 from kimeco.rate_coef import RateCo
-from kimeco.templates.sim_arr_tpl import ctjobtpl
 from kimeco.logger_config import KMOLogger
 
 
@@ -66,17 +65,20 @@ class SIM:
         times = []
         for exp in self.settings['exp_profiles']:
             times.append(exp[0].tolist())
-        scratchdir: str = self.settings['scratch_base'] +\
-                          self.settings["project_name"] + '/' +\
-                          self.name
+        scratchdir: str = (
+            self.settings['scratch_base']
+            + self.settings['project_name']
+            + '/'
+            + self.name
+        )
         ct_job: str = self.ctjobtpl.format(
             init_loc=self.settings['init_loc'],
             input_file=self.settings['input_file'],
             scratchdir=scratchdir,
             el_num=self.id,
             db=self.db,
-            tbl_map=self.KIN.tbl_map,
-            rates=self.KIN.rc.tolist(),
+            tbl_map=getattr(self.KIN, 'tbl_map'),
+            rates=getattr(self.KIN, 'rc').tolist(),
             time=times,
             all_tsteps=time_steps,
             gen_name=self.gen_name,
@@ -96,3 +98,73 @@ class SIM:
         self.status = self.q_sys.status(
             id=self.q_idx,
             jtype='sim')
+
+
+class SIM_PP(SIM):
+    def __init__(self,
+                 sop: SOP,
+                 kin: RateCo,
+                 id: int,
+                 q_idx: int,
+                 gen_name: str,
+                 pp_species: list[str],
+                 db: SIM_DB,
+                 loc: str,
+                 q_sys: QueueingSystem,
+                 set: dict[str, Any],
+                 klog: KMOLogger
+                 ) -> None:
+        super().__init__(
+            sop=sop,
+            kin=kin,
+            id=id,
+            q_idx=q_idx,
+            gen_name=gen_name,
+            sc_species=pp_species,
+            db=db,
+            loc=loc,
+            q_sys=q_sys,
+            set=set,
+            klog=klog,
+        )
+        self.ctjobtpl = self.settings['cantera_tpl']
+        self.profiles = [
+            None] * (
+                len(self.settings['pp_pres']) *
+                len(self.settings['pp_temp'])
+            )
+
+    def q_up(self) -> None:
+        cpu: int = self.settings['cpu_sim']
+        mem: int = self.settings['mem_sim']
+        time_steps: list[int] = [
+            len(times) for times in self.settings['pp_times']
+        ]
+        scratchdir: str = (
+            self.settings['scratch_base']
+            + self.settings['project_name']
+            + '/'
+            + self.name
+        )
+        ct_job: str = self.ctjobtpl.format(
+            init_loc=self.settings['init_loc'],
+            input_file=self.settings['input_file'],
+            scratchdir=scratchdir,
+            el_num=self.id,
+            db=self.db,
+            tbl_map=getattr(self.KIN, 'tbl_map'),
+            rates=getattr(self.KIN, 'rc').tolist(),
+            time=self.settings['pp_times'],
+            all_tsteps=time_steps,
+            gen_name=self.gen_name,
+            to_watch=self.sc_species,
+            initial_x=self.settings['pp_initial_X'],
+        )
+        with open(f'{self.loc}/{self.name}.py', 'w') as f:
+            f.write(ct_job)
+        self.q_sys.add_to_q(name=self.name,
+                            idx=self.q_idx,
+                            location=self.loc,
+                            jtype='sim',
+                            ressources=(cpu, mem))
+        self.set_status()

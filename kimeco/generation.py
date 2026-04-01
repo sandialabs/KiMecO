@@ -21,7 +21,7 @@ class Generation(CoreRun):
     def __init__(self,
                  elements: list[Element],
                  settings: dict[str, Any],
-                 rc_tpl: list[str],
+                 rc_tpls: list[list[str]],
                  sop_db: SOP_DB,
                  kin_db: KIN_DB,
                  sim_db: SIM_DB,
@@ -41,7 +41,7 @@ class Generation(CoreRun):
             pert (Perturbator): Perturbator object used to perturb the SOP
                                 of this generation
             set (dict): Settings.
-            rc_tpl: Template for rate constant calculation.
+            rc_tpls: Templates for rate constant calculation.
             loc: Location. Absolute path of where the gen folder should be.
         """
         self.id: int = Generation.__id
@@ -49,7 +49,7 @@ class Generation(CoreRun):
         super().__init__(
                  elements=elements,
                  settings=settings,
-                 rc_tpl=rc_tpl,
+                 rc_tpls=rc_tpls,
                  sop_db=sop_db,
                  kin_db=kin_db,
                  sim_db=sim_db,

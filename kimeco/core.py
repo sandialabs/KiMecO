@@ -26,7 +26,7 @@ class CoreRun:
     def __init__(self,
                  elements: list[Element],
                  settings: dict[str, Any],
-                 rc_tpl: list[str],
+                 rc_tpls: list[list[str]],
                  sop_db: SOP_DB,
                  kin_db: KIN_DB,
                  sim_db: SIM_DB,
@@ -47,7 +47,7 @@ class CoreRun:
         # List of species names used by cantera
         self.sc_species: list[str] = self.settings['score_sp']
         # Rate coefficients template
-        self.rc_tpl: list[str] = rc_tpl
+        self.rc_tpls: list[list[str]] = rc_tpls
         self.loc: str = settings['workdir']
         # Scoring function
         self.sf: Scoring = sf
@@ -110,8 +110,9 @@ class CoreRun:
                     for file in first_el.sop.files2copy:
                         src = f'{self.loc}/{file}'
                         dst = f'{subfolder}/{file}'
-                        if (not os.path.isfile(dst) and
-                            os.path.isfile(src)):
+                        if (
+                                not os.path.isfile(dst) and
+                                os.path.isfile(src)):
                             os.symlink(src, dst)
 
         # Change to base directory
@@ -152,6 +153,9 @@ class CoreRun:
             Path to element subfolder (e.g., 'workdir/base_dir/G0000/01')
         """
         return f'{self.get_gen_folder(el)}/{el.id//50:02d}'
+
+    def get_sim_time_grid(self, sim_idx: int) -> list[float]:
+        return self.settings['exp_profiles'][sim_idx][0].tolist()
 
     def clean_files(self) -> None:
         for el in self.elements:
@@ -210,7 +214,8 @@ class CoreRun:
                         continue
 
                     # Try to acquire lock, skip if busy
-                    if not self.el_locks[(el.gen, el.id)].acquire(blocking=False):
+                    if not self.el_locks[(el.gen, el.id)].acquire(
+                            blocking=False):
                         continue
 
                     # Submit work with lock held
@@ -256,6 +261,11 @@ class CoreRun:
     def reset_element(self,
                       el: Element) -> None:
         """Reset a failed element."""
+        if self.pert is None:
+            raise RuntimeError(
+                'Cannot reset an element without a perturbator.'
+            )
+
         rst: int = el.reset
         table_name: str = self.get_table_name(el)
 
@@ -278,7 +288,7 @@ class CoreRun:
         el.rateCoef = RateCo(
             sop=el.sop,
             settings=self.settings,
-            software_tpl=self.rc_tpl,
+            software_tpls=self.rc_tpls,
             id=el.id,
             q_idx=q_idx,
             name=f'{table_name}{el.name}',
@@ -294,7 +304,6 @@ class CoreRun:
                 f'{el.rateCoef.status.value}')
         if el.rateCoef.status == JobStatus.NOT_IN_QUEUE:
             el.rateCoef.q_up()
-            # self.klog.debug(f'Queued rate coefficient calc for element {el.id}.')
         elif el.rateCoef.status == JobStatus.FINISHED:
             el.save_kin(db=self.kin_db, table=table_name)
 
@@ -350,8 +359,10 @@ class CoreRun:
                         continue  # Already loaded
 
                     sim_id: int = el.id * nsim + sim
-                    flnm: str = f'{self.get_element_subfolder(el)}' + \
-                           f'/{table_name}{el.name}S{sim:02d}.json'
+                    flnm: str = (
+                        f'{self.get_element_subfolder(el)}'
+                        f'/{table_name}{el.name}S{sim:02d}.json'
+                    )
 
                     if not os.path.isfile(flnm):
                         # File doesn't exist yet - check if we should requeue
@@ -379,7 +390,9 @@ class CoreRun:
                             data: dict[str, list[float]] = json.load(f)
                         # Prepare data for batch upsert
                         row_ids: list[float] = data.pop('row_ids')
-                        el.sim.profiles[sim] = np.array([vals for vals in data.values()])[4:]
+                        el.sim.profiles[sim] = np.array(
+                            [vals for vals in data.values()]
+                        )[4:]
                         for row_id in row_ids:
                             row_data = {
                                 col: data[col][row_ids.index(row_id)]
@@ -388,13 +401,14 @@ class CoreRun:
                             }
                             self.sim_db.prepare_batch_upsert(
                                 table=table_name,
-                                id=row_id,
+                                id=int(row_id),
                                 values=row_data
                             )
 
                         # Delete JSON file after successful read
                         os.remove(flnm)
-                        el.status = ElementStatus.SCORING
+                        if all([prof is not None for prof in el.sim.profiles]):
+                            el.status = ElementStatus.SCORING
 
     def finalize_element(self,
                          el: Element) -> None:
@@ -418,12 +432,6 @@ class CoreRun:
 
         # Process each table's results
         for table_name, profiles in collecting.items():
-            for i in range(len(table_name)):
-                if table_name[i].isdigit():
-                    prefix_end = i
-                    break
-            gen_id = int(table_name[prefix_end:])  # Extract from G####
-
             for sim_id, db_data in profiles.items():
                 el_id: int = sim_id // nsim
                 sim_idx: int = sim_id % nsim
@@ -431,7 +439,8 @@ class CoreRun:
                 # Find element with matching ID and generation
                 el = None
                 for element in self.elements:
-                    if element.id == el_id and element.gen == gen_id:
+                    if (element.id == el_id and
+                            self.get_table_name(element) == table_name):
                         el = element
                         break
 
@@ -439,7 +448,7 @@ class CoreRun:
                     continue  # Element not found
 
                 # number of timesteps
-                nsteps: int = len(self.settings['exp_profiles'][sim_idx][0])
+                nsteps: int = len(self.get_sim_time_grid(sim_idx))
 
                 # Validate data completeness
                 if len(db_data) != nsteps:
@@ -467,7 +476,7 @@ class CoreRun:
         el.rateCoef = RateCo(
             sop=el.sop,
             settings=self.settings,
-            software_tpl=self.rc_tpl,
+            software_tpls=self.rc_tpls,
             id=el.id,
             q_idx=q_idx,
             name=f'{table_name}{el.name}',

@@ -1,0 +1,111 @@
+{
+"cantera_tpl": "ct.tpl",
+"ga_type": "exp",
+"mess_inputs": ["roo/mess_0000.inp", "ooqooh/mess_0000.inp"],
+"project_name": "run",
+"rc_software": "mess",
+"pp_temp": [550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200],
+"pp_pres": [1],
+"rc_temp": [550, 600, 650],
+"rc_pres": [0.01, 0.1, 1, 10],
+"pres_unit": "bar",
+"ct_yaml": "ThInK_Mech.yaml",
+"initial_X":[{
+    "C2H5": 3.34e-5,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.64e-5,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.95e-5,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.34e-6,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.64e-6,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.95e-6,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.34e-7,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.64e-7,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.95e-7,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.34e-8,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.64e-8,
+    "O2": 0.1,
+    "HE": "base"
+},{
+    "C2H5": 3.95e-8,
+    "O2": 0.1,
+    "HE": "base"
+}],
+"exp_profiles":[
+    "p1t1.csv",
+    "p1t2.csv",
+    "p1t3.csv",
+    "p2t1.csv",
+    "p2t2.csv",
+    "p2t3.csv",
+    "p3t1.csv",
+    "p3t2.csv",
+    "p3t3.csv",
+    "p4t1.csv",
+    "p4t2.csv",
+    "p4t3.csv"],
+"exp_errors":[
+    "ep1t1.csv",
+    "ep1t2.csv",
+    "ep1t3.csv",
+    "ep2t1.csv",
+    "ep2t2.csv",
+    "ep2t3.csv",
+    "ep3t1.csv",
+    "ep3t2.csv",
+    "ep3t3.csv",
+    "ep4t1.csv",
+    "ep4t2.csv",
+    "ep4t3.csv"],
+"n_elem": 500,
+"max_gen": 400,
+"max_std": 4,
+"std_we": 0.5,
+"std_be": 1,
+"std_bfc": 1.05,
+"distrib_bfc": "log-normal",
+"freq_mode": "batch",
+"std_hrs": 0.1,
+"std_if": 1.1,
+"std_fact": 0.25,
+"std_pow": 0.075,
+"std_epsilon": 0.1,
+"std_sigma": 0.1,
+"std_sfc": 2,
+"std_mrc": 1.5,
+"score_conv": 0.01,
+"max_helpers": 10,
+"sensi_d": 0.1,
+"cumul_sensi": 0.95,
+"SA_freq": 20,
+"max_score": 4}
+
+

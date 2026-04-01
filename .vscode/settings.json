@@ -2,5 +2,11 @@
     "python.defaultInterpreterPath": "/home/csoulie/.conda/envs/game/bin/python",
     "python.venvPath": "/home/csoulie/.conda/envs/",
     "gitlens.advanced.caching.gitPath": true,
-    "python.analysis.typeCheckingMode": "basic"
+    "python.analysis.typeCheckingMode": "basic",
+    "chat.tools.terminal.autoApprove": {
+        "conda": true
+    },
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": ["tests"],
+    "python.testing.unittestEnabled": false
 }

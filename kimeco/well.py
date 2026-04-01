@@ -20,6 +20,7 @@ class Well:
     """
     def __init__(self,
                  name: str,
+                 pes_ids: list[int],
                  pert_e: bool = True,
                  freq_mode: FreqMode = FreqMode.BATCH
                  ) -> None:
@@ -29,7 +30,10 @@ class Well:
         self.m_rotors: list[MultiRotor] = []
         self.h_rotors: list[HinRotor] = []
         self.in_multiple_pes: bool = False
-        self.energy: float
+        # Original energy in inputs
+        self._energy: float = 0.0
+        # Perturbation of the energy
+        self.dE: float = 0.0
         self.structure: Atoms
         # batch frequency coefficient
         self.bfc = 1.0
@@ -39,6 +43,7 @@ class Well:
         self.dummy: bool = False
         self.freq_mode: FreqMode = freq_mode
         self.uncertainties: dict[str, float] = {}
+        self.pes_ids: list[int] = pes_ids
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -61,6 +66,10 @@ class Well:
                     f'Well does not have the attribute {name}')
         else:
             self.__getattribute__(name)
+
+    @property
+    def energy(self) -> float:
+        return self._energy + self.dE
 
     @property
     def frequencies(self) -> NDArray[Any]:
@@ -178,12 +187,12 @@ class Well:
                 self.uncertainties[param_name] = val
 
     def set_structure(self,
-                      symbols: str,
+                      symbols: str | list[str],
                       positions: list[list]) -> None:
         """Set the structure (atoms + geom) of the well.
 
         Args:
-            symbols (str): Chemical elements
+            symbols (str | list[str]): Chemical elements
             positions (list[list]): 3D geometry
         """
         self.structure = Atoms(symbols=symbols,
@@ -218,12 +227,12 @@ class Well:
         """
         for hr in self.h_rotors:
             if hr.group == group and hr.axis == axis:
-                if (hr.fourier and
-                    fexp == hr.fexp and
+                if (fexp == hr.fexp and
                     fcoef == hr.fcoef and
                     hr.symmetry == symmetry and
                     hr.ThermalPowerMax == thermalpowermax and
-                    np.array_equal(hr._scan, np.array(scan, dtype=np.float32))):
+                    np.array_equal(
+                        hr._scan, np.array(scan, dtype=np.float32))):
                     break
                 else:
                     msg = f"Well {self.name} already has a rotor with:"

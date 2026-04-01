@@ -14,9 +14,11 @@ class Barrier(Well):
     def __init__(self, name: str,
                  lside: Well | Bimolecular,
                  rside: Well | Bimolecular,
+                 pes_id: int,
                  freq_mode: FreqMode = FreqMode.BATCH) -> None:
 
         super().__init__(name=name,
+                         pes_ids=[pes_id],
                          freq_mode=freq_mode)
         self.connected: list[Well | Bimolecular] = [lside, rside]
         self._energy: float
@@ -50,7 +52,7 @@ class Barrier(Well):
         return freq
 
     @property
-    def energy(self):
+    def energy(self) -> float:
         if self.barrierless:
             return max(self.connected[0].energy,
                        self.connected[1].energy)
@@ -59,15 +61,15 @@ class Barrier(Well):
 
     @property
     def r_coff(self) -> float:
-        return min(self.r_lenergy, self.r_renergy)
+        return float(f"{min(self.r_lenergy, self.r_renergy):.3f}")
 
     @property
     def r_lenergy(self) -> float:
-        return self.energy - self.connected[0].energy
+        return float(f"{self.energy - self.connected[0].energy:.3f}")
 
     @property
     def r_renergy(self) -> float:
-        return self.energy - self.connected[1].energy
+        return float(f"{self.energy - self.connected[1].energy:.3f}")
 
     @property
     def db_dict(self) -> dict[str, Any]:
@@ -86,7 +88,7 @@ class Barrier(Well):
     def set_uncertainties(self, settings: dict[str, Any]):
         super().set_uncertainties(settings)
         self.uncertainties.pop(f'{self.name}{dbs}{Ptype.WE.value}', None)
-        barrier_specific: list[str] = [Ptype.BE]
+        barrier_specific: list[Ptype] = [Ptype.BE]
         if self.barrierless:
             barrier_specific.append(Ptype.SFC)
         else:

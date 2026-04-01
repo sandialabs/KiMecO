@@ -37,6 +37,11 @@ class KINSection(Section):
                     t for t in self.settings['rc_temp']],
                     multi=True,
                     id='rc_T'),
+                html.H4('PES IDs (optional):'),
+                dcc.Dropdown(options=[
+                    pid for pid in self.init_SOP.pes_ids],
+                    multi=True,
+                    id='rc_pes'),
                 # Plot BUTTON
                 html.Div(
                     id='kin_plot_b',
@@ -78,6 +83,7 @@ class KINSection(Section):
             State('rc_to', 'value'),
             State('rc_P', 'value'),
             State('rc_T', 'value'),
+            State('rc_pes', 'value'),
             State('gen range slider', 'value'),
             prevent_initial_call=True,
             running=[
@@ -90,6 +96,7 @@ class KINSection(Section):
             To: list[str],
             pres: list[float],
             temp: list[float],
+            pes_ids: Optional[list[int]],
             selected_gen: list[int],
         ) -> tuple[dict[str, str], list[Any]]:
             if clic is None:
@@ -131,6 +138,7 @@ class KINSection(Section):
                 req_conditions,
                 selected_gen,
                 rate_pairs_db,
+                pes_ids=pes_ids,
             )
 
             figs: list[Any] = []
@@ -246,4 +254,3 @@ class KINSection(Section):
             settings=plot_settings,
         )
         return hist.layout()
-

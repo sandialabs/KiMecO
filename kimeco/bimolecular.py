@@ -1,8 +1,6 @@
 from typing import Any
 from kimeco.enums import FreqMode
 from kimeco.well import Well
-from kimeco.database.kimeco_db import dbs
-from kimeco.enums import Ptype
 
 
 class Bimolecular:
@@ -10,15 +8,26 @@ class Bimolecular:
     It must have a name and an energy."""
     def __init__(self,
                  name: str,
+                 pes_ids: list[int],
                  freq_mode: FreqMode = FreqMode.BATCH
                  ) -> None:
         self.freq_mode: FreqMode = freq_mode
         self.name: str = name
         self.fragments: list[Well] = []
+        self.pes_ids: list[int] = pes_ids
         self.in_multiple_pes: bool = False
-        self.energy: float
+        self._energy: float
         self.dummy = False
         self.uncertainties: dict[str, float] = {}
+
+    @property
+    def energy(self) -> float:
+        """Return the energy of the bimolecular.
+
+        Returns:
+            float: energy of the bimolecular
+        """
+        return self._energy + sum([frag.dE for frag in self.fragments])
 
     def set_fragments(self, frags: list[Well]) -> None:
         """Save a pair of fragments.
@@ -28,15 +37,20 @@ class Bimolecular:
         """
         self.fragments = frags
 
-    def add_new_frag(self, name: str) -> None:
+    def add_new_frag(self,
+                     name: str) -> None:
         """Save a new fragment.
 
         Args:
             name (str): fragment's name
+            pes_id (int): PES identifier owning this fragment
         """
-        frag = Well(name=name,
-                    freq_mode=self.freq_mode,
-                    pert_e=False)
+        # Fragments are shared molecular pieces and are not assigned to a PES.
+        frag = Well(
+            name=name,
+            pes_ids=[],
+            freq_mode=self.freq_mode,
+            pert_e=True)
         self.fragments.append(frag)
 
     @property
@@ -53,16 +67,15 @@ class Bimolecular:
 
     def set_uncertainties(self,
                           settings: dict[str, Any]) -> None:
-        self.uncertainties[f"{self.name}{dbs}{Ptype.WE.value}"] = \
-            settings[f'std_{Ptype.WE.value}']
         for frag in self.fragments:
             frag.set_uncertainties(settings=settings)
             self.uncertainties.update(frag.uncertainties)
 
     @property
     def db_dict(self) -> dict[str, Any]:
-        db_dict: dict[str, float] = {
-            f"{self.name}{dbs}{Ptype.WE.value}": float(self.energy)}
+        db_dict: dict[str, float] = {}
+        # Old implementation. bimolecular shouldn't be perturbed anymore
+        # f"{self.name}{dbs}{Ptype.WE.value}": float(self.energy)
         for frag in self.fragments:
             db_dict.update(frag.db_dict)
 

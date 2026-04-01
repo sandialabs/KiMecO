@@ -33,7 +33,7 @@ class GeneticAlgorithm(ABC):
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
                  f_el: Element,
-                 input_tpl: list[str],
+                 input_tpls: list[list[str]],
                  klog: KMOLogger
                  ) -> None:
         self.klog: KMOLogger = klog
@@ -44,12 +44,12 @@ class GeneticAlgorithm(ABC):
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
         self.f_el: Element = f_el
-        self.input_tpl: list[str] = input_tpl
+        self.input_tpls: list[list[str]] = input_tpls
         self.new_gen_has_been_created = False
         self.gen_0 = Generation(
             elements=[f_el],
             settings=settings,
-            rc_tpl=input_tpl,
+            rc_tpls=input_tpls,
             sop_db=sop_db,
             kin_db=kin_db,
             sim_db=sim_db,
@@ -357,7 +357,7 @@ class GeneticAlgorithm(ABC):
             new_gen = Generation(
                 elements=new_elements,
                 settings=self.settings,
-                rc_tpl=self.input_tpl,
+                rc_tpls=self.input_tpls,
                 sop_db=self.sop_db,
                 kin_db=self.kin_db,
                 sim_db=self.sim_db,
@@ -403,7 +403,7 @@ class GeneticAlgorithm(ABC):
             sensitivity = Linear(
                 elements=self.goat,
                 settings=self.settings,
-                rc_tpl=self.input_tpl,
+                rc_tpls=self.input_tpls,
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog,

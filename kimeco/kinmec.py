@@ -15,14 +15,14 @@ class KiMec:
     def __init__(self,
                  file: str,
                  settings: dict[str, Any],
-                 sop_tpl: SOP,) -> None:
+                 sop_tpl: SOP | None,) -> None:
         """Prepare the kinetic mechanism to be updated
         by MESS rate coefficients
 
         Args:
             file (str): path to the yaml mechanism
             settings (dict[str, Any]): user input
-            sop_tpl (SOP): any SOP object corresponding to the system
+            sop_tpl (SOP | None): any SOP object corresponding to the system
                 (the value of the parameters don't matter)
         """
         self.settings: dict[str, Any] = settings

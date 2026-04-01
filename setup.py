@@ -26,6 +26,7 @@ setup(
                           "scipy>=1.10",
                           "plotly>=5",
                           "pint"],
+        extras_require={"test": ["pytest>=9.0.2"]},
 
         keywords=['python',
                   'kimeco',

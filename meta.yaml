@@ -39,6 +39,8 @@ requirements:
         - mess-static
 
 test:
+    requires:
+        - pytest
     imports:
         - kimeco
         - kimeco.core

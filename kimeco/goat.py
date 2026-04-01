@@ -2,6 +2,7 @@ from typing import List, Tuple, Union, Optional, Dict
 import numpy as np
 from numpy.typing import NDArray
 from typing import Any
+from sqlalchemy.engine import Row
 
 
 from kimeco.element import Element
@@ -153,7 +154,7 @@ class GOATs:
 
         # Execute batch select
         try:
-            rows: Dict[int, List[List[Any]]] = \
+            rows: Dict[str, List[Row[Any]]] = \
                 self.sop_db.batch_select_to_dict()
         except Exception as exc:
             raise RuntimeError(f"Failed to retrieve SOP rows: {exc}") from exc
@@ -161,8 +162,8 @@ class GOATs:
         # Map rows to Elements
         for gen_id, el_id in zip(gen_ids, el_ids):
             # drop the id column and reconstruct SOP
-            table = np.array(rows[f'{self.prefix}{gen_id:04d}'])
-            row: str = table[table[:, 0] == el_id][:,1:]
+            table_rows = np.array(rows[f'{self.prefix}{gen_id:04d}'])
+            row = table_rows[table_rows[:, 0] == el_id][:, 1:]
             if len(row) != 1:
                 msg = "Expected exactly one row for id "
                 msg += f"{el_id} in table G{gen_id:04d}, found {len(row)}"
@@ -241,7 +242,8 @@ class GOATs:
         self,
         req_conditions: List[Tuple[float, float]],
         gen_ids: List[int],
-        from_to: tuple[str, str],
+        rate_pairs: List[Tuple[Optional[str], Optional[str]]],
+        pes_ids: Optional[List[int]] = None,
     ) -> RateResult:
         """Return rate coefficients for GOAT elements in the requested
         generations and conditions.
@@ -255,6 +257,7 @@ class GOATs:
             gen_ids: list of generation indices to query (indexes in
                      self.generations)
             rate_pairs: list of (From, To) species name tuples
+            pes_ids: optional PES ids to filter, otherwise aggregate all PES
 
         Returns:
             Nested dict structured per generation, per (p,t) condition and
@@ -284,29 +287,71 @@ class GOATs:
                 table: str = f"{self.prefix}{elem_gen:04d}"
                 kin_id = int(elem_id)
                 for (p, t) in req_conditions:
-                    # KIN_DB expects From, To parameter names
-                    self.kin_db.prepare_batch_select(
-                        table=table,
-                        kin_id=kin_id,
-                        p=float(p),
-                        t=float(t),
-                        From=from_to[0],
-                        To=from_to[1])
+                    for pair in rate_pairs:
+                        from_name, to_name = pair
+                        if from_name is None or to_name is None:
+                            continue
+                        if pes_ids is None:
+                            self.kin_db.prepare_batch_select(
+                                table=table,
+                                kin_id=kin_id,
+                                p=float(p),
+                                t=float(t),
+                                from_name=from_name,
+                                to_name=to_name,
+                            )
+                        else:
+                            for pes_id in pes_ids:
+                                self.kin_db.prepare_batch_select(
+                                    table=table,
+                                    kin_id=kin_id,
+                                    p=float(p),
+                                    t=float(t),
+                                    from_name=from_name,
+                                    to_name=to_name,
+                                    pes_id=pes_id,
+                                )
 
         raw_results = self.kin_db.batch_select()
 
         # Assemble results in requested shape
-        out: dict[int, dict[tuple[float, float], list[float]]] = {}
+        out: RateResult = {}
         for gen_id in gen_ids:
             out[gen_id] = {}
             for (p, t) in req_conditions:
-                key = (p, t, from_to[1], from_to[0])
-                out[gen_id][(p, t)] = []
+                out[gen_id][(p, t)] = {}
+                valid_pairs: List[Tuple[str, str]] = []
+                for from_name, to_name in rate_pairs:
+                    if from_name is None or to_name is None:
+                        continue
+                    pair_key: Tuple[str, str] = (from_name, to_name)
+                    valid_pairs.append(pair_key)
+                    out[gen_id][(p, t)][pair_key] = {}
+
                 for (elem_gen, elem_id) in self.generations[gen_id]:
                     table = f"{self.prefix}{elem_gen:04d}"
                     kin_id = int(elem_id)
-                    out[gen_id][(p, t)].append(
-                        float(raw_results[table][kin_id][key]))
+                    kin_rslt = raw_results.get(table, {}).get(kin_id, {})
+                    for pair_key in valid_pairs:
+                        from_name, to_name = pair_key
+                        value: Optional[float] = None
+                        total: float = 0.0
+                        found: bool = False
+                        for key, kval in kin_rslt.items():
+                            kp, kt, kpes, kfrom, kto = key
+                            if kp != p or kt != t:
+                                continue
+                            if kfrom != from_name or kto != to_name:
+                                continue
+                            if pes_ids is not None and kpes not in pes_ids:
+                                continue
+                            total += float(kval)
+                            found = True
+                        if found:
+                            value = total
+                        out[gen_id][(p, t)][pair_key][
+                            (elem_gen, elem_id)
+                        ] = value
         return out
 
     def get_p_for_gen(self,
@@ -351,4 +396,3 @@ class GOATs:
 
     def __repr__(self) -> str:
         return f"GOATs(filename={self.filename!r}, generations={len(self)})"
-

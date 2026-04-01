@@ -23,13 +23,13 @@ class Exponential(GeneticAlgorithm):
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
                  f_el: Element,
-                 input_tpl: list[str],
+                 input_tpls: list[list[str]],
                  klog: KMOLogger) -> None:
         super().__init__(
             settings=settings,
             sf=sf,
             pert=pert,
-            input_tpl=input_tpl,
+            input_tpls=input_tpls,
             sop_db=sop_db,
             kin_db=kin_db,
             sim_db=sim_db,

@@ -11,6 +11,7 @@ from kimeco.logger_config import setup_logger
 from kimeco.user_input import KMOInput
 from kimeco.parameters import SOP
 from kimeco.goat import GOATs
+from kimeco.database.sim_db import SIM_DB
 from kimeco.gui.sopsection import SOPSection
 from kimeco.gui.kinsection import KINSection
 from kimeco.gui.simsection import SIMSection
@@ -41,7 +42,7 @@ class KimecoApp(KiMecO):
             settings=self.settings,
             sop_tpl=self.init_SOP)
         self.init_SOP: SOP
-        self.input_tpl: list[str]
+        self.input_tpls: list[list[str]]
         self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
 
@@ -54,6 +55,14 @@ class KimecoApp(KiMecO):
 
     def initialize_databases(self) -> None:
         super().initialize_databases()
+        self.pp_sim_db: SIM_DB | None = None
+        pp_sim_path = f"{self.settings['workdir']}/PP_DB_SIM.db"
+        if os.path.isfile(pp_sim_path):
+            self.pp_sim_db = SIM_DB(
+                name='PP_DB_SIM',
+                threads=self.settings['threads'],
+                path=self.settings['workdir'],
+                tbl_name=None)
         self.init_vals = self.sop_db.get_table(table='G0000')[0]
         # Construct GOATs object so GUI sections can request Element objects
         goat_file: str = f"{self.settings['workdir']}/goats.txt"

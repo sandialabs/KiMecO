@@ -327,20 +327,22 @@ class Perturbator:
 
     def perturb_bimolecular(self,
                             bim: Bimolecular) -> None:
-        self.perturb_energy(item=bim)
         for well in bim.fragments:
+            self.perturb_energy(item=well)
             self.perturb_vibrations(well=well)
             self.perturb_hindered_rotors(well=well)
             self.perturb_multi_rotors(well=well)
 
     def perturb_energy(self,
-                       item: Well | Bimolecular) -> None:
-        """Perturb the energy of a Well or Bimolecular object.
+                       item: Well) -> None:
+        """Perturb the energy of a Well object.
         Calculate the perturbation and add it to the energy of the object.
 
         Args:
-            item (Well | Bimolecular): Object to perturb the energy of.
+            item (Well): Object to perturb the energy of.
         """
+        if not item.pert_e:
+            return
         param: str = f'{item.name}{dbs}{Ptype.WE.value}'
         if param in self.select:
             # Set trial energy out of the boundaries
@@ -357,8 +359,7 @@ class Perturbator:
                     c_val=item.energy,
                     param=param,
                     distrib=self.settings[f'distrib_{Ptype.WE.value}'])
-
-            item.energy = try_e
+            item.dE = try_e - item._energy
 
     def perturb_barrier_energy(self,
                                bar: Barrier) -> None:

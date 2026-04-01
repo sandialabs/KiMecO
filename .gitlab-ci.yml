@@ -25,7 +25,7 @@ installation:
     - mkdir -p "$CI_PROJECT_DIR/.ci"
     - mamba create -p "$CONDA_ENV_PATH" python=3.10 pip -y
     - conda activate "$CONDA_ENV_PATH"
-    - mamba install --file requirements.txt pytest setuptools wheel -y
+    - mamba install --file requirements.txt setuptools wheel -y
     - pip install --no-build-isolation --no-deps -e .
   
   script:
@@ -60,13 +60,7 @@ unit_tests:
     - source /opt/conda/etc/profile.d/conda.sh
     - conda activate "$CONDA_ENV_PATH"
   script:
-    - |
-      pytest -q | rc=$?
-      if [ $rc -eq 5 ]; then
-        echo "No tests collected yet. CI is active and passing."
-        exit 0
-      fi
-      exit $rc
+    - pytest tests/ -v
   <<: *common_rules
 
 functional_tests:
@@ -81,9 +75,9 @@ functional_tests:
     - conda activate "$CONDA_ENV_PATH"
   script:
     - |
-      pytest -q |rc=$?
+      pytest tests/functional/ -v; rc=$?
       if [ $rc -eq 5 ]; then
-        echo "No tests collected yet. CI is active and passing."
+        echo "No functional tests collected yet. CI is active and passing."
         exit 0
       fi
       exit $rc

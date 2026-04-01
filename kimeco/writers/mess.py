@@ -11,6 +11,21 @@ class MessWriter:
         self.SOP = SOP
         self.tpl = tpl
 
+    def _resolve_placeholder(self, placeholder: str):
+        if '.' not in placeholder:
+            raise ValueError(f'Unsupported placeholder: {placeholder}')
+
+        root_name, path = placeholder.split('.', 1)
+        if root_name == 'SOP':
+            value = self.SOP
+        else:
+            value = self.SOP.items[root_name]
+
+        for token in path.split('.'):
+            value = getattr(value, token)
+
+        return value
+
     def write(self,
               loc: str,
               filename: str) -> None:
@@ -20,33 +35,14 @@ class MessWriter:
                 f"!{k}: {v}" + "\n"
             )
         for line in self.tpl:
-            if '{' in line:
-                new_line = line
-                while '{' in new_line:
-                    name = new_line.split('{')[1].split('.')[0]
-                    line_start = new_line.split('}')[0] + '}'
-                    line_end = ''
-                    for arg in new_line.split('}')[1:]:
-                        if '{' in arg:
-                            line_end += arg + '}'
-                        else:
-                            line_end += arg
-                    if name == 'SOP':
-                        new_line = line_start.format(SOP=self.SOP) + line_end
-                    else:
-                        globv = {'ls': line_start,
-                                 'le': line_end,
-                                 'sop_name': self.SOP.items[name]}
-                        locv = {}
-                        # Execute this code using variables defined in globv
-                        # Undefined variables are local and returned in locv
-                        exec(f"new_line = ls.format({name}=sop_name) + le",
-                             globv,
-                             locv)
-                        new_line = locv['new_line']
-                lines.append(new_line)
-            else:
-                lines.append(line)
+            new_line = line
+            while '{' in new_line and '}' in new_line:
+                start = new_line.index('{')
+                end = new_line.index('}', start)
+                placeholder = new_line[start + 1:end]
+                replacement = str(self._resolve_placeholder(placeholder))
+                new_line = new_line[:start] + replacement + new_line[end + 1:]
+            lines.append(new_line)
 
         with open(loc + '/' + filename, 'w') as f:
             f.writelines(lines)

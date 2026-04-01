@@ -25,7 +25,7 @@ class NMSRunner(CoreRun):
 
     def __init__(self,
                  settings: dict[str, Any],
-                 rc_tpl: list[str],
+                 rc_tpls: list[list[str]],
                  sop_db: SOP_DB,
                  kin_db: KIN_DB,
                  sim_db: SIM_DB,
@@ -36,7 +36,7 @@ class NMSRunner(CoreRun):
 
         Args:
             settings: Configuration dictionary
-            rc_tpl: Rate coefficient template
+            rc_tpls: Rate coefficient templates
             sop_db: SOP database
             kin_db: Kinetics database
             sim_db: Simulation database
@@ -48,7 +48,7 @@ class NMSRunner(CoreRun):
         super().__init__(
             elements=[],
             settings=settings,
-            rc_tpl=rc_tpl,
+            rc_tpls=rc_tpls,
             sop_db=sop_db,
             kin_db=kin_db,
             sim_db=sim_db,

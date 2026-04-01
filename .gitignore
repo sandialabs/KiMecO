@@ -5,3 +5,5 @@ Untitled.ipynb
 *.pyc
 kimeco/*/*.pyc
 .DS_Store
+dev_tests/
+.github/
