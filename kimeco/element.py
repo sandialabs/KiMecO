@@ -65,7 +65,7 @@ class Element:
         for row in rows:
             vals: dict[str, Any] = {}
             for idx, col in enumerate(db.columns):
-                vals[col] = row[idx+1]
+                vals[col] = row[idx+1]  # Skip the row_id 
             db.prepare_batch_upsert(table=table,
                                     id=row[0],
                                     values=vals)

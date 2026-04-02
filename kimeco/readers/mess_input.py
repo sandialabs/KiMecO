@@ -42,6 +42,7 @@ class MessInputReader:
         self.force_new_molecules: bool = settings['force_new_molecules']
         self.files2copy: list[str] = []
         self.pes_files: list[list[str]] = []
+        self.dE: dict[tuple[int,int], float] = {}
         for filename in self.filenames:
             if os.path.isfile(path=filename):
                 with open(file=filename, mode='r') as f:
@@ -208,7 +209,7 @@ class MessInputReader:
                             name=name,
                             pes_id=fid)
                         if error:
-                            msg = f"Well {name} already exists in the same PES."
+                            msg = f"Well {name} already exists."
                             self.klog.warning(msg)
                             self._trigger_stop = True
                     new_line: str = line.split()[0] \
@@ -225,10 +226,17 @@ class MessInputReader:
                         self.SOP.add_new_bimol(name=name,
                                                pes_id=fid)
                     else:
-                        initial_file: int = self.SOP.items[name].pes_ids[0]
-                        msg = f"Bimolecular {name} already exists"
-                        msg += f" in { self.filenames[initial_file]}."
-                        self.klog.warning(msg)
+                        if fid in self.SOP.items[name].pes_ids:
+                            msg: str = f"Multiple Bimolecular {name} exist"
+                            msg += f" in {self.filenames[fid]}."
+                            self.klog.warning(msg)
+                            self._trigger_stop = True
+                        else:
+                            initial_file: int = self.SOP.items[name].pes_ids[0]
+                            msg: str = f"Bimolecular {name} already exists"
+                            msg += f" in { self.filenames[initial_file]}."
+                            self.klog.warning(msg)
+                            self.dE[(initial_file, fid)] = 0.0
                         # self._trigger_stop = True
                     new_line: str = line.split()[0] \
                         + " {" \
@@ -415,6 +423,25 @@ class MessInputReader:
                 elif line.lstrip().casefold().startswith('groundenergy'):
                     # for bimolec
                     energy = float(line.split()[1])
+                    first_pes_id = self.SOP.items[name].pes_ids[0]
+                    shift_key = (first_pes_id, fid)
+                    if shift_key in self.dE:
+                        shift: float = self.dE[shift_key]
+                        current_shift = self.SOP.items[name].energy - energy
+                        if shift == 0.0:
+                            # Save the shift between PESs
+                            self.dE[shift_key] = current_shift
+                        # If a shift was already saved,
+                        # check that it's consistent with the current one
+                        elif shift != current_shift:
+                            msg = "Inconsistent energy shift for "
+                            msg += f"{name} in {self.filenames[fid]}."
+                            msg += "\n"
+                            msg += f"Previous shift: {self.dE[shift_key]}"
+                            msg += f" Current shift: {current_shift}"
+                            self.klog.warning(msg)
+                            self._trigger_stop = True
+
                     self.save_energy(name=name,
                                      energy=energy,
                                      lnum=lnum)
@@ -439,8 +466,23 @@ class MessInputReader:
                 if bar.connected[well_idx].dummy:
                     bar.connected[well_idx]._energy = \
                         bar.energy - bar._well_depth[well_idx]
+        self.shift_PESs()
         self.SOP.files2copy = self.files2copy
         return (self.SOP, self.tpls)
+
+    def shift_PESs(self) -> None:
+        """Shift the energies of species in different
+        PESs if needed, to be able
+        to compare them and use them together in the same mechanism.
+        """
+        for (pes1, pes2), shift in self.dE.items():
+            if shift != 0.0:
+                for item in self.SOP.items.values():
+                    if pes2 in item.pes_ids:
+                        item._energy -= shift
+                msg: str = f"Shifted energies of PES {self.filenames[pes2]} by"
+                msg += f" {shift} to match PES {self.filenames[pes1]}."
+                self.klog.info(msg)
 
     def save_phasespacetheory(self,
                               name: str,

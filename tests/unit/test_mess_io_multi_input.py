@@ -77,9 +77,9 @@ def test_read_duplicate_well_name_across_inputs_marks_multiple_pes(
     assert len(templates) == 2
     assert "DUP" in sop.items
     item = sop.items["DUP"]
-    assert item.in_multiple_pes is True
-    assert sorted(item.pes_ids) == [0, 1]
-    assert parse_reader._trigger_stop is False
+    assert item.in_multiple_pes is False
+    assert sorted(item.pes_ids) == [0]
+    assert parse_reader._trigger_stop is True
 
 
 def test_read_duplicate_bimolecular_name_across_inputs_is_ignored(

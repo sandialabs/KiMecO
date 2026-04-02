@@ -210,18 +210,15 @@ class KIN_DB(Kimeco_db):
             tmp_temp = []
             tmp_from = []
             tmp_to = []
-            tmp_pes = []
             for kin_id in kin_ids:
                 tmp_pres.extend(select_snapshot[table][kin_id]['pres'])
                 tmp_temp.extend(select_snapshot[table][kin_id]['temp'])
                 tmp_from.extend(select_snapshot[table][kin_id]['from_name'])
                 tmp_to.extend(select_snapshot[table][kin_id]['to_name'])
-                tmp_pes.extend(select_snapshot[table][kin_id]['pes_id'])
             pres = set(tmp_pres)
             temp = set(tmp_temp)
             to_names = set(tmp_to)
             from_names = set(tmp_from)
-            pes_ids = set([pid for pid in tmp_pes if pid is not None])
 
             db_row = np.dtype(dtype=[
                 ('kin_id', int32),
@@ -248,8 +245,6 @@ class KIN_DB(Kimeco_db):
                 self.tables[table].c.from_name.in_(from_names),
                 self.tables[table].c.to_name.in_(to_names),
             )
-            if len(pes_ids) > 0:
-                query = query.where(self.tables[table].c.pes_id.in_(pes_ids))
             with self.eng.begin() as conn:
                 db_rslt: Sequence[Row[Any]] = conn.execute(
                         query).fetchall()

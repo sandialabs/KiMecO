@@ -51,7 +51,8 @@ class Linear(CoreRun):
         self.pert: Perturbator | None = pert
         self.sop_db = SOP_DB(sop=self.sop_tpl,
                              name=f'{self.prefix}_DB_SOP',
-                             path=self.settings['workdir'])
+                             path=self.settings['workdir'],
+                             klog=self.klog)
         self.kin_db = KIN_DB(sop=self.sop_tpl,
                              name=f'{self.prefix}_DB_KIN',
                              path=self.settings['workdir'])

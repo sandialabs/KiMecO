@@ -103,6 +103,7 @@ class NelderMeadSwarm:
             name='NMS_DB_SOP',
             threads=self.settings['threads'],
             path=self.wdir,
+            klog=self.klog,
         )
         sop_db_time: float = time.time() - start_time
         msg = 'NMS_DB_SOP initialized:'

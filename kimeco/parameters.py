@@ -1,6 +1,7 @@
 import numpy as np
 from copy import deepcopy
 from typing import Any, Iterator
+from collections.abc import Iterable
 
 from ase.atoms import Atoms
 from kimeco.enums import FreqMode
@@ -111,6 +112,31 @@ class SOP:
         """Return iterator yielding PES-scoped from/to combinations."""
         return PESReactionIterator(self)
 
+    def iter_top_level_items(self) -> Iterator[Well | Bimolecular | Barrier]:
+        """Iterate over PES-owning SOP items only.
+
+        Fragments attached to bimoleculars are excluded because they are
+        parser-internal objects with empty pes_ids.
+        """
+        for collection in (self.wells, self.bimolecular, self.barriers):
+            for item in collection:
+                if item.dummy:
+                    continue
+                yield item
+
+    @staticmethod
+    def normalize_pes_ids(pes_ids: Iterable[int]) -> tuple[int, ...]:
+        """Return a deterministic pes_ids payload for persistence."""
+        return tuple(sorted({int(pes_id) for pes_id in pes_ids}))
+
+    @property
+    def item_pes_ids(self) -> dict[str, tuple[int, ...]]:
+        """Return normalized pes_ids for all top-level SOP items."""
+        return {
+            item.name: self.normalize_pes_ids(item.pes_ids)
+            for item in self.iter_top_level_items()
+        }
+
     @property
     def r_epsilons(self) -> str:
         eps = ''
@@ -183,8 +209,8 @@ class SOP:
         elif pes_id in self.items[name].pes_ids:
             error = True
         else:
-            self.items[name].in_multiple_pes = True
-            self.items[name].pes_ids.append(pes_id)
+            # A well cannot belong to multiple PESs.
+            error = True
         return error
 
     @property

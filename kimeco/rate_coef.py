@@ -34,11 +34,12 @@ class RateCo:
         self.sop: SOP = sop
         self.software: str = settings['rc_software'].casefold()
         self.software_tpls: list[list[str]] = software_tpls
-        if len(self.software_tpls) != len(self.sop.pes_ids):
+        self.output_pes_ids: list[int] = list(self.sop.pes_ids)
+        if len(self.software_tpls) != len(self.output_pes_ids):
             raise ValueError(
                 'MESS template count does not match SOP PES count: '
                 f'{len(self.software_tpls)} templates for '
-                f'{len(self.sop.pes_ids)} PES IDs.'
+                f'{len(self.output_pes_ids)} PES IDs.'
             )
         self.name: str = name
         self.settings: dict[str, Any] = settings
@@ -54,13 +55,13 @@ class RateCo:
         # Modulable if something else than mess is used.
         if self.software == 'mess':
             self.output_names: list[str] = [
-                f"{self.loc}/{self.name}P{pes_id:02d}.out"
-                for pes_id in range(len(self.software_tpls))
+                f"{self.loc}/{self.name}P{output_slot:02d}.out"
+                for output_slot in range(len(self.software_tpls))
             ]
         else:
             self.output_names: list[str] = [
-                f"{self.loc}/{self.name}P{pes_id:02d}.out"
-                for pes_id in range(len(self.software_tpls))
+                f"{self.loc}/{self.name}P{output_slot:02d}.out"
+                for output_slot in range(len(self.software_tpls))
             ]
         self.q_idx: int = q_idx
 
@@ -119,10 +120,10 @@ class RateCo:
             NotImplementedError: Writter for this software doesn't exist yet
         """
         if self.software == 'mess':
-            for pes_id, software_tpl in enumerate(self.software_tpls):
+            for output_slot, software_tpl in enumerate(self.software_tpls):
                 mw = MessWriter(SOP=self.sop, tpl=software_tpl)
                 mw.write(loc=self.loc,
-                         filename=f'{self.name}P{pes_id:02d}.inp')
+                         filename=f'{self.name}P{output_slot:02d}.inp')
         else:
             raise NotImplementedError(
                 "K constants calculation with this software not available yet")
@@ -134,7 +135,8 @@ class RateCo:
         """
         rows: list[tuple[int, Any, Any, int, int, str, str, float]] = []
         outputs: dict[int, MessOutputReader] = {}
-        for pes_id, output_name in enumerate(self.output_names):
+        for output_slot, output_name in enumerate(self.output_names):
+            pes_id = self.output_pes_ids[output_slot]
             i = 0
             while not isfile(output_name):
                 time.sleep(2)

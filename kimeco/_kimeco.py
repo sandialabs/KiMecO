@@ -101,7 +101,8 @@ class KiMecO:
         self.sop_db = SOP_DB(sop=self.init_SOP,
                              name='KMO_DB_SOP',
                              threads=self.settings['threads'],
-                             path=self.settings['workdir'])
+                             path=self.settings['workdir'],
+                             klog=self.klog)
         sop_db_time: float = time.time() - start_time
         msg = 'SOP_DB initialized:'
         self.klog.info(f"{msg:<65}{sop_db_time:>15.1f}")
