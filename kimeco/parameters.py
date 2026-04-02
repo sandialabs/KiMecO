@@ -178,7 +178,9 @@ class SOP:
             pes_id (int): PES ID
         """
         error = False
-        if self.items[name].pes_ids[0] == pes_id:
+        if len(self.items[name].pes_ids) == 0:
+            self.items[name].pes_ids.append(pes_id)
+        elif pes_id in self.items[name].pes_ids:
             error = True
         else:
             self.items[name].in_multiple_pes = True

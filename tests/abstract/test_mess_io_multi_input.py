@@ -13,7 +13,7 @@ from kimeco.well import Well
 from kimeco.writers.mess import MessWriter
 
 # The path to the JSON file relevant for these tests
-DME_ROOT = Path(__file__).resolve().parent / "parse_pes" / "dme"
+DME_ROOT = Path(__file__).resolve().parent.parent / "parse_pes" / "dme"
 DME_INPUT_JSON = DME_ROOT / "input.json"
 
 

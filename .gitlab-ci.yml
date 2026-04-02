@@ -2,8 +2,8 @@ image: condaforge/mambaforge
 
 stages:
   - installation
-  - unit_tests
-  - functional_tests
+  - abstract_tests
+  - example_tests
 
 variables:
   ENV_NAME: kimeco-ci
@@ -49,8 +49,8 @@ installation:
 
 
 
-unit_tests:
-  stage: unit_tests
+abstract_tests:
+  stage: abstract_tests
   cache:
     key: "conda-env-$CI_PIPELINE_ID"
     paths:
@@ -60,11 +60,11 @@ unit_tests:
     - source /opt/conda/etc/profile.d/conda.sh
     - conda activate "$CONDA_ENV_PATH"
   script:
-    - pytest tests/ -v
+    - pytest tests/abstract/ -v
   <<: *common_rules
 
-functional_tests:
-  stage: functional_tests
+example_tests:
+  stage: example_tests
   cache:
     key: "conda-env-$CI_PIPELINE_ID"
     paths:
@@ -75,9 +75,9 @@ functional_tests:
     - conda activate "$CONDA_ENV_PATH"
   script:
     - |
-      pytest tests/functional/ -v; rc=$?
+      pytest tests/examples/ -v; rc=$?
       if [ $rc -eq 5 ]; then
-        echo "No functional tests collected yet. CI is active and passing."
+        echo "No example tests collected yet. CI is active and passing."
         exit 0
       fi
       exit $rc
