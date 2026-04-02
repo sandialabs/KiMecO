@@ -108,7 +108,8 @@ class RateCo:
                 idx=self.q_idx,
                 location=self.loc,
                 jtype='kin',
-                ressources=(cpu, mem)
+                ressources=(cpu, mem),
+                n_pes=len(self.software_tpls)
                                 )
 
     def create_input(self) -> None:

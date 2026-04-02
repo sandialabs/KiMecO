@@ -2,7 +2,7 @@ image: condaforge/mambaforge
 
 stages:
   - installation
-  - abstract_tests
+  - unit_tests
   - example_tests
 
 variables:
@@ -49,8 +49,8 @@ installation:
 
 
 
-abstract_tests:
-  stage: abstract_tests
+unit_tests:
+  stage: unit_tests
   cache:
     key: "conda-env-$CI_PIPELINE_ID"
     paths:
@@ -60,7 +60,7 @@ abstract_tests:
     - source /opt/conda/etc/profile.d/conda.sh
     - conda activate "$CONDA_ENV_PATH"
   script:
-    - pytest tests/abstract/ -v
+    - pytest tests/unit/ -v
   <<: *common_rules
 
 example_tests:

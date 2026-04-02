@@ -2,7 +2,7 @@ from enum import Enum
 from genericpath import isfile
 from kimeco.templates.pyjob import pytpl
 from kimeco.templates.pyjobarray import pyarrtpl
-from kimeco.templates.messjob import messtpl
+from kimeco.templates.kin_arr_tpl import kin_arr_tpl
 from kimeco.templates.slurm import slurmtpl
 from kimeco.templates.slurm_arr import slurmarrtpl
 from subprocess import Popen, PIPE
@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 from numpy import int16, int32, ndarray, str_
 from typing import Any
 import getpass
+import glob
 import os
 from kimeco.logger_config import KMOLogger
 import time
@@ -84,8 +85,8 @@ class QueueingSystem:
 
         self.pytpl: str = pytpl
         self.pyarrtpl: str = pyarrtpl
-        self.messtpl: str = messtpl
         self.q_name: str = q_name
+        self.messtpl = kin_arr_tpl
 
         # Define a dtype object to create a structured numpy array.
         self.jobdata = np.dtype(dtype=[
@@ -95,7 +96,8 @@ class QueueingSystem:
             ('status', str_, (10)),
             ('cpu', int16),
             ('mem', int32),
-            ('type', str_, (3))])
+            ('type', str_, (3)),
+            ('n_pes', int16)])
 
         self.kin_q: NDArray[Any] = np.empty(shape=(nel), dtype=self.jobdata)
         self.sim_q: NDArray[Any] = np.empty(shape=(nel), dtype=self.jobdata)
@@ -108,7 +110,8 @@ class QueueingSystem:
 
     @property
     def av_jobs(self) -> int:
-        job_sum = len(self.kin_q[self.kin_q['status'] == JobStatus.RUNNING])
+        kin_running = self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]
+        job_sum = int(np.sum(kin_running['n_pes']))
         job_sum += \
             len(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]) *\
             self.n_exp
@@ -119,8 +122,8 @@ class QueueingSystem:
 
     @property
     def av_cpu(self) -> int:
-        cpu_sum = np.sum(
-            self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['cpu'])
+        kin_running = self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]
+        cpu_sum = np.sum(kin_running['cpu'] * kin_running['n_pes'])
         cpu_sum += np.sum(
             self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['cpu']) *\
             self.n_exp
@@ -130,8 +133,8 @@ class QueueingSystem:
 
     @property
     def av_mem(self) -> float:
-        mem_sum = np.sum(
-            self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]['mem'])
+        kin_running = self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]
+        mem_sum = np.sum(kin_running['mem'] * kin_running['n_pes'])
         mem_sum += np.sum(
             self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['mem']) *\
             self.n_exp
@@ -151,7 +154,8 @@ class QueueingSystem:
                  idx: int,
                  location: str,
                  jtype: str,
-                 ressources: tuple[int, int]) -> None:
+                 ressources: tuple[int, int],
+                 n_pes: int = 1) -> None:
         """Create the submission file when job is added to queue.
            Job file itself must have already been created by the submitting
            instance.
@@ -162,12 +166,14 @@ class QueueingSystem:
             idx (int): position in the queue of type jtype
             jtype (str): <kin> (for kinetic) or <sim> (simulation)
             ressources (tuple[int, int]): number of CPU and memory (Mb)
+            n_pes (int): number of PES input/output files for kinetic jobs
         """
         cpu, mem = ressources
         job: NDArray[Any] = np.array([
-            (0, name, location, JobStatus.READY.value, cpu, mem, jtype)],
+            (0, name, location, JobStatus.READY.value,
+             cpu, mem, jtype, n_pes)],
             dtype=self.jobdata)
-        self.create_sub_file(job=job)
+        self.create_sub_file(job=job, n_pes=n_pes)
 
         if jtype == 'kin':
             self.kin_q[idx] = job[0]
@@ -177,7 +183,8 @@ class QueueingSystem:
             self.hlp_q[idx] = job[0]
 
     def create_sub_file(self,
-                        job: NDArray[Any]) -> None:
+                        job: NDArray[Any],
+                        n_pes: int = 1) -> None:
         """Create the submission script for the job."""
         if job['type'] == 'sim':
             scratchdir: str = self.settings['scratch_base'] +\
@@ -191,6 +198,16 @@ class QueueingSystem:
                 sub_queue=self.q_name,
                 mem_mb=job['mem'][0],
                 scratchdir=scratchdir
+            )
+        elif job['type'] == 'kin':
+            sub_cmd = self.sub_arr_tpl.format(
+                n_exp=n_pes-1,
+                exclude_nodes=self.settings['exclude_nodes'],
+                nprocs=job['cpu'][0],
+                filename=str(job['name'][0]),
+                sub_queue=self.q_name,
+                mem_mb=job['mem'][0],
+                scratchdir=job['loc'][0]
             )
         else:
             sub_cmd: str = self.subtpl.format(
@@ -235,37 +252,59 @@ class QueueingSystem:
         else:
             raise NotImplementedError('Unknown job type')
 
+        if job['status'] not in [
+                JobStatus.RUNNING.value,
+                JobStatus.FINISHED.value]:
+            return
+
         if jtype == 'kin':
             clear_err: bool = self._pickup_kin(job)
         elif jtype == 'sim':
             clear_err = self._pickup_sim(job)
         elif jtype == 'hlp':
             clear_err = self._pickup_hlp(job)
-        self.clean_files(job, clear_err=clear_err)
+
+        if job['status'] in [
+                JobStatus.PICKED_UP.value,
+                JobStatus.FAILED.value]:
+            self.clean_files(job, clear_err=clear_err)
 
     def _pickup_kin(self,
                     job) -> bool:
         clear_err = True
-        file: str = f"{job['loc']}/{job['name']}"
+        base: str = f"{job['loc']}/{job['name']}"
         lfile: str = f"{job['loc']}/logs/{job['name']}"
-        if os.path.exists(f"{file}.out"):
-            while not (os.path.exists(f"{lfile}.err")):
-                time.sleep(0.1)
-            if os.stat(f"{lfile}.err").st_size > 0:
-                job['status'] = JobStatus.FAILED.value
-                clear_err = False
-                self.klog.warning(
-                    f"Resetting job {job['name']} because an error occurred.")
-                os.remove(f"{file}.out")
-            elif (os.path.exists(f"{file}.err") and
-                  os.stat(f"{file}.err").st_size > 0):
-                job['status'] = JobStatus.FAILED.value
-                clear_err = False
-                self.klog.warning(
-                    f"Resetting job {job['name']} because an error occurred.")
-                os.remove(f"{file}.out")
-            else:
-                job['status'] = JobStatus.PICKED_UP.value
+        n_pes: int = int(job['n_pes'])
+
+        lerrs: list[str] = []
+        while len(lerrs) < n_pes:
+            time.sleep(0.1)
+            lerrs = sorted(glob.glob(f"{lfile}_*.err"))
+
+        if any(os.stat(lerr).st_size > 0 for lerr in lerrs):
+            job['status'] = JobStatus.FAILED.value
+            clear_err = False
+            self.klog.warning(
+                f"Resetting job {job['name']} because an error occurred.")
+            p_outs: list[str] = sorted(glob.glob(f"{base}P*.out"))
+            for p_out in p_outs:
+                os.remove(p_out)
+            return clear_err
+
+        p_outs: list[str] = sorted(glob.glob(f"{base}P*.out"))
+        if len(p_outs) != n_pes:
+            return clear_err
+
+        p_errs: list[str] = glob.glob(f"{base}P*.err")
+        if any(os.stat(p_err).st_size > 0 for p_err in p_errs):
+            job['status'] = JobStatus.FAILED.value
+            clear_err = False
+            self.klog.warning(
+                f"Resetting job {job['name']} because an error occurred.")
+            for p_out in p_outs:
+                os.remove(p_out)
+        else:
+            job['status'] = JobStatus.PICKED_UP.value
         return clear_err
 
     def _pickup_sim(self,
@@ -319,6 +358,11 @@ class QueueingSystem:
                 continue
             if os.path.exists(f"{job['loc']}/{job['name']}.{ext}"):
                 os.remove(f"{job['loc']}/{job['name']}.{ext}")
+
+        if job['type'] == 'kin':
+            base: str = f"{job['loc']}/{job['name']}"
+            for p_aux in glob.glob(f"{base}P*.aux"):
+                os.remove(p_aux)
 
     def submit(self, job) -> None:
         """Submit the job, and return the slurm's job id.
@@ -397,9 +441,10 @@ class QueueingSystem:
                     self.av_cpu >= job['cpu']*self.n_exp and
                     self.av_mem >= job['mem']*self.n_exp)
         else:
-            return (self.av_jobs > 0 and
-                    self.av_cpu >= job['cpu'] and
-                    self.av_mem >= job['mem'])
+            n_pes: int = int(job['n_pes'])
+            return (self.av_jobs >= n_pes and
+                    self.av_cpu >= job['cpu'] * n_pes and
+                    self.av_mem >= job['mem'] * n_pes)
 
     def actualize(self) -> None:
         """Remove picked up jobs from queuing system.
@@ -481,8 +526,10 @@ class QueueingSystem:
             return (isfile(base + '.py')
                     and os.stat(base + '.py').st_size > 0)
         elif job['type'] == 'kin':
-            return (isfile(base + '.inp')
-                    and os.stat(base + '.inp').st_size > 0)
+            n_pes: int = int(job['n_pes']) if int(job['n_pes']) > 0 else 1
+            p_inps: list[str] = sorted(glob.glob(base + 'P*.inp'))
+            return (len(p_inps) == n_pes and
+                    all(os.stat(p_inp).st_size > 0 for p_inp in p_inps))
         elif job['type'] == 'sim':
             return (isfile(base + '.py')
                     and os.stat(base + '.py').st_size > 0)

@@ -76,7 +76,7 @@ class TimeProfile(Experiment):
                             except TypeError as e:
                                 msg = 'Incorrect value detected' +\
                                     f' line{ln} in file {file}' +\
-                                    f' column {header}' + '\n' + e
+                                    f' column {header}' + '\n' + str(e)
                                 raise TypeError(msg)
                         elif header not in self.prof:
                             self._data['prof'][header] = []
@@ -91,7 +91,7 @@ class TimeProfile(Experiment):
                         except TypeError as e:
                             msg = 'Incorrect value detected' +\
                                     f' line{ln} in file {file}' +\
-                                    f' column {header}' + '\n' + e
+                                    f' column {header}' + '\n' + str(e)
                             raise TypeError(msg)
                             # cancel_run = True
                 ln += 1

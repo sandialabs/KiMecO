@@ -212,11 +212,11 @@ class Kimeco_db:
                     else:
                         klog: KMOLogger = KMOLogger(filename='db.log')
                         klog.warning('An OperationalError occured in the db:')
-                        klog.warning(e)
+                        klog.warning(str(e))
                 except Exception as e:
                     klog: KMOLogger = KMOLogger(filename='db.log')
                     klog.warning('An error occured in the database:')
-                    klog.warning(e)
+                    klog.warning(str(e))
             else:
                 klog: KMOLogger = KMOLogger(filename='db.log')
                 msg: str = \

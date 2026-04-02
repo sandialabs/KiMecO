@@ -7,6 +7,7 @@ from kimeco.simulation import SIM
 from typing import Any
 import numpy as np
 from kimeco.enums import ElementStatus
+from kimeco.q_sys import JobStatus
 from kimeco.database.kimeco_db import dbs
 
 
@@ -53,12 +54,14 @@ class Element:
             table (str): Generation name
         """
         rows = np.array(self.rateCoef.recover_rslts())
-        # Happens if the ME calculation didn't converge
+        # Only advance to KIN when all MESS outputs were recovered.
+        # Keep waiting in SOP when outputs are still incomplete.
         if len(rows) == 0:
-            self.status = ElementStatus.RESET
+            if self.rateCoef.status == JobStatus.FAILED:
+                self.status = ElementStatus.RESET
             return
-        else:
-            self.status = ElementStatus.KIN
+
+        self.status = ElementStatus.KIN
         for row in rows:
             vals: dict[str, Any] = {}
             for idx, col in enumerate(db.columns):
