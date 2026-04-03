@@ -65,6 +65,14 @@ class SIM:
         times = []
         for exp in self.settings['exp_profiles']:
             times.append(exp[0].tolist())
+        rates_by_pes = {
+            int(pes_id): rates.tolist()
+            for pes_id, rates in getattr(self.KIN, 'rc_by_pes').items()
+        }
+        tbl_map_by_pes = {
+            int(pes_id): tbl_map
+            for pes_id, tbl_map in getattr(self.KIN, 'tbl_map_by_pes').items()
+        }
         scratchdir: str = (
             self.settings['scratch_base']
             + self.settings['project_name']
@@ -77,8 +85,8 @@ class SIM:
             scratchdir=scratchdir,
             el_num=self.id,
             db=self.db,
-            tbl_map=getattr(self.KIN, 'tbl_map'),
-            rates=getattr(self.KIN, 'rc').tolist(),
+            tbl_map_by_pes=tbl_map_by_pes,
+            rates_by_pes=rates_by_pes,
             time=times,
             all_tsteps=time_steps,
             gen_name=self.gen_name,
@@ -146,14 +154,22 @@ class SIM_PP(SIM):
             + '/'
             + self.name
         )
+        rates_by_pes = {
+            int(pes_id): rates.tolist()
+            for pes_id, rates in getattr(self.KIN, 'rc_by_pes').items()
+        }
+        tbl_map_by_pes = {
+            int(pes_id): tbl_map
+            for pes_id, tbl_map in getattr(self.KIN, 'tbl_map_by_pes').items()
+        }
         ct_job: str = self.ctjobtpl.format(
             init_loc=self.settings['init_loc'],
             input_file=self.settings['input_file'],
             scratchdir=scratchdir,
             el_num=self.id,
             db=self.db,
-            tbl_map=getattr(self.KIN, 'tbl_map'),
-            rates=getattr(self.KIN, 'rc').tolist(),
+            tbl_map_by_pes=tbl_map_by_pes,
+            rates_by_pes=rates_by_pes,
             time=self.settings['pp_times'],
             all_tsteps=time_steps,
             gen_name=self.gen_name,

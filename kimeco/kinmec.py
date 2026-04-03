@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Sequence
 import cantera as ct
 from copy import deepcopy
 from kimeco.cantera.customrate import MessData, MessRate
@@ -103,8 +103,10 @@ class KiMec:
         reac_idx: list[int] = []
         for idx, reac in enumerate(self.reactions):
             for new_reac in new_reactions:
-                if reac.reactants == new_reac.reactants and\
-                    reac.products == new_reac.products:
+                if (
+                    reac.reactants == new_reac.reactants
+                    and reac.products == new_reac.products
+                ):
                     reac_idx.append(idx)
         return reac_idx
 
@@ -223,14 +225,51 @@ class KiMec:
 
         return rates
 
+    def _append_reaction_group(self,
+                               reactants: Sequence[Well | Bimolecular],
+                               products: Sequence[Well | Bimolecular],
+                               units: str,
+                               rates: NDArray,
+                               tbl_map: dict[str, int],
+                               mech_w_species: Any,
+                               new_reactions: list[Any],
+                               skip_identity: bool = False) -> None:
+        """Create reactions for one reactant/product group.
+
+        Missing species in the PES-local table map are skipped.
+        """
+        for reactant in reactants:
+            for product in products:
+                if skip_identity and reactant == product:
+                    continue
+                if reactant.name not in tbl_map or product.name not in tbl_map:
+                    continue
+                new_reactions.append(ct.Reaction.from_yaml(
+                    self.new_reactions_tpls[
+                        (reactant.name, product.name)
+                        ].format(
+                        rates=self.select_convert_rates(
+                            reactant=reactant,
+                            product=product,
+                            units=units,
+                            tbl_map=tbl_map,
+                            rc=rates
+                        )
+                    ),
+                    mech_w_species)
+                )
+
     def create_reactions(self,
-                         rates: NDArray,
-                         tbl_map: dict[str, int]):
+                         rates_by_pes: dict[int, NDArray],
+                         tbl_map_by_pes: dict[int, dict[str, int]]
+                         ):
         """Create cantera reaction objects with updates rate coefficients
 
         Args:
-            rates (NDArray): All rates: [P, T, from, to]
-            tbl_map (dict[str, int]): Map linking indexes to species name
+
+            rates_by_pes (dict[int, NDArray]): PES-scoped rates arrays
+            tbl_map_by_pes (dict[int, dict[str, int]]): PES-scoped map linking
+                indexes to species names
 
         Returns:
             list: list of cantera reaction objects
@@ -242,85 +281,76 @@ class KiMec:
             species=self.species,
             reactions=self.reactions)
         new_reactions: list[Any] = []
-        for reactant in self.SOP.wells:
-            for product in self.SOP.wells:
-                if reactant == product:
-                    continue
-                new_reactions.append(ct.Reaction.from_yaml(
-                    self.new_reactions_tpls[
-                        (reactant.name, product.name)
-                        ].format(
-                        rates=self.select_convert_rates(
-                            reactant=reactant,
-                            product=product,
-                            units="s^-1",
-                            tbl_map=tbl_map,
-                            rc=rates
-                        )
-                    ),
-                    mech_w_species)
+
+        for pes_id in self.SOP.pes_ids:
+            if pes_id not in rates_by_pes or pes_id not in tbl_map_by_pes:
+                raise ValueError(
+                    f"Missing rates or tbl_map for PES {pes_id} in the provided "
+                    "rates. Check that the KIN_DB contains the appropriate "
+                    "table name."
                 )
-        # Create well to bimolecular reactions
-        for reactant in self.SOP.wells:
-            for product in self.SOP.bimolecular:
-                new_reactions.append(ct.Reaction.from_yaml(
-                    self.new_reactions_tpls[
-                        (reactant.name, product.name)
-                        ].format(
-                        rates=self.select_convert_rates(
-                            reactant=reactant,
-                            product=product,
-                            units="s^-1",
-                            tbl_map=tbl_map,
-                            rc=rates
-                        )
-                    ),
-                    mech_w_species)
-                )
-        # Create bimolecular to well reactions
-        for reactant in self.SOP.bimolecular:
-            for product in self.SOP.wells:
-                new_reactions.append(ct.Reaction.from_yaml(
-                    self.new_reactions_tpls[
-                        (reactant.name, product.name)
-                        ].format(
-                        rates=self.select_convert_rates(
-                            reactant=reactant,
-                            product=product,
-                            units="m^3/s/kmol",
-                            tbl_map=tbl_map,
-                            rc=rates
-                        )
-                    ),
-                    mech_w_species)
-                )
-        # Create bimolecular to bimolecular reactions
-        for reactant in self.SOP.bimolecular:
-            for product in self.SOP.bimolecular:
-                if reactant == product:
-                    continue
-                new_reactions.append(ct.Reaction.from_yaml(
-                    self.new_reactions_tpls[
-                        (reactant.name, product.name)
-                        ].format(
-                        rates=self.select_convert_rates(
-                            reactant=reactant,
-                            product=product,
-                            units="m^3/s/kmol",
-                            tbl_map=tbl_map,
-                            rc=rates
-                        )
-                    ),
-                    mech_w_species)
-                )
+            pes_rates = rates_by_pes[pes_id]
+            pes_tbl_map = tbl_map_by_pes[pes_id]
+            wells = self.SOP.wells_in(pes_id)
+            bimolecular = self.SOP.bimols_in(pes_id)
+            self._append_reaction_group(
+                reactants=wells,
+                products=wells,
+                units="s^-1",
+                rates=pes_rates,
+                tbl_map=pes_tbl_map,
+                mech_w_species=mech_w_species,
+                new_reactions=new_reactions,
+                skip_identity=True,
+            )
+            self._append_reaction_group(
+                reactants=wells,
+                products=bimolecular,
+                units="s^-1",
+                rates=pes_rates,
+                tbl_map=pes_tbl_map,
+                mech_w_species=mech_w_species,
+                new_reactions=new_reactions,
+            )
+            self._append_reaction_group(
+                reactants=bimolecular,
+                products=wells,
+                units="m^3/s/kmol",
+                rates=pes_rates,
+                tbl_map=pes_tbl_map,
+                mech_w_species=mech_w_species,
+                new_reactions=new_reactions,
+            )
+            self._append_reaction_group(
+                reactants=bimolecular,
+                products=bimolecular,
+                units="m^3/s/kmol",
+                rates=pes_rates,
+                tbl_map=pes_tbl_map,
+                mech_w_species=mech_w_species,
+                new_reactions=new_reactions,
+                skip_identity=True,
+            )
         return new_reactions
 
     def get_updated_mech(self,
-                         rates: list[Any],
-                         tbl_map: dict[str, int]):
+                         rates_by_pes: dict[int, list[Any]],
+                         tbl_map_by_pes: dict[int, dict[str, int]]
+                         ):
+        """Get a cantera mechanism with updated rate coefficients
+        Args:
+            rates_by_pes (dict[int, list[Any]]): PES-scoped rates arrays
+            tbl_map_by_pes (dict[int, dict[str, int]]): PES-scoped map linking
+                indexes to species names
+        """
+
+        np_rates_by_pes = {
+            int(pes_id): np.array(pes_rates)
+            for pes_id, pes_rates in rates_by_pes.items()
+        }
         new_reactions = self.create_reactions(
-            rates=np.array(rates),
-            tbl_map=tbl_map
+            rates_by_pes=np_rates_by_pes,
+            tbl_map_by_pes=tbl_map_by_pes,
         )
         return ct.Solution(
             thermo="ideal-gas",

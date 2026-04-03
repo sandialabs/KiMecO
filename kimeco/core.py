@@ -311,6 +311,7 @@ class CoreRun:
                        el: Element) -> None:
         """Run the simulation for an element."""
         table_name: str = self.get_table_name(el)
+        el.rateCoef.load_rates_from_db(table=table_name)
         if hasattr(el, 'thread_id'):
             q_idx: int = el.thread_id
         else:

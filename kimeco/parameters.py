@@ -236,6 +236,8 @@ class SOP:
         """
         if name in self.items.keys():
             self.items[name].in_multiple_pes = True
+            if pes_id not in self.items[name].pes_ids:
+                self.items[name].pes_ids.append(pes_id)
         else:
             self.bimolecular.append(
                 Bimolecular(

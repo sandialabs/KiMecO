@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 from kimeco.database.kin_db import KIN_DB
 
@@ -14,7 +15,7 @@ def test_batch_select_keeps_unfiltered_rows_when_filtered_request_exists(
     tmp_path: Path,
 ) -> None:
     kin_db = KIN_DB(
-        sop=DummySOP(),
+        sop=cast(Any, DummySOP()),
         name="TEST_DB_KIN",
         path=str(tmp_path),
         threads=1,
@@ -76,3 +77,50 @@ def test_batch_select_keeps_unfiltered_rows_when_filtered_request_exists(
     assert (1.0, 300.0, 1, "A", "B") in kin_results
     assert kin_results[(1.0, 300.0, 0, "A", "B")] == 1.0
     assert kin_results[(1.0, 300.0, 1, "A", "B")] == 2.0
+
+
+def test_get_rates_for_kin_id_respects_pes_filter(tmp_path: Path) -> None:
+    kin_db = KIN_DB(
+        sop=cast(Any, DummySOP()),
+        name="TEST_DB_KIN_FILTER",
+        path=str(tmp_path),
+        threads=1,
+    )
+    table = "G0000"
+    kin_db.create_new_table(name=table)
+
+    kin_db.prepare_batch_upsert(
+        table=table,
+        id=0,
+        values={
+            "P": 1.0,
+            "T": 300.0,
+            "kin_id": 2,
+            "pes_id": 0,
+            "from_name": "A",
+            "to_name": "B",
+            "k": 1.5,
+        },
+    )
+    kin_db.prepare_batch_upsert(
+        table=table,
+        id=1,
+        values={
+            "P": 1.0,
+            "T": 300.0,
+            "kin_id": 2,
+            "pes_id": 1,
+            "from_name": "A",
+            "to_name": "B",
+            "k": 2.5,
+        },
+    )
+    kin_db.batch_upsert()
+
+    all_rows = kin_db.get_rates_for_kin_id(table=table, kin_id=2)
+    pes1_rows = kin_db.get_rates_for_kin_id(table=table, kin_id=2, pes_id=1)
+
+    assert len(all_rows) == 2
+    assert len(pes1_rows) == 1
+    assert pes1_rows[0][2] == 1
+    assert pes1_rows[0][-1] == 2.5

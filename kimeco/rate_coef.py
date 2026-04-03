@@ -64,6 +64,10 @@ class RateCo:
                 for output_slot in range(len(self.software_tpls))
             ]
         self.q_idx: int = q_idx
+        self.tbl_map_by_pes: dict[int, dict[str, int]] = {}
+        self.rc_by_pes: dict[int, np.ndarray] = {}
+        self.tbl_map: dict[str, int] = {}
+        self.rc: np.ndarray = np.array([])
 
     def set_status(self,
                    table: str) -> None:
@@ -177,6 +181,15 @@ class RateCo:
                 self.klog.warning(
                     'The master equation likely didn\'t converge properly.')
 
+        self.tbl_map_by_pes = {
+            pes_id: dict(mor.tbl_map)
+            for pes_id, mor in outputs.items()
+        }
+        self.rc_by_pes = {
+            pes_id: np.array(mor.rc, copy=True)
+            for pes_id, mor in outputs.items()
+        }
+
         all_pairs: list[tuple[int, str, str]] = list(
             self.sop.reaction_iterator()
         )
@@ -209,3 +222,39 @@ class RateCo:
                     )
                     row_id += 1
         return rows
+
+    def load_rates_from_db(self,
+                           table: str) -> None:
+        """Rebuild PES-scoped rate arrays from persisted KIN_DB rows."""
+        rows = self.db.get_rates_for_kin_id(table=table,
+                                            kin_id=self.id)
+        self.tbl_map_by_pes = {}
+        self.rc_by_pes = {}
+        for pes_id in self.sop.pes_ids:
+            species_names = self.sop.species_names_in_pes(pes_id)
+            tbl_map = {
+                name: idx
+                for idx, name in enumerate(species_names)
+            }
+            rc = np.zeros((
+                len(self.pres),
+                len(self.temp),
+                len(species_names),
+                len(species_names),
+            ))
+            self.tbl_map_by_pes[pes_id] = tbl_map
+            self.rc_by_pes[pes_id] = rc
+
+        for p, t, pes_id, from_name, to_name, k_value in rows:
+            if pes_id not in self.rc_by_pes:
+                continue
+            if p not in self.pres or t not in self.temp:
+                continue
+            tbl_map = self.tbl_map_by_pes[pes_id]
+            if from_name not in tbl_map or to_name not in tbl_map:
+                continue
+            p_idx = self.pres.index(p)
+            t_idx = self.temp.index(t)
+            from_idx = tbl_map[from_name]
+            to_idx = tbl_map[to_name]
+            self.rc_by_pes[pes_id][p_idx, t_idx, from_idx, to_idx] = k_value

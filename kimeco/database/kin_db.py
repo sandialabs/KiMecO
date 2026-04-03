@@ -129,6 +129,50 @@ class KIN_DB(Kimeco_db):
             db_rslt: Sequence = conn.execute(query).fetchall()
         return [row[0] for row in db_rslt]
 
+    def get_rates_for_kin_id(self,
+                             table: str,
+                             kin_id: int,
+                             pes_id: int | None = None
+                             ) -> list[
+                                 tuple[float, float, int, str, str, float]
+                             ]:
+        """Return persisted rates for one kinetics object.
+
+        Args:
+            table (str): generation table name
+            kin_id (int): kinetics identifier
+            pes_id (int | None): optional PES filter
+
+        Returns:
+            list[tuple[float, float, int, str, str, float]]:
+                tuples as (P, T, pes_id, from_name, to_name, k)
+        """
+        query = select(
+            self.tables[table].c.P,
+            self.tables[table].c.T,
+            self.tables[table].c.pes_id,
+            self.tables[table].c.from_name,
+            self.tables[table].c.to_name,
+            self.tables[table].c.k,
+        ).where(
+            self.tables[table].c.kin_id == kin_id
+        )
+        if pes_id is not None:
+            query = query.where(self.tables[table].c.pes_id == pes_id)
+        with self.eng.begin() as conn:
+            db_rslt: Sequence[Row[Any]] = conn.execute(query).fetchall()
+        return [
+            (
+                float(row[0]),
+                float(row[1]),
+                int(row[2]),
+                str(row[3]),
+                str(row[4]),
+                float(row[5]),
+            )
+            for row in db_rslt
+        ]
+
     def prepare_batch_select(self,
                              table: str,
                              kin_id: int,

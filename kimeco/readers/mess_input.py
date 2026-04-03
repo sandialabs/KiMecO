@@ -4,12 +4,14 @@ from uu import Error
 from kimeco.parameters import SOP
 from kimeco.barrier import Barrier
 from kimeco.bimolecular import Bimolecular
-from kimeco.well import Well
 from kimeco.rotors.internalrotation import InternalRotation
 from kimeco.logger_config import KMOLogger
 
 import os
 
+
+# TODO: Make the parsing robust to file swap on
+# restart regarding shifted energies
 
 class MessInputReader:
     """Class that read a mess input file and transforms it into
@@ -42,7 +44,7 @@ class MessInputReader:
         self.force_new_molecules: bool = settings['force_new_molecules']
         self.files2copy: list[str] = []
         self.pes_files: list[list[str]] = []
-        self.dE: dict[tuple[int,int], float] = {}
+        self.dE: dict[tuple[int, int], float] = {}
         for filename in self.filenames:
             if os.path.isfile(path=filename):
                 with open(file=filename, mode='r') as f:
@@ -232,6 +234,8 @@ class MessInputReader:
                             self.klog.warning(msg)
                             self._trigger_stop = True
                         else:
+                            self.SOP.add_new_bimol(name=name,
+                                                   pes_id=fid)
                             initial_file: int = self.SOP.items[name].pes_ids[0]
                             msg: str = f"Bimolecular {name} already exists"
                             msg += f" in { self.filenames[initial_file]}."

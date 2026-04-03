@@ -33,15 +33,15 @@ kin_mech = KiMec(file=f"{{kmo.init_loc}}/{{kmo.settings['ct_yaml']}}",
                  settings=kmo.settings,
                  sop_tpl=kmo.init_SOP)
 kin_mech.prepare_mech()
-tbl_map = {tbl_map}
-rates = {rates}
+tbl_map_by_pes = {tbl_map_by_pes}
+rates_by_pes = {rates_by_pes}
 
 p = kmo.settings['rc_pres'][exp_id // len(kmo.settings['rc_temp'])]
 t = kmo.settings['rc_temp'][exp_id % len(kmo.settings['rc_temp'])]
 
 gas = kin_mech.get_updated_mech(
-    rates=rates,
-    tbl_map=tbl_map)
+    rates_by_pes=rates_by_pes,
+    tbl_map_by_pes=tbl_map_by_pes)
 
 gas.X = kmo.settings['initial_X'][exp_id]
 pres = Q_(f"{{p}} {{kmo.settings['pres_unit']}}")
