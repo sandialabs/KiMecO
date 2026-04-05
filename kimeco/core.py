@@ -1,4 +1,5 @@
 from _thread import LockType
+import sys
 from typing import Any, Optional
 import os
 import glob
@@ -228,7 +229,7 @@ class CoreRun:
                         future.result()
                     except Exception as e:
                         self.klog.error(f'Error processing element: {e}')
-
+                        sys.exit(-1)
             self.sop_db.batch_upsert()
             self.kin_db.batch_upsert()
             self.sim_db.batch_upsert()

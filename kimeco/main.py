@@ -40,7 +40,6 @@ def main() -> None:
         print('To use KiMecO, supply the input file as argument.')
         sys.exit(-1)
 
-    kmo.check_kinmech()
     kmo.initialize_workdir()
     kmo.copy_necessary_files()
     kmo.initialize_databases()

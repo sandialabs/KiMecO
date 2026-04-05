@@ -60,8 +60,10 @@ class Element:
             if self.rateCoef.status == JobStatus.FAILED:
                 self.status = ElementStatus.RESET
             return
+        # avoid changing the status in sensitivity.linear
+        if self.status == ElementStatus.SOP:
+            self.status = ElementStatus.KIN
 
-        self.status = ElementStatus.KIN
         for row in rows:
             vals: dict[str, Any] = {}
             for idx, col in enumerate(db.columns):

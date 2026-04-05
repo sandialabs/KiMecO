@@ -66,8 +66,6 @@ class RateCo:
         self.q_idx: int = q_idx
         self.tbl_map_by_pes: dict[int, dict[str, int]] = {}
         self.rc_by_pes: dict[int, np.ndarray] = {}
-        self.tbl_map: dict[str, int] = {}
-        self.rc: np.ndarray = np.array([])
 
     def set_status(self,
                    table: str) -> None:

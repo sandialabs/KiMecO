@@ -91,6 +91,9 @@ class Linear(CoreRun):
             self.sop_db.defragmentate()
             self.kin_db.defragmentate()
             self.sim_db.defragmentate()
+        self.klog.info(
+            f'{self.name} initialized with {len(self.elements)} elements.'
+            )
 
     def same_f_el_in_db(self) -> bool:
         try:

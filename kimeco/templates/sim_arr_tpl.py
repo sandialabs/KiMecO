@@ -29,17 +29,14 @@ exp_id = int(sys.argv[1])
 el_num = {el_num}
 sim_id = len(kmo.settings['exp_profiles']) * el_num + exp_id
 
-kin_mech = KiMec(file=f"{{kmo.init_loc}}/{{kmo.settings['ct_yaml']}}",
-                 settings=kmo.settings,
-                 sop_tpl=kmo.init_SOP)
-kin_mech.prepare_mech()
+kmo.mech.prepare_mech()
 tbl_map_by_pes = {tbl_map_by_pes}
 rates_by_pes = {rates_by_pes}
 
 p = kmo.settings['rc_pres'][exp_id // len(kmo.settings['rc_temp'])]
 t = kmo.settings['rc_temp'][exp_id % len(kmo.settings['rc_temp'])]
 
-gas = kin_mech.get_updated_mech(
+gas = kmo.mech.get_updated_mech(
     rates_by_pes=rates_by_pes,
     tbl_map_by_pes=tbl_map_by_pes)
 

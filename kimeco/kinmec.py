@@ -1,3 +1,4 @@
+import re
 from typing import Any, Sequence
 import cantera as ct
 from copy import deepcopy
@@ -14,8 +15,7 @@ from kimeco.templates.ct_reaction_tpl import reaction_yaml
 class KiMec:
     def __init__(self,
                  file: str,
-                 settings: dict[str, Any],
-                 sop_tpl: SOP | None,) -> None:
+                 settings: dict[str, Any]) -> None:
         """Prepare the kinetic mechanism to be updated
         by MESS rate coefficients
 
@@ -59,21 +59,25 @@ class KiMec:
         """
         self.add_species()
         self.create_reactions_templates()
-        # temporarily create reactions with 0 rate coefficients
-        rc = np.zeros((
-            len(self.pres),
-            len(self.temp),
-            1,
-            1
-        ))
-        tbl_map: dict[str, int] = {}
-        for sp in self.SOP.wells_names:
-            tbl_map[sp] = 0
-        for sp in self.SOP.bimols_names:
-            tbl_map[sp] = 0
+        # Build PES-scoped placeholder arrays/maps until real rates are loaded.
+        rc_by_pes: dict[int, NDArray] = {}
+        tbl_map_by_pes: dict[int, dict[str, int]] = {}
+        for pes_id in self.SOP.pes_ids:
+            species_names: list[str] = self.SOP.species_names_in_pes(pes_id)
+            tbl_map_by_pes[pes_id] = {
+                name: idx
+                for idx, name in enumerate(species_names)
+            }
+            n_species = len(species_names)
+            rc_by_pes[pes_id] = np.zeros((
+                len(self.pres),
+                len(self.temp),
+                n_species,
+                n_species,
+            ))
         new_reactions = self.create_reactions(
-            rates=rc,
-            tbl_map=tbl_map
+            rates_by_pes=rc_by_pes,
+            tbl_map_by_pes=tbl_map_by_pes,
         )
         # remove redundant reactions
         for idx in reversed(self.find_redundant_idx(new_reactions)):
@@ -183,17 +187,47 @@ class KiMec:
         if isinstance(reactant, Well):
             eq += reactant.name
         elif isinstance(reactant, Bimolecular):
-            eq += f'{reactant.fragments[0].name}'
-            eq += ' + '
-            eq += f'{reactant.fragments[1].name}'
+            if not reactant.dummy:
+                if not reactant.fragments:
+                    raise ValueError(
+                        f"Bimolecular {reactant.name} should have its "
+                        "fragments defined."
+                    )
+                eq += f'{reactant.fragments[0].name}'
+                eq += ' + '
+                eq += f'{reactant.fragments[1].name}'
+            else:
+                try:
+                    eq = ' + '.join(reactant.name.split('+'))
+                except Exception:
+                    raise ValueError(
+                        f"Dummy bimolecular {reactant.name} should be named"
+                        " as 'name1+name2' where name1 and name2 are the "
+                        "names of the two fragments."
+                    )
 
         eq += ' => '
         if isinstance(product, Well):
             eq += product.name
         elif isinstance(product, Bimolecular):
-            eq += f'{product.fragments[0].name}'
-            eq += ' + '
-            eq += f'{product.fragments[1].name}'
+            if not product.dummy:
+                if not product.fragments:
+                    raise ValueError(
+                        f"Bimolecular {product.name} should have its "
+                        "fragments defined."
+                    )
+                eq += f'{product.fragments[0].name}'
+                eq += ' + '
+                eq += f'{product.fragments[1].name}'
+            else:
+                try:
+                    eq = ' + '.join(product.name.split('+'))
+                except Exception:
+                    raise ValueError(
+                        f"Dummy bimolecular {product.name} should be named"
+                        " as 'name1+name2' where name1 and name2 are the "
+                        "names of the two fragments."
+                    )
 
         return eq
 

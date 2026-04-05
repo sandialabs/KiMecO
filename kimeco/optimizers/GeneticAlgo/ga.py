@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from kimeco.logger_config import KMOLogger
 from typing import Any, List
 from kimeco.database.kin_db import KIN_DB
@@ -242,7 +243,7 @@ class GeneticAlgorithm(ABC):
                     self.sim_db.wipe_table(next_gen_name)
                 next_elements.extend([
                     Element(
-                        sop=self.pert.perturb(sop=self.f_el.sop),
+                        sop=self.pert.perturb(sop=deepcopy(self.f_el.sop)),
                         id=id,
                         gen=next_gen_id)
                     for id in range(1, self.settings['n_elem'])])
@@ -261,7 +262,7 @@ class GeneticAlgorithm(ABC):
                 self.sim_db.wipe_table(next_gen_name)
             next_elements.extend([
                 Element(
-                    sop=self.pert.perturb(sop=self.f_el.sop),
+                    sop=self.pert.perturb(sop=deepcopy(self.f_el.sop)),
                     id=id,
                     gen=next_gen_id)
                 for id in range(1, self.settings['n_elem'])])

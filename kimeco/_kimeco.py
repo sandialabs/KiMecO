@@ -51,8 +51,7 @@ class KiMecO:
         self.klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
         self.mech = KiMec(
             file=f"{self.init_loc}/{self.settings['ct_yaml']}",
-            settings=self.settings,
-            sop_tpl=self.init_SOP)
+            settings=self.settings)
         self.init_SOP: SOP
         self.input_tpls: list[list[str]]
         self.set_initial_sop()
@@ -176,15 +175,15 @@ class KiMecO:
         msg += "{}".format(self.settings['active_p']).replace("'", '"')
         self.klog.info(msg)
 
-        # Reinitialize the perturbator once the list of parameters to perturb
+        # # Reinitialize the perturbator once the list of parameters to perturb
         # has been reduced
         self.pert: Perturbator = Perturbator(
             settings=self.settings,
             initial_SOP=self.init_SOP,
             klog=self.klog
             )
-        self.klog.info(
-            f"{'Selected parameters transmitted to perturbator':<80}")
+        # self.klog.info(
+        #     f"{'Selected parameters transmitted to perturbator':<80}")
 
     def set_optimizer(self) -> None:
         """Define the optimizer being used for this run

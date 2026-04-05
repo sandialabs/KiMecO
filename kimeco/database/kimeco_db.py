@@ -110,12 +110,17 @@ class Kimeco_db:
         self.tables[name] = Table(
             name,
             self.metadata,
-            autoload_with=self.eng)
+            autoload_with=self.eng,
+            extend_existing=True)
 
     def create_table(self,
                      name: str,
                      columns: list[str],
                      types: list[type]) -> None:
+        if name not in self.tables:
+            if self.table_exists(name):
+                self.load_table(name)
+                return
         self.tables[name] = Table(
             name,
             self.metadata,

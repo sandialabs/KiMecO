@@ -25,12 +25,22 @@ class DummyDB:
         return []
 
 
+class DummyDBMissingTable:
+    def get_ids_from_kin_id(self, table: str, kin_id: int):
+        raise KeyError(table)
+
+
 class DummyQueue:
     def __init__(self) -> None:
         self.calls = []
 
     def add_to_q(self, **kwargs) -> None:
         self.calls.append(kwargs)
+
+
+class DummyStatusQueue(DummyQueue):
+    def status(self, id: int, jtype: str) -> JobStatus:
+        return JobStatus.NOT_IN_QUEUE
 
 
 class DummyRecoverQueue:
@@ -146,3 +156,37 @@ def test_recover_results_maps_output_slot_to_real_pes_id(
     k_by_pes = {row[4]: row[7] for row in rows}
     assert k_by_pes[2] == 2.0
     assert k_by_pes[5] == 5.0
+
+
+def test_set_status_surfaces_missing_generation_table_keyerror(
+    tmp_path: Path,
+) -> None:
+    settings = {
+        "rc_software": "mess",
+        "postprocess": False,
+        "rc_pres": [1.0],
+        "rc_temp": [300.0],
+        "cpu_kin": 2,
+        "mem_kin": 500,
+    }
+    rateco = RateCo(
+        sop=DummySOP(),
+        settings=settings,
+        software_tpls=[["tpl0"], ["tpl1"], ["tpl2"]],
+        id=0,
+        q_idx=1,
+        name="G0000E0000",
+        loc=str(tmp_path),
+        q_sys=DummyStatusQueue(),
+        db=DummyDBMissingTable(),
+        klog=KMOLogger(filename=str(tmp_path / "missing_table.log")),
+    )
+
+    Path(rateco.loc).mkdir(parents=True, exist_ok=True)
+    for output_name in rateco.output_names:
+        Path(output_name).write_text("ok")
+
+    with pytest.raises(KeyError) as exc:
+        rateco.set_status(table="G0000")
+
+    assert exc.value.args == ("G0000",)

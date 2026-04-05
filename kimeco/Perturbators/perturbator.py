@@ -233,7 +233,6 @@ class Perturbator:
         Returns:
             SOP: Perturbed SOP
         """
-        p_sop: SOP = deepcopy(sop)
 
         if dbs+Ptype.ETF.value in self.select:
             try_fact = -1
@@ -245,10 +244,10 @@ class Perturbator:
                 try_fact: float = self.get_rng(
                     ptype=Ptype.ETF.value,
                     i_val=self.i_sop.factor,
-                    c_val=p_sop.factor,
+                    c_val=sop.factor,
                     param=dbs+Ptype.ETF.value,
                     distrib=self.settings[f'distrib_{Ptype.ETF.value}'])
-            p_sop.factor = try_fact
+            sop.factor = try_fact
 
         if dbs+Ptype.ETP.value in self.select:
             try_pow = -1
@@ -260,12 +259,12 @@ class Perturbator:
                 try_pow: float = self.get_rng(
                     ptype=Ptype.ETP.value,
                     i_val=self.i_sop.power,
-                    c_val=p_sop.power,
+                    c_val=sop.power,
                     param=dbs+Ptype.ETP.value,
                     distrib=self.settings[f'distrib_{Ptype.ETP.value}'])
-            p_sop.power = try_pow
+            sop.power = try_pow
 
-        for i in range(len(p_sop.sigmas)):
+        for i in range(len(sop.sigmas)):
             if f'{dbs}{Ptype.SIG.value}{i}' in self.select:
                 try_sig = -1
                 while try_sig < 0 or \
@@ -276,12 +275,12 @@ class Perturbator:
                     try_sig: float = self.get_rng(
                         ptype=Ptype.SIG.value,
                         i_val=self.i_sop.sigmas[i],
-                        c_val=p_sop.sigmas[i],
+                        c_val=sop.sigmas[i],
                         param=dbs+Ptype.SIG.value+f'{i}',
                         distrib=self.settings[f'distrib_{Ptype.SIG.value}'])
-                p_sop.sigmas[i] = try_sig
+                sop.sigmas[i] = try_sig
 
-        for i in range(len(p_sop.epsilons)):
+        for i in range(len(sop.epsilons)):
             if f'{dbs}{Ptype.EPSI.value}{i}' in self.select:
                 try_eps = -1
                 while try_eps < 0 or \
@@ -292,20 +291,20 @@ class Perturbator:
                     try_eps: float = self.get_rng(
                         ptype=Ptype.EPSI.value,
                         i_val=self.i_sop.epsilons[i],
-                        c_val=p_sop.epsilons[i],
+                        c_val=sop.epsilons[i],
                         param=dbs+Ptype.EPSI.value+f'{i}',
                         distrib=self.settings[f'distrib_{Ptype.EPSI.value}'])
-                p_sop.epsilons[i] = try_eps
+                sop.epsilons[i] = try_eps
 
-        for well in p_sop.wells:
+        for well in sop.wells:
             self.perturb_well(well)
-        for bim in p_sop.bimolecular:
+        for bim in sop.bimolecular:
             self.perturb_bimolecular(bim)
         # Barriers must alway be after W and BM
-        for bar in p_sop.barriers:
+        for bar in sop.barriers:
             self.perturb_barrier(bar)
 
-        return p_sop
+        return sop
 
     def perturb_well(self,
                      well: Well) -> None:

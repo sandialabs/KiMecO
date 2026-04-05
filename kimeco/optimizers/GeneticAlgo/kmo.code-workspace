@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "../../../../projects/dme/kmo"
+		},
+		{
+			"path": "../../.."
+		}
+	],
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"sbatch": true
+		}
+	}
+}

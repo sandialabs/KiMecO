@@ -97,9 +97,10 @@ class SOP_DB(Kimeco_db):
 
     def create_new_table(self,
                          name: str) -> None:
-        return super().create_table(name=name,
-                                    columns=self.columns,
-                                    types=self.types)
+        super().create_table(
+            name=name,
+            columns=self.columns,
+            types=self.types)
 
     def has_generation_tables(self) -> bool:
         return len(self.tables) > 0

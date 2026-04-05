@@ -1,3 +1,5 @@
+import time
+
 from kimeco.logger_config import KMOLogger
 from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
 from kimeco.Perturbators.perturbator import Perturbator
@@ -54,6 +56,7 @@ class Tournament(GeneticAlgorithm):
         Returns:
             list[Element]: list of elements of the new generation.
         """
+        start_time: float = time.time()
         # Change the intensity of the perturbation
         next_gen: list[Element] = gen.elements
         # shuffled: list[Element] = copy.copy(gen.elements)
@@ -81,4 +84,8 @@ class Tournament(GeneticAlgorithm):
                 sop=self.pert.perturb(sop=winner.sop),
                 id=loser.id,
                 gen=gen.id+1)
+            end_time: float = time.time()
+            runtime: float = end_time - start_time
+            message: str = f'Time to create next generation: {runtime:.2f}s'
+            self.klog.info(message)
         return prev_gen, next_gen

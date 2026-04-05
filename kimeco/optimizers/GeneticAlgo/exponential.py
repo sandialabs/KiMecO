@@ -114,5 +114,5 @@ class Exponential(GeneticAlgorithm):
         end_time: float = time.time()
         runtime: float = end_time - start_time
         message: str = f'Time to create next generation: {runtime:.2f}s'
-        self.klog.debug(message)
+        self.klog.info(message)
         return prev_gen, next_gen
