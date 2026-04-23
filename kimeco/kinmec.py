@@ -221,7 +221,7 @@ class KiMec:
                 eq += f'{product.fragments[1].name}'
             else:
                 try:
-                    eq = ' + '.join(product.name.split('+'))
+                    eq += ' + '.join(product.name.split('+'))
                 except Exception:
                     raise ValueError(
                         f"Dummy bimolecular {product.name} should be named"

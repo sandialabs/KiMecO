@@ -118,7 +118,6 @@ class NelderMeadSwarm:
         msg = 'NMS_DB_KIN initialized:'
         self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
         self.sim_db = SIM_DB(
-            sop=self.elements[0].sop,
             name='NMS_DB_SIM',
             threads=self.settings['threads'],
             path=self.wdir,

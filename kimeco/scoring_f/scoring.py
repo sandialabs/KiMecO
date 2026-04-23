@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 from kimeco.simulation import SIM
+from numpy.typing import NDArray
 
 
 class Scoring(ABC):
@@ -30,3 +31,13 @@ class Scoring(ABC):
     def score(self,
               sim: SIM) -> list[float]:
         return [0.0]
+
+    def score_experiment(self,
+                         sim_profile: NDArray,
+                         exp: Any) -> float:
+        """Score a single experiment profile.
+
+        Implementations can override this to support per-experiment scoring
+        while legacy callers continue using `score(sim=...)`.
+        """
+        raise NotImplementedError

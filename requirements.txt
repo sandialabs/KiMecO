@@ -8,4 +8,5 @@ dash
 scipy>=1.10
 plotly>=5
 pint
+pyarrow>=14
 pytest>=9.0.2

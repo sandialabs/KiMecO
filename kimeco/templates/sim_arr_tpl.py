@@ -7,7 +7,8 @@ import os
 import copy
 import time
 import cantera.with_units as ctu
-import json
+import pyarrow as pa
+import pyarrow.feather as feather
 from kimeco.kinmec import KiMec
 from kimeco._kimeco import KiMecO
 ureg = ctu.cantera_units_registry
@@ -27,20 +28,21 @@ os.chdir(scratchdir)
 
 exp_id = int(sys.argv[1])
 el_num = {el_num}
-sim_id = len(kmo.settings['exp_profiles']) * el_num + exp_id
+sim_id = len(kmo.settings['experiments']) * el_num + exp_id
+experiment = kmo.settings['experiments'][exp_id]
 
 kmo.mech.prepare_mech()
 tbl_map_by_pes = {tbl_map_by_pes}
 rates_by_pes = {rates_by_pes}
 
-p = kmo.settings['rc_pres'][exp_id // len(kmo.settings['rc_temp'])]
-t = kmo.settings['rc_temp'][exp_id % len(kmo.settings['rc_temp'])]
+p = experiment.P
+t = experiment.T
 
 gas = kmo.mech.get_updated_mech(
     rates_by_pes=rates_by_pes,
     tbl_map_by_pes=tbl_map_by_pes)
 
-gas.X = kmo.settings['initial_X'][exp_id]
+gas.X = experiment.X
 pres = Q_(f"{{p}} {{kmo.settings['pres_unit']}}")
 temp = Q_(f"{{t}} K")
 
@@ -57,17 +59,12 @@ net.rtol = 1e-15
 
 sim_time = 0.0
 # In seconds
-times = {time}[exp_id]
+times = experiment.data[0].tolist()
 all_tsteps = np.array({all_tsteps})
-block_size = np.sum(all_tsteps)
-start_idx = np.sum(all_tsteps[:exp_id])
 tot_steps = all_tsteps[exp_id]
 
-to_watch = {to_watch}
+to_watch = experiment.species
 traces = {{}}
-traces['P'] = np.full(tot_steps, gas.P)
-traces['T'] = np.full(tot_steps, gas.T)
-traces['sim_id'] = np.full(tot_steps, sim_id)
 traces['time'] = np.array(times)
 
 names = []
@@ -102,28 +99,14 @@ for idx, t in enumerate(times):
     # for snum, i in enumerate(spec):
     #     if i.name in to_watch:
             # density (molecules/cm^3)
-            # traces[i.name][idx] = gas.X[snum] * ntot.magnitude  # Remove if response on
-# unique ids of rows in the DB
-row_ids = [i for i in range({el_num}*block_size+start_idx,
-                            {el_num}*block_size+start_idx+len(times),
-                            1)]
-for idx, id in enumerate(row_ids):
-    row_dict = {{}}
-    for col in traces:
-        row_dict[col] = traces[col][idx]
-
-traces['row_ids'] = row_ids
-traces_serializable = \
-    {{key: value.tolist() if isinstance(value, np.ndarray)
-    else value for key, value in traces.items()}}
-# Serializing json
-json_object = json.dumps(traces_serializable, indent=4)
-# Writing to sample.json
-with open(
-    f"{gen_name}E{el_num:04d}S{{exp_id:02d}}.json", "w"
-    ) as outfile:
-    outfile.write(json_object)
-while not os.path.exists(f"{gen_name}E{el_num:04d}S{{exp_id:02d}}.json"):
+            # traces[i.name][idx] = gas.X[snum] * ntot.magnitude
+            # Remove if response on
+tbl = pa.table(
+    {{col: traces[col] for col in traces}}
+)
+outfile = f"{gen_name}E{el_num:04d}S{{exp_id:02d}}.feather"
+feather.write_feather(tbl, outfile)
+while not os.path.exists(outfile):
     time.sleep(3)
 
 

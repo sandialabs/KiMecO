@@ -1,8 +1,11 @@
 import os
 import csv
 from typing import Any
+import numpy as np
+from numpy.typing import NDArray
 from kimeco.experiments.experiment import Experiment
 from kimeco.scoring_f.scoring import Scoring
+from kimeco.logger_config import KMOLogger
 
 
 class TimeProfile(Experiment):
@@ -14,84 +17,95 @@ class TimeProfile(Experiment):
                  error_file: str,
                  scoring: Scoring,
                  sim_file: str,
-                 settings: dict[str, Any]) -> None:
+                 settings: dict[str, Any],
+                 klog: KMOLogger,
+                 species: list[str],
+                 data: NDArray,
+                 error: NDArray,
+                 weight: float = 1.0) -> None:
         super().__init__(
             temp,
             pres,
             composition,
             scoring,
             sim_file,
-            settings)
+            settings,
+            klog,
+            species,
+            weight)
         self.data_file: str = data_file
         self.error_file: str = error_file
-        self._data: dict[str, dict[str, list[float]]] = {
-            'prof': {},
-            'err': {},
-            }
-        self.time: list[float] = []
-        self.prof = self.read_data(data_file)
-        self.err = self.read_data(data_file, error=True)
+        if data is None:
+            _, self.data = self.read_data(data_file)
+        else:
+            self.data = data
+        if error is None:
+            _, self.error = self.read_data(error_file)
+        else:
+            self.error = error
 
-    @property
-    def prof(self) -> dict[str, list[float]]:
-        return self._data['prof']
-
-    @property
-    def err(self) -> dict[str, list[float]]:
-        return self._data['err']
-
-    def read_data(self,
-                  file: str,
-                  error: bool = False) -> None:
+    @staticmethod
+    def read_data(file: str) -> tuple[list[str], NDArray]:
         """Read the data file for this experiment
 
         Args:
             file (str): path to file
-            error (bool, optional): is error file. Defaults to False.
-
         Raises:
             FileNotFoundError: _description_
             KeyError: _description_
             TypeError: _description_
-            TypeError: _description_
+            ValueError: _description_
+
+        Returns:
+            tuple[list[str], NDArray]:
+                headers and row-oriented matrix where row 0 is time and
+                rows 1..N are species.
         """
         if not os.path.isfile(file):
             msg: str = f'Could not find file {file}'
             raise FileNotFoundError(msg)
+        rows: list[list[float]] = []
         with open(file, mode='r', encoding='utf-8-sig') as f:
-            csv_DictReader = csv.DictReader(f)
-            ln = 0
-            for line in csv_DictReader:
-                if 'time' not in line:
-                    msg = "A column should be the 'time'"
-                    msg += f" in file {file}."
-                    raise KeyError(msg)
-                    # cancel_run = True
-                else:
-                    for header in line:
-                        if header == 'time':
-                            try:
-                                self.time.append(
-                                        float(line[header]))
-                            except TypeError as e:
-                                msg = 'Incorrect value detected' +\
-                                    f' line{ln} in file {file}' +\
-                                    f' column {header}' + '\n' + str(e)
-                                raise TypeError(msg)
-                        elif header not in self.prof:
-                            self._data['prof'][header] = []
-                            self._data['err'][header] = []
-                        try:
-                            if error:
-                                self._data['err'][header].append(
-                                    float(line[header]))
-                            else:
-                                self._data['prof'][header].append(
-                                    float(line[header]))
-                        except TypeError as e:
-                            msg = 'Incorrect value detected' +\
-                                    f' line{ln} in file {file}' +\
-                                    f' column {header}' + '\n' + str(e)
-                            raise TypeError(msg)
-                            # cancel_run = True
-                ln += 1
+            reader = csv.DictReader(f)
+            headers = list(reader.fieldnames or [])
+            if headers is None or len(headers) == 0:
+                raise ValueError(f"Empty CSV header in {file}")
+            if headers[0] != 'time':
+                raise KeyError(
+                    f"The first column should be 'time' in file {file}."
+                )
+            for ln, line in enumerate(reader):
+                row: list[float] = []
+                for header in headers:
+                    try:
+                        row.append(float(line[header]))
+                    except (TypeError, ValueError) as e:
+                        msg = 'Incorrect value detected' + \
+                            f' line{ln} in file {file}' + \
+                            f' column {header}' + '\n' + str(e)
+                        raise TypeError(msg)
+                rows.append(row)
+        if len(rows) == 0:
+            raise ValueError(f'No data rows in file {file}')
+        matrix: NDArray = np.array(rows, dtype=float).T
+        return headers, matrix
+
+    @staticmethod
+    def validate_pair(data_headers: list[str],
+                      data: NDArray,
+                      error_headers: list[str],
+                      error: NDArray,
+                      data_file: str,
+                      error_file: str) -> None:
+        if data_headers != error_headers:
+            msg = f'Headers mismatch between {data_file} and {error_file}.'
+            raise ValueError(msg)
+        if data.shape != error.shape:
+            msg = (
+                f'Data/error shape mismatch for {data_file} '
+                f'and {error_file}.'
+            )
+            raise ValueError(msg)
+        if not np.array_equal(data[0], error[0]):
+            msg = f'Time grid mismatch between {data_file} and {error_file}.'
+            raise ValueError(msg)

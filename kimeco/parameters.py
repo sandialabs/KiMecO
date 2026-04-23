@@ -48,6 +48,9 @@ class SOP:
         self = deepcopy(sop_tpl)
         pos = 0
         for key, val in self.parameters_names.items():
+            if pos >= len(row):
+                raise ValueError(
+                    "Row length does not match SOP template parameters.")
             if val != row[pos]:
                 self.update(key=key,
                             value=row[pos])

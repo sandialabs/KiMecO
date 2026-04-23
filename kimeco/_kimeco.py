@@ -112,12 +112,12 @@ class KiMecO:
         kin_db_time: float = time.time() - start_time - sop_db_time
         msg = 'KIN_DB initialized:'
         self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
-        self.sim_db = SIM_DB(sop=self.init_SOP,
-                             name='KMO_DB_SIM',
-                             threads=self.settings['threads'],
-                             path=self.settings['workdir'])
-        sim_db_time: float = \
-            time.time() - start_time - sop_db_time - kin_db_time
+        self.sim_db = SIM_DB(
+            name='KMO_DB_SIM',
+            threads=self.settings['threads'],
+            path=self.settings['workdir'])
+        sim_db_time: float = (
+            time.time() - start_time - sop_db_time - kin_db_time)
         msg = 'SIM_DB initialized:'
         self.klog.info(f"{msg:<65}{sim_db_time:>15.1f}")
 

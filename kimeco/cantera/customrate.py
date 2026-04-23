@@ -2,7 +2,7 @@ import cantera as ct
 import cantera.with_units as ctu
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
-ureg.default_format = '.5f'
+ureg.formatter.default_format = '.5f'
 
 
 class MessData(ct.ExtensibleRateData):

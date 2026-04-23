@@ -30,8 +30,16 @@ class MessInputReader:
         self.filenames: list[str] = []
         for mess_input in settings['mess_inputs']:
             self.filenames.append(settings['init_loc'] + '/' + mess_input)
-        self.SOP: SOP = SOP(score_species=settings['score_sp'],
-                            freq_mode=settings['freq_mode'])
+        n_exp = settings.get('n_exp')
+        if n_exp is None:
+            n_exp = len(settings.get('experiments', []))
+        if n_exp <= 0:
+            n_exp = 1
+        score_keys = [f'exp_{i}' for i in range(n_exp)]
+        self.SOP: SOP = SOP(
+            score_species=score_keys,
+            freq_mode=settings['freq_mode']
+        )
         if postprocess:
             self.SOP.temp = settings["pp_temp"]
             self.SOP.pres = settings["pp_pres"]

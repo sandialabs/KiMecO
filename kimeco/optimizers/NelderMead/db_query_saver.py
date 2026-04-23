@@ -1,4 +1,3 @@
-import numpy as np
 import threading
 
 from kimeco.database.kin_db import KIN_DB
@@ -59,10 +58,12 @@ class DBQuerySaver:
                     self.ids_in_kin_db[gen_id] = set(self.kin_db.get_column(
                         table=table_name,
                         column_name='kin_id'))
-                    tmp = np.array(self.sim_db.get_column(
-                        table=table_name,
-                        column_name='sim_id'))//len(self.settings['exp_profiles'])
-                    self.ids_in_sim_db[gen_id] = set(tmp.tolist())
+                    self.ids_in_sim_db[gen_id] = set(
+                        self.sim_db.get_column(
+                            table=table_name,
+                            column_name='model_id'
+                        )
+                    )
                 # if the gen is not in db, not finished
                 else:
                     return False

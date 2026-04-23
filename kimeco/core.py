@@ -4,7 +4,6 @@ from typing import Any, Optional
 import os
 import glob
 import threading
-import numpy as np
 from numpy.typing import NDArray
 from kimeco.enums import ElementStatus
 from kimeco.Perturbators.perturbator import Perturbator
@@ -19,7 +18,6 @@ from kimeco.scoring_f.scoring import Scoring
 from kimeco.logger_config import KMOLogger
 import time
 import concurrent.futures
-import json
 
 
 class CoreRun:
@@ -45,8 +43,6 @@ class CoreRun:
         self.previous_el: dict[int, Element] = previous_el
         self.pert: Optional[Perturbator] = pert
         self.base_dir: str = base_dir
-        # List of species names used by cantera
-        self.sc_species: list[str] = self.settings['score_sp']
         # Rate coefficients template
         self.rc_tpls: list[list[str]] = rc_tpls
         self.loc: str = settings['workdir']
@@ -58,8 +54,6 @@ class CoreRun:
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
         self.create_tables()
-        self.pres: list[float] = settings["rc_pres"]
-        self.temp: list[float] = settings["rc_temp"]
 
         self.qs = QueueingSystem(
             settings=self.settings,
@@ -156,7 +150,7 @@ class CoreRun:
         return f'{self.get_gen_folder(el)}/{el.id//50:02d}'
 
     def get_sim_time_grid(self, sim_idx: int) -> list[float]:
-        return self.settings['exp_profiles'][sim_idx][0].tolist()
+        return self.settings['experiments'][sim_idx].data[0].tolist()
 
     def clean_files(self) -> None:
         for el in self.elements:
@@ -324,7 +318,6 @@ class CoreRun:
             q_idx=q_idx,
             db=self.sim_db,
             gen_name=table_name,
-            sc_species=self.sc_species,
             loc=self.get_gen_folder(el),
             q_sys=self.qs,
             set=self.settings,
@@ -336,7 +329,7 @@ class CoreRun:
     def recover_simulation_data(self,
                                 el: Element) -> None:
         """Recover simulation data for an element."""
-        nsim: int = len(self.pres) * len(self.temp)
+        nsim: int = self.settings['n_exp']
         table_name: str = self.get_table_name(el)
 
         # Change status from RUNNING to FINISHED (may have failed)
@@ -351,35 +344,35 @@ class CoreRun:
             el.status = ElementStatus.RESET
             return
 
-        # If successful, read JSON files
+        # If successful, read feather files
         if el.sim.status == JobStatus.PICKED_UP or\
            el.sim.status == JobStatus.NOT_IN_QUEUE:
             if any([prof is None for prof in el.sim.profiles]):
-                # Read JSON files for each simulation profile
+                # Read feather files for each simulation profile
                 for sim in range(nsim):
                     if el.sim.profiles[sim] is not None:
                         continue  # Already loaded
 
-                    sim_id: int = el.id * nsim + sim
                     flnm: str = (
                         f'{self.get_element_subfolder(el)}'
-                        f'/{table_name}{el.name}S{sim:02d}.json'
+                        f'/{table_name}{el.name}S{sim:02d}.feather'
                     )
 
+                    key = (el.id, sim)
                     if not os.path.isfile(flnm):
                         # File doesn't exist yet - check if we should requeue
                         with self.requeue_lock:
-                            if sim_id not in self.requeue_timer:
-                                self.requeue_timer[sim_id] = time.time()
+                            if key not in self.requeue_timer:
+                                self.requeue_timer[key] = time.time()
                                 continue
                             # Wait maximum 30 sec for file
                             elif (time.time() -
-                                  self.requeue_timer[sim_id] < 30.0):
+                                  self.requeue_timer[key] < 30.0):
                                 continue
                             else:
-                                self.requeue_timer[sim_id] = time.time()
+                                self.requeue_timer[key] = time.time()
                                 msg = (f'Missing file: {el.name}S{sim:02d}'
-                                       '.json - resubmitting')
+                                       '.feather - resubmitting')
                                 self.klog.info(msg)
                                 el.sim.q_up()
                                 return
@@ -388,26 +381,21 @@ class CoreRun:
                         if os.path.getsize(flnm) == 0:
                             time.sleep(2)
 
-                        with open(flnm, 'r') as f:
-                            data: dict[str, list[float]] = json.load(f)
-                        # Prepare data for batch upsert
-                        row_ids: list[float] = data.pop('row_ids')
-                        el.sim.profiles[sim] = np.array(
-                            [vals for vals in data.values()]
-                        )[4:]
-                        for row_id in row_ids:
-                            row_data = {
-                                col: data[col][row_ids.index(row_id)]
-                                for col in data.keys()
-                                if col != 'row_ids'
-                            }
-                            self.sim_db.prepare_batch_upsert(
-                                table=table_name,
-                                id=int(row_id),
-                                values=row_data
-                            )
+                        with open(flnm, 'rb') as f:
+                            blob = f.read()
+                        decoded, _ = self.sim_db.decode_result_blob(
+                            result=blob,
+                            model_id=el.id,
+                        )
+                        el.sim.profiles[sim] = decoded.T[1:]
+                        self.sim_db.prepare_batch_upsert(
+                            table=table_name,
+                            model_id=el.id,
+                            experiment_id=sim,
+                            result=blob,
+                        )
 
-                        # Delete JSON file after successful read
+                        # Delete feather file after successful read
                         os.remove(flnm)
                         if all([prof is not None for prof in el.sim.profiles]):
                             el.status = ElementStatus.SCORING
@@ -427,16 +415,13 @@ class CoreRun:
         """
         if len(self.sim_db._select) == 0:
             return
-        nsim: int = self.settings['n_exp']
 
-        collecting: dict[str, dict[int, NDArray]] = \
+        collecting: dict[str, dict[int, dict[int, NDArray]]] = \
             self.sim_db.batch_select()
 
         # Process each table's results
-        for table_name, profiles in collecting.items():
-            for sim_id, db_data in profiles.items():
-                el_id: int = sim_id // nsim
-                sim_idx: int = sim_id % nsim
+        for table_name, model_profiles in collecting.items():
+            for el_id, exp_profiles in model_profiles.items():
 
                 # Find element with matching ID and generation
                 el = None
@@ -449,14 +434,15 @@ class CoreRun:
                 if el is None:
                     continue  # Element not found
 
-                # number of timesteps
-                nsteps: int = len(self.get_sim_time_grid(sim_idx))
+                for sim_idx, db_data in exp_profiles.items():
+                    # number of timesteps
+                    nsteps: int = len(self.get_sim_time_grid(sim_idx))
 
-                # Validate data completeness
-                if len(db_data) != nsteps:
-                    continue
+                    # Validate data completeness
+                    if len(db_data) != nsteps:
+                        continue
 
-                el.sim.profiles[sim_idx] = db_data.T[1:]
+                    el.sim.profiles[sim_idx] = db_data.T[1:]
 
                 # Scoring needs all the profiles
                 if all([prof is not None for prof in el.sim.profiles]):
@@ -494,7 +480,6 @@ class CoreRun:
             q_idx=q_idx,
             db=self.sim_db,
             gen_name=table_name,
-            sc_species=self.sc_species,
             loc=self.get_gen_folder(el),
             q_sys=self.qs,
             set=self.settings,

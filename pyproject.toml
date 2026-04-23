@@ -37,7 +37,8 @@ dependencies = [
     "dash",
     "scipy>=1.10",
   "plotly>=5",
-  "pint"
+  "pint",
+  "pyarrow>=14"
 ]
 
 [project.optional-dependencies]

@@ -160,7 +160,6 @@ class PostProcess(KiMecO):
         self.klog.info(f"{msg:<65}{kin_db_time:>15.1f}")
         start_time = time.time()
         self.pp_sim_db = SIM_DB(
-            species=self.settings['pp_species'],
             name='PP_DB_SIM',
             threads=self.settings['threads'],
             path=self.settings['workdir'])

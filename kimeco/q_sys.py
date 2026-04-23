@@ -531,7 +531,8 @@ class QueueingSystem:
             return (len(p_inps) == n_pes and
                     all(os.stat(p_inp).st_size > 0 for p_inp in p_inps))
         elif job['type'] == 'sim':
-            return (isfile(base + '.py')
-                    and os.stat(base + '.py').st_size > 0)
+            scripts: list[str] = sorted(glob.glob(base + '_*.py'))
+            return (len(scripts) == self.n_exp and
+                    all(os.stat(script).st_size > 0 for script in scripts))
         else:
             raise NotImplementedError('Unknown file type')

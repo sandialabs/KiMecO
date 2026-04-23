@@ -5,7 +5,8 @@
     "gitlens.advanced.caching.gitPath": true,
     "python.analysis.typeCheckingMode": "basic",
     "chat.tools.terminal.autoApprove": {
-        "conda": true
+        "conda": true,
+        "timeout": true
     },
     "python.testing.pytestEnabled": true,
     "python.testing.pytestArgs": ["tests"],
@@ -16,5 +17,13 @@
             "envManager": "ms-python.python:conda",
             "packageManager": "ms-python.python:conda"
         }
+    ],
+    "python.analysis.indexing": true,
+    "python.analysis.indexing.followSymlinkedFolders": false,
+    "python.analysis.enableParallelIndexing": true,
+    "python.analysis.userFileIndexingLimit": 1000,
+    "python.analysis.include": [
+        "kimeco/**",
+        "tests/**"
     ]
 }

@@ -14,7 +14,6 @@ class SIM:
                  id: int,
                  q_idx: int,
                  gen_name: str,
-                 sc_species: list[str],
                  db: SIM_DB,
                  loc: str,
                  q_sys: QueueingSystem,
@@ -29,7 +28,6 @@ class SIM:
             id (int): Identifier of the simulation
             q_idx (int): Queuing system index
             gen_name (str): Name of the generation
-            sc_species (list[str]): Species to score
             db (SIM_DB): Simulation database
             loc (str): Where to store the simulation files
             q_sys (QueueingSystem): Queuing system
@@ -43,16 +41,13 @@ class SIM:
         self.KIN: RateCo = kin
         self.id: int = id
         self.settings: dict[str, Any] = set
-        # Species to save in db
-        self.sc_species: list[str] = sc_species
         self.el_name: str = f'E{id:04d}'
         self.name: str = f'{gen_name}{self.el_name}S'
         self.loc: str = loc + f'/{(self.id)//50:02d}'
         self.q_sys: QueueingSystem = q_sys
-        self.ctjobtpl: str = self.settings['cantera_tpl']
         self.db: SIM_DB = db
         self.profiles: list[NDArray | None] = [
-            None] * len(set['exp_profiles'])
+            None] * len(set['experiments'])
         self.q_idx: int = q_idx
 
     def q_up(self) -> None:
@@ -60,11 +55,13 @@ class SIM:
         """
         cpu: int = self.settings['cpu_sim']
         mem: int = self.settings['mem_sim']
-        time_steps: list[int] = \
-            [len(i[0]) for i in self.settings['exp_profiles']]
-        times = []
-        for exp in self.settings['exp_profiles']:
-            times.append(exp[0].tolist())
+        time_steps: list[int] = [
+            len(exp.data[0]) for exp in self.settings['experiments']
+        ]
+        times = [
+            exp.data[0].tolist() for exp in self.settings['experiments']
+        ]
+        to_watch = [exp.species for exp in self.settings['experiments']]
         rates_by_pes = {
             int(pes_id): rates.tolist()
             for pes_id, rates in getattr(self.KIN, 'rc_by_pes').items()
@@ -79,21 +76,23 @@ class SIM:
             + '/'
             + self.name
         )
-        ct_job: str = self.ctjobtpl.format(
-            init_loc=self.settings['init_loc'],
-            input_file=self.settings['input_file'],
-            scratchdir=scratchdir,
-            el_num=self.id,
-            db=self.db,
-            tbl_map_by_pes=tbl_map_by_pes,
-            rates_by_pes=rates_by_pes,
-            time=times,
-            all_tsteps=time_steps,
-            gen_name=self.gen_name,
-            to_watch=self.sc_species
+        for exp_id, exp in enumerate(self.settings['experiments']):
+            ct_job: str = exp.sim_file.format(
+                init_loc=self.settings['init_loc'],
+                input_file=self.settings['input_file'],
+                scratchdir=scratchdir,
+                el_num=self.id,
+                db=self.db,
+                tbl_map_by_pes=tbl_map_by_pes,
+                rates_by_pes=rates_by_pes,
+                time=times,
+                all_tsteps=time_steps,
+                gen_name=self.gen_name,
+                to_watch=to_watch
             )
-        with open(f'{self.loc}/{self.name}.py', 'w') as f:
-            f.write(ct_job)
+            script_name = f'{self.name}_{exp_id:02d}.py'
+            with open(f'{self.loc}/{script_name}', 'w') as f:
+                f.write(ct_job)
         self.q_sys.add_to_q(name=self.name,
                             idx=self.q_idx,
                             location=self.loc,
@@ -128,13 +127,13 @@ class SIM_PP(SIM):
             id=id,
             q_idx=q_idx,
             gen_name=gen_name,
-            sc_species=pp_species,
             db=db,
             loc=loc,
             q_sys=q_sys,
             set=set,
             klog=klog,
         )
+        self.pp_species = pp_species
         self.ctjobtpl = self.settings['cantera_tpl']
         self.profiles = [
             None] * (
@@ -173,7 +172,7 @@ class SIM_PP(SIM):
             time=self.settings['pp_times'],
             all_tsteps=time_steps,
             gen_name=self.gen_name,
-            to_watch=self.sc_species,
+            to_watch=self.pp_species,
             initial_x=self.settings['pp_initial_X'],
         )
         with open(f'{self.loc}/{self.name}.py', 'w') as f:

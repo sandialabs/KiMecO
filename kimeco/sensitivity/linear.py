@@ -56,9 +56,9 @@ class Linear(CoreRun):
         self.kin_db = KIN_DB(sop=self.sop_tpl,
                              name=f'{self.prefix}_DB_KIN',
                              path=self.settings['workdir'])
-        self.sim_db = SIM_DB(sop=self.sop_tpl,
-                             name=f'{self.prefix}_DB_SIM',
-                             path=self.settings['workdir'])
+        self.sim_db = SIM_DB(
+            name=f'{self.prefix}_DB_SIM',
+            path=self.settings['workdir'])
         if self.SA_is_in_db() and restart:
             self.klog.debug('SA is in DB. Reading results.')
             self.elements = self.get_elements_from_db()
@@ -138,10 +138,9 @@ class Linear(CoreRun):
             kin_ids = set(self.kin_db.get_column(
                 table=self.name,
                 column_name='kin_id'))
-            tmp = np.array(self.sim_db.get_column(
+            sim_ids = set(self.sim_db.get_column(
                 table=self.name,
-                column_name='sim_id'))//len(self.settings['exp_profiles'])
-            sim_ids = set(tmp.tolist())
+                column_name='model_id'))
             if sop_ids == kin_ids == sim_ids:
                 return self.same_f_el_in_db()
             else:

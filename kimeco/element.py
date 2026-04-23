@@ -8,7 +8,9 @@ from typing import Any
 import numpy as np
 from kimeco.enums import ElementStatus
 from kimeco.q_sys import JobStatus
-from kimeco.database.kimeco_db import dbs
+import pyarrow as pa
+import pyarrow.feather as feather
+from io import BytesIO
 
 
 class Element:
@@ -67,7 +69,7 @@ class Element:
         for row in rows:
             vals: dict[str, Any] = {}
             for idx, col in enumerate(db.columns):
-                vals[col] = row[idx+1]  # Skip the row_id 
+                vals[col] = row[idx+1]  # Skip the row_id
             db.prepare_batch_upsert(table=table,
                                     id=row[0],
                                     values=vals)
@@ -76,12 +78,12 @@ class Element:
                              sim_db: SIM_DB,
                              table) -> None:
         n_exp: int = len(self.sim.profiles)
-        for sim in range(n_exp):
-            sim_id: int = self.id * n_exp + sim
-            if self.sim.profiles[sim] is None:
+        for exp_id in range(n_exp):
+            if self.sim.profiles[exp_id] is None:
                 sim_db.prepare_batch_select(
                     table=table,
-                    sim_id=sim_id)
+                    model_id=self.id,
+                    experiment_id=exp_id)
 
     def get_p_val(self,
                   param: str) -> float:
@@ -105,7 +107,7 @@ class Element:
 
         Returns:
             float:
-                Sum of the score selected by the user with score_sp.
+                Average of per-experiment scores.
         """
         return float(np.average(self.scores))
 
@@ -133,37 +135,26 @@ class Element:
             sim_num (int): index of the simulation for this element
         """
 
-        sim_id: int = sim_num + self.id * self.sim.settings['n_exp']
-        all_tsteps = np.array(
-            [len(i[0]) for i in self.sim.settings['exp_profiles']])
-        block_size = int(np.sum(all_tsteps))
-        start_idx = int(np.sum(all_tsteps[:sim_num]))
-        tot_steps = int(all_tsteps[sim_num])
+        exp = self.sim.settings['experiments'][sim_num]
+        to_watch: list[str] = exp.species
 
-        p: float = self.pres[sim_id // len(self.temp)]
-        t: float = self.temp[sim_id % len(self.temp)]
+        sim_prof = self.sim.profiles[sim_num]
+        if sim_prof is None:
+            raise ValueError(f'Missing simulation profile {sim_num}')
+        if sim_prof.shape[0] == len(to_watch) + 1:
+            sim_prof = sim_prof[1:]
+        traces: dict[str, Any] = {
+            'time': exp.data[0].tolist(),
+        }
+        for idx, sp_name in enumerate(to_watch):
+            traces[sp_name] = sim_prof[idx].tolist()
 
-        to_watch: list[str] = self.sim.sc_species
-        traces: dict[str, Any] = {}
-        traces['P'] = np.full(tot_steps, p).tolist()
-        traces['T'] = np.full(tot_steps, t).tolist()
-        traces['sim_id'] = np.full(tot_steps, sim_id).tolist()
-        traces['time'] = self.sim.settings['exp_profiles'][sim_num][0].tolist()
-        row_ids: list[int] = [i for i in range(self.id*block_size+start_idx,
-                              self.id*block_size+start_idx+len(traces['time']),
-                              1)]
-        names = []
-
-        # Arrays to hold the datas
-        for idx, i in enumerate(to_watch):
-            traces[i] = np.full(
-                tot_steps,
-                self.sim.profiles[sim_num][idx]).tolist()
-            names.append(i)
-        for idx, id in enumerate(row_ids):
-            row_dict = {}
-            for col in traces:
-                row_dict[col] = traces[col][idx]
-            db.prepare_batch_upsert(table=table,
-                                    id=id,
-                                    values=row_dict)
+        table_obj = pa.table(traces)
+        buf = BytesIO()
+        feather.write_feather(table_obj, buf)
+        db.prepare_batch_upsert(
+            table=table,
+            model_id=self.id,
+            experiment_id=sim_num,
+            result=buf.getvalue(),
+        )

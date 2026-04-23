@@ -233,23 +233,25 @@ class SIMSection(Section):
                 except Exception:
                     tokens = []
             elements_per_gen[gen_i] = tokens
+            exp_indices = [
+                idx for idx, exp in enumerate(self.settings['experiments'])
+                if (
+                    exp.P == self.settings['rc_pres'][p_idx]
+                    and exp.T == self.settings['rc_temp'][t_idx]
+                )
+            ]
             for (elem_gen, elem_id) in tokens:
-                sim_id = int(
-                    elem_id *
-                    len(self.settings['rc_pres']) *
-                    len(self.settings['rc_temp']) +
-                    p_idx * len(self.settings['rc_temp']) +
-                    t_idx
-                )
-                self.sim_db.prepare_batch_select(
-                    table=f'G{elem_gen:04d}',
-                    sim_id=sim_id,
-                )
+                for exp_idx in exp_indices:
+                    self.sim_db.prepare_batch_select(
+                        table=f'G{elem_gen:04d}',
+                        model_id=elem_id,
+                        experiment_id=exp_idx,
+                    )
 
         all_results = self.sim_db.batch_select()
         for gen_i in selected_gen:
             tables = {f'G{tkn[0]:04d}' for tkn in elements_per_gen[gen_i]}
-            table_results: dict[str, dict[int, NDArray]] = {}
+            table_results: dict[str, dict[int, dict[int, NDArray]]] = {}
             for tbl in tables:
                 if tbl in all_results:
                     table_results[tbl] = all_results[tbl]
@@ -264,28 +266,27 @@ class SIMSection(Section):
         if self.pp_sim_db is None:
             return {}
 
-        n_pp_exp = (
-            len(self.settings['pp_pres']) * len(self.settings['pp_temp'])
-        )
         sim_idx = p_idx * len(self.settings['pp_temp']) + t_idx
         for table_name in tables:
             table_rows = self.pp_sim_db.get_table(table=table_name)
-            sim_ids = sorted(
+            model_ids = sorted(
                 {
-                    int(row[3]) for row in table_rows
-                    if int(row[3]) % n_pp_exp == sim_idx
+                    int(row[0]) for row in table_rows
+                    if int(row[1]) == sim_idx
                 }
             )
-            for sim_id in sim_ids:
+            for model_id in model_ids:
                 self.pp_sim_db.prepare_batch_select(
                     table=table_name,
-                    sim_id=sim_id,
+                    model_id=model_id,
+                    experiment_id=sim_idx,
                 )
-        return self.pp_sim_db.batch_select()
+        all_results = self.pp_sim_db.batch_select()
+        return all_results
 
     def make_figure(self,
                     gen_name: str,
-                    TPGenSP: dict[str, dict[int, NDArray]],
+                    TPGenSP: dict[str, dict[int, dict[int, NDArray]]],
                     sp: str,
                     pres: float,
                     temp: float,
@@ -296,36 +297,54 @@ class SIMSection(Section):
 
         fig = go.Figure()
         nel = 0
-        sp_idx = sim_db.columns.index(sp) - 2
+        if sp not in sim_db.sv_species:
+            return [fig]
+        sp_idx = sim_db.sv_species.index(sp) + 2
         traces: list[go.Scatter] = []
-        for origin, sim_dict in TPGenSP.items():
+        for origin, model_dict in TPGenSP.items():
             name = f'Origin: {origin}'
-            for arr in sim_dict.values():
-                nel += 1
-                traces.append(
-                    go.Scatter(
-                        x=arr[:, 1],
-                        y=arr[:, sp_idx].T,
-                        mode='lines',
-                        name=name,
-                        showlegend=False,
-                        opacity=0.25,
-                        line=dict(color='#1E90FF'),
+            for exp_dict in model_dict.values():
+                for arr in exp_dict.values():
+                    nel += 1
+                    traces.append(
+                        go.Scatter(
+                            x=arr[:, 1],
+                            y=arr[:, sp_idx].T,
+                            mode='lines',
+                            name=name,
+                            showlegend=False,
+                            opacity=0.25,
+                            line=dict(color='#1E90FF'),
+                        )
                     )
-                )
         fig.add_traces(traces)
 
         if show_exp_profile:
             tidx = self.settings['rc_temp'].index(temp)
             pidx = self.settings['rc_pres'].index(pres)
-            eidx = pidx * len(self.settings['rc_temp']) + tidx
-            exp_p = self.settings['exp_profiles'][eidx]
+            exp_indices = [
+                idx for idx, exp in enumerate(self.settings['experiments'])
+                if (
+                    exp.P == self.settings['rc_pres'][pidx]
+                    and exp.T == self.settings['rc_temp'][tidx]
+                )
+            ]
+            if len(exp_indices) == 0:
+                exp_indices = [0]
+            eidx = exp_indices[0]
+            exp_p = self.settings['experiments'][eidx].data
+            exp_species = self.settings['experiments'][eidx].species
+            if sp not in exp_species:
+                return [fig]
+            exp_sp_idx = exp_species.index(sp) + 1
             fig.add_trace(
                 go.Scatter(
                     x=exp_p[0],
-                    y=exp_p[sp_idx - 1],
+                    y=exp_p[exp_sp_idx],
                     error_y={
-                        'array': self.settings['exp_errors'][eidx][sp_idx - 1]
+                        'array': self.settings['experiments'][eidx].error[
+                            exp_sp_idx
+                        ]
                     },
                     mode='lines',
                     name='Exp. profile',

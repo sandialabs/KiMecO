@@ -1,4 +1,3 @@
-import csv
 import os
 import sys
 import json
@@ -12,6 +11,8 @@ import cantera.with_units as ctu
 from kimeco.logger_config import KMOLogger
 from kimeco.enums import Distrib, Optimizers, Pclass, Ptype
 from kimeco.enums import FreqMode, RestartType
+from kimeco.experiments.t_profile import TimeProfile
+from kimeco.scoring_f.weighteddif import WeightedDif
 
 
 ureg: ctu.UnitRegistry = ctu.cantera_units_registry
@@ -57,188 +58,145 @@ class KMOInput:
             return json.load(fp=f)
 
     def basic_checks(self) -> None:
+        """Check if the experiments inputs are without error
+        """
         # Has mandatory keys?
         for key, value in mandatory_keys.items():
             if key not in self.json_file:
-                if key == 'initial_C':
-                    if 'initial_X' not in self.json_file:
-                        self.klog.info(
-                            f"{key} or initial_X is a mandatory keyword.")
-                        continue
-                    else:
-                        # The initial composition was given as a percentage
-                        continue
                 self.klog.info(f"{key} is a mandatory keyword.")
                 self.cancel_run = True
-            elif key == 'cantera_tpl':
-                if not os.path.isfile(self.init_loc+self.json_file[key]):
-                    self.klog.info(
-                        f"Cantera tpl file {self.json_file[key]} not found.")
-                    self.cancel_run = True
-                    continue
-                # If file exist try to open it
-                try:
-                    with open(
-                        self.init_loc+self.json_file[key],
-                        mode='r') as f:
-                        cantera_tpl: str = f.read()
-                except Exception as e:
-                    self.klog.info(
-                        f"Cannot read {self.json_file[key]}.")
-                    self.klog.info(str(e))
-                    self.cancel_run = True
-                    continue
-                # if file can be read, check if it contains the keywords
-                if not cantera_tpl:
-                    raise ValueError("Cantera tpl file is empty.")
-                try:
-                    _: str = cantera_tpl.format(
-                        init_loc='test',
-                        input_file='test',
-                        scratchdir='test',
-                        el_num=0,
-                        db='test',
-                        tbl_map_by_pes='test',
-                        rates_by_pes='test',
-                        time='test',
-                        all_tsteps='test',
-                        gen_name='test',
-                        to_watch='test'
-                        )
-                except KeyError as e:
-                    msg: str = f"Keyword {e} not in the Cantera tpl.\n"
-                    msg += "It should contain the following keywords:\n"
-                    msg += "init_loc, input_file, scratchdir, el_num, db,"
-                    msg += " tbl_map, rates, time, all_tsteps,"
-                    msg += " gen_name, to_watch"
-                    self.klog.info(msg)
-                    self.cancel_run = True
-                    continue
-                self.json_file[key] = cantera_tpl
-            elif not isinstance(self.json_file[key], type(value)):
-                if isinstance(value, float) and \
-                   isinstance(self.json_file[key], int):
-                    continue
+                continue
+            if not isinstance(self.json_file[key], type(value)):
                 self.klog.info(
-                    f"{key} has incorrect type. Type should be {type(value)}")
+                    f"{key} has incorrect type. Type should be {type(value)}"
+                )
                 self.cancel_run = True
+
+        if 'experiments' in self.json_file:
+            if len(self.json_file['experiments']) == 0:
+                self.klog.info("experiments should contain at least one item.")
+                self.cancel_run = True
+            for idx, exp in enumerate(self.json_file['experiments']):
+                if not isinstance(exp, dict):
+                    self.klog.info(f"Experiment {idx} should be a dictionary.")
+                    self.cancel_run = True
+                    continue
+                required = [
+                    'temp',
+                    'pres',
+                    'cantera_tpl',
+                    'scoring_func',
+                    'data_file',
+                    'error_file',
+                ]
+                for key in required:
+                    if key not in exp:
+                        self.klog.info(
+                            f"Experiment {idx} missing mandatory key '{key}'."
+                        )
+                        self.cancel_run = True
+                has_ratio = 'initial_ratio' in exp
+                has_conc = 'initial_concentration' in exp
+                if has_ratio == has_conc:
+                    self.klog.info(
+                        f"Experiment {idx} should define exactly one of "
+                        "initial_ratio or initial_concentration."
+                    )
+                    self.cancel_run = True
+                if 'weight' in exp and not isinstance(
+                        exp['weight'],
+                        (float, int)):
+                    self.klog.info(
+                        f"Experiment {idx} weight should be numeric."
+                    )
+                    self.cancel_run = True
 
         if 'pres_unit' not in self.json_file:
             self.json_file['pres_unit'] = default_settings['pres_unit']
         self.klog.info(
             f"Pressure unit in input assumed in {self.json_file['pres_unit']}")
 
-    def create_initial_conditions(self,
-                                  postprocess: bool = False) -> None:
-        """Create the initial conditions for every experiments
-        """
-        if postprocess:
-            self.n_exp: int = \
-                len(self.json_file['pp_pres'])*len(self.json_file['pp_temp'])
-        else:
-            self.n_exp: int = \
-                len(self.json_file['rc_pres'])*len(self.json_file['rc_temp'])
+    def _validate_tpl(self,
+                      tpl_path: str) -> str:
+        if not os.path.isfile(tpl_path):
+            raise FileNotFoundError(f"Cantera tpl file {tpl_path} not found.")
+        with open(tpl_path, mode='r') as f:
+            cantera_tpl: str = f.read()
+        if not cantera_tpl:
+            raise ValueError(f"Cantera tpl file {tpl_path} is empty.")
+        try:
+            _ = cantera_tpl.format(
+                init_loc='test',
+                input_file='test',
+                scratchdir='test',
+                el_num=0,
+                db='test',
+                tbl_map_by_pes='test',
+                rates_by_pes='test',
+                time='test',
+                all_tsteps='test',
+                gen_name='test',
+                to_watch='test'
+            )
+        except KeyError as e:
+            msg: str = f"Keyword {e} not in the Cantera tpl.\n"
+            msg += "It should contain the following keywords:\n"
+            msg += "init_loc, input_file, scratchdir, el_num, db,"
+            msg += " tbl_map, rates, time, all_tsteps,"
+            msg += " gen_name, to_watch"
+            raise ValueError(msg)
+        return cantera_tpl
+
+    def _initial_ratio_from_exp(self,
+                                exp_cfg: dict[str, Any]) -> dict[str, float]:
         base_key = 'n2'
-
-        if 'initial_X' in self.json_file:
-            if not isinstance(self.json_file['initial_X'], list)\
-               or len(self.json_file['initial_X']) != self.n_exp:
-                msg: str = 'initial_X: Should be a list of dictionaries.\n'
-                msg += 'Each dict should have for key '
-                msg += 'the specie name in the ct mechanism.\n'
-                msg += 'The value should be the ratio of that specie.'
-                self.klog.info(msg)
-                self.cancel_run = True
-            else:
-                for exp in self.json_file['initial_X']:
-                    base_given = False
-                    sum = 0.0
-                    for k, v in exp.items():
-                        if not isinstance(k, str):
-                            self.klog.info(
-                                'initial_X keys should be ct species names.')
-                            self.cancel_run = True
-                            break
-                        # Set the base
-                        if isinstance(v, str) and v.casefold() == 'base':
-                            if not base_given:
-                                self.klog.info(f"Base specie: {k}.")
-                                base_key: str = k
-                                base_given = True
-                            else:
-                                self.klog.info(
-                                    "Two base are given for an experiment.")
-                                self.cancel_run = True
-                        # Check total composition
-                        elif isinstance(v, float):
-                            sum += v
-                    if sum > 1:
-                        self.klog.info("An initial composition exceeds 100%.")
-                        self.cancel_run = True
-                        break
-                    else:
-                        if not base_given:
-                            self.klog.info("No base given, using n2.")
-                    exp[base_key] = 1 - sum
-
-        # Calculate total number of mol in 1 cm3
-        # n = PV/RT
-        if 'initial_C' in self.json_file:
-            self.json_file['initial_X'] = []
-            sum = 0.0
-            base_key = 'n2'
+        if 'initial_ratio' in exp_cfg:
+            ratio: dict[str, float] = {}
+            sum_ratio: float = 0.0
             base_given = False
-            for key, value in self.json_file['initial_C'].items():
-                if not isinstance(key, str):
-                    self.klog.info(
-                        'initial_C keys should be ct species names.')
-                    self.cancel_run = True
-                    break
+            for key, value in exp_cfg['initial_ratio'].items():
                 if isinstance(value, str) and value.casefold() == 'base':
-                    if not base_given:
-                        base_key: str = key
-                        base_given = True
-                    else:
-                        self.klog.info(
-                            f"{key} cannot be the base. It's {base_key}.")
-                        self.cancel_run = True
-                elif isinstance(value, float):
-                    n = Q_(value, 'molecule')
-                    exp = 0
-                    # Setup molar fraction for each experiment for 1cm^3
-                    for a in self.json_file['rc_pres']:
-                        try:
-                            p = Q_(a, self.json_file['pres_unit']).to('torr')
-                        except ValueError as e:
-                            self.cancel_run = True
-                            self.klog.info('pres_unit was not recognised.')
-                            self.klog.info(str(e))
-                        for b in self.json_file['rc_temp']:
-                            t = Q_(b, 'K')
-                            if len(self.json_file['initial_X']) <= exp:
-                                self.json_file['initial_X'].append({})
-                            ntot = (p*Vol/(R*t)).to('molecule')
-                            self.json_file['initial_X'][exp][key] = \
-                                (n/ntot).magnitude
-                            exp += 1
-                    sum += (n/ntot).magnitude
-                    if sum > 1:
-                        self.klog.info(
-                            "The sum of initial C exeeds the total pressure.")
-                        self.cancel_run = True
-                else:
-                    self.klog.info('Values of initial_C should be floats.')
-                    self.cancel_run = True
-                    break
-            for exp in self.json_file['initial_X']:
-                exp[base_key] = 1 - sum
+                    if base_given:
+                        raise ValueError('Two base species given.')
+                    base_key = key
+                    base_given = True
+                    continue
+                if not isinstance(value, (float, int)):
+                    raise ValueError('initial_ratio values should be numeric.')
+                ratio[key] = float(value)
+                sum_ratio += float(value)
+            if sum_ratio > 1.0:
+                raise ValueError('An initial composition exceeds 100%.')
+            ratio[base_key] = 1.0 - sum_ratio
+            return ratio
 
-        for idx, exp in enumerate(self.json_file['initial_X']):
-            self.klog.info(f"Initial composition for experiment {idx}:")
-            for k, v in exp.items():
-                msg = '\t'
-                msg += f'{k}: {v:-.2e}'
-                self.klog.info(msg)
+        ratio = {}
+        sum_ratio = 0.0
+        base_given = False
+        pres_unit = exp_cfg.get('pres_unit', self.json_file['pres_unit'])
+        p = Q_(exp_cfg['pres'], pres_unit).to('torr')
+        t = Q_(exp_cfg['temp'], 'K')
+        ntot = (p*Vol/(R*t)).to('molecule')
+        for key, value in exp_cfg['initial_concentration'].items():
+            if isinstance(value, str) and value.casefold() == 'base':
+                if base_given:
+                    raise ValueError('Two base species given.')
+                base_key = key
+                base_given = True
+                continue
+            if not isinstance(value, (float, int)):
+                raise ValueError(
+                    'initial_concentration values should be numeric.'
+                )
+            n = Q_(float(value), 'molecule')
+            ratio[key] = float((n/ntot).magnitude)
+            sum_ratio += ratio[key]
+        if sum_ratio > 1.0:
+            raise ValueError(
+                'The sum of initial_concentration exceeds total pressure.'
+            )
+        ratio[base_key] = 1.0 - sum_ratio
+        return ratio
 
     def check_unknown_kwords(self) -> None:
         """Check if some keys in the input are not
@@ -246,8 +204,7 @@ class KMOInput:
         """
         for key in self.json_file:
             if key not in default_settings and\
-               key not in mandatory_keys and\
-               key != 'initial_X':
+               key not in mandatory_keys:
                 self.klog.info(
                     f"{key} is an unknown keyword and will be ignored.")
 
@@ -311,188 +268,103 @@ class KMOInput:
                     self.klog.warning(f"{key} has unknown type.")
                     self.cancel_run = True
 
-    def set_profiles(self) -> None:
-        """Read the csv files for every experiments,
-        together with the error files
-        """
-        clean_profiles = []
-        clean_errors = []
-        species = []
-        exp_headers = []
-        if len(self.json_file['exp_profiles']) != self.n_exp:
-            self.klog.info(
-                "There should be one csv profile file for each TP condition.")
-            self.cancel_run = True
-        else:
-            for p in range(len(self.json_file['rc_pres'])):
-                for t in range(len(self.json_file['rc_temp'])):
-                    idx: int = p*len(self.json_file['rc_temp']) + t
-                    file: str = \
-                        self.init_loc+self.json_file['exp_profiles'][idx]
-                    file_err: str = \
-                        self.init_loc+self.json_file['exp_errors'][idx]
-                    clean_profiles.append({})
-                    clean_errors.append({})
-                    exp_headers.append([])
-                    if not os.path.isfile(file) or\
-                       not os.path.isfile(file_err):
-                        self.klog.info(f'Could not find file {file}.')
-                        self.cancel_run = True
-                    else:
-                        # Read experimental profiles
-                        with open(file, mode='r', encoding='utf-8-sig') as f:
-                            csv_DictReader = csv.DictReader(f)
-                            ln = 0
-                            for line in csv_DictReader:
-                                if 'time' not in line:
-                                    msg = "A column should be the 'time'"
-                                    msg += f" in file {file}."
-                                    self.klog.info(msg)
-                                    self.cancel_run = True
-                                else:
-                                    for header in line:
-                                        # Skip excluded species
-                                        if header in self.json_file['exclude_sp']:
-                                            continue
-                                        # Consider other species
-                                        if header not in species and header != 'time':
-                                            species.append(header)
-                                        if header not in exp_headers[-1] and header != 'time':
-                                            exp_headers[-1].append(header)
-                                        if ln == 0:
-                                            clean_profiles[-1][header] = []
-                                        try:
-                                            clean_profiles[-1][header].append(
-                                                float(line[header]))
-                                        except TypeError as e:
-                                            self.klog.debug(str(e))
-                                            msg = (
-                                                'Incorrect value detected' +
-                                                f' line{ln} in file {file}' +
-                                                f' column {header}'
-                                            )
-                                            self.klog.info(msg)
-                                            self.cancel_run = True
-                                ln += 1
-                        # Read experimental profiles errors
-                    with open(file_err, mode='r', encoding='utf-8-sig') as f:
-                        csv_DictReader = csv.DictReader(f)
-                        ln = 0
-                        for line in csv_DictReader:
-                            if 'time' not in line:
-                                msg = "A column should be the 'time'" + \
-                                    f"column in file {file_err}."
-                                self.klog.info(msg)
-                                self.cancel_run = True
-                            else:
-                                for header in line:
-                                    # Skip excluded species
-                                    if header in self.json_file['exclude_sp']:
-                                        continue
-                                    # Consider other species
-                                    if ln == 0:
-                                        clean_errors[-1][header] = []
-                                    try:
-                                        clean_errors[-1][header].append(
-                                            float(line[header]))
-                                    except TypeError as e:
-                                        self.klog.debug(str(e))
-                                        msg = (
-                                            'Incorrect value detected' +
-                                            f' line{ln} in file {file}' +
-                                            f' column {header}'
-                                        )
-                                        self.klog.info(msg)
-                                        self.cancel_run = True
-                            ln += 1
-                    # check the created profiles:
-                    nstep: int = len(clean_profiles[-1]['time'])
-                    if nstep != len(clean_errors[-1]['time']):
-                        msg = 'Error file has a different number of values' +\
-                            ' than corresponding profile.'
-                        self.klog.info(msg)
-                        self.cancel_run = True
-                    for header, profile in clean_profiles[-1].items():
-                        if len(profile) != nstep:
-                            msg = f'Not enough values in profile {header}' +\
-                                f' in file {file}'
-                            self.klog.info(msg)
-        # Transform the profiles in numpy structured arrays
-        for idx, prof in enumerate(clean_profiles):
-            clean_profiles[idx] = np.empty(
-                shape=(len(prof), len(prof['time'])),
-                dtype=float64)
-            for cidx, col in enumerate(prof):
-                clean_profiles[idx][cidx] = prof[col]
-        self.json_file['exp_profiles'] = clean_profiles
-        # Do the same with error files
-        for idx, prof in enumerate(clean_errors):
-            clean_errors[idx] = np.empty(
-                shape=(len(prof), len(prof['time'])),
-                dtype=float64)
-            for cidx, col in enumerate(prof):
-                clean_errors[idx][cidx] = prof[col]
-        self.json_file['exp_errors'] = clean_errors
+    def create_experiments(self) -> None:
+        """Create TimeProfile experiment objects from input JSON."""
+        experiments: list[TimeProfile] = []
+        profiles: list[NDArray[float64]] = []
+        errors: list[NDArray[float64]] = []
+        weights: list[NDArray[float64]] = []
+        initial_x: list[dict[str, float]] = []
+        raw_w: list[float] = []
+        rc_temp: set[float] = set()
+        rc_pres: set[float] = set()
 
-        # Modify score_sp to contain appropriate species
-        if self.json_file['score_sp'] == []:
-            self.json_file['score_sp'] = species
-        else:
-            for sp in self.json_file['score_sp']:
-                if sp not in species:
-                    msg = f'Specie {sp} cannot be scored' +\
-                        ' because it is not in the' +\
-                        ' experimental profiles.'
-                    self.klog.info(msg)
-                    self.cancel_run = True
+        for idx, exp_cfg in enumerate(self.json_file['experiments']):
+            try:
+                data_path = self.init_loc + exp_cfg['data_file']
+                err_path = self.init_loc + exp_cfg['error_file']
+                tpl_path = self.init_loc + exp_cfg['cantera_tpl']
+                tpl_content = self._validate_tpl(tpl_path)
+                ratio = self._initial_ratio_from_exp(exp_cfg)
 
-        # Setting the weight for each experiment
-        # default
-        if len(self.json_file['w_exp']) == 0:
-            self.json_file['w_exp'] = [
-                1.0/self.n_exp for i in range(self.n_exp)]
-        # Error in input
-        elif len(self.json_file['w_exp']) != self.n_exp:
-            self.klog.info(
-                f"The number of weights in w_exp should be {self.n_exp}")
-            self.cancel_run = True
-        else:
-            sum = 0.0
-            for val in self.json_file['w_exp']:
-                sum += val
-            # Normalize the weights
-            self.json_file['w_exp'] = np.array(
-                [val*self.n_exp/sum for val in self.json_file['w_exp']])
+                data_headers, data = TimeProfile.read_data(file=data_path)
+                err_headers, err = TimeProfile.read_data(file=err_path)
+                TimeProfile.validate_pair(
+                    data_headers=data_headers,
+                    data=data,
+                    error_headers=err_headers,
+                    error=err,
+                    data_file=data_path,
+                    error_file=err_path,
+                )
+                species = data_headers[1:]
+                if exp_cfg['scoring_func'].casefold() != 'weighteddif':
+                    raise ValueError(
+                        f"Unknown scoring function: {exp_cfg['scoring_func']}"
+                    )
+                sf = WeightedDif(settings=self.json_file)
 
-        # Setup species weights for each experiment
-        self.json_file['weights'] = []
-        for key in self.json_file['w_species']:
-            if key not in species:
-                msg = f'Specie {key} cannot have a weight' +\
-                    ' because it is not in the' +\
-                    ' experimental profiles.'
-                self.klog.info(msg)
+                exp = TimeProfile(
+                    temp=float(exp_cfg['temp']),
+                    pres=float(exp_cfg['pres']),
+                    composition=ratio,
+                    data_file=data_path,
+                    error_file=err_path,
+                    scoring=sf,
+                    sim_file=tpl_content,
+                    settings=self.json_file,
+                    klog=self.klog,
+                    species=species,
+                    weight=float(exp_cfg.get('weight', 1.0)),
+                    data=data,
+                    error=err,
+                )
+
+                sp_weights = np.ones(shape=len(species), dtype=float64)
+                w_species = exp_cfg.get(
+                    'w_species',
+                    self.json_file['w_species']
+                )
+                for sidx, sp in enumerate(species):
+                    if sp in w_species:
+                        sp_weights[sidx] = float(w_species[sp])
+                exp.sp_weights = sp_weights
+
+                experiments.append(exp)
+                profiles.append(data)
+                errors.append(err)
+                weights.append(sp_weights)
+                raw_w.append(exp.weight)
+                initial_x.append(ratio)
+                rc_temp.add(exp.T)
+                rc_pres.add(exp.P)
+            except Exception as e:
+                self.klog.info(f"Experiment {idx} is invalid: {e}")
                 self.cancel_run = True
-        for idx, exp_h in enumerate(exp_headers):
-            sp_w_exp: NDArray[float64] = np.ones(
-                shape=len(exp_h),
-                dtype=float64)
-            i = 0
-            for sp_i in exp_h:
-                # If a specie should have a score
-                if sp_i in self.json_file['score_sp'] and \
-                   sp_i not in self.json_file['exclude_sp']:
-                    # If the specie has a specific weight
-                    if sp_i in self.json_file['w_species']:
-                        sp_w_exp[i] = self.json_file['w_species'][sp_i]
-                    else:
-                        pass
 
-                else:
-                    sp_w_exp[i] = 0.0
-                i += 1
-            sp_w_exp *= self.json_file['w_exp'][idx]
-            self.json_file['weights'].append(sp_w_exp)
+        if len(experiments) == 0:
+            self.klog.info('No valid experiment found in input.')
+            self.cancel_run = True
+            return
+
+        w_sum = float(np.sum(raw_w))
+        norm_exp_w = [w * len(raw_w) / w_sum for w in raw_w]
+        for idx, exp in enumerate(experiments):
+            exp.weight = norm_exp_w[idx]
+            weights[idx] = weights[idx] * exp.weight
+
+        self.n_exp = len(experiments)
+        self.json_file['experiments'] = experiments
+        self.json_file['exp_profiles'] = profiles
+        self.json_file['exp_errors'] = errors
+        self.json_file['weights'] = weights
+        self.json_file['initial_X'] = initial_x
+        self.json_file['rc_temp'] = sorted(list(rc_temp))
+        self.json_file['rc_pres'] = sorted(list(rc_pres))
+        self.json_file['w_exp'] = norm_exp_w
+        self.json_file['to_watch'] = [exp.species for exp in experiments]
+
+        self.json_file['scoring_func'] = 'weighteddif'
 
     def other_checks_to_modif(self) -> None:
         """Early implementation checks that should be improved,
@@ -523,10 +395,9 @@ class KMOInput:
             dict: settings
         """
         self.basic_checks()
-        self.create_initial_conditions()
         self.check_unknown_kwords()
         self.set_default_values()
-        self.set_profiles()
+        self.create_experiments()
         self.other_checks_to_modif()
         if self.cancel_run:
             sys.exit(-1)
