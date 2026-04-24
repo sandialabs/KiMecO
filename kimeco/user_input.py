@@ -129,7 +129,7 @@ class KMOInput:
                 init_loc='test',
                 input_file='test',
                 scratchdir='test',
-                el_num=0,
+                model_id=0,
                 db='test',
                 tbl_map_by_pes='test',
                 rates_by_pes='test',
@@ -141,7 +141,7 @@ class KMOInput:
         except KeyError as e:
             msg: str = f"Keyword {e} not in the Cantera tpl.\n"
             msg += "It should contain the following keywords:\n"
-            msg += "init_loc, input_file, scratchdir, el_num, db,"
+            msg += "init_loc, input_file, scratchdir, model_id, db,"
             msg += " tbl_map, rates, time, all_tsteps,"
             msg += " gen_name, to_watch"
             raise ValueError(msg)
@@ -304,6 +304,14 @@ class KMOInput:
                     )
                 sf = WeightedDif(settings=self.json_file)
 
+                new_tpl = True
+                tpl_idx = 0
+                for idxprev_exp, prev_exp in enumerate(experiments):
+                    if prev_exp.sim_file == tpl_content:
+                        new_tpl = False
+                        tpl_idx = idxprev_exp
+                        break
+
                 exp = TimeProfile(
                     temp=float(exp_cfg['temp']),
                     pres=float(exp_cfg['pres']),
@@ -318,6 +326,8 @@ class KMOInput:
                     weight=float(exp_cfg.get('weight', 1.0)),
                     data=data,
                     error=err,
+                    new_tpl=new_tpl,
+                    tpl_idx=tpl_idx
                 )
 
                 sp_weights = np.ones(shape=len(species), dtype=float64)

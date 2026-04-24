@@ -7,8 +7,7 @@ import os
 import copy
 import time
 import cantera.with_units as ctu
-import pyarrow as pa
-import pyarrow.feather as feather
+import json
 from kimeco.kinmec import KiMec
 from kimeco._kimeco import KiMecO
 ureg = ctu.cantera_units_registry
@@ -19,37 +18,45 @@ Vol = Q_(1, 'cm^3')
 
 kmo = KiMecO(input_file='{input_file}',
              init_loc='{init_loc}',
-             name='E{el_num:04d}_sims',
+             name='E{model_id:04d}_sims',
              sim_job=True)
 kmo.initialize_workdir()
-
 scratchdir = '{scratchdir}'
 os.chdir(scratchdir)
 
-exp_id = int(sys.argv[1])
-el_num = {el_num}
-sim_id = len(kmo.settings['experiments']) * el_num + exp_id
-experiment = kmo.settings['experiments'][exp_id]
 
+exp_id = int(sys.argv[1])
+model_id = {model_id}
+experiment = kmo.settings['experiments'][exp_id]
 kmo.mech.prepare_mech()
 tbl_map_by_pes = {tbl_map_by_pes}
 rates_by_pes = {rates_by_pes}
-
-p = experiment.P
-t = experiment.T
-
 gas = kmo.mech.get_updated_mech(
     rates_by_pes=rates_by_pes,
     tbl_map_by_pes=tbl_map_by_pes)
+
+p_unit = kmo.settings['pres_unit']
+p = experiment.P
+t = experiment.T
 
 gas.X = experiment.X
 pres = Q_(f"{{p}} {{kmo.settings['pres_unit']}}")
 temp = Q_(f"{{t}} K")
 
 # Total number of molecules
-ntot = (pres*Vol/(R*temp)).to('molecule')
 gas.TP = temp.magnitude, np.round(pres.to("Pa").magnitude, 5)
 # number of mol of gas in 1 cm^3
+
+
+import cantera as ct
+
+ureg = ctu.cantera_units_registry
+Q_ = ureg.Quantity
+
+R = Q_(gas_constant, 'J mol^-1 K^-1')
+Vol = Q_(1, 'cm^3')
+
+ntot = (pres*Vol/(R*temp)).to('molecule')
 
 reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
 net = ct.ReactorNet([reactor])
@@ -101,12 +108,17 @@ for idx, t in enumerate(times):
             # density (molecules/cm^3)
             # traces[i.name][idx] = gas.X[snum] * ntot.magnitude
             # Remove if response on
-tbl = pa.table(
-    {{col: traces[col] for col in traces}}
-)
-outfile = f"{gen_name}E{el_num:04d}S{{exp_id:02d}}.feather"
-feather.write_feather(tbl, outfile)
-while not os.path.exists(outfile):
+traces_serializable = \
+    {{key: value.tolist() if isinstance(value, np.ndarray)
+    else value for key, value in traces.items()}}
+# Serializing json
+json_object = json.dumps(traces_serializable, indent=4)
+# Writing to sample.json
+with open(
+    f"{gen_name}E{model_id:04d}S{{exp_id:02d}}.json", "w"
+    ) as outfile:
+    outfile.write(json_object)
+while not os.path.exists(f"{gen_name}E{model_id:04d}S{{exp_id:02d}}.json"):
     time.sleep(3)
 
 

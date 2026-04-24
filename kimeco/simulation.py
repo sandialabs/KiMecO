@@ -77,11 +77,15 @@ class SIM:
             + self.name
         )
         for exp_id, exp in enumerate(self.settings['experiments']):
+            # Only write the script if the template is new,
+            # otherwise it has already been written for a previous experiment.
+            if not exp.new_tpl:
+                continue
             ct_job: str = exp.sim_file.format(
                 init_loc=self.settings['init_loc'],
                 input_file=self.settings['input_file'],
                 scratchdir=scratchdir,
-                el_num=self.id,
+                model_id=self.id,
                 db=self.db,
                 tbl_map_by_pes=tbl_map_by_pes,
                 rates_by_pes=rates_by_pes,
@@ -90,7 +94,7 @@ class SIM:
                 gen_name=self.gen_name,
                 to_watch=to_watch
             )
-            script_name = f'{self.name}_{exp_id:02d}.py'
+            script_name = f'{self.name}_exp{exp.tpl_idx:02d}.py'
             with open(f'{self.loc}/{script_name}', 'w') as f:
                 f.write(ct_job)
         self.q_sys.add_to_q(name=self.name,
@@ -165,7 +169,7 @@ class SIM_PP(SIM):
             init_loc=self.settings['init_loc'],
             input_file=self.settings['input_file'],
             scratchdir=scratchdir,
-            el_num=self.id,
+            model_id=self.id,
             db=self.db,
             tbl_map_by_pes=tbl_map_by_pes,
             rates_by_pes=rates_by_pes,

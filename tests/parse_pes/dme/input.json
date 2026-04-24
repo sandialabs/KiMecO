@@ -1,93 +1,87 @@
 {
+"force_new_molecules": true,
 "cantera_tpl": "ct.tpl",
 "ga_type": "exp",
 "mess_inputs": ["roo/mess_0000.inp", "ooqooh/mess_0000.inp"],
 "project_name": "run",
 "rc_software": "mess",
 "pp_temp": [550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200],
-"pp_pres": [1],
-"rc_temp": [550, 600, 650],
-"rc_pres": [0.01, 0.1, 1, 10],
+"pp_pres": [2],
+"pp_ensembles": ["G0000", "G0001", "GT-1"],
+"rc_temp": [550, 575, 600, 625, 650],
+"rc_pres": [2],
 "pres_unit": "bar",
 "ct_yaml": "ThInK_Mech.yaml",
-"initial_X":[{
-    "C2H5": 3.34e-5,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.64e-5,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.95e-5,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.34e-6,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.64e-6,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.95e-6,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.34e-7,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.64e-7,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.95e-7,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.34e-8,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.64e-8,
-    "O2": 0.1,
-    "HE": "base"
-},{
-    "C2H5": 3.95e-8,
-    "O2": 0.1,
-    "HE": "base"
-}],
-"exp_profiles":[
-    "p1t1.csv",
-    "p1t2.csv",
-    "p1t3.csv",
-    "p2t1.csv",
-    "p2t2.csv",
-    "p2t3.csv",
-    "p3t1.csv",
-    "p3t2.csv",
-    "p3t3.csv",
-    "p4t1.csv",
-    "p4t2.csv",
-    "p4t3.csv"],
-"exp_errors":[
-    "ep1t1.csv",
-    "ep1t2.csv",
-    "ep1t3.csv",
-    "ep2t1.csv",
-    "ep2t2.csv",
-    "ep2t3.csv",
-    "ep3t1.csv",
-    "ep3t2.csv",
-    "ep3t3.csv",
-    "ep4t1.csv",
-    "ep4t2.csv",
-    "ep4t3.csv"],
+"experiments": [
+    {
+        "temp": 550,
+        "pres": 2,
+        "cantera_tpl": "ct.tpl",
+        "scoring_func": "weighteddif",
+        "data_file": "P1T1.csv",
+        "error_file": "eP1T1_2.csv",
+        "initial_concentration": {
+            "CH3OCH2": 1.67e-7,
+            "O2": 0.038,
+            "HE": "base"
+        }
+    },
+    {
+        "temp": 575,
+        "pres": 2,
+        "cantera_tpl": "ct.tpl",
+        "scoring_func": "weighteddif",
+        "data_file": "P1T2.csv",
+        "error_file": "eP1T2_2.csv",
+        "initial_concentration": {
+            "CH3OCH2": 1.75e-7,
+            "O2": 0.03968,
+            "HE": "base"
+        }
+    },
+    {
+        "temp": 600,
+        "pres": 2,
+        "cantera_tpl": "ct.tpl",
+        "scoring_func": "weighteddif",
+        "data_file": "P1T3.csv",
+        "error_file": "eP1T3_2.csv",
+        "initial_concentration": {
+            "CH3OCH2": 1.82e-7,
+            "O2": 0.0414,
+            "HE": "base"
+        }
+    },
+    {
+        "temp": 625,
+        "pres": 2,
+        "cantera_tpl": "ct.tpl",
+        "scoring_func": "weighteddif",
+        "data_file": "P1T4.csv",
+        "error_file": "eP1T4_2.csv",
+        "initial_concentration": {
+            "CH3OCH2": 1.90e-7,
+            "O2": 0.04316,
+            "HE": "base"
+        }
+    },
+    {
+        "temp": 650,
+        "pres": 2,
+        "cantera_tpl": "ct.tpl",
+        "scoring_func": "weighteddif",
+        "data_file": "P1T5.csv",
+        "error_file": "eP1T5_2.csv",
+        "initial_concentration": {
+            "CH3OCH2": 1.97e-7,
+            "O2": 0.04488,
+            "HE": "base"
+        }
+    }
+],
 "n_elem": 500,
-"max_gen": 400,
-"max_std": 4,
+"max_gen": 200,
+"max_std": 3,
 "std_we": 0.5,
 "std_be": 1,
 "std_bfc": 1.05,
@@ -106,6 +100,7 @@
 "sensi_d": 0.1,
 "cumul_sensi": 0.95,
 "SA_freq": 20,
-"max_score": 4}
+"max_score": 4
+}
 
 

@@ -21,7 +21,6 @@
     "python.analysis.indexing": true,
     "python.analysis.indexing.followSymlinkedFolders": false,
     "python.analysis.enableParallelIndexing": true,
-    "python.analysis.userFileIndexingLimit": 1000,
     "python.analysis.include": [
         "kimeco/**",
         "tests/**"

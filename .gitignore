@@ -1,4 +1,4 @@
-.vscode/launch.json
+.vscode/**
 Untitled.ipynb
 .ipynb_checkpoints/*
 *.ipynb

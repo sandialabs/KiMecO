@@ -2,8 +2,13 @@ from _thread import LockType
 import sys
 from typing import Any, Optional
 import os
+import io
 import glob
 import threading
+import json
+import numpy as np
+import pyarrow.feather as feather
+import pyarrow as pa
 from numpy.typing import NDArray
 from kimeco.enums import ElementStatus
 from kimeco.Perturbators.perturbator import Perturbator
@@ -344,18 +349,18 @@ class CoreRun:
             el.status = ElementStatus.RESET
             return
 
-        # If successful, read feather files
+        # If successful, read JSON files
         if el.sim.status == JobStatus.PICKED_UP or\
            el.sim.status == JobStatus.NOT_IN_QUEUE:
             if any([prof is None for prof in el.sim.profiles]):
-                # Read feather files for each simulation profile
+                # Read JSON files for each simulation profile
                 for sim in range(nsim):
                     if el.sim.profiles[sim] is not None:
                         continue  # Already loaded
 
                     flnm: str = (
                         f'{self.get_element_subfolder(el)}'
-                        f'/{table_name}{el.name}S{sim:02d}.feather'
+                        f'/{table_name}{el.name}S{sim:02d}.json'
                     )
 
                     key = (el.id, sim)
@@ -372,7 +377,7 @@ class CoreRun:
                             else:
                                 self.requeue_timer[key] = time.time()
                                 msg = (f'Missing file: {el.name}S{sim:02d}'
-                                       '.feather - resubmitting')
+                                       '.json - resubmitting')
                                 self.klog.info(msg)
                                 el.sim.q_up()
                                 return
@@ -380,14 +385,23 @@ class CoreRun:
                         # File exists
                         if os.path.getsize(flnm) == 0:
                             time.sleep(2)
+                        
+                        # Load data from JSON file
+                        with open(flnm, 'r') as f:
+                            data: dict[str, list[float]] = json.load(f)
 
-                        with open(flnm, 'rb') as f:
-                            blob = f.read()
-                        decoded, _ = self.sim_db.decode_result_blob(
-                            result=blob,
-                            model_id=el.id,
+                        # Convert lists to numpy arrays and store in sim.profiles
+                        el.sim.profiles[sim] = np.array(
+                            [vals for vals in data.values()]
                         )
-                        el.sim.profiles[sim] = decoded.T[1:]
+
+                        # Prepare data for database upsert
+                        tbl = pa.table(
+                            {col: data[col] for col in data}
+                        )
+                        buf = io.BytesIO()
+                        feather.write_feather(tbl, buf)
+                        blob = buf.getvalue()
                         self.sim_db.prepare_batch_upsert(
                             table=table_name,
                             model_id=el.id,
@@ -395,9 +409,10 @@ class CoreRun:
                             result=blob,
                         )
 
-                        # Delete feather file after successful read
+                        # Delete JSON file after successful read
                         os.remove(flnm)
-                        if all([prof is not None for prof in el.sim.profiles]):
+                        if all([prof is not None
+                                for prof in el.sim.profiles]):
                             el.status = ElementStatus.SCORING
 
     def finalize_element(self,

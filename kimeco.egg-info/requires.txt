@@ -1,0 +1,14 @@
+ase>=3.22.1
+cantera>=3.0.0
+numpy>=2
+pandas>=2.2
+sqlalchemy
+sqlalchemy-utils
+dash
+scipy>=1.10
+plotly>=5
+pint
+pyarrow>=14
+
+[test]
+pytest>=9.0.2

@@ -22,6 +22,8 @@ class TimeProfile(Experiment):
                  species: list[str],
                  data: NDArray,
                  error: NDArray,
+                 new_tpl: bool,
+                tpl_idx: int = 0,
                  weight: float = 1.0) -> None:
         super().__init__(
             temp,
@@ -32,6 +34,8 @@ class TimeProfile(Experiment):
             settings,
             klog,
             species,
+            new_tpl,
+            tpl_idx,
             weight)
         self.data_file: str = data_file
         self.error_file: str = error_file

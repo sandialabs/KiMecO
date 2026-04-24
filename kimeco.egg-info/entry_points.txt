@@ -1,4 +1,5 @@
 [console_scripts]
 kmo = kimeco.main:main
+kmo_start = kimeco.gui.kmo_start:main
 kmopp = kimeco.postprocessing.postprocess:main
 kmoui = kimeco.gui.kimecoapp:main

@@ -25,6 +25,8 @@ class Experiment(ABC):
                  settings: dict[str, Any],
                  klog: KMOLogger,
                  species: list[str],
+                 new_tpl: bool,
+                 tpl_idx: int = 0,
                  weight: float = 1.0) -> None:
         """Experiments need conditions,
         composition and scoring method.
@@ -55,6 +57,8 @@ class Experiment(ABC):
         self.data: NDArray | None = None
         self.error: NDArray | None = None
         self.sf: Scoring = scoring
+        self.new_tpl: bool = new_tpl
+        self.tpl_idx: int = tpl_idx
 
     @staticmethod
     @abstractmethod

@@ -139,9 +139,12 @@ def test_collect_sim_profiles_skips_wrong_timestep_count(
     assert element.sim.profiles == [None]
 
 
-def test_recover_simulation_data_reads_feather_and_queues_db_upsert(
+def test_recover_simulation_data_reads_json_and_converts_to_feather(
     tmp_path: Path,
 ) -> None:
+    """Test that recovery reads JSON files and transforms them to feather."""
+    import json
+
     sim_db = SIM_DB(name='TEST_CORE_SIM_FILE', path=str(tmp_path), threads=1)
     experiments = [
         SimpleNamespace(data=np.array([[0.0, 1.0]], dtype=float)),
@@ -159,15 +162,20 @@ def test_recover_simulation_data_reads_feather_and_queues_db_upsert(
         status=ElementStatus.SIM,
     )
 
+    # Create JSON file (simulation output format)
     folder = tmp_path / 'base' / 'G0000' / '00'
     folder.mkdir(parents=True)
-    file_path = folder / 'G0000E0007S00.feather'
-    expected_blob = _blob_from_dict({'time': [0.0, 1.0], 'A': [1.0, 0.25]})
-    file_path.write_bytes(expected_blob)
+    json_file = folder / 'G0000E0007S00.json'
+    data = {'time': [0.0, 1.0], 'A': [1.0, 0.25]}
+    json_file.write_text(json.dumps(data))
 
     core.recover_simulation_data(element)
 
-    assert not file_path.exists()
+    # Verify JSON file is deleted after recovery
+    assert not json_file.exists()
     assert element.status == ElementStatus.SCORING
     assert element.sim.profiles[0].tolist() == [[0.0, 1.0], [1.0, 0.25]]
+
+    # Verify feather blob is stored in database
+    expected_blob = _blob_from_dict({'time': [0.0, 1.0], 'A': [1.0, 0.25]})
     assert sim_db._upsert['G0000'][(7, 0)] == expected_blob

@@ -190,6 +190,7 @@ class QueueingSystem:
             scratchdir: str = self.settings['scratch_base'] +\
                               self.settings["project_name"] + '/' +\
                               job['name'][0]
+
             sub_cmd: str = self.sub_arr_tpl.format(
                 n_exp=self.n_exp-1,
                 exclude_nodes=self.settings['exclude_nodes'],
@@ -224,8 +225,12 @@ class QueueingSystem:
         elif job['type'] == 'hlp':
             job_cmd = self.pytpl.format(filename=str(job['name'][0]))
         elif job['type'] == 'sim':
+            filenames = [
+                f"{str(job['name'][0])}_exp{exp.tpl_idx:02d}.py"
+                for exp in self.settings['experiments']]
             job_cmd = self.pyarrtpl.format(
                 filename=str(job['name'][0]),
+                filenames=' '.join(filenames),
                 scratchdir=scratchdir,
                 destination=job['loc'][0])
         else:
@@ -531,8 +536,11 @@ class QueueingSystem:
             return (len(p_inps) == n_pes and
                     all(os.stat(p_inp).st_size > 0 for p_inp in p_inps))
         elif job['type'] == 'sim':
+            n_unique_scripts: int = len(set(
+                exp.tpl_idx for exp in self.settings['experiments']
+            ))
             scripts: list[str] = sorted(glob.glob(base + '_*.py'))
-            return (len(scripts) == self.n_exp and
+            return (len(scripts) == n_unique_scripts and
                     all(os.stat(script).st_size > 0 for script in scripts))
         else:
             raise NotImplementedError('Unknown file type')

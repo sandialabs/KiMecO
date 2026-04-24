@@ -46,5 +46,6 @@ test = ["pytest>=9.0.2"]
 
 [project.scripts]
 kmo = "kimeco.main:main"
+kmo_start = "kimeco.gui.kmo_start:main"
 kmoui = "kimeco.gui.kimecoapp:main"
 kmopp = "kimeco.postprocessing.postprocess:main"
