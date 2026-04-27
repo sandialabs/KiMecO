@@ -1,4 +1,5 @@
 ctjobtpl = """import sys
+import json
 import cantera as ct
 from kimeco.cantera.customrate import MessData, MessRate
 import numpy as np
@@ -7,7 +8,8 @@ import os
 import copy
 import time
 import cantera.with_units as ctu
-import json
+import pyarrow as pa
+import pyarrow.feather as feather
 from kimeco.kinmec import KiMec
 from kimeco._kimeco import KiMecO
 ureg = ctu.cantera_units_registry

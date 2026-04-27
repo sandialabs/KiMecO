@@ -27,7 +27,7 @@ def _settings(tmp_path: Path) -> dict:
 
 def _queueing_system(tmp_path: Path) -> QueueingSystem:
     klog = KMOLogger(filename=str(tmp_path / "q_sys_test.log"))
-    return QueueingSystem(settings=_settings(tmp_path), nel=4, nhlp=0, klog=klog)
+    return QueueingSystem(settings=_settings(tmp_path), nel=4, klog=klog)
 
 
 def test_create_sub_file_kin_uses_slurm_array_and_stores_n_pes(tmp_path: Path) -> None:

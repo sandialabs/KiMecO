@@ -96,7 +96,6 @@
 "std_sfc": 2,
 "std_mrc": 1.5,
 "score_conv": 0.01,
-"max_helpers": 10,
 "sensi_d": 0.1,
 "cumul_sensi": 0.95,
 "SA_freq": 20,

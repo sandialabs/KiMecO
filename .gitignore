@@ -1,9 +1,6 @@
-.vscode/**
-Untitled.ipynb
-.ipynb_checkpoints/*
-*.ipynb
-*.pyc
-kimeco/*/*.pyc
+.ipynb_checkpoints/**
+**.ipynb
+**.pyc
 .DS_Store
-dev_tests/
-.github/
+dev_tests/**
+.github/**

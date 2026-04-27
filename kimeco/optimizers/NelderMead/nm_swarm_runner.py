@@ -64,7 +64,6 @@ class NMSRunner(CoreRun):
         self.qs = QueueingSystem(
             settings=self.settings,
             nel=settings['threads'],
-            nhlp=0,  # Helpers removed - no longer used
             klog=self.klog)
 
         # Pool-level lock to guard mutations and snapshots

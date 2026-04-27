@@ -1,0 +1,48 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "kmo_start",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/csoulie/.local/bin/kmo_start",
+            "console": "integratedTerminal",
+            "cwd": "/home/csoulie/projects/dme/kmo",
+            "python": "/home/csoulie/.conda/envs/game/bin/python"
+        },
+        {
+            "name": "kmo dme",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/csoulie/.conda/envs/game/bin/kmo",
+            "console": "integratedTerminal",
+            "args": ["input.json"],
+            "cwd": "/home/csoulie/projects/dme/kmo",
+            "python": "/home/csoulie/.conda/envs/game/bin/python"
+        },
+        {
+            "name": "kmo dev test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/csoulie/.conda/envs/game/bin/kmo",
+            "console": "integratedTerminal",
+            "args": ["input.json"],
+            "cwd": "/home/csoulie/kmo_dev",
+            "python": "/home/csoulie/.conda/envs/game/bin/python"
+        },
+        {
+            "name": "postprocess l3 nms small",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/csoulie/.conda/envs/game/bin/kmopp",
+            "console": "integratedTerminal",
+            "args": ["input.json"],
+            "cwd": "/home/csoulie/projects/ethylperoxy/me/paper/sandia_mech/5p_noise/l3_to_anl/nms_small",
+            "python": "/home/csoulie/.conda/envs/game/bin/python"
+        }
+    ]
+}

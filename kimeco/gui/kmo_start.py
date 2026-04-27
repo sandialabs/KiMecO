@@ -7,7 +7,7 @@ valid JSON input files for KiMecO with a progressive validation workflow.
 
 
 import dash
-from dash import html, dcc, Input, Output, callback
+from dash import html, dcc, Input, Output, State, callback
 
 from kimeco.gui.input_sections.mechanism_section import (
     create_mechanism_section
@@ -19,14 +19,14 @@ from kimeco.gui.input_sections.experiments_section import (
 from kimeco.gui.input_sections.optimizer_section import (
     create_optimizer_section
 )
-from kimeco.gui.input_sections.rate_coeff_section import (
-    create_rate_coeff_section
+from kimeco.gui.input_sections.perturbation_section import (
+    create_perturbation_section
 )
 from kimeco.gui.input_sections.postprocessing_section import (
     create_postprocessing_section
 )
-from kimeco.gui.input_sections.perturbation_section import (
-    create_perturbation_section
+from kimeco.gui.input_sections.resources_section import (
+    create_resources_section
 )
 from kimeco.gui.input_sections.advanced_section import (
     create_advanced_section
@@ -83,6 +83,8 @@ class KMOStartApp:
                         dcc.Tab(
                             label="2. SOP",
                             value="sop-tab",
+                            id="sop-tab",
+                            disabled=True,
                             children=[
                                 html.Div(
                                     create_sop_section(),
@@ -115,13 +117,13 @@ class KMOStartApp:
                             ]
                         ),
                         dcc.Tab(
-                            label="5. Rate Coeff",
-                            value="rate-coeff-tab",
+                            label="5. Perturbation",
+                            value="perturbation-tab",
                             disabled=True,
-                            id="rate-coeff-tab",
+                            id="perturbation-tab",
                             children=[
                                 html.Div(
-                                    create_rate_coeff_section(),
+                                    create_perturbation_section(),
                                     style={"marginTop": "20px"}
                                 )
                             ]
@@ -139,13 +141,13 @@ class KMOStartApp:
                             ]
                         ),
                         dcc.Tab(
-                            label="7. Perturbation",
-                            value="perturbation-tab",
+                            label="7. Resources",
+                            value="resources-tab",
                             disabled=True,
-                            id="perturbation-tab",
+                            id="resources-tab",
                             children=[
                                 html.Div(
-                                    create_perturbation_section(),
+                                    create_resources_section(),
                                     style={"marginTop": "20px"}
                                 )
                             ]
@@ -188,6 +190,14 @@ class KMOStartApp:
                     id="experiment-count-store",
                     data=0
                 ),
+                dcc.Store(
+                    id="optimizer-valid-store",
+                    data=False
+                ),
+                dcc.Store(
+                    id="optimizer-config-store",
+                    data={}
+                ),
 
                 html.Div(style={"marginTop": "40px", "marginBottom": "20px"}),
             ]
@@ -195,27 +205,47 @@ class KMOStartApp:
 
     def setup_callbacks(self) -> None:
         """Set up all Dash callbacks for validation and state management."""
-        # Callback to enable/disable Experiments tab based on validation
+        # Keep tab lock state and active tab in sync with validation state.
         @callback(
+            Output("sop-tab", "disabled"),
             Output("experiments-tab", "disabled"),
-            [
-                Input("mechanism-valid-store", "data"),
-                Input("sop-valid-store", "data")
-            ],
-            prevent_initial_call=True
+            Output("main-tabs", "value"),
+            Input("mechanism-valid-store", "data"),
+            Input("sop-valid-store", "data"),
+            State("main-tabs", "value"),
         )
-        def toggle_experiments_tab(mechanism_valid: bool,
-                                   sop_valid: bool) -> bool:
-            """Enable experiments tab only when mechanism and SOP valid."""
-            return not (mechanism_valid and sop_valid)
+        def sync_validation_tabs(
+            mechanism_valid: bool,
+            sop_valid: bool,
+            current_tab: str,
+        ) -> tuple[bool, bool, str]:
+            """Unlock tabs and advance after successful checks."""
+            sop_disabled = not mechanism_valid
+            experiments_disabled = not (mechanism_valid and sop_valid)
+
+            next_tab = current_tab
+            if sop_disabled and current_tab == "sop-tab":
+                next_tab = "mechanism-tab"
+            elif experiments_disabled and current_tab == "experiments-tab":
+                next_tab = "sop-tab" if not sop_disabled else "mechanism-tab"
+
+            if mechanism_valid and current_tab == "mechanism-tab":
+                next_tab = "sop-tab"
+            if mechanism_valid and sop_valid and current_tab in {
+                "mechanism-tab",
+                "sop-tab",
+            }:
+                next_tab = "experiments-tab"
+
+            return sop_disabled, experiments_disabled, next_tab
 
         # Callback to enable/disable settings tabs based on experiments
         @callback(
             [
                 Output("optimizer-tab", "disabled"),
-                Output("rate-coeff-tab", "disabled"),
-                Output("postprocessing-tab", "disabled"),
                 Output("perturbation-tab", "disabled"),
+                Output("postprocessing-tab", "disabled"),
+                Output("resources-tab", "disabled"),
                 Output("advanced-tab", "disabled"),
             ],
             Input("experiment-count-store", "data"),

@@ -41,6 +41,26 @@ class KMOInput:
         self.json_file: dict[str, Any] = self.load_input()
         self.n_exp: int
 
+    def _global_pres_unit(self) -> str:
+        """Return the canonical pressure unit used internally."""
+        return str(
+            self.json_file.get('pres_unit', default_settings['pres_unit'])
+        )
+
+    def _normalized_exp_pressure(self,
+                                 exp_cfg: dict[str, Any]) -> float:
+        """Normalize experiment pressure to the global pressure unit."""
+        src_unit = exp_cfg.get('pres_unit', self._global_pres_unit())
+        try:
+            p_value = float(exp_cfg['pres'])
+        except (TypeError, ValueError):
+            raise ValueError('Experiment pressure should be numeric.')
+        try:
+            p_q = Q_(p_value, str(src_unit))
+            return float(p_q.to(self._global_pres_unit()).magnitude)
+        except Exception:
+            raise ValueError(f"Unknown pressure unit: {src_unit}")
+
     def load_input(self) -> dict:
         # File exist?
         input_path: str = self.init_loc + self.input_file
@@ -110,6 +130,13 @@ class KMOInput:
                         f"Experiment {idx} weight should be numeric."
                     )
                     self.cancel_run = True
+                if 'pres_unit' in exp and not isinstance(
+                        exp['pres_unit'],
+                        str):
+                    self.klog.info(
+                        f"Experiment {idx} pres_unit should be a string."
+                    )
+                    self.cancel_run = True
 
         if 'pres_unit' not in self.json_file:
             self.json_file['pres_unit'] = default_settings['pres_unit']
@@ -124,26 +151,16 @@ class KMOInput:
             cantera_tpl: str = f.read()
         if not cantera_tpl:
             raise ValueError(f"Cantera tpl file {tpl_path} is empty.")
-        try:
-            _ = cantera_tpl.format(
-                init_loc='test',
-                input_file='test',
-                scratchdir='test',
-                model_id=0,
-                db='test',
-                tbl_map_by_pes='test',
-                rates_by_pes='test',
-                time='test',
-                all_tsteps='test',
-                gen_name='test',
-                to_watch='test'
-            )
-        except KeyError as e:
-            msg: str = f"Keyword {e} not in the Cantera tpl.\n"
-            msg += "It should contain the following keywords:\n"
-            msg += "init_loc, input_file, scratchdir, model_id, db,"
-            msg += " tbl_map, rates, time, all_tsteps,"
-            msg += " gen_name, to_watch"
+        import string as _string
+        parsed_keys = frozenset(
+            field_name
+            for _, field_name, _, _ in _string.Formatter().parse(cantera_tpl)
+            if field_name is not None
+        )
+        missing = TimeProfile.REQUIRED_TPL_KEYS - parsed_keys
+        if missing:
+            msg: str = "Missing keywords in Cantera tpl: "
+            msg += ", ".join(sorted(missing))
             raise ValueError(msg)
         return cantera_tpl
 
@@ -173,8 +190,11 @@ class KMOInput:
         ratio = {}
         sum_ratio = 0.0
         base_given = False
-        pres_unit = exp_cfg.get('pres_unit', self.json_file['pres_unit'])
-        p = Q_(exp_cfg['pres'], pres_unit).to('torr')
+        p = Q_(
+            self._normalized_exp_pressure(exp_cfg),
+            self._global_pres_unit()
+        )
+        p = p.to('torr')
         t = Q_(exp_cfg['temp'], 'K')
         ntot = (p*Vol/(R*t)).to('molecule')
         for key, value in exp_cfg['initial_concentration'].items():
@@ -312,9 +332,11 @@ class KMOInput:
                         tpl_idx = idxprev_exp
                         break
 
+                normalized_pres = self._normalized_exp_pressure(exp_cfg)
+
                 exp = TimeProfile(
                     temp=float(exp_cfg['temp']),
-                    pres=float(exp_cfg['pres']),
+                    pres=normalized_pres,
                     composition=ratio,
                     data_file=data_path,
                     error_file=err_path,

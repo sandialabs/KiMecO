@@ -40,7 +40,6 @@ def _qs(tmp_path: Path, experiments: list) -> QueueingSystem:
     return QueueingSystem(
         settings=_settings(tmp_path, experiments),
         nel=4,
-        nhlp=0,
         klog=klog,
     )
 

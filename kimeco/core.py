@@ -63,7 +63,6 @@ class CoreRun:
         self.qs = QueueingSystem(
             settings=self.settings,
             nel=len(self.elements),
-            nhlp=0,  # Helpers removed - no longer used
             klog=self.klog)
         self.clean_files()
         # Contain the time when a sim_id was first queried

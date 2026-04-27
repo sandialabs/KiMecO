@@ -14,38 +14,11 @@ from dash import (
 
 from kimeco.default_settings import default_settings
 from kimeco.kinmec import KiMec
+from kimeco.gui.input_sections.file_browser import FileBrowserDropdown
 
 
 _KINMEC_CACHE: dict[str, KiMec] = {}
-_BROWSER_ROOT = os.getcwd()
-
-
-def _build_browser_options(cwd: str) -> list[dict[str, str]]:
-    """Build dropdown options for the directory browser."""
-    current_dir = os.path.abspath(cwd or _BROWSER_ROOT)
-    try:
-        entries = os.listdir(current_dir)
-        dirs = sorted([
-            n for n in entries
-            if os.path.isdir(os.path.join(current_dir, n))
-        ])
-        files = sorted([
-            n for n in entries
-            if os.path.isfile(os.path.join(current_dir, n))
-        ])
-    except Exception:
-        dirs, files = [], []
-
-    options: list[dict[str, str]] = [
-        {"label": "[DIR] ..", "value": "__PARENT__"}
-    ]
-    for name in dirs:
-        full_path = os.path.join(current_dir, name)
-        options.append({"label": f"[DIR] {name}", "value": full_path})
-    for name in files:
-        full_path = os.path.join(current_dir, name)
-        options.append({"label": f"[FILE] {name}", "value": full_path})
-    return options
+_BROWSER = FileBrowserDropdown(root_dir=os.getcwd())
 
 
 def get_loaded_kinmec(ct_yaml_path: str) -> Optional[KiMec]:
@@ -57,8 +30,6 @@ def get_loaded_kinmec(ct_yaml_path: str) -> Optional[KiMec]:
 
 def create_mechanism_section() -> html.Div:
     """Create the mechanism tab section for ct_yaml file selection."""
-    initial_options = _build_browser_options(_BROWSER_ROOT)
-    initial_dir = os.path.abspath(_BROWSER_ROOT)
     return html.Div([
             html.H5("Mechanism File (ct_yaml)", className="fw-bold"),
             html.Small(
@@ -84,29 +55,13 @@ def create_mechanism_section() -> html.Div:
                     "Starts from the directory where kmo_start was launched",
                     className="text-muted"
                 ),
-                html.Div(
-                    id="mechanism-browser-path",
-                    className="mt-2",
-                    children=html.Code(
-                        f"Current directory: {initial_dir}"
-                    ),
+                _BROWSER.render_controls(
+                    dropdown_id="mechanism-browser-dropdown",
+                    refresh_id="mechanism-browser-refresh",
+                    path_id="mechanism-browser-path",
+                    cwd_store_id="mechanism-browser-cwd",
+                    selected_store_id=None,
                 ),
-                html.Div([
-                    html.Button(
-                        "Refresh",
-                        id="mechanism-browser-refresh",
-                        className="btn btn-outline-secondary btn-sm"
-                    ),
-                ], className="mt-2"),
-                dcc.Dropdown(
-                    id="mechanism-browser-dropdown",
-                    options=initial_options,
-                    placeholder="Select '..', a directory, or a file",
-                    clearable=False,
-                    value=None,
-                    style={"marginTop": "8px", "fontFamily": "monospace"},
-                ),
-                dcc.Store(id="mechanism-browser-cwd", data=initial_dir),
             ], className="mt-2 p-2 border rounded"),
             html.Div(
                 id="mechanism-error-message",
@@ -240,29 +195,25 @@ def validate_mechanism(
 )
 def update_browser_state(selected_value, _refresh, cwd):
     """Own dropdown navigation, refresh, and file selection state."""
-    current_dir = os.path.abspath(cwd or _BROWSER_ROOT)
+    current_dir, selected_file = _BROWSER.resolve_selection(
+        selected_value,
+        cwd,
+    )
+    options = _BROWSER.build_options(current_dir)
+    path_label = _BROWSER.path_label(current_dir)
+    if selected_file is not None:
+        return (
+            no_update,
+            selected_file,
+            options,
+            path_label,
+            None,
+        )
 
-    if selected_value == "__PARENT__":
-        current_dir = os.path.abspath(os.path.dirname(current_dir))
-    elif selected_value:
-        target = os.path.abspath(selected_value)
-        if os.path.isdir(target):
-            current_dir = target
-        elif os.path.isfile(target):
-            path_label = html.Code(f"Current directory: {current_dir}")
-            return (
-                no_update,
-                target,
-                _build_browser_options(current_dir),
-                path_label,
-                None,
-            )
-
-    path_label = html.Code(f"Current directory: {current_dir}")
     return (
         current_dir,
         no_update,
-        _build_browser_options(current_dir),
+        options,
         path_label,
         None,
     )

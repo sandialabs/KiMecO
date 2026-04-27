@@ -92,8 +92,6 @@ default_settings: dict[str, Any] = {
     "cpu_sim": 1,
     # Memory (Mb) used per simulation job
     "mem_sim": 1000,
-    # Memory (Mb) used per simulation job
-    "mem_hlp": 500,
     # Maximum number of memory (Mb) used per generation
     "max_mem": 1000000,
     # Default start for NMS
@@ -203,9 +201,11 @@ default_settings: dict[str, Any] = {
     # User given list of parameters to perturb. All if empty.
     "active_p": [],
     # Frequency of the sensitivity analysis
-    "SA_freq": 1000,
+    "SA_freq": 20,
     # From which generation to start the sensitivity analysis
     "SA_start": 1,
+    # From which generation to end the sensitivity analysis
+    "SA_end": 80,
     # Key: generation number.
     # Value: list of parameters added at that generation
     "SA_restart": {},

@@ -1,6 +1,5 @@
 from enum import Enum
 from genericpath import isfile
-from kimeco.templates.pyjob import pytpl
 from kimeco.templates.pyjobarray import pyarrtpl
 from kimeco.templates.kin_arr_tpl import kin_arr_tpl
 from kimeco.templates.slurm import slurmtpl
@@ -30,7 +29,6 @@ class QueueingSystem:
     def __init__(self,
                  settings: dict[str, Any],
                  nel: int,
-                 nhlp: int,
                  klog: KMOLogger,
                  q_type: str = 'slurm',
                  q_name: str = 'day-long-cpu',
@@ -83,7 +81,6 @@ class QueueingSystem:
                     break
             self.subtpl = self.subtpl.replace(line, '')
 
-        self.pytpl: str = pytpl
         self.pyarrtpl: str = pyarrtpl
         self.q_name: str = q_name
         self.messtpl = kin_arr_tpl
@@ -101,9 +98,8 @@ class QueueingSystem:
 
         self.kin_q: NDArray[Any] = np.empty(shape=(nel), dtype=self.jobdata)
         self.sim_q: NDArray[Any] = np.empty(shape=(nel), dtype=self.jobdata)
-        self.hlp_q: NDArray[Any] = np.empty(shape=(nhlp), dtype=self.jobdata)
-        self.queues: list[NDArray] = [self.kin_q, self.sim_q, self.hlp_q]
-        self.queues_order: list[str] = ['kin', 'sim', 'hlp']
+        self.queues: list[NDArray] = [self.kin_q, self.sim_q]
+        self.queues_order: list[str] = ['kin', 'sim']
 
         self.submitted: int = 0
         self.running: int = 0
@@ -115,7 +111,6 @@ class QueueingSystem:
         job_sum += \
             len(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]) *\
             self.n_exp
-        job_sum += len(self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING])
         return min(
             self._max_jobs - job_sum,
             self.settings['max_user_jobs'] - self.current_user_jobs)
@@ -127,8 +122,6 @@ class QueueingSystem:
         cpu_sum += np.sum(
             self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['cpu']) *\
             self.n_exp
-        cpu_sum += np.sum(
-            self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['cpu'])
         return self._max_cpu - cpu_sum
 
     @property
@@ -138,15 +131,12 @@ class QueueingSystem:
         mem_sum += np.sum(
             self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['mem']) *\
             self.n_exp
-        mem_sum += np.sum(
-            self.hlp_q[self.hlp_q['status'] == JobStatus.RUNNING]['mem'])
         return self._max_mem - mem_sum
 
     @property
     def n_ready(self) -> int:
         n_ready: int = len(self.kin_q[self.kin_q['status'] == JobStatus.READY])
         n_ready += len(self.sim_q[self.sim_q['status'] == JobStatus.READY])
-        n_ready += len(self.hlp_q[self.hlp_q['status'] == JobStatus.READY])
         return n_ready
 
     def add_to_q(self,
@@ -179,8 +169,6 @@ class QueueingSystem:
             self.kin_q[idx] = job[0]
         elif jtype == 'sim':
             self.sim_q[idx] = job[0]
-        elif jtype == 'hlp':
-            self.hlp_q[idx] = job[0]
 
     def create_sub_file(self,
                         job: NDArray[Any],
@@ -211,19 +199,11 @@ class QueueingSystem:
                 scratchdir=job['loc'][0]
             )
         else:
-            sub_cmd: str = self.subtpl.format(
-                exclude_nodes=self.settings['exclude_nodes'],
-                nprocs=job['cpu'][0],
-                filename=str(job['name'][0]),
-                sub_queue=self.q_name,
-                mem_mb=job['mem'][0]
-            )
+            raise NotImplementedError('Unknown job type')
         job_cmd: str
 
         if job['type'] == 'kin':
             job_cmd = self.messtpl.format(filename=str(job['name'][0]))
-        elif job['type'] == 'hlp':
-            job_cmd = self.pytpl.format(filename=str(job['name'][0]))
         elif job['type'] == 'sim':
             filenames = [
                 f"{str(job['name'][0])}_exp{exp.tpl_idx:02d}.py"
@@ -252,8 +232,6 @@ class QueueingSystem:
             job = self.kin_q[id]
         elif jtype == 'sim':
             job = self.sim_q[id]
-        elif jtype == 'hlp':
-            job = self.hlp_q[id]
         else:
             raise NotImplementedError('Unknown job type')
 
@@ -266,8 +244,6 @@ class QueueingSystem:
             clear_err: bool = self._pickup_kin(job)
         elif jtype == 'sim':
             clear_err = self._pickup_sim(job)
-        elif jtype == 'hlp':
-            clear_err = self._pickup_hlp(job)
 
         if job['status'] in [
                 JobStatus.PICKED_UP.value,
@@ -329,19 +305,6 @@ class QueueingSystem:
             clear_err = False
             self.klog.warning(
                 f"Resetting job {job['name']} because an error occurred.")
-        else:
-            job['status'] = JobStatus.PICKED_UP.value
-        return clear_err
-
-    def _pickup_hlp(self,
-                    job) -> bool:
-        clear_err = True
-        lfile: str = f"{job['loc']}/logs/{job['name']}"
-        if os.path.exists(f"{lfile}.err") and\
-           os.stat(f"{lfile}.err").st_size > 0:
-            job['status'] = JobStatus.FAILED.value
-            clear_err = False
-            self.klog.info(f"Helper {job['name'][0]} failed.")
         else:
             job['status'] = JobStatus.PICKED_UP.value
         return clear_err
@@ -508,10 +471,6 @@ class QueueingSystem:
             return (JobStatus(self.sim_q[id]['status'])
                     if self.sim_q[id]['status']
                     else JobStatus.NOT_IN_QUEUE)
-        elif jtype == 'hlp':
-            return (JobStatus(self.hlp_q[id]['status'])
-                    if self.hlp_q[id]['status']
-                    else JobStatus.NOT_IN_QUEUE)
         else:
             raise NotImplementedError('Unknown type of job')
 
@@ -525,12 +484,8 @@ class QueueingSystem:
         Returns:
             bool: All necessary files are there.
         """
-        # Helpers only need JSON, and their existence is checked elsewhere.
         base: str = str(job['loc']) + '/' + str(job['name'])
-        if job['type'] == 'hlp':
-            return (isfile(base + '.py')
-                    and os.stat(base + '.py').st_size > 0)
-        elif job['type'] == 'kin':
+        if job['type'] == 'kin':
             n_pes: int = int(job['n_pes']) if int(job['n_pes']) > 0 else 1
             p_inps: list[str] = sorted(glob.glob(base + 'P*.inp'))
             return (len(p_inps) == n_pes and

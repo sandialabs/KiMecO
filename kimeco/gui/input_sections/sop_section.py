@@ -1,9 +1,9 @@
 """SOP section for mess_inputs file selection and validation."""
-from typing import Tuple
+from typing import Any, Tuple
+import io
 import os
 import logging
 from dash import (
-    ALL,
     dcc,
     html,
     Input,
@@ -12,74 +12,17 @@ from dash import (
     callback,
     callback_context,
 )
-import dash
+from dash.dependencies import ALL
 
 from kimeco.gui.input_sections.mechanism_section import get_loaded_kinmec
+from kimeco.gui.input_sections.file_browser import FileBrowserDropdown
 
 
-_SOP_BROWSER_ROOT = os.getcwd()
-
-
-def _build_sop_browser_buttons(cwd: str) -> list:
-    """Build clickable button entries for the SOP file browser."""
-    current_dir = os.path.abspath(cwd or _SOP_BROWSER_ROOT)
-    root_abs = os.path.abspath(_SOP_BROWSER_ROOT)
-    try:
-        entries = os.listdir(current_dir)
-        dirs = sorted([
-            n for n in entries
-            if os.path.isdir(os.path.join(current_dir, n))
-        ])
-        files = sorted([
-            n for n in entries
-            if os.path.isfile(os.path.join(current_dir, n))
-        ])
-    except Exception:
-        dirs, files = [], []
-
-    buttons: list = []
-    if current_dir != root_abs:
-        buttons.append(html.Button(
-            "[DIR] ..",
-            id={"type": "sop-nav-btn", "index": "__PARENT__"},
-            className=(
-                "btn btn-sm btn-outline-secondary"
-                " d-block w-100 text-start mb-1"
-            ),
-            style={"fontFamily": "monospace"},
-            n_clicks=0,
-        ))
-    for name in dirs:
-        full_path = os.path.join(current_dir, name)
-        buttons.append(html.Button(
-            f"[DIR] {name}",
-            id={"type": "sop-nav-btn", "index": full_path},
-            className=(
-                "btn btn-sm btn-outline-primary"
-                " d-block w-100 text-start mb-1"
-            ),
-            style={"fontFamily": "monospace"},
-            n_clicks=0,
-        ))
-    for name in files:
-        full_path = os.path.join(current_dir, name)
-        buttons.append(html.Button(
-            f"[FILE] {name}",
-            id={"type": "sop-file-btn", "index": full_path},
-            className=(
-                "btn btn-sm btn-outline-success"
-                " d-block w-100 text-start mb-1"
-            ),
-            style={"fontFamily": "monospace"},
-            n_clicks=0,
-        ))
-    return buttons
+_SOP_BROWSER = FileBrowserDropdown(root_dir=os.getcwd())
 
 
 def create_sop_section() -> html.Div:
     """Create the SOP tab section for mess_inputs selection and LOAD."""
-    initial_buttons = _build_sop_browser_buttons(_SOP_BROWSER_ROOT)
-    initial_dir = os.path.abspath(_SOP_BROWSER_ROOT)
     return html.Div([
             html.H5(
                 "MESS Input Files",
@@ -105,41 +48,22 @@ def create_sop_section() -> html.Div:
                     "Pick MESS files from launch directory tree",
                     className="text-muted"
                 ),
-                html.Div(
-                    id="sop-browser-path",
+                _SOP_BROWSER.render_controls(
+                    dropdown_id="sop-browser-dropdown",
+                    refresh_id="sop-browser-refresh",
+                    path_id="sop-browser-path",
+                    cwd_store_id="sop-browser-cwd",
+                    selected_store_id="sop-browser-selected-file",
+                ),
+                dcc.Checklist(
+                    id="sop-force-new-molecules",
+                    options=[{
+                        "label": "force_new_molecules",
+                        "value": "enabled",
+                    }],
+                    value=[],
                     className="mt-2",
-                    children=html.Code(
-                        f"Current directory: {initial_dir}"
-                    ),
-                ),
-                html.Div([
-                    html.Button(
-                        "Add Selected File",
-                        id="sop-browser-add-file",
-                        className="btn btn-primary btn-sm",
-                        style={"marginRight": "8px"}
-                    ),
-                    html.Button(
-                        "Refresh",
-                        id="sop-browser-refresh",
-                        className="btn btn-outline-secondary btn-sm"
-                    ),
-                ], className="mt-2"),
-                html.Div(
-                    id="sop-browser-entries-container",
-                    children=initial_buttons,
-                    style={
-                        "maxHeight": "200px",
-                        "overflowY": "auto",
-                        "border": "1px solid #dee2e6",
-                        "borderRadius": "4px",
-                        "padding": "4px",
-                        "marginTop": "8px",
-                    },
-                ),
-                dcc.Store(id="sop-browser-cwd", data=initial_dir),
-                dcc.Store(
-                    id="sop-browser-selected-file", data=None
+                    inputStyle={"marginRight": "6px"},
                 ),
                 html.Button(
                     "Load & Validate SOP",
@@ -160,89 +84,67 @@ def create_sop_section() -> html.Div:
                     "display": "none"
                 }
             ),
+            html.Div(
+                id="sop-validation-log",
+                style={
+                    "marginTop": "10px",
+                    "display": "none"
+                }
+            ),
             dcc.Store(id="sop-mess-files-store", data=[]),
         ], className="card p-3 mt-3")
 
 
 @callback(
-    Output("sop-browser-entries-container", "children"),
-    Output("sop-browser-path", "children"),
-    Input("sop-browser-cwd", "data"),
-    Input("sop-browser-refresh", "n_clicks"),
-)
-def render_sop_browser_entries(cwd, _refresh):
-    """Render dir/file buttons for current SOP browser directory."""
-    current_dir = os.path.abspath(cwd or _SOP_BROWSER_ROOT)
-    path_label = html.Code(f"Current directory: {current_dir}")
-    return _build_sop_browser_buttons(current_dir), path_label
-
-
-@callback(
     Output("sop-browser-cwd", "data"),
-    Input({"type": "sop-nav-btn", "index": ALL}, "n_clicks"),
-    State("sop-browser-cwd", "data"),
-    prevent_initial_call=True,
-)
-def navigate_on_sop_dir_click(n_clicks_list, cwd):
-    """Navigate into a subdirectory when its button is clicked."""
-    if not any(v for v in n_clicks_list if v):
-        return dash.no_update
-    triggered_id = callback_context.triggered_id
-    if not isinstance(triggered_id, dict):
-        return dash.no_update
-    current_dir = os.path.abspath(cwd or _SOP_BROWSER_ROOT)
-    root_abs = os.path.abspath(_SOP_BROWSER_ROOT)
-    path = triggered_id["index"]
-    if path == "__PARENT__":
-        target = os.path.abspath(os.path.dirname(current_dir))
-    else:
-        target = os.path.abspath(path)
-    if os.path.commonpath([root_abs, target]) == root_abs:
-        return target
-    return dash.no_update
-
-
-@callback(
     Output("sop-browser-selected-file", "data"),
-    Input({"type": "sop-file-btn", "index": ALL}, "n_clicks"),
-    prevent_initial_call=True,
+    Output("sop-browser-dropdown", "options"),
+    Output("sop-browser-path", "children"),
+    Output("sop-browser-dropdown", "value"),
+    Input("sop-browser-dropdown", "value"),
+    Input("sop-browser-refresh", "n_clicks"),
+    State("sop-browser-cwd", "data"),
 )
-def select_sop_file_on_click(n_clicks_list):
-    """Store the path of the file whose button was clicked."""
-    if not any(v for v in n_clicks_list if v):
-        return dash.no_update
-    triggered_id = callback_context.triggered_id
-    if not isinstance(triggered_id, dict):
-        return dash.no_update
-    return triggered_id["index"]
+def update_sop_browser_state(selected_value, _refresh, cwd):
+    """Own dropdown navigation, refresh, and file selection state."""
+    current_dir, selected_file = _SOP_BROWSER.resolve_selection(
+        selected_value,
+        cwd,
+    )
+    options = _SOP_BROWSER.build_options(current_dir)
+    path_label = _SOP_BROWSER.path_label(current_dir)
+    selected_payload = selected_file if selected_file is not None else None
+
+    return (
+        current_dir,
+        selected_payload,
+        options,
+        path_label,
+        None,
+    )
 
 
 @callback(
     Output("sop-mess-files-store", "data"),
-    Input("sop-browser-add-file", "n_clicks"),
-    Input({"type": "sop-remove-file", "index": dash.ALL}, "n_clicks"),
-    State("sop-browser-selected-file", "data"),
+    Input("sop-browser-selected-file", "data"),
+    Input({"type": "sop-remove-file", "index": ALL}, "n_clicks"),
     State("sop-mess-files-store", "data"),
     prevent_initial_call=True,
 )
 def update_mess_files_list(
-    _add_clicks,
-    _remove_clicks,
     selected_entry: str,
+    _remove_clicks,
     current_files: list,
 ) -> list:
-    """Update the mess_inputs list on add/remove actions."""
+    """Update the mess_inputs list on file selection/remove actions."""
     if current_files is None:
         current_files = []
 
     triggered_id = callback_context.triggered_id
-    if triggered_id == "sop-browser-add-file":
+    if triggered_id == "sop-browser-selected-file":
         if not selected_entry or not os.path.isfile(selected_entry):
             return current_files
-        try:
-            rel_path = os.path.relpath(selected_entry, os.getcwd())
-        except ValueError:
-            rel_path = selected_entry
+        rel_path = _SOP_BROWSER.to_workspace_relative(selected_entry)
         current_files.append(rel_path)
         return list(dict.fromkeys(current_files))
 
@@ -271,7 +173,7 @@ def render_mess_files_list(current_files: list) -> html.Div:
         file_items.append(
             html.Div([
                 html.Small(
-                    f"📄 {filename}",
+                    f"{filename}",
                     className="text-muted",
                     style={"display": "inline-block", "width": "90%"}
                 ),
@@ -299,21 +201,45 @@ def render_mess_files_list(current_files: list) -> html.Div:
     [
         Output("sop-validation-message", "children"),
         Output("sop-validation-message", "style"),
-        Output("sop-valid-store", "data")
+        Output("sop-valid-store", "data"),
+        Output("sop-validation-log", "children"),
+        Output("sop-validation-log", "style"),
     ],
     Input("sop-load-button", "n_clicks"),
     [
         State("mechanism-ct-yaml-input", "value"),
-        State("sop-mess-files-store", "data")
+        State("sop-mess-files-store", "data"),
+        State("sop-force-new-molecules", "value"),
     ],
     prevent_initial_call=True
 )
 def validate_sop(
     n_clicks,
     ct_yaml_path: str,
-    mess_files: list
-) -> Tuple[str, dict, bool]:
+    mess_files: list,
+    force_new_molecules: list,
+) -> Tuple[Any, dict, bool, Any, dict]:
     """Validate SOP by attempting to load mechanism and MESS files."""
+    log_style = {
+        "marginTop": "10px",
+        "padding": "10px",
+        "backgroundColor": "#f8f9fa",
+        "borderRadius": "5px",
+        "display": "block",
+    }
+
+    def _log_pre(content: str) -> html.Pre:
+        return html.Pre(
+            content,
+            style={
+                "margin": "0",
+                "whiteSpace": "pre-wrap",
+                "fontFamily": "monospace",
+                "maxHeight": "240px",
+                "overflowY": "auto",
+            }
+        )
+
     if n_clicks is None or not ct_yaml_path or not mess_files:
         error_msg = html.Div([
             html.Div(
@@ -330,18 +256,36 @@ def validate_sop(
                 "borderRadius": "5px",
                 "display": "block"
             },
-            False
+            False,
+            _log_pre("Validation did not run: missing ct_yaml or MESS files."),
+            log_style,
         )
 
     # Import here to keep initialization local and avoid heavy startup cost.
+    log_stream = io.StringIO()
+    gui_logger = logging.getLogger("kmo_start")
+    stream_handler = logging.StreamHandler(log_stream)
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(
+        logging.Formatter("%(levelname)s: %(message)s")
+    )
+    previous_level = gui_logger.level
+    gui_logger.addHandler(stream_handler)
+    if gui_logger.level > logging.INFO:
+        gui_logger.setLevel(logging.INFO)
+
     try:
         from kimeco.default_settings import default_settings
         from kimeco.readers.mess_input import MessInputReader
 
         # Try to build SOP (validates mechanism + MESS compatibility)
+        force_new_molecules_bool = bool(
+            force_new_molecules and "enabled" in force_new_molecules
+        )
         temp_input = {
             "mess_inputs": mess_files,
             "ct_yaml": ct_yaml_path,
+            "force_new_molecules": force_new_molecules_bool,
             "experiments": [
                 {
                     "temp": 1000,
@@ -367,12 +311,14 @@ def validate_sop(
 
         full_input["postprocess"] = False
         full_input["init_loc"] = os.getcwd()
-        gui_logger = logging.getLogger("kmo_start")
 
         # Try to read MESS inputs
         mr = MessInputReader(
             settings=full_input,
-            mechanism_species=mech.species,
+            mechanism_species=[
+                sp.name if hasattr(sp, "name") else str(sp)
+                for sp in mech.species
+            ],
             klog=gui_logger,
             postprocess=False
         )
@@ -396,6 +342,9 @@ def validate_sop(
                     style={"color": "#333", "marginTop": "5px"}
                 )
             ])
+            log_content = log_stream.getvalue().strip() or (
+                "SOP validation completed without parser log messages."
+            )
             return (
                 success_msg,
                 {
@@ -405,7 +354,9 @@ def validate_sop(
                     "borderRadius": "5px",
                     "display": "block"
                 },
-                True
+                True,
+                _log_pre(log_content),
+                log_style,
             )
         except Exception as e:
             error_msg = html.Div([
@@ -414,6 +365,9 @@ def validate_sop(
                     style={"color": "red", "fontWeight": "bold"}
                 )
             ])
+            log_content = log_stream.getvalue().strip() or (
+                "No parser log messages were emitted before failure."
+            )
             return (
                 error_msg,
                 {
@@ -423,7 +377,9 @@ def validate_sop(
                     "borderRadius": "5px",
                     "display": "block"
                 },
-                False
+                False,
+                _log_pre(log_content),
+                log_style,
             )
 
     except Exception as e:
@@ -433,6 +389,7 @@ def validate_sop(
                 style={"color": "red", "fontWeight": "bold"}
             )
         ])
+        log_content = log_stream.getvalue().strip() or str(e)
         return (
             error_msg,
             {
@@ -442,5 +399,10 @@ def validate_sop(
                 "borderRadius": "5px",
                 "display": "block"
             },
-            False
+            False,
+            _log_pre(log_content),
+            log_style,
         )
+    finally:
+        gui_logger.removeHandler(stream_handler)
+        gui_logger.setLevel(previous_level)

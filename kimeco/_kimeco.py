@@ -65,7 +65,10 @@ class KiMecO:
         """
         mr = MessInputReader(
             settings=self.settings,
-            mechanism_species=self.mech.species,
+            mechanism_species=[
+                sp.name if hasattr(sp, "name") else str(sp)
+                for sp in self.mech.species
+            ],
             klog=self.klog,
             postprocess=postprocess)
         (self.init_SOP, self.input_tpls) = mr.read()

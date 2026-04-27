@@ -18,7 +18,7 @@ class MessInputReader:
      an object with easily extractable data."""
     def __init__(self,
                  settings: dict,
-                 mechanism_species: list[str],
+                 mechanism_species: list[object],
                  klog: KMOLogger,
                  postprocess: bool = False) -> None:
         """Save the file content as a string for further manipulation
@@ -48,7 +48,10 @@ class MessInputReader:
             self.SOP.pres = settings["rc_pres"]
         self.SOP.pres_unit = settings["pres_unit"]
         self.klog: KMOLogger = klog
-        self.mechanism_species: set[str] = set(mechanism_species)
+        self.mechanism_species: set[str] = {
+            self._normalize_species_name(species)
+            for species in mechanism_species
+        }
         self.force_new_molecules: bool = settings['force_new_molecules']
         self.files2copy: list[str] = []
         self.pes_files: list[list[str]] = []
@@ -68,10 +71,28 @@ class MessInputReader:
         # to trigger the stop of the program after reading the input file.
         self._trigger_stop = False
 
+    @staticmethod
+    def _normalize_species_name(species: object) -> str:
+        """Return a canonical species name for robust membership checks."""
+        raw_name = species if isinstance(species, str) else getattr(
+            species,
+            "name",
+            str(species),
+        )
+        normalized = raw_name.strip()
+        # Drop one level of common wrappers used in some MESS inputs.
+        if len(normalized) >= 2 and (
+            (normalized[0] == "{" and normalized[-1] == "}")
+            or (normalized[0] == '"' and normalized[-1] == '"')
+            or (normalized[0] == "'" and normalized[-1] == "'")
+        ):
+            normalized = normalized[1:-1].strip()
+        return normalized
+
     def validate_species(self,
                          species: str,
                          species_type: str) -> None:
-        if species in self.mechanism_species:
+        if self._normalize_species_name(species) in self.mechanism_species:
             return
         msg: str = (
             f"{species_type} '{species}' from MESS input is not present "

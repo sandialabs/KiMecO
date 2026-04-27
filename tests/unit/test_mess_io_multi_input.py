@@ -137,6 +137,31 @@ def test_read_duplicate_barrier_name_across_inputs_triggers_stop(
     assert parse_reader._trigger_stop is True
 
 
+def test_read_well_species_matches_mechanism_species_objects(
+    tmp_path: Path,
+) -> None:
+    class DummySpecies:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    settings = _dme_settings()
+    settings["force_new_molecules"] = False
+    parse_reader = MessInputReader(
+        settings=settings,
+        mechanism_species=[DummySpecies("IN_MECH")],
+        klog=KMOLogger(filename=str(tmp_path / "species_object_match.log")),
+        postprocess=False,
+    )
+    parse_reader.pes_files = [["Well IN_MECH\n", "End\n"]]
+    parse_reader.filenames = ["mock.mess"]
+
+    sop, templates = parse_reader.read()
+
+    assert len(templates) == 1
+    assert "IN_MECH" in sop.items
+    assert parse_reader._trigger_stop is False
+
+
 def test_save_energy_parses_and_stores_value(reader: MessInputReader) -> None:
     file_lines = reader.pes_files[0]
     reader.tpls = [[]]

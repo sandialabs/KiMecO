@@ -383,7 +383,8 @@ class GeneticAlgorithm(ABC):
             if not self.converged:
                 prev_elements, new_elements = self.get_next_gen(gen=new_gen)
                 if new_gen.id % self.settings['SA_freq'] == 0 and\
-                   new_gen.id >= self.settings['SA_start']:
+                   new_gen.id >= self.settings['SA_start'] and\
+                   new_gen.id <= self.settings['SA_end']:
                     self.run_sensitivity(gen_id=new_gen.id)
         self.klog.info('Run Sucessful.')
         if Generation.total() > 1:

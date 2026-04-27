@@ -1,14 +1,22 @@
 import os
 import csv
+import string
 from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 from kimeco.experiments.experiment import Experiment
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.logger_config import KMOLogger
+from kimeco.templates.sim_arr_tpl import ctjobtpl
 
 
 class TimeProfile(Experiment):
+    REQUIRED_TPL_KEYS: frozenset[str] = frozenset(
+        field_name
+        for _, field_name, _, _ in string.Formatter().parse(ctjobtpl)
+        if field_name is not None
+    )
+
     def __init__(self,
                  temp: float,
                  pres: float,

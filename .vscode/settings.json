@@ -20,7 +20,7 @@
     ],
     "python.analysis.indexing": true,
     "python.analysis.indexing.followSymlinkedFolders": false,
-    "python.analysis.enableParallelIndexing": true,
+    "python.analysis.enableParallelIndexing": false,
     "python.analysis.include": [
         "kimeco/**",
         "tests/**"
