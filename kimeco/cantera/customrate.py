@@ -1,11 +1,13 @@
 import cantera as ct
 import cantera.with_units as ctu
+from typing import Any
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 ureg.formatter.default_format = '.5f'
+ct_any: Any = ct
 
 
-class MessData(ct.ExtensibleRateData):
+class MessData(ct_any.ExtensibleRateData):
     __slots__ = ("T", "P")
 
     def __init__(self) -> None:
@@ -26,8 +28,8 @@ class MessData(ct.ExtensibleRateData):
         return update
 
 
-@ct.extension(name="Mess-data", data=MessData)
-class MessRate(ct.ExtensibleRate):
+@ct_any.extension(name="Mess-data", data=MessData)
+class MessRate(ct_any.ExtensibleRate):
     __slots__ = ("rc",
                  "Pgrid",
                  "Tgrid",
@@ -76,11 +78,45 @@ class MessRate(ct.ExtensibleRate):
         #                      reaction {equation}")
         pass
 
+    @staticmethod
+    def _grid_index(grid: list[float], value: float) -> int:
+        """Return index of value in grid with a bounded nearest fallback.
+
+        Cantera may provide state values that differ slightly from the
+        user-provided grid because of unit conversion and floating-point
+        representation.
+        """
+        if not grid:
+            raise ValueError("Empty grid provided for custom rate lookup")
+
+        rounded_value = round(value, 5)
+        try:
+            return grid.index(rounded_value)
+        except ValueError:
+            nearest_idx = min(
+                range(len(grid)), key=lambda i: abs(grid[i] - rounded_value)
+            )
+            nearest_value = grid[nearest_idx]
+
+            # Only accept nearest point if it is within 0.01%.
+            if rounded_value == 0.0:
+                if abs(nearest_value) <= 1e-12:
+                    return nearest_idx
+            else:
+                rel_err = (
+                    abs(nearest_value - rounded_value) /
+                    abs(rounded_value)
+                )
+                if rel_err <= 1e-4:
+                    return nearest_idx
+
+            raise
+
     def eval(self, data) -> float:
         for idx, p in enumerate(self.Pgrid):
             self.Pgrid[idx] = round(p, 5)
         for idx, t in enumerate(self.Tgrid):
             self.Tgrid[idx] = round(t, 5)
-        Pindex: int = self.Pgrid.index(round(data.P, 5))
-        Tindex: int = self.Tgrid.index(round(data.T, 5))
+        Pindex: int = self._grid_index(self.Pgrid, data.P)
+        Tindex: int = self._grid_index(self.Tgrid, data.T)
         return self.rc[Pindex][Tindex]

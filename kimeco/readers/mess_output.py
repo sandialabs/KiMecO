@@ -40,8 +40,34 @@ class MessOutputReader:
                                          len(self.species)),
                                          fill_value=0.0)
 
-        self.lnum: int = 0  # Line index of table. Save map for first table
-        self.tbl_map: dict[str, int] = {}  # Map linking indexes to species name
+        self.lnum: int = 0
+        # Map linking indexes to species name in first parsed table.
+        self.tbl_map: dict[str, int] = {}
+
+    @staticmethod
+    def _safe_index(grid: list[float], value: float) -> int:
+        """Return index in grid with tolerant float matching."""
+        try:
+            return grid.index(value)
+        except ValueError:
+            rounded_val = round(value, 5)
+            rounded_grid = [round(v, 5) for v in grid]
+            if rounded_val in rounded_grid:
+                return rounded_grid.index(rounded_val)
+
+            nearest_idx = min(
+                range(len(grid)),
+                key=lambda i: abs(grid[i] - value)
+            )
+            nearest_val = grid[nearest_idx]
+            if rounded_val == 0.0:
+                if abs(nearest_val) <= 1e-12:
+                    return nearest_idx
+            else:
+                rel_err = abs(nearest_val - value) / abs(value)
+                if rel_err <= 1e-4:
+                    return nearest_idx
+            raise
 
     def read(self) -> None:
         recording = False
@@ -59,13 +85,13 @@ class MessOutputReader:
                 if 'temperature' in line.casefold() and\
                       'pressure' in line.casefold():
                     temp = float(line.split()[2])
-                    t_idx: int = self.temp.index(temp)
+                    t_idx: int = self._safe_index(self.temp, temp)
                     pres = float(line.split()[6])
-                    p_idx: int = self.pres.index(pres)
+                    p_idx: int = self._safe_index(self.pres, pres)
                     continue
                 elif line.lstrip().casefold().startswith('temperature'):
                     temp = float(line.split()[2])
-                    t_idx: int = self.temp.index(temp)
+                    t_idx: int = self._safe_index(self.temp, temp)
                     p_idx: int = len(self.pres)
                 elif "From\\To" in line:
                     self.save_table(lnum=lnum,
@@ -113,7 +139,7 @@ class MessOutputReader:
                         # Happens when no space between two columns
                         # no space when the right value is very small
                         # and start with a minus sign
-                        self.klog.warning(e)
+                        self.klog.warning(str(e))
                         table[From, To] = float(
                             re.sub(r'-\d+.\d+e-\d\d\d',
                                    ' 0.0 ',

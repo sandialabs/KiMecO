@@ -215,7 +215,7 @@ class KINSection(Section):
             except Exception:
                 tokens = []
             all_gen_rows[gen_i] = np.empty(len(tokens))
-            for idx, (elem_gen, elem_id) in enumerate(tokens):
+            for idx, (mdl_gen, mdl_id) in enumerate(tokens):
                 val = None
                 if (gen_i in rates
                         and frm_db is not None
@@ -224,7 +224,7 @@ class KINSection(Section):
                     key_cond = (float(p), float(t))
                     pair = conds.get(key_cond, {})
                     pair = pair.get((frm_db, to_db), {})
-                    val = pair.get((elem_gen, elem_id), None)
+                    val = pair.get((mdl_gen, mdl_id), None)
                 all_gen_rows[gen_i][idx] = (
                     val if val is not None else np.nan
                 )

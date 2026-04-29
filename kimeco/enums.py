@@ -1,7 +1,7 @@
 from enum import Enum
 
 
-class ElementStatus(Enum):
+class ModelStatus(Enum):
     SOP = 'sop'
     KIN = 'kin'
     SIM = 'sim'

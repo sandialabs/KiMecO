@@ -1,5 +1,5 @@
 """SOP section for mess_inputs file selection and validation."""
-from typing import Any, Tuple
+from typing import Any, Tuple, cast
 import io
 import os
 import logging
@@ -16,6 +16,10 @@ from dash.dependencies import ALL
 
 from kimeco.gui.input_sections.mechanism_section import get_loaded_kinmec
 from kimeco.gui.input_sections.file_browser import FileBrowserDropdown
+from kimeco.logger_config import KMOLogger
+
+from kimeco.default_settings import default_settings
+from kimeco.readers.mess_input import MessInputReader
 
 
 _SOP_BROWSER = FileBrowserDropdown(root_dir=os.getcwd())
@@ -204,6 +208,7 @@ def render_mess_files_list(current_files: list) -> html.Div:
         Output("sop-valid-store", "data"),
         Output("sop-validation-log", "children"),
         Output("sop-validation-log", "style"),
+        Output("sensitivity-sop-parameter-options-store", "data"),
     ],
     Input("sop-load-button", "n_clicks"),
     [
@@ -218,7 +223,7 @@ def validate_sop(
     ct_yaml_path: str,
     mess_files: list,
     force_new_molecules: list,
-) -> Tuple[Any, dict, bool, Any, dict]:
+) -> Tuple[Any, dict, bool, Any, dict, list]:
     """Validate SOP by attempting to load mechanism and MESS files."""
     log_style = {
         "marginTop": "10px",
@@ -257,8 +262,10 @@ def validate_sop(
                 "display": "block"
             },
             False,
-            _log_pre("Validation did not run: missing ct_yaml or MESS files."),
+            _log_pre("Validation did not run: missing ct_yaml or "
+                     "MESS files."),
             log_style,
+            [],
         )
 
     # Import here to keep initialization local and avoid heavy startup cost.
@@ -274,122 +281,100 @@ def validate_sop(
     if gui_logger.level > logging.INFO:
         gui_logger.setLevel(logging.INFO)
 
+
+    # Try to build SOP (validates mechanism + MESS compatibility)
+    force_new_molecules_bool = bool(
+        force_new_molecules and "enabled" in force_new_molecules
+    )
+    temp_input = {
+        "mess_inputs": mess_files,
+        "ct_yaml": ct_yaml_path,
+        "force_new_molecules": force_new_molecules_bool,
+        "experiments": [
+            {
+                "temp": 1000,
+                "pres": 1,
+                "cantera_tpl": "dummy.py",
+                "scoring_func": {"type": "dummy"},
+                "data_file": "dummy.csv",
+                "error_file": "dummy.csv",
+                "initial_ratio": {}
+            }
+        ]
+    }
+
+    # Merge with defaults
+    full_input = {**default_settings}
+    full_input.update(temp_input)
+
+    mech = get_loaded_kinmec(ct_yaml_path)
+    if mech is None:
+        raise ValueError(
+            "Mechanism is not loaded. Re-validate ct_yaml in tab 1 first."
+        )
+
+    full_input["postprocess"] = False
+    full_input["init_loc"] = os.getcwd()
+
+    # Try to read MESS inputs
+    mr = MessInputReader(
+        settings=full_input,
+        mechanism_species=[
+            sp.name
+            for sp in mech.species
+        ],
+        klog=cast(KMOLogger, gui_logger),
+        postprocess=False
+    )
+
     try:
-        from kimeco.default_settings import default_settings
-        from kimeco.readers.mess_input import MessInputReader
-
-        # Try to build SOP (validates mechanism + MESS compatibility)
-        force_new_molecules_bool = bool(
-            force_new_molecules and "enabled" in force_new_molecules
-        )
-        temp_input = {
-            "mess_inputs": mess_files,
-            "ct_yaml": ct_yaml_path,
-            "force_new_molecules": force_new_molecules_bool,
-            "experiments": [
-                {
-                    "temp": 1000,
-                    "pres": 1,
-                    "cantera_tpl": "dummy.py",
-                    "scoring_func": {"type": "dummy"},
-                    "data_file": "dummy.csv",
-                    "error_file": "dummy.csv",
-                    "initial_ratio": {}
-                }
-            ]
-        }
-
-        # Merge with defaults
-        full_input = {**default_settings}
-        full_input.update(temp_input)
-
-        mech = get_loaded_kinmec(ct_yaml_path)
-        if mech is None:
+        sop, _ = mr.read()
+        if mr._trigger_stop:
             raise ValueError(
-                "Mechanism is not loaded. Re-validate ct_yaml in tab 1 first."
+                "MESS/SOP parsing flagged consistency errors. "
+                "Check mechanism and MESS compatibility."
             )
-
-        full_input["postprocess"] = False
-        full_input["init_loc"] = os.getcwd()
-
-        # Try to read MESS inputs
-        mr = MessInputReader(
-            settings=full_input,
-            mechanism_species=[
-                sp.name if hasattr(sp, "name") else str(sp)
-                for sp in mech.species
-            ],
-            klog=gui_logger,
-            postprocess=False
+        # Success! Extract parameter names for sensitivity section
+        sop_param_names = list(sop.parameters_names.keys())
+        success_msg = html.Div([
+            html.Div(
+                "✓ SOP validated!",
+                style={"color": "green", "fontWeight": "bold"}
+            ),
+            html.Small(
+                f"{len(sop.wells)} wells, "
+                f"{len(sop.bimolecular)} bimolecular "
+                f"({len(sop_param_names)} parameters)",
+                style={"color": "#333", "marginTop": "5px"}
+            )
+        ])
+        log_content = log_stream.getvalue().strip() or (
+            "SOP validation completed without parser log messages."
         )
-
-        try:
-            sop, _ = mr.read()
-            if mr._trigger_stop:
-                raise ValueError(
-                    "MESS/SOP parsing flagged consistency errors. "
-                    "Check mechanism and MESS compatibility."
-                )
-            # Success!
-            success_msg = html.Div([
-                html.Div(
-                    "✓ SOP validated!",
-                    style={"color": "green", "fontWeight": "bold"}
-                ),
-                html.Small(
-                    f"{len(sop.wells)} wells, "
-                    f"{len(sop.bimolecular)} bimolecular",
-                    style={"color": "#333", "marginTop": "5px"}
-                )
-            ])
-            log_content = log_stream.getvalue().strip() or (
-                "SOP validation completed without parser log messages."
-            )
-            return (
-                success_msg,
-                {
-                    "marginTop": "15px",
-                    "padding": "10px",
-                    "backgroundColor": "#d4edda",
-                    "borderRadius": "5px",
-                    "display": "block"
-                },
-                True,
-                _log_pre(log_content),
-                log_style,
-            )
-        except Exception as e:
-            error_msg = html.Div([
-                html.Div(
-                    f"❌ Error loading SOP: {str(e)}",
-                    style={"color": "red", "fontWeight": "bold"}
-                )
-            ])
-            log_content = log_stream.getvalue().strip() or (
-                "No parser log messages were emitted before failure."
-            )
-            return (
-                error_msg,
-                {
-                    "marginTop": "15px",
-                    "padding": "10px",
-                    "backgroundColor": "#f8d7da",
-                    "borderRadius": "5px",
-                    "display": "block"
-                },
-                False,
-                _log_pre(log_content),
-                log_style,
-            )
-
+        return (
+            success_msg,
+            {
+                "marginTop": "15px",
+                "padding": "10px",
+                "backgroundColor": "#d4edda",
+                "borderRadius": "5px",
+                "display": "block"
+            },
+            True,
+            _log_pre(log_content),
+            log_style,
+            sop_param_names,
+        )
     except Exception as e:
         error_msg = html.Div([
             html.Div(
-                f"❌ Validation error: {str(e)}",
+                f"Error loading SOP: {str(e)}",
                 style={"color": "red", "fontWeight": "bold"}
             )
         ])
-        log_content = log_stream.getvalue().strip() or str(e)
+        log_content = log_stream.getvalue().strip() or (
+            "No parser log messages were emitted before failure."
+        )
         return (
             error_msg,
             {
@@ -402,7 +387,6 @@ def validate_sop(
             False,
             _log_pre(log_content),
             log_style,
+            [],
         )
-    finally:
-        gui_logger.removeHandler(stream_handler)
-        gui_logger.setLevel(previous_level)
+

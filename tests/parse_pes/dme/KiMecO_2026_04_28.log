@@ -1,0 +1,4 @@
+2026-04-28 17:31:09,612 - INFO - Pressure unit in input assumed in torr
+2026-04-28 17:31:09,612 - INFO - optimizer_scheme is an unknown keyword and will be ignored.
+2026-04-28 17:31:09,699 - WARNING - 'restart' set to default
+2026-04-28 17:31:09,699 - INFO - Input reading...                                                          PASSED

@@ -74,7 +74,7 @@ def create_resources_section() -> html.Div:
             html.Div([
                 html.Div("", className="col-md-3"),
                 html.Div(
-                    html.Strong("CPU cores"),
+                    html.Strong("CPUs"),
                     className="col-md-3 text-center"
                 ),
                 html.Div(
@@ -152,7 +152,7 @@ def create_resources_section() -> html.Div:
         html.H6("Global limits", className="fw-semibold"),
         _row(
             _col(
-                "Max CPU cores",
+                "Max total CPUs",
                 "Total CPU budget; submission stalls when exceeded.",
                 dcc.Input(
                     id="res-max-cpu",

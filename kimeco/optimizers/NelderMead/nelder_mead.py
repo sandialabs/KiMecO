@@ -8,8 +8,8 @@ from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
 from kimeco.goat import GOATs
 from kimeco.sensitivity.linear import Linear
-from kimeco.element import Element
-from kimeco.enums import ElementStatus, Ptype, Pclass, Distrib
+from kimeco.model import Model
+from kimeco.enums import ModelStatus, Ptype, Pclass, Distrib
 from kimeco.parameters import SOP
 from kimeco.generation import Generation
 from kimeco.scoring_f.scoring import Scoring
@@ -24,7 +24,7 @@ class NelderMead:
                  sop_db: SOP_DB,
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
-                 f_el: Element,
+                 f_mdl: Model,
                  input_tpls: list[list[str]],
                  klog: KMOLogger,
                  prefix: str = 'NM'
@@ -35,7 +35,7 @@ class NelderMead:
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
         self.input_tpls: list[list[str]] = input_tpls
-        self.f_el: Element = f_el
+        self.f_mdl: Model = f_mdl
         self.settings: dict[str, Any] = settings
         self.pert: Perturbator = pert
         self.klog: KMOLogger = klog
@@ -44,7 +44,7 @@ class NelderMead:
         self.wdir: str = self.settings['workdir']
         self.prefix: str = prefix
         # Updated in objective function
-        self.last_vertice: SOP = self.f_el.sop
+        self.last_vertice: SOP = self.f_mdl.sop
         self.goats = GOATs(sop_db=sop_db,
                            sim_db=sim_db,
                            kin_db=kin_db,
@@ -91,7 +91,7 @@ class NelderMead:
                 ])
             else:
                 dstep: float = self.calculate_dstep(
-                    uc=self.f_el.sop.uncertainties[
+                    uc=self.f_mdl.sop.uncertainties[
                         self.current_dimensions[i-1]
                     ],
                     param=self.current_dimensions[i-1],
@@ -171,19 +171,19 @@ class NelderMead:
         if pclass == Pclass.ADDITIVE:
             norm_param = (
                 value
-                - self.f_el.sop.parameters_names[parameter]) \
-                / abs(bounds[1] - self.f_el.sop.parameters_names[parameter])
+                - self.f_mdl.sop.parameters_names[parameter]) \
+                / abs(bounds[1] - self.f_mdl.sop.parameters_names[parameter])
         elif pclass == Pclass.PERCENT:
             norm_param = (
                 value
-                - self.f_el.sop.parameters_names[parameter]) \
-                / abs(bounds[1] - self.f_el.sop.parameters_names[parameter])
+                - self.f_mdl.sop.parameters_names[parameter]) \
+                / abs(bounds[1] - self.f_mdl.sop.parameters_names[parameter])
         elif pclass == Pclass.MULTIPLICATIVE:
             norm_param: float = (
                 np.log(value) -
-                np.log(self.f_el.sop.parameters_names[parameter])) /\
+                np.log(self.f_mdl.sop.parameters_names[parameter])) /\
                 (np.log(bounds[1]) -
-                 np.log(self.f_el.sop.parameters_names[parameter]))
+                 np.log(self.f_mdl.sop.parameters_names[parameter]))
         else:
             raise NotImplementedError(
                 f"Parameter class {pclass} not implemented.")
@@ -219,17 +219,17 @@ class NelderMead:
                 break
         if pclass == Pclass.ADDITIVE:
             abs_param: float = value * \
-                abs(bounds[1] - self.f_el.sop.parameters_names[param])\
-                + self.f_el.sop.parameters_names[param]
+                abs(bounds[1] - self.f_mdl.sop.parameters_names[param])\
+                + self.f_mdl.sop.parameters_names[param]
         elif pclass == Pclass.PERCENT:
             abs_param = value * \
-                abs(bounds[1] - self.f_el.sop.parameters_names[param])\
-                + self.f_el.sop.parameters_names[param]
+                abs(bounds[1] - self.f_mdl.sop.parameters_names[param])\
+                + self.f_mdl.sop.parameters_names[param]
         elif pclass == Pclass.MULTIPLICATIVE:
             abs_param = np.exp(
                 value * (np.log(bounds[1]) -
-                         np.log(self.f_el.sop.parameters_names[param])) +
-                np.log(self.f_el.sop.parameters_names[param]))
+                         np.log(self.f_mdl.sop.parameters_names[param])) +
+                np.log(self.f_mdl.sop.parameters_names[param]))
         else:
             raise NotImplementedError(
                 f"Parameter class {pclass} not implemented.")
@@ -307,16 +307,16 @@ class NelderMead:
         return simplex
 
     def update_iterations(self,
-                          last_vertice: Element) -> None:
+                          last_vertice: Model) -> None:
         """Keep track of the goat list in the goat file,
         and and the associated score
 
         Args:
-            new_els (list[Element]): last vertive
+            new_mdls (list[Model]): last vertive
         """
-        self.latest_simplex: list[Element] = \
+        self.latest_simplex: list[Model] = \
             self.goats.update_with_generation(
-                elements=[last_vertice],
+                models=[last_vertice],
                 goat_length=len(self.current_dimensions) + 1
             )
         with open(self.wdir + '/NM_scores.txt', 'a', encoding='utf-8') as f:
@@ -345,7 +345,7 @@ class NelderMead:
             msg = "Running SA to check if centroid is full-dimensional"
             self.klog.info(msg)
             sensitivity = Linear(
-                elements=self.goats.get_goat_for_gen(-1),
+                models=self.goats.get_goat_for_gen(-1),
                 settings=self.settings,
                 rc_tpls=self.input_tpls,
                 sf=self.sf,
@@ -358,6 +358,8 @@ class NelderMead:
             self.klog.error(f"Optimization failed: {result.message}")
             raise RuntimeError("Nelder-Mead optimization failed.")
         # else:
+        if result.success:
+            self.klog.info(result.x)
         #     self.klog.info("The dimensionality has not changed.")
         initial = False
         msg: str = "\nIncreasing accuracy for last minimization.\n"
@@ -387,7 +389,7 @@ class NelderMead:
             for p, v in self.last_vertice.parameters_names.items()]
         # SOP from vertice
         self.last_vertice = SOP.from_db_row(
-                sop_tpl=self.f_el.sop,
+                sop_tpl=self.f_mdl.sop,
                 row=row
             )
         if self.is_generation_finished(gen_id=Generation.total()):
@@ -402,7 +404,7 @@ class NelderMead:
 
             if sop_in_db:
                 db_sop: SOP = SOP.from_db_row(
-                    sop_tpl=self.f_el.sop,
+                    sop_tpl=self.f_mdl.sop,
                     row=db_row
                 )
                 same_p: list[bool] = [
@@ -416,29 +418,29 @@ class NelderMead:
                         self.last_vertice.parameters_names)
                 ]
                 if all(same_p):
-                    vertice = Element(
+                    vertice = Model(
                         sop=db_sop,
                         id=0,
                         gen=Generation.total(),
-                        status=ElementStatus.DONE.value)
+                        status=ModelStatus.DONE.value)
                 else:
-                    vertice = Element(
+                    vertice = Model(
                         sop=self.last_vertice,
                         id=0,
                         gen=Generation.total())
             else:
-                vertice = Element(
+                vertice = Model(
                     sop=self.last_vertice,
                     id=0,
                     gen=Generation.total())
         else:
-            vertice = Element(
+            vertice = Model(
                 sop=self.last_vertice,
                 id=0,
                 gen=Generation.total())
 
         new_gen = Generation(
-                elements=[vertice],
+                models=[vertice],
                 settings=self.settings,
                 rc_tpls=self.input_tpls,
                 sop_db=self.sop_db,
@@ -447,7 +449,7 @@ class NelderMead:
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog,
-                previous_el={0: self.f_el},
+                previous_el={0: self.f_mdl},
                 prefix=self.prefix
                 )
         new_gen.run()
@@ -457,8 +459,8 @@ class NelderMead:
                     param=p,
                     value=params[self.current_dimensions.index(p)])
                 for p in self.current_dimensions]))
-        self.update_iterations(last_vertice=new_gen.elements[0])
-        return new_gen.elements[0].score
+        self.update_iterations(last_vertice=new_gen.models[0])
+        return new_gen.models[0].score
 
     def is_generation_finished(self,
                                gen_id: int) -> bool:
@@ -482,7 +484,7 @@ class NelderMead:
                 column_name='kin_id'))
             sim_ids = set(self.sim_db.get_column(
                 table=gen_name,
-                column_name='model_id'))
+                column_name='mdl_id'))
             if sop_ids == kin_ids == sim_ids:
                 return True
             else:
@@ -513,7 +515,7 @@ class NelderMead:
                 break
         return self.pert.get_boundaries(
             ptype=pt.value,
-            i_val=self.f_el.sop.parameters_names[parameter]
+            i_val=self.f_mdl.sop.parameters_names[parameter]
             )
 
     def print_stats(self,
@@ -525,7 +527,7 @@ class NelderMead:
             start='INITIAL',
             current='CURRENT') + '\n'
         for idx, p in enumerate(self.current_dimensions):
-            start: float = self.f_el.sop.parameters_names[p]
+            start: float = self.f_mdl.sop.parameters_names[p]
             current: float = params[idx]
             if start >= 1000:
                 str_start: str = f"{start:-6.2E}"

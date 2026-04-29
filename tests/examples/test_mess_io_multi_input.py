@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -51,12 +52,14 @@ def _assert_sop_equivalent(sop1: SOP, sop2: SOP) -> None:
             f"in_multiple_pes mismatch for '{name}'"
         )
         if isinstance(item1, Barrier):
+            item2_barrier = cast(Barrier, item2)
             assert {c.name for c in item1.connected} == {
-                c.name for c in item2.connected
+                c.name for c in item2_barrier.connected
             }, f"Barrier connectivity mismatch for '{name}'"
         elif isinstance(item1, Well):
+            item2_well = cast(Well, item2)
             assert item1.energy == item2.energy, f"Energy mismatch for '{name}'"
-            assert len(item1.frequencies) == len(item2.frequencies), (
+            assert len(item1.frequencies) == len(item2_well.frequencies), (
                 f"Frequency count mismatch for '{name}'"
             )
         elif isinstance(item1, Bimolecular):

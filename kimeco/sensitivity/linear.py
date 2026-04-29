@@ -2,7 +2,7 @@ from kimeco.enums import Distrib, Ptype, RestartType
 from typing import Any
 import numpy as np
 from numpy.typing import NDArray
-from kimeco.element import Element, ElementStatus
+from kimeco.model import Model, ModelStatus
 from kimeco.parameters import SOP
 from kimeco.core import CoreRun
 from kimeco.database.kimeco_db import dbs
@@ -30,7 +30,7 @@ class Linear(CoreRun):
         cls.__id = 0
 
     def __init__(self,
-                 elements: list[Element],
+                 models: list[Model],
                  settings: dict[str, Any],
                  rc_tpls: list[list[str]],
                  sf: Scoring,
@@ -46,7 +46,7 @@ class Linear(CoreRun):
         self.name: str = f'{self.prefix}{self.id:04d}'
         self.to_test: list[bool] = []
         self.selected: list[str] = []
-        self.sop_tpl: SOP = self.average([el.sop for el in elements])
+        self.sop_tpl: SOP = self.average([mdl.sop for mdl in models])
         self.lin_fact: float = self.settings['sensi_d']
         self.pert: Perturbator | None = pert
         self.sop_db = SOP_DB(sop=self.sop_tpl,
@@ -61,18 +61,18 @@ class Linear(CoreRun):
             path=self.settings['workdir'])
         if self.SA_is_in_db() and restart:
             self.klog.debug('SA is in DB. Reading results.')
-            self.elements = self.get_elements_from_db()
-            self.elements_from_db = True
+            self.models = self.get_models_from_db()
+            self.models_from_db = True
         else:
             if self.settings['restart'] == RestartType.RESCORE:
                 self.klog.warning(
                     'Rescoring only but SA not in DB.')
-            self.elements: list[Element] = self.prepare_elements(
-                elements=elements
+            self.models: list[Model] = self.prepare_models(
+                models=models
                 )
-            self.elements_from_db = False
+            self.models_from_db = False
         super().__init__(
-            elements=self.elements,
+            models=self.models,
             settings=self.settings,
             rc_tpls=rc_tpls,
             sop_db=self.sop_db,
@@ -92,10 +92,10 @@ class Linear(CoreRun):
             self.kin_db.defragmentate()
             self.sim_db.defragmentate()
         self.klog.info(
-            f'{self.name} initialized with {len(self.elements)} elements.'
+            f'{self.name} initialized with {len(self.models)} models.'
             )
 
-    def same_f_el_in_db(self) -> bool:
+    def same_f_mdl_in_db(self) -> bool:
         try:
             db_row: list[float] = self.sop_db.get_sop_row(
                 table=self.name,
@@ -140,25 +140,25 @@ class Linear(CoreRun):
                 column_name='kin_id'))
             sim_ids = set(self.sim_db.get_column(
                 table=self.name,
-                column_name='model_id'))
+                column_name='mdl_id'))
             if sop_ids == kin_ids == sim_ids:
-                return self.same_f_el_in_db()
+                return self.same_f_mdl_in_db()
             else:
                 return False
         else:
             return False
 
-    def get_elements_from_db(self) -> list[Element]:
-        """Restaure the elements from the SA from the DB
+    def get_models_from_db(self) -> list[Model]:
+        """Restaure the models from the SA from the DB
 
         Returns:
-            list[Element]: Elements with a score and DONE status
+            list[Model]: Models with a score and DONE status
         """
-        next_elements = []
+        next_models = []
         sop_ids: list[Any] = self.sop_db.get_column(
             table=self.name,
             column_name='id')
-        # Only valid for 2-step derivative plus central element
+        # Only valid for 2-step derivative plus central model
         for side in [1, -1]:
             # Iterate through the parameters
             for key in self.sop_tpl.parameters_names:
@@ -181,31 +181,31 @@ class Linear(CoreRun):
                                     )
             for e_id, row in zip(sop_ids, rows):
                 if self.settings['restart'] == RestartType.RESCORE:
-                    next_elements.append(
-                        Element(
+                    next_models.append(
+                        Model(
                             sop=SOP.from_db_row(
                                 sop_tpl=self.sop_tpl,
                                 row=row[1:].tolist()
                             ),
                             id=e_id,
                             gen=self.id,
-                            status=ElementStatus.RESCORE.value))
+                            status=ModelStatus.RESCORE.value))
                 else:
-                    next_elements.append(
-                        Element(
+                    next_models.append(
+                        Model(
                             sop=SOP.from_db_row(
                                 sop_tpl=self.sop_tpl,
                                 row=row[1:].tolist()
                             ),
                             id=e_id,
                             gen=self.id,
-                            status=ElementStatus.DONE.value))
+                            status=ModelStatus.DONE.value))
         else:
             raise ValueError(
                 f'SA {self.name} in DB is incomplete. '
                 f'Found {len(sop_ids)} SOP but expected '
                 f'{sum(self.to_test)+1}.')
-        return next_elements
+        return next_models
 
     def average(self,
                 sop_list: list[SOP]) -> SOP:
@@ -263,12 +263,12 @@ class Linear(CoreRun):
             dstep = scale
         return dstep * self.lin_fact
 
-    def prepare_elements(self,
-                         elements: list[Element]) -> list[Element]:
+    def prepare_models(self,
+                         models: list[Model]) -> list[Model]:
 
         # List to hold the new SOP objects
-        new_elements: list[Element] = [
-            Element(sop=self.sop_tpl,
+        new_models: list[Model] = [
+            Model(sop=self.sop_tpl,
                     id=0,
                     gen=self.id)
         ]
@@ -276,7 +276,7 @@ class Linear(CoreRun):
         # Get the parameters names and their current values
         pn: dict[str, Any] = self.sop_tpl.parameters_names
 
-        el_id = 0
+        mdl_id = 0
         # direction of the derivative
         for side in (1, -1):
             # Iterate through the parameters
@@ -289,7 +289,7 @@ class Linear(CoreRun):
                     continue
                 # Create a new SOP object with the modified parameter
                 self.to_test.append(True)
-                el_id += 1
+                mdl_id += 1
                 # Get the uncertainty of the parameter
                 uc: float = self.sop_tpl.uncertainties[key]
                 dstep: float = self.calculate_dstep(
@@ -301,18 +301,18 @@ class Linear(CoreRun):
                     sop_tpl=self.sop_tpl,
                     row=[v+(dstep*side) if k == key else v
                          for k, v in pn.items()])
-                new_elements.append(
-                    Element(
+                new_models.append(
+                    Model(
                         sop=new_sop,
-                        id=el_id,
+                        id=mdl_id,
                         gen=self.id))
-        return new_elements
+        return new_models
 
     def run(self) -> None:
         super().run()
-        zero: float = self.elements[0].score
+        zero: float = self.models[0].score
         rslts: NDArray = np.absolute(
-            [el.score - zero for el in self.elements[1:]]
+            [mdl.score - zero for mdl in self.models[1:]]
             )
         half = int(len(rslts)/2)
         highest = [
@@ -357,11 +357,11 @@ class Linear(CoreRun):
         with open(f'{self.name}.out', 'w') as f:
             f.write(txt_file)
 
-    def save_initial_element(self,
+    def save_initial_model(self,
                              sop_db: SOP_DB,
                              kin_db: KIN_DB,
                              sim_db: SIM_DB) -> None:
-        """Save the initial unperturbed element of the sensitivity analysis
+        """Save the initial unperturbed model of the sensitivity analysis
         in G0000 table of each database.
 
         Args:
@@ -385,13 +385,13 @@ class Linear(CoreRun):
             sim_db.create_new_table(
                 name=tbl_name
                 )
-        initial_element: Element = self.elements[0]
-        initial_element.save_kin(db=kin_db, table=tbl_name)
+        initial_model: Model = self.models[0]
+        initial_model.save_kin(db=kin_db, table=tbl_name)
         for sim_num in range(self.settings['n_exp']):
-            initial_element.save_sim(db=sim_db,
+            initial_model.save_sim(db=sim_db,
                                      table=tbl_name,
                                      sim_num=sim_num)
-        initial_element.prepare_upsert(db=sop_db, table=tbl_name)
+        initial_model.prepare_upsert(db=sop_db, table=tbl_name)
         sop_db.batch_upsert()
         kin_db.batch_upsert()
         sim_db.batch_upsert()

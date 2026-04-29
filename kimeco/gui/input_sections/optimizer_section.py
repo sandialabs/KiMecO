@@ -54,16 +54,10 @@ def _validate_config(config: dict[str, Any]) -> tuple[bool, str]:
     """Validate optimizer numeric domains before emitting config."""
     if config["max_gen"] < 1:
         return False, "max_gen must be >= 1."
-    if config["n_elem"] < 1:
-        return False, "n_elem must be >= 1."
+    if config["n_mdl"] < 1:
+        return False, "n_mdl must be >= 1."
     if config["goat_length"] < 1:
         return False, "goat_length must be >= 1."
-    if config["SA_freq"] < 1:
-        return False, "SA_freq must be >= 1."
-    if config["SA_start"] < 1:
-        return False, "SA_start must be >= 1."
-    if config["SA_end"] <= config["SA_start"]:
-        return False, "SA_end must be > SA start."
     if config["max_score"] <= 0:
         return False, "max_score must be > 0."
     if config["score_conv"] <= 0:
@@ -76,10 +70,10 @@ def _validate_config(config: dict[str, Any]) -> tuple[bool, str]:
         return False, "nm_maxiter and nm_maxfev must be >= 0."
     if config["nm_dstep"] <= 0:
         return False, "nm_dstep must be > 0."
-    if config["nm_final_fatol"] <= 0 or config["nm_final_xatol"] <= 0:
-        return False, "nm_final_fatol and nm_final_xatol must be > 0."
-    if config["nm_final_maxiter"] < 0 or config["nm_final_maxfev"] < 0:
-        return False, "nm_final_maxiter and nm_final_maxfev must be >= 0."
+    # if config["nm_final_fatol"] <= 0 or config["nm_final_xatol"] <= 0:
+    #     return False, "nm_final_fatol and nm_final_xatol must be > 0."
+    # if config["nm_final_maxiter"] < 0 or config["nm_final_maxfev"] < 0:
+    #     return False, "nm_final_maxiter and nm_final_maxfev must be >= 0."
     if config["optimizer"] not in {"ga", "nelder-mead"}:
         return False, "optimizer must be ga or nelder-mead."
     if config["optimizer"] == "ga" and config["ga_type"] not in {
@@ -167,11 +161,11 @@ def create_optimizer_section() -> html.Div:
                 html.Div([
                     html.Label("# of models", className="form-label"),
                     dcc.Input(
-                        id="optimizer-n-elem-input",
+                        id="optimizer-n-mdl-input",
                         type="number",
                         min=1,
                         step=1,
-                        value=default_settings["n_elem"],
+                        value=default_settings["n_mdl"],
                         className="form-control"
                     ),
                 ], className="col-md-4"),
@@ -233,44 +227,6 @@ def create_optimizer_section() -> html.Div:
                     ),
                 ], className="col-md-4"),
             ], className="row g-2 mt-1"),
-        ], className="mt-2"),
-        html.Div(id="optimizer-ga-sa-controls", children=[
-            html.H6("On-the-fly Sensitivity analysis settings", className="fw-semibold mt-3"),
-            html.Div([
-                html.Div([
-                    html.Label("Frequency", className="form-label"),
-                    dcc.Input(
-                        id="optimizer-sa-freq-input",
-                        type="number",
-                        min=1,
-                        step=1,
-                        value=default_settings["SA_freq"],
-                        className="form-control"
-                    ),
-                ], className="col-md-6"),
-                html.Div([
-                    html.Label("Start at generation:", className="form-label"),
-                    dcc.Input(
-                        id="optimizer-sa-start-input",
-                        type="number",
-                        min=1,
-                        step=1,
-                        value=default_settings["SA_start"],
-                        className="form-control"
-                    ),
-                ], className="col-md-6"),
-                html.Div([
-                    html.Label("End at generation:", className="form-label"),
-                    dcc.Input(
-                        id="optimizer-sa-end-input",
-                        type="number",
-                        min=1,
-                        step=1,
-                        value=default_settings["SA_end"],
-                        className="form-control"
-                    ),
-                ], className="col-md-6"),
-            ], className="row g-2")
         ], className="mt-2"),
         html.Div(id="optimizer-nm-controls", children=[
             html.H6("Nelder-Mead Controls", className="fw-semibold mt-3"),
@@ -344,83 +300,13 @@ def create_optimizer_section() -> html.Div:
                 ], className="col-md-4"),
             ], className="row g-2 mt-1"),
         ], className="mt-2"),
-        html.Div(id="optimizer-nm-final-controls", children=[
-            html.H6(
-                "Swarm Nelder-Mead Refinement",
-                className="fw-semibold mt-3"
-            ),
-            html.Small(
-                "These controls apply to each NM instance in the swarm.",
-                className="text-muted"
-            ),
-            html.Div([
-                html.Div([
-                    html.Label("nm_final_fatol", className="form-label"),
-                    dcc.Input(
-                        id="optimizer-nm-final-fatol-input",
-                        type="number",
-                        min=0,
-                        step=1e-4,
-                        value=default_settings["nm_final_fatol"],
-                        className="form-control"
-                    ),
-                ], className="col-md-4"),
-                html.Div([
-                    html.Label("nm_final_xatol", className="form-label"),
-                    dcc.Input(
-                        id="optimizer-nm-final-xatol-input",
-                        type="number",
-                        min=0,
-                        step=1e-4,
-                        value=default_settings["nm_final_xatol"],
-                        className="form-control"
-                    ),
-                ], className="col-md-4"),
-                html.Div([
-                    html.Label("nm_final_adaptive", className="form-label"),
-                    dcc.Checklist(
-                        id="optimizer-nm-final-adaptive-input",
-                        options=[{"label": "enabled", "value": "on"}],
-                        value=["on"]
-                        if default_settings["nm_final_adaptive"] else [],
-                        className="mt-1"
-                    ),
-                ], className="col-md-4"),
-            ], className="row g-2"),
-            html.Div([
-                html.Div([
-                    html.Label("nm_final_maxiter", className="form-label"),
-                    dcc.Input(
-                        id="optimizer-nm-final-maxiter-input",
-                        type="number",
-                        min=0,
-                        step=1,
-                        value=default_settings["nm_final_maxiter"],
-                        className="form-control"
-                    ),
-                ], className="col-md-6"),
-                html.Div([
-                    html.Label("nm_final_maxfev", className="form-label"),
-                    dcc.Input(
-                        id="optimizer-nm-final-maxfev-input",
-                        type="number",
-                        min=0,
-                        step=1,
-                        value=default_settings["nm_final_maxfev"],
-                        className="form-control"
-                    ),
-                ], className="col-md-6"),
-            ], className="row g-2 mt-1"),
-        ], className="mt-2"),
         html.Div(id="optimizer-params-container"),
     ], className="card p-3 mt-3", id="optimizer-card")
 
 
 @callback(
     Output("optimizer-ga-controls", "style"),
-    Output("optimizer-ga-sa-controls", "style"),
     Output("optimizer-nm-controls", "style"),
-    Output("optimizer-nm-final-controls", "style"),
     Output("optimizer-nms-start-row", "style"),
     Output("optimizer-max-gen-input", "value"),
     Output("optimizer-max-gen-input", "disabled"),
@@ -435,48 +321,32 @@ def create_optimizer_section() -> html.Div:
     Output("optimizer-validation-message", "style"),
     Input("optimizer-scheme-dropdown", "value"),
     Input("optimizer-max-gen-input", "value"),
-    Input("optimizer-n-elem-input", "value"),
+    Input("optimizer-n-mdl-input", "value"),
     Input("optimizer-goat-length-input", "value"),
     Input("optimizer-max-score-input", "value"),
     Input("optimizer-score-conv-input", "value"),
     Input("optimizer-param-conv-input", "value"),
-    Input("optimizer-sa-freq-input", "value"),
-    Input("optimizer-sa-start-input", "value"),
-    Input("optimizer-sa-end-input", "value"),
     Input("optimizer-nm-fatol-input", "value"),
     Input("optimizer-nm-xatol-input", "value"),
     Input("optimizer-nm-maxiter-input", "value"),
     Input("optimizer-nm-maxfev-input", "value"),
     Input("optimizer-nm-dstep-input", "value"),
-    Input("optimizer-nm-adaptive-input", "value"),
-    Input("optimizer-nm-final-fatol-input", "value"),
-    Input("optimizer-nm-final-xatol-input", "value"),
-    Input("optimizer-nm-final-maxiter-input", "value"),
-    Input("optimizer-nm-final-maxfev-input", "value"),
-    Input("optimizer-nm-final-adaptive-input", "value"),
+    Input("optimizer-nm-adaptive-input", "value")
 )
 def update_optimizer_scheme(
     scheme: str,
     max_gen_value: Any,
-    n_elem_value: Any,
+    n_mdl_value: Any,
     goat_length_value: Any,
     max_score_value: Any,
     score_conv_value: Any,
     param_conv_value: Any,
-    sa_freq_value: Any,
-    sa_start_value: Any,
-    sa_end_value: Any,
     nm_fatol_value: Any,
     nm_xatol_value: Any,
     nm_maxiter_value: Any,
     nm_maxfev_value: Any,
     nm_dstep_value: Any,
     nm_adaptive_value: list[str],
-    nm_final_fatol_value: Any,
-    nm_final_xatol_value: Any,
-    nm_final_maxiter_value: Any,
-    nm_final_maxfev_value: Any,
-    nm_final_adaptive_value: list[str],
 ) -> tuple[Any, ...]:
     """Update visible controls and emit runtime-compatible optimizer config."""
     max_gen = _int_or_default(max_gen_value, "max_gen")
@@ -491,37 +361,17 @@ def update_optimizer_scheme(
         "ga_type": ga_type,
         "NMS_start": nms_start,
         "max_gen": runtime_max_gen,
-        "n_elem": _int_or_default(n_elem_value, "n_elem"),
+        "n_mdl": _int_or_default(n_mdl_value, "n_mdl"),
         "goat_length": _int_or_default(goat_length_value, "goat_length"),
         "max_score": _float_or_default(max_score_value, "max_score"),
         "score_conv": _float_or_default(score_conv_value, "score_conv"),
         "param_conv": _float_or_default(param_conv_value, "param_conv"),
-        "SA_freq": _int_or_default(sa_freq_value, "SA_freq"),
-        "SA_start": _int_or_default(sa_start_value, "SA_start"),
-        "SA_end": _int_or_default(sa_end_value, "SA_end"),
         "nm_fatol": _float_or_default(nm_fatol_value, "nm_fatol"),
         "nm_xatol": _float_or_default(nm_xatol_value, "nm_xatol"),
         "nm_maxiter": _int_or_default(nm_maxiter_value, "nm_maxiter"),
         "nm_maxfev": _int_or_default(nm_maxfev_value, "nm_maxfev"),
         "nm_dstep": _float_or_default(nm_dstep_value, "nm_dstep"),
-        "nm_adaptive": bool(nm_adaptive_value),
-        "nm_final_fatol": _float_or_default(
-            nm_final_fatol_value,
-            "nm_final_fatol"
-        ),
-        "nm_final_xatol": _float_or_default(
-            nm_final_xatol_value,
-            "nm_final_xatol"
-        ),
-        "nm_final_maxiter": _int_or_default(
-            nm_final_maxiter_value,
-            "nm_final_maxiter"
-        ),
-        "nm_final_maxfev": _int_or_default(
-            nm_final_maxfev_value,
-            "nm_final_maxfev"
-        ),
-        "nm_final_adaptive": bool(nm_final_adaptive_value),
+        "nm_adaptive": bool(nm_adaptive_value)
     }
 
     is_swarm = scheme in {SCHEME_SWARM_NM, SCHEME_SWARM_NM_GOAT}
@@ -552,12 +402,11 @@ def update_optimizer_scheme(
 
     return (
         visible if is_ga else hidden,
-        visible if (is_ga and not is_swarm) else hidden,
-        visible if is_nm else hidden,
+        visible if (is_nm or is_swarm) else hidden,
         visible if is_swarm else hidden,
-        visible if is_swarm else hidden,
+        # visible if is_swarm else hidden,
         runtime_max_gen,
-        is_swarm,
+        scheme == SCHEME_SWARM_NM,
         nms_start,
         True,
         optimizer,

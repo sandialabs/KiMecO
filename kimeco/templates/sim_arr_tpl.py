@@ -20,7 +20,7 @@ Vol = Q_(1, 'cm^3')
 
 kmo = KiMecO(input_file='{input_file}',
              init_loc='{init_loc}',
-             name='E{model_id:04d}_sims',
+             name='E{mdl_id:04d}_sims',
              sim_job=True)
 kmo.initialize_workdir()
 scratchdir = '{scratchdir}'
@@ -28,7 +28,7 @@ os.chdir(scratchdir)
 
 
 exp_id = int(sys.argv[1])
-model_id = {model_id}
+mdl_id = {mdl_id}
 experiment = kmo.settings['experiments'][exp_id]
 kmo.mech.prepare_mech()
 tbl_map_by_pes = {tbl_map_by_pes}
@@ -37,16 +37,14 @@ gas = kmo.mech.get_updated_mech(
     rates_by_pes=rates_by_pes,
     tbl_map_by_pes=tbl_map_by_pes)
 
-p_unit = kmo.settings['pres_unit']
 p = experiment.P
 t = experiment.T
 
 gas.X = experiment.X
-pres = Q_(f"{{p}} {{kmo.settings['pres_unit']}}")
 temp = Q_(f"{{t}} K")
 
 # Total number of molecules
-gas.TP = temp.magnitude, np.round(pres.to("Pa").magnitude, 5)
+gas.TP = temp.magnitude, np.round(p, 5)
 # number of mol of gas in 1 cm^3
 
 
@@ -58,6 +56,7 @@ Q_ = ureg.Quantity
 R = Q_(gas_constant, 'J mol^-1 K^-1')
 Vol = Q_(1, 'cm^3')
 
+pres = Q_(p, 'Pa')
 ntot = (pres*Vol/(R*temp)).to('molecule')
 
 reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
@@ -117,10 +116,10 @@ traces_serializable = \
 json_object = json.dumps(traces_serializable, indent=4)
 # Writing to sample.json
 with open(
-    f"{gen_name}E{model_id:04d}S{{exp_id:02d}}.json", "w"
+    f"{gen_name}E{mdl_id:04d}S{{exp_id:02d}}.json", "w"
     ) as outfile:
     outfile.write(json_object)
-while not os.path.exists(f"{gen_name}E{model_id:04d}S{{exp_id:02d}}.json"):
+while not os.path.exists(f"{gen_name}E{mdl_id:04d}S{{exp_id:02d}}.json"):
     time.sleep(3)
 
 

@@ -1,0 +1,157 @@
+2026-04-28 18:32:41,224 - INFO - Internal pressure unit set to torr
+2026-04-28 18:32:41,224 - INFO - Experiment pressure units detected (bar) and converted to the internal unit.
+2026-04-28 18:32:41,224 - INFO - optimizer_scheme is an unknown keyword and will be ignored.
+2026-04-28 18:32:41,295 - WARNING - 'restart' set to default
+2026-04-28 18:32:41,295 - INFO - Input reading...                                                          PASSED
+2026-04-28 18:32:43,290 - WARNING - Well 'CH3OCH2OO' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,291 - WARNING - Well 'CH2OCH2OOH' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,293 - WARNING - Fragment 'CH3OCH2' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,295 - WARNING - Fragment 'C1H2OC(O1)H2' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,298 - WARNING - Well 'OOCH2OCH2OOH' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,299 - WARNING - Well 'OCHOCH2OOH_OH' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,300 - WARNING - Well 'OOCH2OOH_CH2O' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,300 - WARNING - Well 'OOCH2OH_OOCH2' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,301 - WARNING - Fragment 'OCHOCH2OOH' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,303 - WARNING - Fragment 'OOCH2OOH' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,304 - WARNING - Fragment 'OOCH2OH' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,305 - WARNING - Fragment 'OOCH2' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,306 - WARNING - Fragment 'CH2OCH2OOH' from MESS input is not present in the mechanism file.
+2026-04-28 18:32:43,454 - INFO - SOP_DB initialized:                                                          0.1
+2026-04-28 18:32:43,485 - INFO - KIN_DB initialized:                                                          0.0
+2026-04-28 18:32:43,517 - INFO - SIM_DB initialized:                                                          0.0
+2026-04-28 18:32:43,517 - INFO - Scoring function:                                                   W-difference
+2026-04-28 18:32:43,528 - INFO - Perturbation settings:
+	PARAMETERS                  UNCERTAINTIES        DISTRIBUTIONS
+	__fact                           2.50E-01               normal
+	__pow                            7.50E-02               normal
+	__sigma0                         1.00E-01               normal
+	__sigma1                         1.00E-01               normal
+	__epsilon0                       1.00E-01               normal
+	__epsilon1                       1.00E-01               normal
+	CH3OCH2OO__we                    2.00E+00               normal
+	CH3OCH2OO__bfc                   1.05E+00           log-normal
+	CH3OCH2OO__hrs0                  1.00E-01               normal
+	CH3OCH2OO__hrs1                  1.00E-01               normal
+	CH3OCH2OO__hrs2                  1.00E-01               normal
+	CH2OCH2OOH__we                   2.00E+00               normal
+	CH2OCH2OOH__bfc                  1.05E+00           log-normal
+	CH2OCH2OOH__hrs0                 1.00E-01               normal
+	CH2OCH2OOH__hrs1                 1.00E-01               normal
+	CH2OCH2OOH__hrs2                 1.00E-01               normal
+	CH2OCH2OOH__hrs3                 1.00E-01               normal
+	CH2OCH2OOH__hrs4                 1.00E-01               normal
+	CH2OCH2OOH__hrs5                 1.00E-01               normal
+	CH2OCH2OOH__hrs6                 1.00E-01               normal
+	CH2OCH2OOH__hrs7                 1.00E-01               normal
+	CH3OCHO__we                      2.00E+00               normal
+	CH3OCHO__bfc                     1.05E+00           log-normal
+	CH3OCHO__hrs0                    1.00E-01               normal
+	CH3OCHO__hrs1                    1.00E-01               normal
+	OH__we                           2.00E+00               normal
+	OH__bfc                          1.05E+00           log-normal
+	CH3OCH2__we                      2.00E+00               normal
+	CH3OCH2__bfc                     1.05E+00           log-normal
+	CH3OCH2__hrs0                    1.00E-01               normal
+	CH3OCH2__hrs1                    1.00E-01               normal
+	O2__we                           2.00E+00               normal
+	O2__bfc                          1.05E+00           log-normal
+	CH3OCH2OO=CH3OCH2+O2__bfc             1.05E+00           log-normal
+	CH3OCH2OO=CH3OCH2+O2__hrs0             1.00E-01               normal
+	CH3OCH2OO=CH3OCH2+O2__hrs1             1.00E-01               normal
+	CH3OCH2OO=CH3OCH2+O2__be             4.00E+00               normal
+	CH3OCH2OO=CH3OCH2+O2__sfc             2.00E+00           log-normal
+	C1H2OC(O1)H2__we                 2.00E+00               normal
+	C1H2OC(O1)H2__bfc                1.05E+00           log-normal
+	CH3OCH2OO=CH3OCHO+OH__bfc             1.05E+00           log-normal
+	CH3OCH2OO=CH3OCHO+OH__hrs0             1.00E-01               normal
+	CH3OCH2OO=CH3OCHO+OH__hrs1             1.00E-01               normal
+	CH3OCH2OO=CH3OCHO+OH__be             4.00E+00               normal
+	CH3OCH2OO=CH3OCHO+OH__if             1.10E+00           log-normal
+	CH2OCH2OOH=CH3OCH2OO__bfc             1.05E+00           log-normal
+	CH2OCH2OOH=CH3OCH2OO__be             4.00E+00               normal
+	CH2OCH2OOH=CH3OCH2OO__if             1.10E+00           log-normal
+	CH2OCH2OOH=CH2O+CH2O+OH__bfc             1.05E+00           log-normal
+	CH2OCH2OOH=CH2O+CH2O+OH__hrs0             1.00E-01               normal
+	CH2OCH2OOH=CH2O+CH2O+OH__be             4.00E+00               normal
+	CH2OCH2OOH=CH2O+CH2O+OH__if             1.10E+00           log-normal
+	CH2OCH2OOH=C1H2OC(O1)H2+OH__bfc             1.05E+00           log-normal
+	CH2OCH2OOH=C1H2OC(O1)H2+OH__hrs0             1.00E-01               normal
+	CH2OCH2OOH=C1H2OC(O1)H2+OH__be             4.00E+00               normal
+	CH2OCH2OOH=C1H2OC(O1)H2+OH__if             1.10E+00           log-normal
+	OOCH2OCH2OOH__we                 2.00E+00               normal
+	OOCH2OCH2OOH__bfc                1.05E+00           log-normal
+	OOCH2OCH2OOH__hrs0               1.00E-01               normal
+	OOCH2OCH2OOH__hrs1               1.00E-01               normal
+	OOCH2OCH2OOH__hrs2               1.00E-01               normal
+	OOCH2OCH2OOH__hrs3               1.00E-01               normal
+	OOCH2OCH2OOH__hrs4               1.00E-01               normal
+	OCHOCH2OOH_OH__we                2.00E+00               normal
+	OCHOCH2OOH_OH__bfc               1.05E+00           log-normal
+	OOCH2OOH_CH2O__we                2.00E+00               normal
+	OOCH2OOH_CH2O__bfc               1.05E+00           log-normal
+	OOCH2OH_OOCH2__we                2.00E+00               normal
+	OOCH2OH_OOCH2__bfc               1.05E+00           log-normal
+	OCHOCH2OOH__we                   2.00E+00               normal
+	OCHOCH2OOH__bfc                  1.05E+00           log-normal
+	OCHOCH2OOH__hrs0                 1.00E-01               normal
+	OCHOCH2OOH__hrs1                 1.00E-01               normal
+	OCHOCH2OOH__hrs2                 1.00E-01               normal
+	OCHOCH2OOH__hrs3                 1.00E-01               normal
+	OCHOCH2OOH_OH=OCHOCH2OOH+OH__bfc             1.05E+00           log-normal
+	OCHOCH2OOH_OH=OCHOCH2OOH+OH__hrs0             1.00E-01               normal
+	OCHOCH2OOH_OH=OCHOCH2OOH+OH__hrs1             1.00E-01               normal
+	OCHOCH2OOH_OH=OCHOCH2OOH+OH__hrs2             1.00E-01               normal
+	OCHOCH2OOH_OH=OCHOCH2OOH+OH__hrs3             1.00E-01               normal
+	OCHOCH2OOH_OH=OCHOCH2OOH+OH__be             4.00E+00               normal
+	OCHOCH2OOH_OH=OCHOCH2OOH+OH__sfc             2.00E+00           log-normal
+	CH2O__we                         2.00E+00               normal
+	CH2O__bfc                        1.05E+00           log-normal
+	OOCH2OOH__we                     2.00E+00               normal
+	OOCH2OOH__bfc                    1.05E+00           log-normal
+	OOCH2OOH__hrs0                   1.00E-01               normal
+	OOCH2OOH__hrs1                   1.00E-01               normal
+	OOCH2OOH__hrs2                   1.00E-01               normal
+	OOCH2OOH_OCH2=OOCH2OOH+CH2O__bfc             1.05E+00           log-normal
+	OOCH2OOH_OCH2=OOCH2OOH+CH2O__hrs0             1.00E-01               normal
+	OOCH2OOH_OCH2=OOCH2OOH+CH2O__hrs1             1.00E-01               normal
+	OOCH2OOH_OCH2=OOCH2OOH+CH2O__hrs2             1.00E-01               normal
+	OOCH2OOH_OCH2=OOCH2OOH+CH2O__be             4.00E+00               normal
+	OOCH2OOH_OCH2=OOCH2OOH+CH2O__sfc             2.00E+00           log-normal
+	OOCH2OH__we                      2.00E+00               normal
+	OOCH2OH__bfc                     1.05E+00           log-normal
+	OOCH2OH__hrs0                    1.00E-01               normal
+	OOCH2OH__hrs1                    1.00E-01               normal
+	OOCH2__we                        2.00E+00               normal
+	OOCH2__bfc                       1.05E+00           log-normal
+	OOCH2__hrs0                      1.00E-01               normal
+	OOCH2OH_OOCH2=OOCH2OH+OOCH2__bfc             1.05E+00           log-normal
+	OOCH2OH_OOCH2=OOCH2OH+OOCH2__hrs0             1.00E-01               normal
+	OOCH2OH_OOCH2=OOCH2OH+OOCH2__hrs1             1.00E-01               normal
+	OOCH2OH_OOCH2=OOCH2OH+OOCH2__hrs2             1.00E-01               normal
+	OOCH2OH_OOCH2=OOCH2OH+OOCH2__be             4.00E+00               normal
+	OOCH2OH_OOCH2=OOCH2OH+OOCH2__sfc             2.00E+00           log-normal
+	OOCH2OCH2OOH=CH2OCH2OOH+O2__bfc             1.05E+00           log-normal
+	OOCH2OCH2OOH=CH2OCH2OOH+O2__hrs0             1.00E-01               normal
+	OOCH2OCH2OOH=CH2OCH2OOH+O2__hrs1             1.00E-01               normal
+	OOCH2OCH2OOH=CH2OCH2OOH+O2__hrs2             1.00E-01               normal
+	OOCH2OCH2OOH=CH2OCH2OOH+O2__hrs3             1.00E-01               normal
+	OOCH2OCH2OOH=CH2OCH2OOH+O2__be             4.00E+00               normal
+	OOCH2OCH2OOH=CH2OCH2OOH+O2__sfc             2.00E+00           log-normal
+	OOCH2OCH2OOH=OCHOCH2OOH_OH__bfc             1.05E+00           log-normal
+	OOCH2OCH2OOH=OCHOCH2OOH_OH__hrs0             1.00E-01               normal
+	OOCH2OCH2OOH=OCHOCH2OOH_OH__be             4.00E+00               normal
+	OOCH2OCH2OOH=OCHOCH2OOH_OH__if             1.10E+00           log-normal
+	OOCH2OCH2OOH=OOCH2OOH_CH2O__bfc             1.05E+00           log-normal
+	OOCH2OCH2OOH=OOCH2OOH_CH2O__hrs0             1.00E-01               normal
+	OOCH2OCH2OOH=OOCH2OOH_CH2O__hrs1             1.00E-01               normal
+	OOCH2OCH2OOH=OOCH2OOH_CH2O__be             4.00E+00               normal
+	OOCH2OCH2OOH=OOCH2OOH_CH2O__if             1.10E+00           log-normal
+	OOCH2OCH2OOH=OOCH2OH_OOCH2__bfc             1.05E+00           log-normal
+	OOCH2OCH2OOH=OOCH2OH_OOCH2__hrs0             1.00E-01               normal
+	OOCH2OCH2OOH=OOCH2OH_OOCH2__hrs1             1.00E-01               normal
+	OOCH2OCH2OOH=OOCH2OH_OOCH2__be             4.00E+00               normal
+	OOCH2OCH2OOH=OOCH2OH_OOCH2__if             1.10E+00           log-normal
+
+2026-04-28 18:32:45,827 - INFO - SA0000 initialized with 207 elements.
+2026-04-28 18:32:45,827 - INFO - Running sensitivity analysis                                     
+2026-04-28 18:34:45,618 - ERROR - Error processing element: 6750.0 is not in list

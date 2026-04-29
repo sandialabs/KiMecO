@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 
-from kimeco.element import Element
-from kimeco.enums import ElementStatus
+from kimeco.model import Model
+from kimeco.enums import ModelStatus
 from kimeco.q_sys import JobStatus
 
 
@@ -25,41 +26,41 @@ class DummyRateCo:
         return self._rows
 
 
-def _element() -> Element:
+def _model() -> Model:
     sop = SimpleNamespace(pres=[1.0], temp=[300.0])
-    return Element(sop=sop, id=0, status=ElementStatus.SOP.value)
+    return Model(sop=cast(Any, sop), id=0, status=ModelStatus.SOP.value)
 
 
 def test_save_kin_waits_when_rows_empty_and_job_not_failed() -> None:
-    el = _element()
+    mdl = _model()
     db = DummyKINDB()
-    el.rateCoef = DummyRateCo(rows=[], status=JobStatus.NOT_IN_QUEUE)
+    mdl.rateCoef = cast(Any, DummyRateCo(rows=[], status=JobStatus.NOT_IN_QUEUE))
 
-    el.save_kin(db=db, table="G0000")
+    mdl.save_kin(db=cast(Any, db), table="G0000")
 
-    assert el.status == ElementStatus.SOP
+    assert mdl.status == ModelStatus.SOP
     assert db.upserts == []
 
 
 def test_save_kin_resets_when_rows_empty_and_job_failed() -> None:
-    el = _element()
+    mdl = _model()
     db = DummyKINDB()
-    el.rateCoef = DummyRateCo(rows=[], status=JobStatus.FAILED)
+    mdl.rateCoef = cast(Any, DummyRateCo(rows=[], status=JobStatus.FAILED))
 
-    el.save_kin(db=db, table="G0000")
+    mdl.save_kin(db=cast(Any, db), table="G0000")
 
-    assert el.status == ElementStatus.RESET
+    assert mdl.status == ModelStatus.RESET
     assert db.upserts == []
 
 
 def test_save_kin_sets_kin_and_writes_rows_when_results_present() -> None:
-    el = _element()
+    mdl = _model()
     db = DummyKINDB()
-    el.rateCoef = DummyRateCo(rows=[(10, 1.0, 300.0)], status=JobStatus.FINISHED)
+    mdl.rateCoef = cast(Any, DummyRateCo(rows=[(10, 1.0, 300.0)], status=JobStatus.FINISHED))
 
-    el.save_kin(db=db, table="G0000")
+    mdl.save_kin(db=cast(Any, db), table="G0000")
 
-    assert el.status == ElementStatus.KIN
+    assert mdl.status == ModelStatus.KIN
     assert len(db.upserts) == 1
     table, row_id, values = db.upserts[0]
     assert table == "G0000"

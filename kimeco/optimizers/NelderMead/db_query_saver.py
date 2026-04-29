@@ -18,7 +18,7 @@ class DBQuerySaver:
         self.ids_in_sop_db: dict[int, set[int]] = {}
         self.ids_in_kin_db: dict[int, set[int]] = {}
         self.ids_in_sim_db: dict[int, set[int]] = {}
-        self._locks: dict[int, threading.Lock] = {}  # Lock per el_id
+        self._locks: dict[int, threading.Lock] = {}  # Lock per mdl_id
 
     def _get_lock(self,
                   gen_id: int) -> threading.Lock:
@@ -28,14 +28,14 @@ class DBQuerySaver:
         return self._locks[gen_id]
 
     def is_vertice_finished(self,
-                            el_id: int,
+                            mdl_id: int,
                             gen_id: int,
                             prefix: str) -> bool:
         """Check if gen is in memory.
         if not query ids of gen from db.
 
         Args:
-            el_id (int): id of element
+            mdl_id (int): id of model
             gen_id (int): id of generation
 
         Returns:
@@ -61,16 +61,16 @@ class DBQuerySaver:
                     self.ids_in_sim_db[gen_id] = set(
                         self.sim_db.get_column(
                             table=table_name,
-                            column_name='model_id'
+                            column_name='mdl_id'
                         )
                     )
                 # if the gen is not in db, not finished
                 else:
                     return False
 
-        if (el_id in self.ids_in_sop_db[gen_id] and
-            el_id in self.ids_in_kin_db[gen_id] and
-            el_id in self.ids_in_sim_db[gen_id]):
+        if (mdl_id in self.ids_in_sop_db[gen_id] and
+            mdl_id in self.ids_in_kin_db[gen_id] and
+            mdl_id in self.ids_in_sim_db[gen_id]):
             return True
         else:
             return False

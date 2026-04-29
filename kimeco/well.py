@@ -192,7 +192,7 @@ class Well:
         """Set the structure (atoms + geom) of the well.
 
         Args:
-            symbols (str | list[str]): Chemical elements
+            symbols (str | list[str]): Chemical models
             positions (list[list]): 3D geometry
         """
         self.structure = Atoms(symbols=symbols,

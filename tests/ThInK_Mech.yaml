@@ -8,7 +8,7 @@ units: {length: cm, time: s, quantity: mol, activation-energy: cal/mol}
 phases:
 - name: gas
   thermo: ideal-gas
-  elements: [H, O, C, N, Ar, He, Kr]
+  models: [H, O, C, N, Ar, He, Kr]
   species: [AR, KR, HE, N2, H, H2, C, CH, CH2, CH2(S), CH3, O, CH4, OH,
     H2O, C2, C2H, C2H2, CH2C, C2H3, CO, C2H4, HCO, C2H5, CHOH, CHOH(T),
     CH2O, C2H6, CH3O, CH2OH, O2, CH3OH, HO2, H2O2, C3H, CH2CC, CHCCH(S),
@@ -59,7 +59,7 @@ species:
     - [2.5, 0.0, 0.0, 0.0, 0.0, -745.375, 5.49095651]
     - [2.50001436, -2.78190281e-08, 1.74071629e-11, -4.31400304e-15, 3.66743374e-19,
       -745.380247, 5.49087778]
-    note: REF Elements  g 8/97
+    note: REF Models  g 8/97
   transport:
     model: gas
     geometry: atom

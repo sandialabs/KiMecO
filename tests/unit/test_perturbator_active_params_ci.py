@@ -7,7 +7,7 @@ def _build_perturbator(active_params: list[str], log_path: str) -> tuple[Perturb
     settings = {
         "active_p": active_params,
     }
-    sop = SOP(score_species=[])
+    sop = SOP(n_exp=1)
     pert = Perturbator(
         settings=settings,
         initial_SOP=sop,

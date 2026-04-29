@@ -32,7 +32,7 @@ class SIM_DB(Kimeco_db):
                          path=path,
                          threads=threads)
 
-        self.columns: list[str] = ['model_id', 'experiment_id', 'result']
+        self.columns: list[str] = ['mdl_id', 'experiment_id', 'result']
         # Kept as runtime convenience for GUI; not part of schema init.
         self.sv_species: list[str] = []
 
@@ -65,20 +65,20 @@ class SIM_DB(Kimeco_db):
         self.tables[name] = Table(
             name,
             self.metadata,
-            Column('model_id', Integer, nullable=False),
+            Column('mdl_id', Integer, nullable=False),
             Column('experiment_id', Integer, nullable=False),
             Column('result', LargeBinary, nullable=False),
-            UniqueConstraint('model_id', 'experiment_id',
+            UniqueConstraint('mdl_id', 'experiment_id',
                              name=f'uq_{name}_model_exp')
         )
         self.metadata.create_all(self.eng)
 
     @staticmethod
     def decode_result_blob(result: bytes,
-                           model_id: int) -> tuple[NDArray, list[str]]:
+                           mdl_id: int) -> tuple[NDArray, list[str]]:
         """Decode feather blob and return row-oriented matrix.
 
-        Returned matrix columns are [model_id, time, species...].
+        Returned matrix columns are [mdl_id, time, species...].
         """
         table = feather.read_table(BytesIO(result))
         col_names: list[str] = list(table.column_names)
@@ -88,7 +88,7 @@ class SIM_DB(Kimeco_db):
         species = [col for col in col_names if col != 'time']
         n_steps = table.num_rows
         rows = np.zeros((n_steps, 2 + len(species)), dtype=float)
-        rows[:, 0] = float(model_id)
+        rows[:, 0] = float(mdl_id)
         rows[:, 1] = np.array(table.column('time').to_pylist(), dtype=float)
 
         for idx, sp in enumerate(species):
@@ -99,13 +99,13 @@ class SIM_DB(Kimeco_db):
 
     def prepare_batch_upsert(self,
                              table: str,
-                             model_id: int,
+                             mdl_id: int,
                              experiment_id: int,
                              result: bytes) -> None:
         with self._upsert_lock:
             if table not in self._upsert:
                 self._upsert[table] = {}
-            self._upsert[table][(model_id, experiment_id)] = result
+            self._upsert[table][(mdl_id, experiment_id)] = result
 
     def batch_upsert(self) -> None:
         with self._upsert_lock:
@@ -122,9 +122,9 @@ class SIM_DB(Kimeco_db):
                 self.create_new_table(table)
 
             rows: list[dict[str, Any]] = []
-            for (model_id, experiment_id), result in payload.items():
+            for (mdl_id, experiment_id), result in payload.items():
                 rows.append({
-                    'model_id': int(model_id),
+                    'mdl_id': int(mdl_id),
                     'experiment_id': int(experiment_id),
                     'result': result,
                 })
@@ -134,7 +134,7 @@ class SIM_DB(Kimeco_db):
             stmt = insert(self.tables[table]).values(rows)
             stmt = stmt.on_conflict_do_update(
                 index_elements=[
-                    self.tables[table].c.model_id,
+                    self.tables[table].c.mdl_id,
                     self.tables[table].c.experiment_id,
                 ],
                 set_={'result': stmt.excluded.result}
@@ -174,15 +174,15 @@ class SIM_DB(Kimeco_db):
 
     def prepare_batch_select(self,
                              table: str,
-                             model_id: int,
+                             mdl_id: int,
                              experiment_id: int) -> None:
         with self._select_lock:
             if table not in self._select:
                 self._select[table] = set()
-            self._select[table].add((int(model_id), int(experiment_id)))
+            self._select[table].add((int(mdl_id), int(experiment_id)))
 
     def batch_select(self) -> dict[str, dict[int, dict[int, NDArray]]]:
-        """Return decoded rows keyed by table/model_id/experiment_id."""
+        """Return decoded rows keyed by table/mdl_id/experiment_id."""
         with self._select_lock:
             if len(self._select) == 0:
                 return {}
@@ -198,13 +198,13 @@ class SIM_DB(Kimeco_db):
                 continue
             conditions = [
                 and_(
-                    self.tables[table].c.model_id == model_id,
+                    self.tables[table].c.mdl_id == mdl_id,
                     self.tables[table].c.experiment_id == experiment_id,
                 )
-                for model_id, experiment_id in req_pairs
+                for mdl_id, experiment_id in req_pairs
             ]
             query = select(
-                self.tables[table].c.model_id,
+                self.tables[table].c.mdl_id,
                 self.tables[table].c.experiment_id,
                 self.tables[table].c.result,
             ).where(or_(*conditions))
@@ -243,12 +243,12 @@ class SIM_DB(Kimeco_db):
                 return results
 
             for row in db_rows:
-                key = (int(row.model_id), int(row.experiment_id))
+                key = (int(row.mdl_id), int(row.experiment_id))
                 if key not in req_pairs:
                     continue
                 decoded, species = self.decode_result_blob(
                     result=row.result,
-                    model_id=int(row.model_id),
+                    mdl_id=int(row.mdl_id),
                 )
                 if len(self.sv_species) == 0 and len(species) != 0:
                     self.sv_species = species

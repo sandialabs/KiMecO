@@ -15,7 +15,7 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.scoring_f.weighteddif import WeightedDif
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.sensitivity.linear import Linear
-from kimeco.element import Element
+from kimeco.model import Model
 from kimeco.enums import Optimizers, RestartType
 from kimeco.optimizers.GeneticAlgo.exponential import Exponential
 from kimeco.optimizers.GeneticAlgo.tournament import Tournament
@@ -49,8 +49,11 @@ class KiMecO:
         if not sim_job:
             self.klog.setLevel(self.settings['log_level'])
         self.klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
+        ct_yaml_path = self.settings['ct_yaml']
+        if not os.path.isabs(ct_yaml_path):
+            ct_yaml_path = os.path.join(self.init_loc, ct_yaml_path)
         self.mech = KiMec(
-            file=f"{self.init_loc}/{self.settings['ct_yaml']}",
+            file=ct_yaml_path,
             settings=self.settings)
         self.init_SOP: SOP
         self.input_tpls: list[list[str]]
@@ -149,7 +152,7 @@ class KiMecO:
         # User friendly for jupyter notebook use
         Linear.reset()
         self.sensitivity = Linear(
-            elements=[Element(
+            models=[Model(
                 sop=self.init_SOP,
                 id=0)],
             settings=self.settings,
@@ -157,17 +160,17 @@ class KiMecO:
             sf=self.sf,
             pert=self.pert,
             klog=self.klog)
-        if not self.sensitivity.elements_from_db:
+        if not self.sensitivity.models_from_db:
             self.klog.info(f"{'Running sensitivity analysis':<65}")
         else:
             self.klog.info(f"{'SA read from DB':<65}")
         self.sensitivity.run()  # Only actually run if necessary
         self.settings['active_p'] = self.sensitivity.selected
-        self.f_el: Element = self.sensitivity.elements[0]
-        if not self.sensitivity.elements_from_db or \
+        self.f_mdl: Model = self.sensitivity.models[0]
+        if not self.sensitivity.models_from_db or \
             (self.settings['restart'] == RestartType.RESCORE and
-             self.sensitivity.elements_from_db):
-            self.sensitivity.save_initial_element(
+             self.sensitivity.models_from_db):
+            self.sensitivity.save_initial_model(
                 sop_db=self.sop_db,
                 kin_db=self.kin_db,
                 sim_db=self.sim_db
@@ -205,7 +208,7 @@ class KiMecO:
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
-                    f_el=self.f_el,
+                    f_mdl=self.f_mdl,
                     klog=self.klog)
             elif self.settings['ga_type'].casefold() == 'exp':
                 self.optimizer = Exponential(
@@ -216,7 +219,7 @@ class KiMecO:
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
-                    f_el=self.f_el,
+                    f_mdl=self.f_mdl,
                     klog=self.klog)
             else:
                 raise TypeError('Unknown genetic algorythm requested')
@@ -229,15 +232,15 @@ class KiMecO:
                     sop_db=self.sop_db,
                     kin_db=self.kin_db,
                     sim_db=self.sim_db,
-                    f_el=self.f_el,
+                    f_mdl=self.f_mdl,
                     klog=self.klog)
         else:
             raise NotImplementedError('Unknown optimizer requested')
         self.klog.info(f"{'OPTIMIZER:':<65}{self.optimizer.name}")
 
-    def get_ensemble(self, name: str) -> list[Element]:
+    def get_ensemble(self, name: str) -> list[Model]:
         """
-        Resolve an ensemble name to a list of Elements.
+        Resolve an ensemble name to a list of Models.
 
         Supported formats:
         - 'Gdddd' e.g., 'G0001': GA generation dddd
@@ -245,56 +248,59 @@ class KiMecO:
         - 'GTxxxx': specific GOATs generation
         """
         name = name.strip()
-        elements: list[Element] = []
+        models: list[Model] = []
         if name.startswith('G') and len(name) == 5 and name[1:].isdigit():
             gen = int(name[1:])
             if gen != 1:
                 raise NotImplementedError("Only generation 1 is supported")
-                # TODO: Add previous el in SOP_db to know all elems
+                # TODO: Add previous mdl in SOP_db to know all mdls
                 #  of a generation, and not only the new ones.
             table: str = f'G{gen:04d}'
-            f_el_row = self.sop_db.get_table(table=table)[0]
-            f_el = Element(
+            f_mdl_row = self.sop_db.get_table(table=table)[0]
+            f_mdl = Model(
                 sop=SOP.from_db_row(
                     sop_tpl=self.init_SOP,
-                    row=f_el_row[1:]),
+                    row=f_mdl_row[1:]),
                 id=0,
                 gen=0)
-            elements.append(f_el)
+            models.append(f_mdl)
             if self.sop_db.table_exists(table):
                 rows = self.sop_db.get_table(table=table)
                 for row in rows:
                     sop: SOP = SOP.from_db_row(
                         sop_tpl=self.init_SOP,
                         row=row[1:])
-                    elements.append(
-                        Element(sop=sop,
-                                id=row[0],
-                                gen=gen))
+                    models.append(
+                        Model(
+                            sop=sop,
+                            id=row[0],
+                            gen=gen,
+                        )
+                    )
         elif name.startswith('GT'):
             # GOATs ensemble resolution from optimizer.goats
             if hasattr(self.optimizer, 'goats'):
                 goats: GOATs = self.optimizer.goats
                 # 'GT-1' means last generation
                 if name == 'GT-1':
-                    elements = goats.get_goat_for_gen(-1)
+                    models = goats.get_goat_for_gen(-1)
                 else:
                     # 'GTxxxx' means specific generation
                     gen = int(name[2:])
-                    elements = goats.get_goat_for_gen(gen)
+                    models = goats.get_goat_for_gen(gen)
             else:
                 self.klog.warning(
                     f"No GOATs object for ensemble '{name}'.")
-        if not elements:
+        if not models:
             self.klog.warning(f"Ensemble '{name}' not found or empty.")
-        return elements
+        return models
 
-    def run_nms(self, elements: list[Element]) -> None:
-        """Run NelderMeadSwarm starting from provided elements."""
-        if not elements:
+    def run_nms(self, models: list[Model]) -> None:
+        """Run NelderMeadSwarm starting from provided models."""
+        if not models:
             return
         swarm = NelderMeadSwarm(
-            elements=elements,
+            models=models,
             settings=self.settings,
             sf=self.sf,
             sop_db=self.sop_db,
@@ -307,16 +313,16 @@ class KiMecO:
         bests = swarm.run()
         self.klog.info(
             f"NMS completed: {len(bests)} NM finished successfully.")
-        best_el: Element = bests[
-            bests.index(min(bests, key=lambda el: el.score))]
-        msg = f"{'Best element after NMS:':<65}"
-        msg += "\n" + f"ID: {best_el.id}, Score: {best_el.score:.4f}"
+        best_mdl: Model = bests[
+            bests.index(min(bests, key=lambda mdl: mdl.score))]
+        msg = f"{'Best model after NMS:':<65}"
+        msg += "\n" + f"ID: {best_mdl.id}, Score: {best_mdl.score:.4f}"
         msg += "\nParameters:\n"
-        for k, v in best_el.sop.parameters_names.items():
+        for k, v in best_mdl.sop.parameters_names.items():
             msg += f"  {k}: {v}\n"
         self.klog.info(msg)
         mw = MessWriter(
-            SOP=best_el.sop,
+            SOP=best_mdl.sop,
             tpl=self.input_tpls)
         mw.write(
             loc=self.settings['workdir'],

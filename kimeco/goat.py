@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.engine import Row
 
 
-from kimeco.element import Element
+from kimeco.model import Model
 from kimeco.database.sop_db import SOP_DB
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
@@ -54,15 +54,15 @@ class GOATs:
         self.prefix: str = prefix
 
         # generations is a list where each index corresponds to a
-        # generation number and stores a list of (gen_id, el_id) tuples
-        # representing the GOAT elements for that generation.
+        # generation number and stores a list of (gen_id, mdl_id) tuples
+        # representing the GOAT models for that generation.
         self.generations: List[List[Tuple[int, int]]] = []
         self.scores: list[list[float]] = []
 
-        # all_seen stores Element objects we've been given through
+        # all_seen stores Model objects we've been given through
         # update_with_generation so we can compute the global bests.
-        # Keyed by (gen, id) -> Element
-        self.all_seen: Dict[Tuple[int, int], Element] = {}
+        # Keyed by (gen, id) -> Model
+        self.all_seen: Dict[Tuple[int, int], Model] = {}
 
         self.score_line_tpl = '{iter:>10}{best_score:>15}{score_avrg:>15}\n'
         if overwrite:
@@ -98,15 +98,15 @@ class GOATs:
                     if not goat_list:
                         continue
                     goats: List[Tuple[int, int]] = []
-                    for el in goat_list:
+                    for mdl in goat_list:
                         try:
-                            a, b = el.split("_", 1)
+                            a, b = mdl.split("_", 1)
                             goats.append((int(a), int(b)))
                         except Exception as exc:
                             raise ValueError(
                                 (
-                                    f"Malformed element on line {lineno+1}: '")
-                                + f"{el}'"
+                                    f"Malformed model on line {lineno+1}: '")
+                                + f"{mdl}'"
                             ) from exc
                     gens.append(goats)
         except FileNotFoundError:
@@ -116,14 +116,14 @@ class GOATs:
         inst.generations = gens
         return inst
 
-    def get_goat_for_gen(self, generation_number: int) -> List[Element]:
-        """Return a list of Element objects for the given generation number.
+    def get_goat_for_gen(self, generation_number: int) -> List[Model]:
+        """Return a list of Model objects for the given generation number.
 
         The GOAT file stores tokens as "genId_elId" (e.g. "0_12"). Each
-        token corresponds to an element stored in the corresponding
+        token corresponds to an model stored in the corresponding
         generation table in the SOP DB. This method queries the SOP_DB to
         reconstruct SOP objects (using SOP_DB.sop_tpl as template and
-        SOP.from_db_row) and returns Element instances with proper ids and
+        SOP.from_db_row) and returns Model instances with proper ids and
         generation set.
         """
         if generation_number == -1:
@@ -131,26 +131,26 @@ class GOATs:
         if generation_number < 0 or generation_number >= len(self.generations):
             raise IndexError("Generation number out of range")
 
-        elements: List[Element] = []
+        models: List[Model] = []
         # Each entry in self.generations[generation_number] is a tuple
-        # (gen_id, el_id)
+        # (gen_id, mdl_id)
         gen_ids = []
-        el_ids = []
+        mdl_ids = []
         tables = {}
 
-        for gen_id, el_id in self.generations[generation_number]:
+        for gen_id, mdl_id in self.generations[generation_number]:
             # Table name in DBs follows the pattern G{gen_id:04d}
             table: str = f"{self.prefix}{gen_id:04d}"
             if table not in tables:
                 tables[table] = []
-            tables[table].append(el_id)
+            tables[table].append(mdl_id)
             gen_ids.append(gen_id)
-            el_ids.append(el_id)
+            mdl_ids.append(mdl_id)
 
         # Prepare batch select for all required SOP rows
         for table, ids in tables.items():
-            for el_id in ids:
-                self.sop_db.prepare_batch_select(table=table, row_id=el_id)
+            for mdl_id in ids:
+                self.sop_db.prepare_batch_select(table=table, row_id=mdl_id)
 
         # Execute batch select
         try:
@@ -159,55 +159,55 @@ class GOATs:
         except Exception as exc:
             raise RuntimeError(f"Failed to retrieve SOP rows: {exc}") from exc
 
-        # Map rows to Elements
-        for gen_id, el_id in zip(gen_ids, el_ids):
+        # Map rows to Models
+        for gen_id, mdl_id in zip(gen_ids, mdl_ids):
             # drop the id column and reconstruct SOP
             table_rows = np.array(rows[f'{self.prefix}{gen_id:04d}'])
-            row = table_rows[table_rows[:, 0] == el_id][:, 1:]
+            row = table_rows[table_rows[:, 0] == mdl_id][:, 1:]
             if len(row) != 1:
                 msg = "Expected exactly one row for id "
-                msg += f"{el_id} in table G{gen_id:04d}, found {len(row)}"
+                msg += f"{mdl_id} in table G{gen_id:04d}, found {len(row)}"
                 raise ValueError(msg)
             sop_obj = self.sop_db.sop_tpl.__class__.from_db_row(
                 sop_tpl=self.sop_db.sop_tpl,
                 row=row[0]
             )
-            el = Element(sop=sop_obj, id=el_id, gen=gen_id)
-            elements.append(el)
+            mdl = Model(sop=sop_obj, id=mdl_id, gen=gen_id)
+            models.append(mdl)
 
-        return elements
+        return models
 
     def update_with_generation(self,
-                               elements: List[Element],
-                               goat_length: int) -> List[Element]:
+                               models: List[Model],
+                               goat_length: int) -> List[Model]:
         """Update internal GOATs state with a newly computed generation.
 
-        This method records the provided Element objects in the internal
-        'all_seen' pool, computes the best `goat_length` elements across all
-        seen elements (lower score is better), stores the resulting tokens as
+        This method records the provided Model objects in the internal
+        'all_seen' pool, computes the best `goat_length` models across all
+        seen models (lower score is better), stores the resulting tokens as
         the GOAT for that generation index, and writes the whole GOAT file.
 
-        Returns the list of selected Element objects.
+        Returns the list of selected Model objects.
         """
-        if not elements:
+        if not models:
             raise ValueError(
-                "No elements provided for update_with_generation")
+                "No models provided for update_with_generation")
 
-        gen_id: int = max(el.gen for el in elements)
+        gen_id: int = max(mdl.gen for mdl in models)
 
-        # Add new elements to pool
-        for el in elements:
-            self.all_seen[(el.gen, el.id)] = el
+        # Add new models to pool
+        for mdl in models:
+            self.all_seen[(mdl.gen, mdl.id)] = mdl
 
-        # Build candidate list from all seen elements up to this gen
-        candidates: List[Element] = [
-            el
-            for (g, _), el in self.all_seen.items()
+        # Build candidate list from all seen models up to this gen
+        candidates: List[Model] = [
+            mdl
+            for (g, _), mdl in self.all_seen.items()
             if g <= gen_id
         ]
 
         # Sort ascending by score (lower is better) and pick top N
-        chosen: List[Element] = sorted(
+        chosen: List[Model] = sorted(
             candidates, key=lambda e: e.score)[:goat_length]
 
         # Ensure self.generations is long enough
@@ -218,7 +218,7 @@ class GOATs:
             )
 
         # Store tokens for this generation
-        self.generations[gen_id] = [(el.gen, el.id) for el in chosen]
+        self.generations[gen_id] = [(mdl.gen, mdl.id) for mdl in chosen]
 
         # Persist full file (rewrite) to keep it consistent
         with open(self.wdir + '/' + self.filename, 'w', encoding='utf-8') as f:
@@ -229,8 +229,8 @@ class GOATs:
                 line = ' '.join(f"{g}_{i}" for g, i in goats)
                 f.write(line + '\n')
 
-        best_score: float = min(el.score for el in chosen)
-        average_score = np.average([el.score for el in chosen])
+        best_score: float = min(mdl.score for mdl in chosen)
+        average_score = np.average([mdl.score for mdl in chosen])
         with open(self.wdir + '/score_info.txt', 'a', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
                 iter=f"{gen_id:04d}",
@@ -245,7 +245,7 @@ class GOATs:
         rate_pairs: List[Tuple[Optional[str], Optional[str]]],
         pes_ids: Optional[List[int]] = None,
     ) -> RateResult:
-        """Return rate coefficients for GOAT elements in the requested
+        """Return rate coefficients for GOAT models in the requested
         generations and conditions.
 
         This method minimizes DB queries by batching requests using
@@ -261,31 +261,31 @@ class GOATs:
 
         Returns:
             Nested dict structured per generation, per (p,t) condition and
-            per (From,To) pair mapping element keys to floats or None.
+            per (From,To) pair mapping model keys to floats or None.
 
         Notes:
-            - A generation may contain multiple GOAT elements; the return
-              maps each (el.gen, el.id) to the corresponding rate value.
+            - A generation may contain multiple GOAT models; the return
+              maps each (mdl.gen, mdl.id) to the corresponding rate value.
             - Missing DB entries are represented as None.
         """
         # Clear any previous selects in kin_db and prepare batched selects
         # NOTE: KIN_DB.prepare_batch_select appends into kin_db._select
         # so we just call it repeatedly and then a single batch_select().
 
-        # Collect element tokens (gen,id) per requested generation.
-        # We avoid reconstructing Element objects here and use the
+        # Collect model tokens (gen,id) per requested generation.
+        # We avoid reconstructing Model objects here and use the
         # stored tokens directly to minimize work.
-        # gen_elements: Dict[int, List[Tuple[int, int]]] = {}
+        # gen_models: Dict[int, List[Tuple[int, int]]] = {}
         # for gen_id in gen_ids:
         #     tokens = self.generations[gen_id]
-        #     gen_elements[gen_id] = tokens
+        #     gen_models[gen_id] = tokens
 
-        # Prepare batch selects for every element token / condition /
-        # rate_pair. gen_elements stores tuples (elem_gen, elem_id).
+        # Prepare batch selects for every model token / condition /
+        # rate_pair. gen_models stores tuples (mdl_gen, mdl_id).
         for gen_id in gen_ids:
-            for (elem_gen, elem_id) in self.generations[gen_id]:
-                table: str = f"{self.prefix}{elem_gen:04d}"
-                kin_id = int(elem_id)
+            for (mdl_gen, mdl_id) in self.generations[gen_id]:
+                table: str = f"{self.prefix}{mdl_gen:04d}"
+                kin_id = int(mdl_id)
                 for (p, t) in req_conditions:
                     for pair in rate_pairs:
                         from_name, to_name = pair
@@ -328,9 +328,9 @@ class GOATs:
                     valid_pairs.append(pair_key)
                     out[gen_id][(p, t)][pair_key] = {}
 
-                for (elem_gen, elem_id) in self.generations[gen_id]:
-                    table = f"{self.prefix}{elem_gen:04d}"
-                    kin_id = int(elem_id)
+                for (mdl_gen, mdl_id) in self.generations[gen_id]:
+                    table = f"{self.prefix}{mdl_gen:04d}"
+                    kin_id = int(mdl_id)
                     kin_rslt = raw_results.get(table, {}).get(kin_id, {})
                     for pair_key in valid_pairs:
                         from_name, to_name = pair_key
@@ -350,14 +350,14 @@ class GOATs:
                         if found:
                             value = total
                         out[gen_id][(p, t)][pair_key][
-                            (elem_gen, elem_id)
+                            (mdl_gen, mdl_id)
                         ] = value
         return out
 
     def get_p_for_gen(self,
                       params: List[str],
                       gen_id: int) -> NDArray:
-        """Return requested SOP parameters for GOAT elements.
+        """Return requested SOP parameters for GOAT models.
 
         Args:
             params: list of parameter names (keys in SOP.parameters_names)
@@ -368,9 +368,9 @@ class GOATs:
 
         """
 
-        for (gen_origin, el_id) in self.generations[gen_id]:
+        for (gen_origin, mdl_id) in self.generations[gen_id]:
             table: str = f"{self.prefix}{gen_origin:04d}"
-            self.sop_db.prepare_batch_select(table=table, row_id=el_id)
+            self.sop_db.prepare_batch_select(table=table, row_id=mdl_id)
 
         # Execute batched select once
         raw_cols: List[Tuple[Any]] = self.sop_db.batch_select_cols(cols=params)

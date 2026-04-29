@@ -1,6 +1,7 @@
 """Experiments section for building experiment configurations."""
 import os
 from string import Formatter
+from typing import Any, cast
 import cantera.with_units as ctu
 
 from dash import (
@@ -16,9 +17,13 @@ from dash import (
 
 from kimeco.gui.input_sections.file_browser import FileBrowserDropdown
 from kimeco.experiments.t_profile import TimeProfile
+from kimeco.default_settings import default_settings
 
 
-SCORING_FUNC_OPTIONS = [{"label": "weighteddif", "value": "weighteddif"}]
+SCORING_FUNC_OPTIONS = [
+    {"label": default_settings["scoring_func"],
+     "value": default_settings["scoring_func"]}
+]
 INIT_MODE_OPTIONS = [
     {"label": "Ratio", "value": "ratio"},
     {"label": "Concentration", "value": "concentration"},
@@ -35,14 +40,15 @@ def _build_pressure_unit_options() -> list[dict[str, str]]:
             if str(unit) != "sound_pressure_level"
         )
     except Exception:
-        units = ["torr"]
+        units = [default_settings["pres_unit"]]
     return [{"label": unit, "value": unit} for unit in units]
 
 
 PRESSURE_UNIT_OPTIONS = _build_pressure_unit_options()
 DEFAULT_PRESSURE_UNIT = (
-    "torr"
-    if any(opt["value"] == "torr" for opt in PRESSURE_UNIT_OPTIONS)
+    default_settings["pres_unit"]
+    if any(opt["value"] == default_settings["pres_unit"]
+           for opt in PRESSURE_UNIT_OPTIONS)
     else PRESSURE_UNIT_OPTIONS[0]["value"]
 )
 
@@ -117,11 +123,12 @@ def _make_empty_experiment(exp_id: int) -> dict:
         "pres": None,
         "pres_unit": DEFAULT_PRESSURE_UNIT,
         "cantera_tpl": "",
-        "scoring_func": "weighteddif",
+        "scoring_func": default_settings["scoring_func"],
         "data_file": "",
         "error_file": "",
         "init_mode": "ratio",
         "init_value": "",
+        "w_species": {},
     }
 
 
@@ -156,6 +163,42 @@ def _experiment_file_browser(idx: int, field: str) -> html.Div:
     )
 
 
+def _build_w_species_rows(w_species: dict) -> list:
+    """Build w_species weight rows from dict."""
+    if not w_species:
+        return []
+    rows = []
+    for species_name, weight in w_species.items():
+        rows.append(html.Div([
+            html.Div([
+                dcc.Input(
+                    type="text",
+                    placeholder="Species name",
+                    value=species_name,
+                    className="form-control form-control-sm",
+                    readOnly=True,
+                ),
+            ], className="col-md-6"),
+            html.Div([
+                dcc.Input(
+                    type="number",
+                    min=0,
+                    step=0.1,
+                    placeholder="Weight",
+                    value=weight,
+                    className="form-control form-control-sm",
+                ),
+            ], className="col-md-4"),
+            html.Div([
+                html.Button(
+                    "×",
+                    className="btn btn-danger btn-sm w-100",
+                ),
+            ], className="col-md-2"),
+        ], className="row g-2 mb-2"))
+    return rows
+
+
 def _experiment_form(exp: dict, idx: int) -> html.Div:
     """Render a single experiment form card."""
     return html.Div([
@@ -185,7 +228,7 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                 html.Label("Pressure Unit", className="form-label"),
                 dcc.Dropdown(
                     id={"type": "exp-pres-unit", "index": idx},
-                    options=PRESSURE_UNIT_OPTIONS,
+                    options=cast(Any, PRESSURE_UNIT_OPTIONS),
                     value=exp.get("pres_unit", DEFAULT_PRESSURE_UNIT),
                     clearable=False,
                 ),
@@ -194,7 +237,7 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                 html.Label("Scoring Function", className="form-label"),
                 dcc.Dropdown(
                     id={"type": "exp-scoring-func", "index": idx},
-                    options=SCORING_FUNC_OPTIONS,
+                    options=cast(Any, SCORING_FUNC_OPTIONS),
                     value=exp.get("scoring_func", "weighteddif"),
                     clearable=False,
                 ),
@@ -203,7 +246,7 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                 html.Label("Initial composition mode", className="form-label"),
                 dcc.Dropdown(
                     id={"type": "exp-init-mode", "index": idx},
-                    options=INIT_MODE_OPTIONS,
+                    options=cast(Any, INIT_MODE_OPTIONS),
                     value=exp.get("init_mode", "ratio"),
                     clearable=False,
                 ),
@@ -272,6 +315,29 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                 _experiment_file_browser(idx, "error_file"),
             ], className="col-md-4"),
         ], className="row g-2"),
+        # Species weights (w_species)
+        html.Div([
+            html.Label(
+                "Species Weights (w_species) - Optional",
+                className="form-label fw-semibold mt-3"
+            ),
+            html.Small(
+                "Set relative weights for species in scoring function. "
+                "Leave empty to weight all species equally.",
+                className="text-muted d-block mb-2"
+            ),
+            html.Div(
+                id={"type": "exp-w-species-rows", "index": idx},
+                children=_build_w_species_rows(
+                    exp.get("w_species", {})
+                ),
+            ),
+            html.Button(
+                "+ Add Species",
+                id={"type": "exp-w-species-add", "index": idx},
+                className="btn btn-outline-primary btn-sm mt-2",
+            ),
+        ], className="mt-3"),
     ], className="card p-3 mb-2 bg-light")
 
 
@@ -619,8 +685,9 @@ def add_experiment(
                 else DEFAULT_PRESSURE_UNIT
             ) or DEFAULT_PRESSURE_UNIT,
             "scoring_func": (
-                scoring_funcs[i] if i < len(scoring_funcs) else "weighteddif"
-            ) or "weighteddif",
+                scoring_funcs[i] if i < len(scoring_funcs)
+                else default_settings["scoring_func"]
+            ) or default_settings["scoring_func"],
             "init_mode": (
                 init_modes[i] if i < len(init_modes) else "ratio"
             ) or "ratio",

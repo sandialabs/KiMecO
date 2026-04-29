@@ -41,6 +41,22 @@ def _build_reader(tmp_path: Path) -> MessInputReader:
     )
 
 
+def test_reader_accepts_absolute_mess_input_paths(tmp_path: Path) -> None:
+    settings = _dme_settings()
+    settings["mess_inputs"] = [
+        str((DME_ROOT / path).resolve()) for path in settings["mess_inputs"]
+    ]
+
+    reader = MessInputReader(
+        settings=settings,
+        mechanism_species=[],
+        klog=KMOLogger(filename=str(tmp_path / "absolute_paths.log")),
+        postprocess=False,
+    )
+
+    assert reader.filenames == settings["mess_inputs"]
+
+
 # Find the starting line of a block in the MESS input file
 def _find_line(lines: list[str], blockname: str, after: int = 0) -> int:
     for idx in range(after, len(lines)):
@@ -148,7 +164,7 @@ def test_read_well_species_matches_mechanism_species_objects(
     settings["force_new_molecules"] = False
     parse_reader = MessInputReader(
         settings=settings,
-        mechanism_species=[DummySpecies("IN_MECH")],
+        mechanism_species=["IN_MECH"],
         klog=KMOLogger(filename=str(tmp_path / "species_object_match.log")),
         postprocess=False,
     )

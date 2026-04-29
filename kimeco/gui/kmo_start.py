@@ -19,6 +19,9 @@ from kimeco.gui.input_sections.experiments_section import (
 from kimeco.gui.input_sections.optimizer_section import (
     create_optimizer_section
 )
+from kimeco.gui.input_sections.sensitivity_section import (
+    create_sensitivity_section
+)
 from kimeco.gui.input_sections.perturbation_section import (
     create_perturbation_section
 )
@@ -27,9 +30,6 @@ from kimeco.gui.input_sections.postprocessing_section import (
 )
 from kimeco.gui.input_sections.resources_section import (
     create_resources_section
-)
-from kimeco.gui.input_sections.advanced_section import (
-    create_advanced_section
 )
 from kimeco.gui.input_sections.save_load_write_section import (
     create_save_load_write_section
@@ -105,7 +105,19 @@ class KMOStartApp:
                             ]
                         ),
                         dcc.Tab(
-                            label="4. Optimizer",
+                            label="4. Sensitivity Analysis",
+                            value="sensitivity-tab",
+                            disabled=True,
+                            id="sensitivity-tab",
+                            children=[
+                                html.Div(
+                                    create_sensitivity_section(),
+                                    style={"marginTop": "20px"}
+                                )
+                            ]
+                        ),
+                        dcc.Tab(
+                            label="5. Optimizer",
                             value="optimizer-tab",
                             disabled=True,
                             id="optimizer-tab",
@@ -117,7 +129,7 @@ class KMOStartApp:
                             ]
                         ),
                         dcc.Tab(
-                            label="5. Perturbation",
+                            label="6. Theoretical Uncertainties",
                             value="perturbation-tab",
                             disabled=True,
                             id="perturbation-tab",
@@ -129,7 +141,7 @@ class KMOStartApp:
                             ]
                         ),
                         dcc.Tab(
-                            label="6. Postprocessing",
+                            label="7. Postprocessing",
                             value="postprocessing-tab",
                             disabled=True,
                             id="postprocessing-tab",
@@ -141,25 +153,13 @@ class KMOStartApp:
                             ]
                         ),
                         dcc.Tab(
-                            label="7. Resources",
+                            label="8. Resources",
                             value="resources-tab",
                             disabled=True,
                             id="resources-tab",
                             children=[
                                 html.Div(
                                     create_resources_section(),
-                                    style={"marginTop": "20px"}
-                                )
-                            ]
-                        ),
-                        dcc.Tab(
-                            label="8. Advanced",
-                            value="advanced-tab",
-                            disabled=True,
-                            id="advanced-tab",
-                            children=[
-                                html.Div(
-                                    create_advanced_section(),
                                     style={"marginTop": "20px"}
                                 )
                             ]
@@ -242,11 +242,11 @@ class KMOStartApp:
         # Callback to enable/disable settings tabs based on experiments
         @callback(
             [
+                Output("sensitivity-tab", "disabled"),
                 Output("optimizer-tab", "disabled"),
                 Output("perturbation-tab", "disabled"),
                 Output("postprocessing-tab", "disabled"),
                 Output("resources-tab", "disabled"),
-                Output("advanced-tab", "disabled"),
             ],
             Input("experiment-count-store", "data"),
             prevent_initial_call=True

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+from typing import Any, cast
 
 import numpy as np
 
@@ -94,15 +95,15 @@ def rateco(tmp_path: Path) -> RateCo:
         "mem_kin": 500,
     }
     return RateCo(
-        sop=DummySOP(),
+        sop=cast(Any, DummySOP()),
         settings=settings,
         software_tpls=[["tpl0"], ["tpl1"], ["tpl2"]],
         id=0,
         q_idx=7,
         name="G0000E0001",
         loc=str(tmp_path),
-        q_sys=DummyQueue(),
-        db=DummyDB(),
+        q_sys=cast(Any, DummyQueue()),
+        db=cast(Any, DummyDB()),
         klog=KMOLogger(filename=str(tmp_path / "rateco.log")),
     )
 
@@ -113,8 +114,8 @@ def test_q_up_passes_n_pes_to_queue(rateco: RateCo, monkeypatch: pytest.MonkeyPa
 
     rateco.q_up()
 
-    assert len(rateco.q_sys.calls) == 1
-    call = rateco.q_sys.calls[0]
+    assert len(cast(Any, rateco.q_sys).calls) == 1
+    call = cast(Any, rateco.q_sys).calls[0]
     assert call["n_pes"] == 3
     assert call["jtype"] == "kin"
     assert call["name"] == "G0000E0001"
@@ -133,15 +134,15 @@ def test_recover_results_maps_output_slot_to_real_pes_id(
         "mem_kin": 500,
     }
     rateco = RateCo(
-        sop=DummyRecoverSOP(),
+        sop=cast(Any, DummyRecoverSOP()),
         settings=settings,
         software_tpls=[["tpl0"], ["tpl1"]],
         id=0,
         q_idx=3,
         name="G0000E0001",
         loc=str(tmp_path),
-        q_sys=DummyRecoverQueue(),
-        db=DummyDB(),
+        q_sys=cast(Any, DummyRecoverQueue()),
+        db=cast(Any, DummyDB()),
         klog=KMOLogger(filename=str(tmp_path / "recover.log")),
     )
     monkeypatch.setattr("kimeco.rate_coef.MessOutputReader", FakeMessOutputReader)
@@ -170,15 +171,15 @@ def test_set_status_surfaces_missing_generation_table_keyerror(
         "mem_kin": 500,
     }
     rateco = RateCo(
-        sop=DummySOP(),
+        sop=cast(Any, DummySOP()),
         settings=settings,
         software_tpls=[["tpl0"], ["tpl1"], ["tpl2"]],
         id=0,
         q_idx=1,
         name="G0000E0000",
         loc=str(tmp_path),
-        q_sys=DummyStatusQueue(),
-        db=DummyDBMissingTable(),
+        q_sys=cast(Any, DummyStatusQueue()),
+        db=cast(Any, DummyDBMissingTable()),
         klog=KMOLogger(filename=str(tmp_path / "missing_table.log")),
     )
 

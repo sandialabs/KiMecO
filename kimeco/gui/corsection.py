@@ -3,7 +3,7 @@ from dash import html, dcc, Output, Input, State, MATCH
 from dash.dash_table import DataTable
 from dash.exceptions import PreventUpdate
 import numpy as np
-from typing import Any
+from typing import Any, cast
 import plotly.graph_objects as go
 
 
@@ -53,17 +53,17 @@ class CORSection(Section):
                 raise PreventUpdate
             for gen_i in selected_gen:
                 if gen_i not in self.sop_tables:
-                    # Fetch Elements for this generation and build the
-                    # parameter table directly from Element.sop.parameters_names
-                    elements = self.gapp.goats.get_goat_for_gen(gen_i)
+                    # Fetch Models for this generation and build the
+                    # parameter table directly from Model.sop.parameters_names
+                    models = self.gapp.goats.get_goat_for_gen(gen_i)
                     # Preserve GOAT ordering when building rows
                     rows: list[list[float]] = []
-                    for el in elements:
+                    for mdl in models:
                         # parameters_names is an ordered dict-like mapping
-                        vals = list(el.sop.parameters_names.values())
+                        vals = list(mdl.sop.parameters_names.values())
                         # Prepend the id into the row for compatibility with
                         # previous layout (original code used [:,1:])
-                        rows.append([el.id] + [float(v) for v in vals])
+                        rows.append([mdl.id] + [float(v) for v in vals])
                     if rows:
                         self.sop_tables[gen_i] = np.array(rows)
                     else:
@@ -189,27 +189,29 @@ class CORSection(Section):
         cor = np.corrcoef(non_constant_data, rowvar=False)
         r2 = cor**2
         # Prepare the data for the DataTable
-        data = [
+        data: list[dict[str, str | int | float | bool]] = [
             {**{'Header': col_name}, **{p: float(f'{v:.2f}')
                                         for p, v in zip(perturbed_cols, row)}}
             for col_name, row in zip(perturbed_cols, r2)
         ]
 
-        header = [{'name': f'G{id:04d}', 'id': 'Header', 'type': 'text'}] + [
+        header: list[dict[str, str]] = [
+            {'name': f'G{id:04d}', 'id': 'Header', 'type': 'text'}
+        ] + [
             {'name': col, 'id': col, 'type': 'numeric'}
             for col in perturbed_cols
         ]
         cond_style = self.get_cond_style(perturbed_cols)
         self.corr_tables.append(html.Div(children=[
             DataTable(
-                columns=header,
-                data=data,
+                columns=cast(Any, header),
+                data=cast(Any, data),
                 style_cell=dict(textAlign='center'),
                 id={"type": "cor_table", "index": id},
                 editable=False,
                 style_table={'overflowX': 'auto'},
                 style_header={'backgroundColor': 'lightgrey'},
-                style_data_conditional=cond_style,
+                style_data_conditional=cast(Any, cond_style),
                 cell_selectable=True,  # Enable cell selection
                 selected_cells=[],  # Initialize as empty
             ),
@@ -245,7 +247,7 @@ class CORSection(Section):
 
     def get_cond_style(self,
                        cols: list[str]):
-        cond = [
+        cond: list[dict[str, Any]] = [
             {
                 'if': {
                     'column_id': 'Header',

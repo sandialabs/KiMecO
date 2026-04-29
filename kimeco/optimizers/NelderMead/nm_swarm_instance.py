@@ -6,11 +6,11 @@ from kimeco.database.sop_db import SOP_DB
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.optimizers.NelderMead.nelder_mead import NelderMead
 from kimeco.optimizers.NelderMead.db_query_saver import DBQuerySaver
-from kimeco.element import Element
+from kimeco.model import Model
 from scipy.optimize import minimize
 from numpy.typing import NDArray
 from kimeco.parameters import SOP
-from kimeco.enums import ElementStatus
+from kimeco.enums import ModelStatus
 from kimeco.optimizers.NelderMead.nm_swarm_runner import NMSRunner
 from kimeco.logger_config import KMOLogger
 
@@ -19,7 +19,7 @@ class NelderMeadInstance(NelderMead):
     """Nelder-Mead instance for use within NelderMeadSwarm.
 
     Uses instance-specific table naming (NM0000, NM0001, ...), maintains
-    per-instance element counters, and works with fixed dimensions (no
+    per-instance model counters, and works with fixed dimensions (no
     sensitivity analysis during optimization).
     """
 
@@ -31,7 +31,7 @@ class NelderMeadInstance(NelderMead):
                  sop_db: SOP_DB,
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
-                 f_el: Element,
+                 f_mdl: Model,
                  input_tpls: list[list[str]],
                  klog: KMOLogger,
                  dimensions: list[str],
@@ -49,12 +49,12 @@ class NelderMeadInstance(NelderMead):
             sop_db: SOP database
             sim_db: Simulation database
             kin_db: Kinetics database
-            f_el: Initial element
+            f_mdl: Initial model
             input_tpls: Rate constant templates
             klog: Logger
             dimensions: Fixed list of parameters to optimize
             nm_subdir: Subdirectory for this instance's files
-            registry: Optional SwarmRegistry for tracking elements
+            registry: Optional SwarmRegistry for tracking models
         """
         self.nm_id: int = nm_id
         self.gen_prefix: str = prefix + 'G'
@@ -69,7 +69,7 @@ class NelderMeadInstance(NelderMead):
             sop_db=sop_db,
             sim_db=sim_db,
             kin_db=kin_db,
-            f_el=f_el,
+            f_mdl=f_mdl,
             input_tpls=input_tpls,
             klog=klog,
             prefix=self.prefix
@@ -93,29 +93,29 @@ class NelderMeadInstance(NelderMead):
         options['initial_simplex'] = self.get_initial_simplex()
 
         self.klog.debug(
-            f"Setting final Nelder-Mead fatol="
-            f"{self.settings['nm_final_fatol']}")
-        options['fatol'] = self.settings['nm_final_fatol']
+            f"Setting Nelder-Mead fatol="
+            f"{self.settings['nm_fatol']}")
+        options['fatol'] = self.settings['nm_fatol']
 
         self.klog.debug(
-            f"Setting final Nelder-Mead xatol="
-            f"{self.settings['nm_final_xatol']}")
-        options['xatol'] = self.settings['nm_final_xatol']
+            f"Setting Nelder-Mead xatol="
+            f"{self.settings['nm_xatol']}")
+        options['xatol'] = self.settings['nm_xatol']
 
-        if self.settings['nm_final_maxiter'] > 0:
+        if self.settings['nm_maxiter'] > 0:
             self.klog.debug(
-                f"Setting final Nelder-Mead maxiter="
-                f"{self.settings['nm_final_maxiter']}")
-            options['maxiter'] = self.settings['nm_final_maxiter']
+                f"Setting Nelder-Mead maxiter="
+                f"{self.settings['nm_maxiter']}")
+            options['maxiter'] = self.settings['nm__maxiter']
 
         if self.settings['nm_maxfev'] > 0:
             self.klog.debug(
-                f"Setting final Nelder-Mead maxfev="
-                f"{self.settings['nm_final_maxfev']}")
-            options['maxfev'] = self.settings['nm_final_maxfev']
+                f"Setting Nelder-Mead maxfev="
+                f"{self.settings['nm_maxfev']}")
+            options['maxfev'] = self.settings['nm_maxfev']
 
         if self.settings['nm_adaptive']:
-            self.klog.debug("Using adaptive for final Nelder-Mead")
+            self.klog.debug("Using adaptive Nelder-Mead")
             options['adaptive'] = True
             # better performance in high D.
         return options
@@ -148,7 +148,7 @@ class NelderMeadInstance(NelderMead):
         return result.x
 
     def objective_function(self, params: NDArray) -> float:
-        """Objective function with per-instance element tracking."""
+        """Objective function with per-instance model tracking."""
         row = [
             v
             if p not in self.current_dimensions
@@ -159,14 +159,14 @@ class NelderMeadInstance(NelderMead):
 
         # SOP from vertice
         self.last_vertice = SOP.from_db_row(
-            sop_tpl=self.f_el.sop,
+            sop_tpl=self.f_mdl.sop,
             row=row
         )
 
         # Check if this SOP already exists in our NM table
         table_name: str = f'{self.gen_prefix}{self.gen_counter:04d}'
         if self.dbqs.is_vertice_finished(gen_id=self.gen_counter,
-                                         el_id=self.nm_id,
+                                         mdl_id=self.nm_id,
                                          prefix=self.gen_prefix):
             self.klog.debug(
                 f"NM{self.nm_id:04d} call {self.gen_counter} is in db.")
@@ -181,7 +181,7 @@ class NelderMeadInstance(NelderMead):
 
             if sop_in_db:
                 db_sop: SOP = SOP.from_db_row(
-                    sop_tpl=self.f_el.sop,
+                    sop_tpl=self.f_mdl.sop,
                     row=db_row
                 )
                 same_p: list[bool] = [
@@ -195,105 +195,63 @@ class NelderMeadInstance(NelderMead):
                         self.last_vertice.parameters_names)
                 ]
                 if all(same_p):
-                    vertice = Element(
+                    vertice = Model(
                         sop=db_sop,
                         id=self.nm_id,
                         gen=self.gen_counter,
-                        status=ElementStatus.DONE.value)
+                        status=ModelStatus.DONE.value)
                 else:
-                    vertice = Element(
+                    vertice = Model(
                         sop=self.last_vertice,
                         id=self.nm_id,
                         gen=self.gen_counter)
             else:
-                vertice = Element(
+                vertice = Model(
                     sop=self.last_vertice,
                     id=self.nm_id,
                     gen=self.gen_counter)
         else:
-            vertice = Element(
+            vertice = Model(
                 sop=self.last_vertice,
                 id=self.nm_id,
                 gen=self.gen_counter)
 
         # Create a generation-like run but with NM table names
-        finished_vertice: Element = self.shared_core.run(el=vertice)
+        finished_vertice: Model = self.shared_core.run(mdl=vertice)
 
-        # Increment element counter for next evaluation
+        # Increment generation counter for next evaluation
         self.gen_counter += 1
-
-        # self.print_stats(
-        #     params=np.array([
-        #         self.get_absolute(
-        #             param=p,
-        #             value=params[self.current_dimensions.index(p)])
-        #         for p in self.current_dimensions]))
         self.update_iterations(last_vertice=finished_vertice)
 
         return finished_vertice.score
 
-    # def is_vertice_finished(self,
-    #                         gen_id: int,
-    #                         elem_id: int) -> bool:
-    #     """Check if a table is finished.
-
-    #     Args:
-    #         nm_id: ID of the nelder-mead instance
-    #         elem_id: Element ID to check
-    #     Returns:
-    #         bool: Whether it is finished
-    #     """
-    #     table_name: str = f"{self.gen_prefix}{gen_id:04d}"
-
-    #     if self.sop_db.table_exists(table_name) and\
-    #        self.kin_db.table_exists(table_name) and\
-    #        self.sim_db.table_exists(table_name):
-    #         sop_ids = set(self.sop_db.get_column(
-    #             table=table_name,
-    #             column_name='id'))
-    #         kin_ids = set(self.kin_db.get_column(
-    #             table=table_name,
-    #             column_name='kin_id'))
-    #         tmp = np.array(self.sim_db.get_column(
-    #             table=table_name,
-    #             column_name='sim_id'))//len(self.settings['exp_profiles'])
-    #         sim_ids = set(tmp.tolist())
-    #         if elem_id in sop_ids and\
-    #            elem_id in kin_ids and\
-    #            elem_id in sim_ids:
-    #             return True
-    #         else:
-    #             return False
-    #     else:
-    #         return False
-
     def update_iterations(self,
-                          last_vertice: Element) -> None:
+                          last_vertice: Model) -> None:
         """Keep track of the scores."""
         with open(self.score_file, 'a', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
                 iter=self.gen_counter,
                 score=f"{last_vertice.score:.3f}"))
 
-    def get_best_element(self) -> Element:
-        """Get the best element found during optimization.
+    def get_best_model(self) -> Model:
+        """Get the best model found during optimization.
 
         Returns:
-            Element with lowest score
+            Model with lowest score
         """
-        all_vertices: list[Element] = []
+        all_vertices: list[Model] = []
         rows = self.sop_db.get_table(
             table=f'{self.gen_prefix}{self.gen_counter:04d}')
         for row in rows:
             sop = SOP.from_db_row(
-                sop_tpl=self.f_el.sop,
+                sop_tpl=self.f_mdl.sop,
                 row=row[1:])  # Skip id
-            element = Element(
+            model = Model(
                 sop=sop,
                 id=row[0],  # id
                 gen=self.gen_counter,
-                status=ElementStatus.DONE.value)
-            all_vertices.append(element)
+                status=ModelStatus.DONE.value)
+            all_vertices.append(model)
 
-        # Return element with best score
-        return min(all_vertices, key=lambda el: el.score)
+        # Return model with best score
+        return min(all_vertices, key=lambda mdl: mdl.score)

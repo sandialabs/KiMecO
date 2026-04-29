@@ -1,6 +1,7 @@
 """Shared file browser dropdown component and helpers for input sections."""
 
 import os
+from typing import Any, cast
 
 from dash import dcc, html
 
@@ -105,7 +106,7 @@ class FileBrowserDropdown:
             ], className="mt-2"),
             dcc.Dropdown(
                 id=dropdown_id,
-                options=self.build_options(initial_dir),
+                options=cast(Any, self.build_options(initial_dir)),
                 placeholder=placeholder,
                 clearable=False,
                 value=None,

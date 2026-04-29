@@ -1,13 +1,15 @@
 from curses.ascii import isdigit
 from uu import Error
-
 from kimeco.parameters import SOP
 from kimeco.barrier import Barrier
 from kimeco.bimolecular import Bimolecular
+from kimeco.well import Well
 from kimeco.rotors.internalrotation import InternalRotation
 from kimeco.logger_config import KMOLogger
 
 import os
+import sys
+from typing import cast
 
 
 # TODO: Make the parsing robust to file swap on
@@ -18,7 +20,7 @@ class MessInputReader:
      an object with easily extractable data."""
     def __init__(self,
                  settings: dict,
-                 mechanism_species: list[object],
+                 mechanism_species: list[str],
                  klog: KMOLogger,
                  postprocess: bool = False) -> None:
         """Save the file content as a string for further manipulation
@@ -29,29 +31,30 @@ class MessInputReader:
         """
         self.filenames: list[str] = []
         for mess_input in settings['mess_inputs']:
-            self.filenames.append(settings['init_loc'] + '/' + mess_input)
+            if os.path.isabs(mess_input):
+                resolved_path = os.path.abspath(mess_input)
+            else:
+                resolved_path = os.path.abspath(
+                    os.path.join(settings['init_loc'], mess_input)
+                )
+            self.filenames.append(resolved_path)
         n_exp = settings.get('n_exp')
         if n_exp is None:
             n_exp = len(settings.get('experiments', []))
         if n_exp <= 0:
-            n_exp = 1
-        score_keys = [f'exp_{i}' for i in range(n_exp)]
-        self.SOP: SOP = SOP(
-            score_species=score_keys,
-            freq_mode=settings['freq_mode']
-        )
+            self.klog.error("Number of experiments must be positive.")
+            sys.exit(1)
+        self.SOP: SOP = SOP(n_exp=n_exp)
+
         if postprocess:
             self.SOP.temp = settings["pp_temp"]
             self.SOP.pres = settings["pp_pres"]
         else:
             self.SOP.temp = settings["rc_temp"]
             self.SOP.pres = settings["rc_pres"]
-        self.SOP.pres_unit = settings["pres_unit"]
+        self.SOP.pres_unit = 'bar'
         self.klog: KMOLogger = klog
-        self.mechanism_species: set[str] = {
-            self._normalize_species_name(species)
-            for species in mechanism_species
-        }
+        self.mechanism_species: list[str] = mechanism_species
         self.force_new_molecules: bool = settings['force_new_molecules']
         self.files2copy: list[str] = []
         self.pes_files: list[list[str]] = []
@@ -71,28 +74,10 @@ class MessInputReader:
         # to trigger the stop of the program after reading the input file.
         self._trigger_stop = False
 
-    @staticmethod
-    def _normalize_species_name(species: object) -> str:
-        """Return a canonical species name for robust membership checks."""
-        raw_name = species if isinstance(species, str) else getattr(
-            species,
-            "name",
-            str(species),
-        )
-        normalized = raw_name.strip()
-        # Drop one level of common wrappers used in some MESS inputs.
-        if len(normalized) >= 2 and (
-            (normalized[0] == "{" and normalized[-1] == "}")
-            or (normalized[0] == '"' and normalized[-1] == '"')
-            or (normalized[0] == "'" and normalized[-1] == "'")
-        ):
-            normalized = normalized[1:-1].strip()
-        return normalized
-
     def validate_species(self,
                          species: str,
                          species_type: str) -> None:
-        if self._normalize_species_name(species) in self.mechanism_species:
+        if species in self.mechanism_species:
             return
         msg: str = (
             f"{species_type} '{species}' from MESS input is not present "
@@ -316,14 +301,16 @@ class MessInputReader:
                       line.lstrip().casefold().split()[1] == 'phasespacetheory'
                       and
                       isinstance(self.SOP.items[name], Barrier)):
-                    self.SOP.items[name].barrierless = True
+                    bar = cast(Barrier, self.SOP.items[name])
+                    bar.barrierless = True
                     tpl.append(line)
                     skip += self.save_phasespacetheory(name, lnum)
                     continue
                 elif (line.lstrip().casefold().startswith('core')
                       and line.lstrip().casefold().split()[1] == 'rotd'
                       and isinstance(self.SOP.items[name], Barrier)):
-                    self.SOP.items[name].barrierless = True
+                    bar = cast(Barrier, self.SOP.items[name])
+                    bar.barrierless = True
                     tpl.append(line)
                     skip += self.save_rotd(name, lnum)
                     continue
@@ -346,8 +333,18 @@ class MessInputReader:
                                     self.SOP.items[fname] = \
                                         self.SOP.items[name].fragments[-1]
                                 else:
-                                    self.SOP.items[name].fragments.append(
-                                        self.SOP.items[fname])
+                                    frag_item = self.SOP.items[fname]
+                                    if isinstance(frag_item, Well) and not isinstance(frag_item, Barrier):
+                                        self.SOP.items[name].fragments.append(
+                                            frag_item)
+                                    elif isinstance(frag_item, Barrier):
+                                        msg = f"Fragment {fname} points to a barrier object."
+                                        self.klog.warning(msg)
+                                        self._trigger_stop = True
+                                    else:
+                                        msg = f"Fragment {fname} is not a well object."
+                                        self.klog.warning(msg)
+                                        self._trigger_stop = True
                             # if the bimol has twice the same fragment,
                             # don't recreate the object
                             else:
@@ -529,7 +526,10 @@ class MessInputReader:
         Returns:
             int: number of line to skip to not double read this core
         """
-        bar: Barrier = self.SOP.items[name]
+        item = self.SOP.items[name]
+        if not isinstance(item, Barrier):
+            raise TypeError(f'Expected Barrier for {name}')
+        bar: Barrier = item
         skip = 0
         fid: int = len(self.tpls)-1
         file: list[str] = self.pes_files[fid]
@@ -557,7 +557,9 @@ class MessInputReader:
             else:
                 skip += 1
                 tpl.append(line)
-        raise Error(f'Incorrect termination of phasespacetheory core for {name}')
+        raise Error(
+            f'Incorrect termination of phasespacetheory core for {name}'
+            )
 
     def save_rotd(self,
                   name: str,
@@ -571,7 +573,10 @@ class MessInputReader:
         Returns:
             int: number of line to skip to not double read this core
         """
-        bar: Barrier = self.SOP.items[name]
+        item = self.SOP.items[name]
+        if not isinstance(item, Barrier):
+            raise TypeError(f'Expected Barrier for {name}')
+        bar: Barrier = item
         skip = 0
         fid: int = len(self.tpls)-1
         file: list[str] = self.pes_files[fid]
@@ -596,7 +601,9 @@ class MessInputReader:
             else:
                 skip += 1
                 tpl.append(line)
-        raise Error(f'Incorrect termination of rotd core for {name}')
+        raise Error(
+            f'Incorrect termination of rotd core for {name}'
+            )
 
     def save_temperatures(self, lnum: int) -> None:
         """Save temperatures to be used for RC calculation,
@@ -710,7 +717,11 @@ class MessInputReader:
         skip: int = 0
         symmetry: int = 0
         local_skip: int = 0
-        rot_num: int = len(self.SOP.items[name].h_rotors)
+        item = self.SOP.items[name]
+        if isinstance(item, Bimolecular):
+            rot_num = len(item.fragments[-1].h_rotors)
+        else:
+            rot_num = len(item.h_rotors)
         saved_f: int = 0
         group: list[int] = []
         axis: list[int] = []
@@ -848,7 +859,11 @@ class MessInputReader:
         """
 
         skip = 0
-        rot_idx = len(self.SOP.items[name].m_rotors)
+        item = self.SOP.items[name]
+        if isinstance(item, Bimolecular):
+            rot_idx = len(item.fragments[-1].m_rotors)
+        else:
+            rot_idx = len(item.m_rotors)
         irs: list[InternalRotation] = []
         ir_skip: int = 0
         sf: float | None = None
@@ -1191,7 +1206,10 @@ class MessInputReader:
             int: number of line to skip readinding in the read method.
         """
         well_depth: list[float] = [-1.0, -1.0]
-        bar: Barrier = self.SOP.items[name]
+        item = self.SOP.items[name]
+        if not isinstance(item, Barrier):
+            raise TypeError(f'Expected Barrier for {name}')
+        bar: Barrier = item
         well_idx = 0
         skip = 0
         fid: int = len(self.tpls)-1
@@ -1235,3 +1253,4 @@ class MessInputReader:
             else:
                 self.tpls[-1].append(line)
                 skip += 1
+        raise Error(f'Incorrect termination of tunneling for {name}')

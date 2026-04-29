@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 import pyarrow as pa
@@ -48,11 +49,11 @@ def test_make_figure_uses_nested_sim_db_results_for_species_trace() -> None:
         sp='A',
         pres=1.0,
         temp=300.0,
-        sim_db=SimpleNamespace(sv_species=['A']),
+        sim_db=cast(Any, SimpleNamespace(sv_species=['A'])),
         show_exp_profile=False,
     )
 
-    fig = rendered[-1].figure
+    fig = cast(Any, rendered[-1]).figure
 
     assert len(fig.data) == 1
     assert list(fig.data[0].x) == [0.0, 1.0]
@@ -66,13 +67,13 @@ def test_get_pp_condition_profiles_filters_by_experiment_id(
     pp_db.create_new_table(name='G0000')
     pp_db.prepare_batch_upsert(
         table='G0000',
-        model_id=3,
+        mdl_id=3,
         experiment_id=0,
         result=_blob_from_dict({'time': [0.0], 'A': [1.0]}),
     )
     pp_db.prepare_batch_upsert(
         table='G0000',
-        model_id=3,
+        mdl_id=3,
         experiment_id=1,
         result=_blob_from_dict({'time': [0.0], 'A': [2.0]}),
     )

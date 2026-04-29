@@ -2,7 +2,7 @@ from typing import Any
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
-from kimeco.element import Element
+from kimeco.model import Model
 from kimeco.core import CoreRun
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
@@ -19,7 +19,7 @@ class Generation(CoreRun):
         return cls.__id
 
     def __init__(self,
-                 elements: list[Element],
+                 models: list[Model],
                  settings: dict[str, Any],
                  rc_tpls: list[list[str]],
                  sop_db: SOP_DB,
@@ -28,16 +28,16 @@ class Generation(CoreRun):
                  sf: Scoring,
                  pert: Perturbator,
                  klog: KMOLogger,
-                 previous_el: dict[int, Element] = {},
+                 previous_el: dict[int, Model] = {},
                  prefix: str = 'G') -> None:
         """Generation object manages the worflow of
-        a given set of elements, going from creating them
+        a given set of models, going from creating them
         (perturbed SOPs) to calculating the rate constants
         and doing the cantera Simulation
 
         Args:
             sop (SOP): Initial set of parameters to be perturbed
-            n (int): number of elements in the generation
+            n (int): number of models in the generation
             pert (Perturbator): Perturbator object used to perturb the SOP
                                 of this generation
             set (dict): Settings.
@@ -47,7 +47,7 @@ class Generation(CoreRun):
         self.id: int = Generation.__id
         Generation.__id += 1
         super().__init__(
-                 elements=elements,
+                 models=models,
                  settings=settings,
                  rc_tpls=rc_tpls,
                  sop_db=sop_db,
@@ -66,7 +66,7 @@ class Generation(CoreRun):
         self.logger_tpl = '{message:<65}{number:>14.2f}'
 
     def run(self) -> None:
-        """Run a generation until all of its elements are scored.
+        """Run a generation until all of its models are scored.
         """
         start_time: float = time.time()
         self.klog.info(f'Running generation {self.id} ...')
@@ -88,12 +88,12 @@ class Generation(CoreRun):
                 message='Best score:',
                 number=self.best_score))
 
-    def reset_element(self, el: Element) -> None:
-        """Reset a failed element."""
-        rst: int = el.reset
-        self.elements[el.id] = Element(
-            sop=self.pert.perturb(sop=self.previous_el[el.id].sop),
-            id=el.id,
+    def reset_model(self, mdl: Model) -> None:
+        """Reset a failed model."""
+        rst: int = mdl.reset
+        self.models[mdl.id] = Model(
+            sop=self.pert.perturb(sop=self.previous_el[mdl.id].sop),
+            id=mdl.id,
             gen=self.id
         )
-        self.elements[el.id].reset = rst + 1
+        self.models[mdl.id].reset = rst + 1

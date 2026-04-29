@@ -6,20 +6,20 @@ from kimeco.rate_coef import RateCo
 from kimeco.simulation import SIM
 from typing import Any
 import numpy as np
-from kimeco.enums import ElementStatus
+from kimeco.enums import ModelStatus
 from kimeco.q_sys import JobStatus
 import pyarrow as pa
 import pyarrow.feather as feather
 from io import BytesIO
 
 
-class Element:
+class Model:
     def __init__(self,
                  sop: SOP,
                  id: int,
                  gen: int = 0,
-                 status: str = ElementStatus.SOP.value) -> None:
-        """An element is part of a generation and has
+                 status: str = ModelStatus.SOP.value) -> None:
+        """An model is part of a generation and has
         different attributes, such as an id and a status.
         It is mainly a container object.
 
@@ -27,15 +27,15 @@ class Element:
             sop (SOP): perturbed set of parameters
 
         Attributes:
-            status (ElementStatus): Status of the element.
-            id (int): ID of the element.
+            status (ModelStatus): Status of the model.
+            id (int): ID of the model.
             gen (int): ID of the generation of origin
         """
         self.sop: SOP = sop
         self.pres: list[float] = sop.pres
         self.temp: list[float] = sop.temp
         self.gen: int = gen
-        self.status: ElementStatus = ElementStatus(status)
+        self.status: ModelStatus = ModelStatus(status)
         self.id: int = id
         self.rateCoef: RateCo
         self.sim: SIM
@@ -60,11 +60,11 @@ class Element:
         # Keep waiting in SOP when outputs are still incomplete.
         if len(rows) == 0:
             if self.rateCoef.status == JobStatus.FAILED:
-                self.status = ElementStatus.RESET
+                self.status = ModelStatus.RESET
             return
         # avoid changing the status in sensitivity.linear
-        if self.status == ElementStatus.SOP:
-            self.status = ElementStatus.KIN
+        if self.status == ModelStatus.SOP:
+            self.status = ModelStatus.KIN
 
         for row in rows:
             vals: dict[str, Any] = {}
@@ -82,7 +82,7 @@ class Element:
             if self.sim.profiles[exp_id] is None:
                 sim_db.prepare_batch_select(
                     table=table,
-                    model_id=self.id,
+                    mdl_id=self.id,
                     experiment_id=exp_id)
 
     def get_p_val(self,
@@ -114,7 +114,7 @@ class Element:
     def prepare_upsert(self,
                        db: Kimeco_db,
                        table: str) -> None:
-        """Save the SOP of this element in the given database.
+        """Save the SOP of this model in the given database.
 
         Args:
             db (Kimeco_db): SOP_DB
@@ -132,7 +132,7 @@ class Element:
 
         Args:
             db (SIM_DB): Kimeco SIM database object
-            sim_num (int): index of the simulation for this element
+            sim_num (int): index of the simulation for this model
         """
 
         exp = self.sim.settings['experiments'][sim_num]
@@ -154,7 +154,7 @@ class Element:
         feather.write_feather(table_obj, buf)
         db.prepare_batch_upsert(
             table=table,
-            model_id=self.id,
+            mdl_id=self.id,
             experiment_id=sim_num,
             result=buf.getvalue(),
         )

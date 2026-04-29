@@ -5,8 +5,8 @@ from kimeco._kimeco import KiMecO
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 import time
-from kimeco.element import Element
-from kimeco.enums import ElementStatus
+from kimeco.model import Model
+from kimeco.enums import ModelStatus
 from kimeco.goat import GOATs
 from kimeco.parameters import SOP
 from kimeco.postprocessing.extrapolate import Extrapolate
@@ -203,22 +203,22 @@ class PostProcess(KiMecO):
 
             # Generation table: G####
             if cond_g:
-                elements: list[Element] = self.get_generation(token)
+                models: list[Model] = self.get_generation(token)
             # GOATs generation: GT####
             elif cond_gt:
                 gen_id = int(token[2:])
-                elements: list[Element] = []
+                models: list[Model] = []
                 try:
-                    goats_elements = self.goats.get_goat_for_gen(gen_id)
+                    goats_models = self.goats.get_goat_for_gen(gen_id)
                 except Exception as e:
                     self.klog.warning(f"Could not load GOATs for {token}: {e}")
                     continue
-                for idx, el in enumerate(goats_elements):
-                    elements.append(Element(
-                        sop=el.sop,
+                for idx, mdl in enumerate(goats_models):
+                    models.append(Model(
+                        sop=mdl.sop,
                         id=idx,
-                        gen=el.gen,
-                        status=ElementStatus.SOP.value
+                        gen=mdl.gen,
+                        status=ModelStatus.SOP.value
                     ))
                 if gen_id >= 0:
                     name = token
@@ -227,16 +227,16 @@ class PostProcess(KiMecO):
 
             # NMSG Nelder-Mead Swarm Generation: NMSG####
             elif cond_nms:
-                elements = []
+                models = []
                 # Find the size of the ensemble
                 nms_cond_g = self.settings['NMS_start'].startswith('G') and \
                     self.settings['NMS_start'][1:].isdigit()
                 nms_cond_gt = self.settings['NMS_start'].startswith('GT') and \
                     self.settings['NMS_start'][2:].lstrip('-').isdigit()
                 if nms_cond_g:
-                    tot_elem: int = self.settings['n_elem']
+                    tot_mdl: int = self.settings['n_mdl']
                 elif nms_cond_gt:
-                    tot_elem = self.settings['goat_length']
+                    tot_mdl = self.settings['goat_length']
                 else:
                     raise NotImplementedError(
                         "NMS_start not recognized for NMSG postprocessing.")
@@ -249,9 +249,9 @@ class PostProcess(KiMecO):
                     raise ValueError(
                         "No NMSG tables found in SOP DB for postprocessing.")
                 max_NMS_gen: int = max(NMS_gens)
-                # Load elements from NMSG tables, starting from the
-                # highest generation until all elements are found
-                els2load: list[float] = [i for i in range(tot_elem)]
+                # Load models from NMSG tables, starting from the
+                # highest generation until all models are found
+                els2load: list[float] = [i for i in range(tot_mdl)]
                 for gen in range(max_NMS_gen, -1, -1):
                     table_name: str = f'NMSG{gen:04d}'
                     try:
@@ -260,27 +260,27 @@ class PostProcess(KiMecO):
                         raise ValueError(
                             f"Could not read table {table_name}: {e}")
                     for idx, row in enumerate(rows):
-                        el_id = int(row[0])
-                        if el_id in els2load:
-                            elements.append(
-                                Element(
+                        mdl_id = int(row[0])
+                        if mdl_id in els2load:
+                            models.append(
+                                Model(
                                     sop=SOP.from_db_row(
                                         sop_tpl=self.init_SOP,
                                         row=np.asarray(row[1:]).tolist()
                                     ),
-                                    id=el_id,
+                                    id=mdl_id,
                                     gen=gen
                                 )
                             )
-                            els2load.pop(els2load.index(el_id))
+                            els2load.pop(els2load.index(mdl_id))
                     if not els2load:
                         break
             # Nelder-Mead Generation: NM####
             elif cond_nm:
-                elements = []
+                models = []
                 gen_id = int(token[2:])
                 # Find the size of the ensemble
-                tot_elem: int = 1
+                tot_mdl: int = 1
                 # Find all NM tables in the SOP DB
                 NM_gens: list[int] = [
                     int(tbl_name.split('NM')[-1])
@@ -299,8 +299,8 @@ class PostProcess(KiMecO):
                         f"Table {name} not found in SOP DB for "
                         "postprocessing."
                     )
-                elements.append(
-                    Element(
+                models.append(
+                    Model(
                         sop=SOP.from_db_row(
                             sop_tpl=self.init_SOP,
                             row=self.sop_db.get_table(name)[0][1:]),
@@ -315,11 +315,11 @@ class PostProcess(KiMecO):
                 continue
 
             # Run extrapolation for this ensemble
-            if not elements:
-                self.klog.warning(f"No elements found for {name}, skipping.")
+            if not models:
+                self.klog.warning(f"No models found for {name}, skipping.")
                 continue
             Extrapolate(
-                elements=elements,
+                models=models,
                 settings=self.settings,
                 rc_tpls=self.input_tpls,
                 sop_db=self.sop_db,
@@ -332,17 +332,17 @@ class PostProcess(KiMecO):
             ).run()
 
     def get_generation(self,
-                       token: str) -> list[Element]:
-        """Retrieve all elements from a generation table in the SOP DB."""
-        elements: list[Element] = []
+                       token: str) -> list[Model]:
+        """Retrieve all models from a generation table in the SOP DB."""
+        models: list[Model] = []
         try:
             rows = self.sop_db.get_table(token)
         except Exception as e:
             raise ValueError(
                 f"Could not read table {token}: {e}")
         for idx, row in enumerate(rows):
-            elements.append(
-                Element(
+            models.append(
+                Model(
                     sop=SOP.from_db_row(
                         sop_tpl=self.init_SOP,
                         row=np.asarray(row[1:]).tolist()
@@ -353,7 +353,7 @@ class PostProcess(KiMecO):
 
                 )
             )
-        return elements
+        return models
 
 
 def main() -> None:

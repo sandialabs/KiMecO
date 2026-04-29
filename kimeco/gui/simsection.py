@@ -168,7 +168,7 @@ class SIMSection(Section):
                             t_idx=t_idx,
                         )
                         for table_name in pp_tables or []:
-                            table_results: dict[str, dict[int, NDArray]] = {}
+                            table_results: dict[str, dict[int, dict[int, NDArray]]] = {}
                             if table_name in all_table_sims:
                                 table_results[table_name] = (
                                     all_table_sims[table_name]
@@ -220,9 +220,9 @@ class SIMSection(Section):
             self,
             selected_gen: list[int],
             p_idx: int,
-            t_idx: int) -> list[dict[str, dict[int, NDArray]]]:
-        all_gen_sims: list[dict[str, dict[int, NDArray]]] = []
-        elements_per_gen: dict[int, list] = {}
+            t_idx: int) -> list[dict[str, dict[int, dict[int, NDArray]]]]:
+        all_gen_sims: list[dict[str, dict[int, dict[int, NDArray]]]] = []
+        models_per_gen: dict[int, list] = {}
         for gen_i in selected_gen:
             gens = self.gapp.goats.generations
             if isinstance(gens, dict):
@@ -232,7 +232,7 @@ class SIMSection(Section):
                     tokens = gens[gen_i]
                 except Exception:
                     tokens = []
-            elements_per_gen[gen_i] = tokens
+            models_per_gen[gen_i] = tokens
             exp_indices = [
                 idx for idx, exp in enumerate(self.settings['experiments'])
                 if (
@@ -240,17 +240,17 @@ class SIMSection(Section):
                     and exp.T == self.settings['rc_temp'][t_idx]
                 )
             ]
-            for (elem_gen, elem_id) in tokens:
+            for (mdl_gen, mdl_id) in tokens:
                 for exp_idx in exp_indices:
                     self.sim_db.prepare_batch_select(
-                        table=f'G{elem_gen:04d}',
-                        model_id=elem_id,
+                        table=f'G{mdl_gen:04d}',
+                        mdl_id=mdl_id,
                         experiment_id=exp_idx,
                     )
 
         all_results = self.sim_db.batch_select()
         for gen_i in selected_gen:
-            tables = {f'G{tkn[0]:04d}' for tkn in elements_per_gen[gen_i]}
+            tables = {f'G{tkn[0]:04d}' for tkn in models_per_gen[gen_i]}
             table_results: dict[str, dict[int, dict[int, NDArray]]] = {}
             for tbl in tables:
                 if tbl in all_results:
@@ -262,23 +262,23 @@ class SIMSection(Section):
             self,
             tables: list[str],
             p_idx: int,
-            t_idx: int) -> dict[str, dict[int, NDArray]]:
+            t_idx: int) -> dict[str, dict[int, dict[int, NDArray]]]:
         if self.pp_sim_db is None:
             return {}
 
         sim_idx = p_idx * len(self.settings['pp_temp']) + t_idx
         for table_name in tables:
             table_rows = self.pp_sim_db.get_table(table=table_name)
-            model_ids = sorted(
+            mdl_ids = sorted(
                 {
                     int(row[0]) for row in table_rows
                     if int(row[1]) == sim_idx
                 }
             )
-            for model_id in model_ids:
+            for mdl_id in mdl_ids:
                 self.pp_sim_db.prepare_batch_select(
                     table=table_name,
-                    model_id=model_id,
+                    mdl_id=mdl_id,
                     experiment_id=sim_idx,
                 )
         all_results = self.pp_sim_db.batch_select()
@@ -393,6 +393,6 @@ class SIMSection(Section):
             ]),
             html.H4(f'T (K): {temp}'),
             html.H4(f"P ({self.settings['pres_unit']}): {pres}"),
-            html.H5(f'Number of elements: {nel}'),
+            html.H5(f'Number of models: {nel}'),
             dcc.Graph(figure=fig),
         ]

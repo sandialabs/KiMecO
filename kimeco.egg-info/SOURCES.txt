@@ -8,7 +8,7 @@ kimeco/barrier.py
 kimeco/bimolecular.py
 kimeco/core.py
 kimeco/default_settings.py
-kimeco/element.py
+kimeco/model.py
 kimeco/enums.py
 kimeco/generation.py
 kimeco/goat.py
@@ -86,8 +86,8 @@ tests/examples/__init__.py
 tests/examples/test_mess_io_multi_input.py
 tests/unit/__init__.py
 tests/unit/test_core_sim_recovery_ci.py
-tests/unit/test_element_save_kin_ci.py
-tests/unit/test_element_sim_db_ci.py
+tests/unit/test_model_save_kin_ci.py
+tests/unit/test_model_sim_db_ci.py
 tests/unit/test_kin_db_batch_select_ci.py
 tests/unit/test_kinmec_get_reaction_eq_ci.py
 tests/unit/test_mess_io_multi_input.py

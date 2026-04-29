@@ -401,6 +401,13 @@ class Perturbator:
         if self.settings['freq_mode'] == FreqMode.BATCH:
             param: str = f'{well.name}{dbs}{Ptype.BFC.value}'
             if param in self.select:
+                i_item = self.i_sop.items[well.name]
+                if isinstance(i_item, Bimolecular):
+                    msg: str = f'Unexpected BFC parameter'
+                    msg += f' for bimolecular item: {well.name}'
+                    raise TypeError(msg)
+                else:
+                    i_well = i_item
                 # Set trial low-frequency perturbation out of the boundaries
                 try_bfc = -1
 
@@ -411,7 +418,7 @@ class Perturbator:
                         initial_val=1):
                     try_bfc: float = self.get_rng(
                         ptype=Ptype.BFC.value,
-                        i_val=self.i_sop.items[well.name].bfc,
+                        i_val=i_well.bfc,
                         c_val=well.bfc,
                         param=param,
                         distrib=self.settings[f'distrib_{Ptype.BFC.value}'])
@@ -421,6 +428,13 @@ class Perturbator:
             for idx, c_val in enumerate(well.ifc):
                 param: str = f'{well.name}{dbs}{Ptype.IFC.value}{idx:02d}'
                 if param in self.select:
+                    i_item = self.i_sop.items[well.name]
+                    if isinstance(i_item, Bimolecular):
+                        msg: str = f'Unexpected IFC parameter'
+                        msg += f' for bimolecular item: {well.name}'
+                        raise TypeError(msg)
+                    else:
+                        i_well = i_item
                     # Set trial frequency perturbation out of the boundaries
                     try_ifc = -1
 
@@ -431,7 +445,7 @@ class Perturbator:
                             initial_val=1):
                         try_ifc: float = self.get_rng(
                             ptype=Ptype.IFC.value,
-                            i_val=self.i_sop.items[well.name].ifc[idx],
+                            i_val=i_well.ifc[idx],
                             c_val=c_val,
                             param=param,
                             distrib=self.settings[f'distrib_{Ptype.IFC.value}']
@@ -511,15 +525,18 @@ class Perturbator:
         """
         param: str = f'{bar.name}{dbs}{Ptype.IF.value}'
         if param in self.select:
+            i_item = self.i_sop.items[bar.name]
+            if not isinstance(i_item, Barrier):
+                raise TypeError(f'Expected Barrier for {bar.name}')
             # Set trial imaginary frequency out of the boundaries
             try_if: float = -1
             while try_if < 0 or not self.within_boundaries(
                     perturbed_val=try_if,
                     ptype=Ptype.IF.value,
-                    initial_val=self.i_sop.items[bar.name].ifreq):
+                    initial_val=i_item.ifreq):
                 try_if = self.get_rng(
                         ptype=Ptype.IF.value,
-                        i_val=self.i_sop.items[bar.name].ifreq,
+                        i_val=i_item.ifreq,
                         c_val=bar.ifreq,
                         param=param,
                         distrib=self.settings[f'distrib_{Ptype.IF.value}']
@@ -536,16 +553,19 @@ class Perturbator:
         """
         param: str = f'{bar.name}{dbs}{Ptype.SFC.value}'
         if param in self.select:
+            i_item = self.i_sop.items[bar.name]
+            if not isinstance(i_item, Barrier):
+                raise TypeError(f'Expected Barrier for {bar.name}')
             # Set trial symmetry factor out of the boundaries
             try_sfc: float = -1
             while (try_sfc <= 0 or
                    not self.within_boundaries(
                     perturbed_val=try_sfc,
                     ptype=Ptype.SFC.value,
-                    initial_val=self.i_sop.items[bar.name].sfc)):
+                    initial_val=i_item.sfc)):
                 try_sfc = self.get_rng(
                         ptype=Ptype.SFC.value,
-                        i_val=self.i_sop.items[bar.name].sfc,
+                        i_val=i_item.sfc,
                         c_val=bar.sfc,
                         param=param,
                         distrib=self.settings[f'distrib_{Ptype.SFC.value}']

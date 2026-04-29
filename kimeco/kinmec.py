@@ -1,5 +1,5 @@
 import re
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 import cantera as ct
 from copy import deepcopy
 from kimeco.cantera.customrate import MessData, MessRate
@@ -34,7 +34,8 @@ class KiMec:
         else:
             self.pres: list[float] = settings['rc_pres']
             self.temp: list[float] = settings['rc_temp']
-        self.mech: ct.Solution = ct.Solution(file)
+        ct_any: Any = ct
+        self.mech: Any = ct_any.Solution(file)
         self.species = [sp for sp in self.mech.species()]
         self.reactions = [rc for rc in self.mech.reactions()]
         # Create a yaml template for the rate coefficients of a reaction
@@ -88,21 +89,27 @@ class KiMec:
         to the cantera Simulation.
         """
         mech_names: list[str] = [sp.name for sp in self.species]
-        thermo = ct.NasaPoly2(self.species[0].thermo.min_temp,
-                              self.species[0].thermo.max_temp,
-                              self.species[0].thermo.reference_pressure,
-                              self.species[0].thermo.coeffs)
+        ct_any: Any = ct
+        thermo = ct_any.NasaPoly2(self.species[0].thermo.min_temp,
+                                  self.species[0].thermo.max_temp,
+                                  self.species[0].thermo.reference_pressure,
+                                  self.species[0].thermo.coeffs)
         for specie in self.SOP.species:
             if specie not in mech_names:
-                well: Well = self.SOP.items[specie]
-                new_specie: ct.Species = ct.Species(name=well.name,
-                                                    composition=well.compo
-                                                    )
+                item = self.SOP.items[specie]
+                if not isinstance(item, Well):
+                    msg: str = f"Only wells can be added as new "
+                    msg += f"species. '{specie}' is not a well."
+                    raise ValueError(msg)
+                well: Well = cast(Well, item)
+                new_specie: Any = ct_any.Species(name=well.name,
+                                                 composition=well.compo
+                                                 )
                 new_specie.thermo = thermo
                 self.species.append(new_specie)
 
     def find_redundant_idx(self,
-                           new_reactions: list[ct.Reaction]
+                           new_reactions: list[Any]
                            ) -> list[int]:
         reac_idx: list[int] = []
         for idx, reac in enumerate(self.reactions):
@@ -278,7 +285,8 @@ class KiMec:
                     continue
                 if reactant.name not in tbl_map or product.name not in tbl_map:
                     continue
-                new_reactions.append(ct.Reaction.from_yaml(
+                ct_any: Any = ct
+                new_reactions.append(ct_any.Reaction.from_yaml(
                     self.new_reactions_tpls[
                         (reactant.name, product.name)
                         ].format(
@@ -309,7 +317,8 @@ class KiMec:
             list: list of cantera reaction objects
         """
         # Mechanism with all the new species
-        mech_w_species: Any = ct.Solution(
+        ct_any: Any = ct
+        mech_w_species: Any = ct_any.Solution(
             thermo="ideal-gas",
             kinetics="gas",
             species=self.species,
@@ -386,7 +395,8 @@ class KiMec:
             rates_by_pes=np_rates_by_pes,
             tbl_map_by_pes=tbl_map_by_pes,
         )
-        return ct.Solution(
+        ct_any: Any = ct
+        return ct_any.Solution(
             thermo="ideal-gas",
             kinetics="gas",
             species=self.species,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 import pyarrow as pa
@@ -10,7 +11,7 @@ import pyarrow.feather as feather
 
 from kimeco.core import CoreRun
 from kimeco.database.sim_db import SIM_DB
-from kimeco.enums import ElementStatus
+from kimeco.enums import ModelStatus
 from kimeco.q_sys import JobStatus
 
 
@@ -31,12 +32,12 @@ def _core_stub(tmp_path: Path, sim_db: SIM_DB, experiments: list) -> CoreRun:
         'n_exp': len(experiments),
     }
     core.sim_db = sim_db
-    core.elements = []
+    core.models = []
     core.requeue_lock = Lock()
     core.requeue_timer = {}
     core.qs_lock = Lock()
-    core.qs = SimpleNamespace(pickUp=lambda id, jtype: None)
-    core.klog = SimpleNamespace(info=lambda msg: None)
+    core.qs = cast(Any, SimpleNamespace(pickUp=lambda id, jtype: None))
+    core.klog = cast(Any, SimpleNamespace(info=lambda msg: None))
     return core
 
 
@@ -71,36 +72,36 @@ def test_collect_sim_profiles_restores_all_experiments_and_marks_scoring(
         sim_db=sim_db,
         experiments=experiments,
     )
-    element = SimpleNamespace(
+    model = SimpleNamespace(
         id=7,
         gen=0,
         sim=SimpleNamespace(profiles=[None, None]),
-        status=ElementStatus.SIM,
+        status=ModelStatus.SIM,
     )
-    core.elements = [element]
+    core.models = cast(Any, [model])
 
     sim_db.create_new_table(name='G0000')
     sim_db.prepare_batch_upsert(
         table='G0000',
-        model_id=7,
+        mdl_id=7,
         experiment_id=0,
         result=_blob_from_dict({'time': [0.0, 1.0], 'A': [1.0, 0.8]}),
     )
     sim_db.prepare_batch_upsert(
         table='G0000',
-        model_id=7,
+        mdl_id=7,
         experiment_id=1,
         result=_blob_from_dict({'time': [0.0, 1.0], 'A': [0.5, 0.2]}),
     )
     sim_db.batch_upsert()
-    sim_db.prepare_batch_select(table='G0000', model_id=7, experiment_id=0)
-    sim_db.prepare_batch_select(table='G0000', model_id=7, experiment_id=1)
+    sim_db.prepare_batch_select(table='G0000', mdl_id=7, experiment_id=0)
+    sim_db.prepare_batch_select(table='G0000', mdl_id=7, experiment_id=1)
 
     core.collect_sim_profiles()
 
-    assert element.status == ElementStatus.SCORING
-    assert element.sim.profiles[0].tolist() == [[0.0, 1.0], [1.0, 0.8]]
-    assert element.sim.profiles[1].tolist() == [[0.0, 1.0], [0.5, 0.2]]
+    assert model.status == ModelStatus.SCORING
+    assert model.sim.profiles[0].tolist() == [[0.0, 1.0], [1.0, 0.8]]
+    assert model.sim.profiles[1].tolist() == [[0.0, 1.0], [0.5, 0.2]]
 
 
 def test_collect_sim_profiles_skips_wrong_timestep_count(
@@ -115,28 +116,28 @@ def test_collect_sim_profiles_skips_wrong_timestep_count(
         sim_db=sim_db,
         experiments=experiments,
     )
-    element = SimpleNamespace(
+    model = SimpleNamespace(
         id=7,
         gen=0,
         sim=SimpleNamespace(profiles=[None]),
-        status=ElementStatus.SIM,
+        status=ModelStatus.SIM,
     )
-    core.elements = [element]
+    core.models = cast(Any, [model])
 
     sim_db.create_new_table(name='G0000')
     sim_db.prepare_batch_upsert(
         table='G0000',
-        model_id=7,
+        mdl_id=7,
         experiment_id=0,
         result=_blob_from_dict({'time': [0.0], 'A': [1.0]}),
     )
     sim_db.batch_upsert()
-    sim_db.prepare_batch_select(table='G0000', model_id=7, experiment_id=0)
+    sim_db.prepare_batch_select(table='G0000', mdl_id=7, experiment_id=0)
 
     core.collect_sim_profiles()
 
-    assert element.status == ElementStatus.SIM
-    assert element.sim.profiles == [None]
+    assert model.status == ModelStatus.SIM
+    assert model.sim.profiles == [None]
 
 
 def test_recover_simulation_data_reads_json_and_converts_to_feather(
@@ -154,12 +155,12 @@ def test_recover_simulation_data_reads_json_and_converts_to_feather(
         sim_db=sim_db,
         experiments=experiments,
     )
-    element = SimpleNamespace(
+    model = SimpleNamespace(
         id=7,
         gen=0,
         name='E0007',
         sim=DummySim(profiles=[None], status=JobStatus.PICKED_UP),
-        status=ElementStatus.SIM,
+        status=ModelStatus.SIM,
     )
 
     # Create JSON file (simulation output format)
@@ -169,12 +170,12 @@ def test_recover_simulation_data_reads_json_and_converts_to_feather(
     data = {'time': [0.0, 1.0], 'A': [1.0, 0.25]}
     json_file.write_text(json.dumps(data))
 
-    core.recover_simulation_data(element)
+    core.recover_simulation_data(cast(Any, model))
 
     # Verify JSON file is deleted after recovery
     assert not json_file.exists()
-    assert element.status == ElementStatus.SCORING
-    assert element.sim.profiles[0].tolist() == [[0.0, 1.0], [1.0, 0.25]]
+    assert model.status == ModelStatus.SCORING
+    assert model.sim.profiles[0].tolist() == [[0.0, 1.0], [1.0, 0.25]]
 
     # Verify feather blob is stored in database
     expected_blob = _blob_from_dict({'time': [0.0, 1.0], 'A': [1.0, 0.25]})

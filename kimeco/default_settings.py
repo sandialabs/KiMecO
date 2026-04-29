@@ -81,6 +81,8 @@ default_settings: dict[str, Any] = {
     "pp_ensembles": ["G0001", "GT-1"],
     # User input unit of pressure
     "pres_unit": 'torr',
+    # Scoring function for optimization
+    "scoring_func": "weighteddif",
     # Allow species present in MESS but absent from mechanism file.
     # If False, run stops when a missing species is encountered.
     "force_new_molecules": False,
@@ -182,12 +184,12 @@ default_settings: dict[str, Any] = {
     "w_species": {},
     # Restart modes, and treatment of existing tables/db
     "restart": RestartType.DEFAULT.value,
-    # Number of elements per generation
-    "n_elem": 500,
+    # Number of models per generation
+    "n_mdl": 500,
     # Value of score above which a generation won't converge
     "max_score": 4.0,
-    # Value of score under which a generation has converged
-    "score_conv": 0.01,
+    # Average value of best models' score for convergence
+    "score_conv": 2,
     # Maximum number of generations
     "max_gen": 10,
     # Percentage of deviation of means and stds of parameters to converge

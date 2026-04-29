@@ -37,10 +37,12 @@ class KimecoApp(KiMecO):
             init_loc=init_loc,
             klog=self.klog)
         self.settings: dict[str, Any] = self.raw_input.full_run_settings()
+        ct_yaml_path = self.settings['ct_yaml']
+        if not os.path.isabs(ct_yaml_path):
+            ct_yaml_path = os.path.join(self.init_loc, ct_yaml_path)
         self.mech = KiMec(
-            file=f"{self.init_loc}/{self.settings['ct_yaml']}",
-            settings=self.settings,
-            sop_tpl=self.init_SOP)
+            file=ct_yaml_path,
+            settings=self.settings)
         self.init_SOP: SOP
         self.input_tpls: list[list[str]]
         self.set_initial_sop()
@@ -64,7 +66,7 @@ class KimecoApp(KiMecO):
                 path=self.settings['workdir'],
                 tbl_name=None)
         self.init_vals = self.sop_db.get_table(table='G0000')[0]
-        # Construct GOATs object so GUI sections can request Element objects
+        # Construct GOATs object so GUI sections can request Model objects
         goat_file: str = f"{self.settings['workdir']}/goats.txt"
         # Always construct GOATs from the same goat.txt used previously
         self.goats = GOATs.from_file(

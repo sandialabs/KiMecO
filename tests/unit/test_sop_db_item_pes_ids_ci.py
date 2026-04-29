@@ -5,18 +5,20 @@ import sqlite3
 
 import numpy as np
 import pytest
+from typing import cast
 
 from kimeco.logger_config import KMOLogger
 from kimeco.parameters import SOP
 from kimeco.database.sop_db import SOP_DB, SOPItemPesIdsTable
+from kimeco.well import Well
+from kimeco.bimolecular import Bimolecular
+from kimeco.barrier import Barrier
 
 
 def _build_sop(swapped: bool = False) -> SOP:
-    sop = SOP(score_species=[])
+    sop = SOP(n_exp=1)
     sop.factor = 1.0
     sop.power = 1.0
-    sop.temp = []
-    sop.pres = []
     sop.pres_unit = 'atm'
 
     if swapped:
@@ -30,8 +32,9 @@ def _build_sop(swapped: bool = False) -> SOP:
     sop.add_new_well(name='RIGHT', pes_id=right_pes_id)
     sop.check_well(name='LEFT', pes_id=right_pes_id)
     sop.add_new_bimol(name='LEFT+H', pes_id=left_pes_id)
-    sop.items['LEFT+H'].add_new_frag(name='LEFT_FRAG')
-    sop.items['LEFT_FRAG'] = sop.items['LEFT+H'].fragments[-1]
+    left_h = cast(Bimolecular, sop.items['LEFT+H'])
+    left_h.add_new_frag(name='LEFT_FRAG')
+    sop.items['LEFT_FRAG'] = left_h.fragments[-1]
     sop.add_new_barrier(
         name='TS_LEFT_RIGHT',
         lside='LEFT',
@@ -40,11 +43,12 @@ def _build_sop(swapped: bool = False) -> SOP:
     )
 
     for well_name in ('LEFT', 'RIGHT', 'LEFT_FRAG'):
-        sop.items[well_name]._freq = np.array([])
+        cast(Well, sop.items[well_name])._freq = np.array([])
 
-    sop.items['TS_LEFT_RIGHT']._freq = np.array([])
-    sop.items['TS_LEFT_RIGHT']._energy = 0.0
-    sop.items['TS_LEFT_RIGHT'].ifreq = 0.0
+    ts = cast(Barrier, sop.items['TS_LEFT_RIGHT'])
+    ts._freq = np.array([])
+    ts._energy = 0.0
+    ts.ifreq = 0.0
     return sop
 
 

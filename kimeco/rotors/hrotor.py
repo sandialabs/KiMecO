@@ -28,4 +28,4 @@ class HinRotor:
 
     @property
     def scan(self) -> NDArray[np.float32]:
-        return self._scan * self.pert
+        return (self._scan * self.pert).astype(np.float32)

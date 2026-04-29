@@ -18,10 +18,10 @@ def _config(**overrides) -> dict:
         "ga_type": "exp",
         "NMS_start": "",
         "max_gen": 10,
-        "n_elem": 500,
+        "n_mdl": 500,
         "goat_length": 250,
         "max_score": 4.0,
-        "score_conv": 0.01,
+        "score_conv": 2,
         "param_conv": 0.01,
         "SA_freq": 1000,
         "SA_start": 1,
@@ -100,8 +100,8 @@ class TestValidateConfig:
         ok, _ = _validate_config(_config(max_gen=0))
         assert ok is False
 
-    def test_invalid_n_elem(self):
-        ok, _ = _validate_config(_config(n_elem=0))
+    def test_invalid_n_mdl(self):
+        ok, _ = _validate_config(_config(n_mdl=0))
         assert ok is False
 
     def test_invalid_nm_fatol(self):

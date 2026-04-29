@@ -1,4 +1,5 @@
 import time
+from copy import deepcopy
 
 from kimeco.logger_config import KMOLogger
 from kimeco.optimizers.GeneticAlgo.ga import GeneticAlgorithm
@@ -6,7 +7,7 @@ from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.database.sop_db import SOP_DB
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
-from kimeco.element import Element
+from kimeco.model import Model
 from kimeco.generation import Generation
 import random
 from typing import Any
@@ -21,7 +22,7 @@ class Tournament(GeneticAlgorithm):
                  sop_db: SOP_DB,
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
-                 f_el: Element,
+                 f_mdl: Model,
                  input_tpls: list[list[str]],
                  klog: KMOLogger) -> None:
         super().__init__(
@@ -32,56 +33,49 @@ class Tournament(GeneticAlgorithm):
             sop_db=sop_db,
             kin_db=kin_db,
             sim_db=sim_db,
-            f_el=f_el,
+            f_mdl=f_mdl,
             klog=klog)
         self.name = 'Tournament'
 
-    def isconverged(self,
-                    gen: Generation
-                    ) -> bool:
-        if gen.best_score < self.settings['score_conv']:
-            return True
-        else:
-            return False
-
     def create_next_gen(self,
                         gen: Generation
-                        ) -> tuple[dict[int, Element], list[Element]]:
-        """Pair all elements, keep the one with the best score,
-        and create a new element from the loser.
+                        ) -> tuple[dict[int, Model], list[Model]]:
+        """Pair all models, keep the one with the best score,
+        and create a new model from the loser.
 
         Args:
             gen (Generation): previous generation
 
         Returns:
-            list[Element]: list of elements of the new generation.
+            list[Model]: list of models of the new generation.
         """
         start_time: float = time.time()
         # Change the intensity of the perturbation
-        next_gen: list[Element] = gen.elements
-        # shuffled: list[Element] = copy.copy(gen.elements)
+        # Work on a new list to avoid mutating the previous generation.
+        next_gen: list[Model] = list(gen.models)
+        # shuffled: list[Model] = copy.copy(gen.models)
         shuffled: list[int] = [i for i in range(len(next_gen))]
         # Safe guard
         for i in shuffled:
             if i != next_gen[i].id:
                 raise AttributeError(
-                    f'The elements of Generation {gen.id} are not ordered!')
+                    f'The models of Generation {gen.id} are not ordered!')
         random.shuffle(shuffled)
-        prev_gen: dict[int, Element] = {}
+        prev_gen: dict[int, Model] = {}
         half = int(len(shuffled)/2)
         for idx in range(len(shuffled[:half])):
-            el1: Element = next_gen[shuffled[idx]]
-            el2: Element = next_gen[shuffled[idx+half]]
+            el1: Model = next_gen[shuffled[idx]]
+            el2: Model = next_gen[shuffled[idx+half]]
             if el1.score < el2.score:
-                winner: Element = el1
-                loser: Element = el2
+                winner: Model = el1
+                loser: Model = el2
             else:
-                winner: Element = el2
-                loser: Element = el1
-            # Prev gen saves the winners from which a new element is created.
+                winner: Model = el2
+                loser: Model = el1
+            # Prev gen saves the winners from which a new model is created.
             prev_gen[loser.id] = next_gen[winner.id]
-            next_gen[loser.id] = Element(
-                sop=self.pert.perturb(sop=winner.sop),
+            next_gen[loser.id] = Model(
+                sop=self.pert.perturb(sop=deepcopy(winner.sop)),
                 id=loser.id,
                 gen=gen.id+1)
             end_time: float = time.time()

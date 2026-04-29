@@ -41,23 +41,57 @@ class KMOInput:
         self.json_file: dict[str, Any] = self.load_input()
         self.n_exp: int
 
-    def _global_pres_unit(self) -> str:
-        """Return the canonical pressure unit used internally."""
-        return str(
-            self.json_file.get('pres_unit', default_settings['pres_unit'])
-        )
+    @staticmethod
+    def _canonical_pressure_unit(unit: Any) -> str:
+        """Return a pressure unit string accepted by cantera ureg."""
+        if unit is None:
+            raise ValueError('Pressure unit cannot be None.')
+
+        raw_unit = str(unit).strip()
+        if raw_unit == '':
+            raise ValueError('Pressure unit cannot be empty.')
+
+        aliases: dict[str, str] = {
+            'pa': 'Pa',
+            'kpa': 'kPa',
+            'mpa': 'MPa',
+            'bar': 'bar',
+            'mbar': 'mbar',
+            'atm': 'atm',
+            'torr': 'torr',
+            'mmhg': 'torr',
+            'psi': 'psi',
+        }
+
+        candidates: list[str] = [raw_unit]
+        lower = raw_unit.casefold()
+        if lower in aliases:
+            candidates.append(aliases[lower])
+        if lower != raw_unit:
+            candidates.append(lower)
+
+        for candidate in dict.fromkeys(candidates):
+            try:
+                _ = Q_(1.0, candidate).to('Pa')
+                return candidate
+            except Exception:
+                continue
+
+        raise ValueError(f'Unknown pressure unit: {raw_unit}')
 
     def _normalized_exp_pressure(self,
                                  exp_cfg: dict[str, Any]) -> float:
-        """Normalize experiment pressure to the global pressure unit."""
-        src_unit = exp_cfg.get('pres_unit', self._global_pres_unit())
+        """Normalize experiment pressure to Pa and round to 5 decimals."""
+        src_unit = self._canonical_pressure_unit(
+            exp_cfg.get('pres_unit', default_settings['pres_unit'])
+        )
         try:
             p_value = float(exp_cfg['pres'])
         except (TypeError, ValueError):
             raise ValueError('Experiment pressure should be numeric.')
         try:
             p_q = Q_(p_value, str(src_unit))
-            return float(p_q.to(self._global_pres_unit()).magnitude)
+            return float(np.round(p_q.to('Pa').magnitude, 5))
         except Exception:
             raise ValueError(f"Unknown pressure unit: {src_unit}")
 
@@ -138,10 +172,32 @@ class KMOInput:
                     )
                     self.cancel_run = True
 
-        if 'pres_unit' not in self.json_file:
-            self.json_file['pres_unit'] = default_settings['pres_unit']
+        for exp in self.json_file.get('experiments', []):
+            if not isinstance(exp, dict):
+                continue
+            exp_unit = exp.get('pres_unit', default_settings['pres_unit'])
+            try:
+                exp['pres_unit'] = self._canonical_pressure_unit(exp_unit)
+            except ValueError as e:
+                self.klog.info(str(e))
+                self.cancel_run = True
+
+        self.json_file['pres_unit'] = 'bar'
         self.klog.info(
-            f"Pressure unit in input assumed in {self.json_file['pres_unit']}")
+            "Experiment pressures are stored in Pa. "
+            "MESS pressure grid unit set to bar."
+        )
+        exp_units = {
+            str(exp.get('pres_unit')).casefold()
+            for exp in self.json_file.get('experiments', [])
+            if isinstance(exp, dict) and 'pres_unit' in exp
+        }
+        if exp_units:
+            unit_list = ', '.join(sorted(exp_units))
+            self.klog.info(
+                "Experiment pressure units detected "
+                f"({unit_list}) and converted to Pa."
+            )
 
     def _validate_tpl(self,
                       tpl_path: str) -> str:
@@ -190,10 +246,7 @@ class KMOInput:
         ratio = {}
         sum_ratio = 0.0
         base_given = False
-        p = Q_(
-            self._normalized_exp_pressure(exp_cfg),
-            self._global_pres_unit()
-        )
+        p = Q_(self._normalized_exp_pressure(exp_cfg), 'Pa')
         p = p.to('torr')
         t = Q_(exp_cfg['temp'], 'K')
         ntot = (p*Vol/(R*t)).to('molecule')
@@ -297,7 +350,7 @@ class KMOInput:
         initial_x: list[dict[str, float]] = []
         raw_w: list[float] = []
         rc_temp: set[float] = set()
-        rc_pres: set[float] = set()
+        rc_pres_pa: set[float] = set()
 
         for idx, exp_cfg in enumerate(self.json_file['experiments']):
             try:
@@ -369,7 +422,7 @@ class KMOInput:
                 raw_w.append(exp.weight)
                 initial_x.append(ratio)
                 rc_temp.add(exp.T)
-                rc_pres.add(exp.P)
+                rc_pres_pa.add(exp.P)
             except Exception as e:
                 self.klog.info(f"Experiment {idx} is invalid: {e}")
                 self.cancel_run = True
@@ -392,7 +445,10 @@ class KMOInput:
         self.json_file['weights'] = weights
         self.json_file['initial_X'] = initial_x
         self.json_file['rc_temp'] = sorted(list(rc_temp))
-        self.json_file['rc_pres'] = sorted(list(rc_pres))
+        self.json_file['rc_pres'] = sorted([
+            float(np.round(Q_(p, 'Pa').to('bar').magnitude, 5))
+            for p in rc_pres_pa
+        ])
         self.json_file['w_exp'] = norm_exp_w
         self.json_file['to_watch'] = [exp.species for exp in experiments]
 

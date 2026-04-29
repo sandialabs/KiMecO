@@ -5,21 +5,21 @@ from kimeco.core import CoreRun
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
-from kimeco.element import Element
+from kimeco.model import Model
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
-from kimeco.enums import ElementStatus
+from kimeco.enums import ModelStatus
 from kimeco.logger_config import KMOLogger
 from kimeco.q_sys import QueueingSystem
 
 
 class NMSRunner(CoreRun):
-    """NelderMead Swarm Runner - manages dynamic element pool for NM.
+    """NelderMead Swarm Runner - manages dynamic model pool for NM.
 
     Key differences from CoreRun:
-    - Elements are added dynamically via add_element()
-    - Each element routes to table based on el.gen (e.g., G0000, G0001)
-    - Element pool has fixed size (thread count) but contents change
+    - Models are added dynamically via add_model()
+    - Each model routes to table based on mdl.gen (e.g., G0000, G0001)
+    - Model pool has fixed size (thread count) but contents change
     - Tables/folders created on-demand per generation
     """
 
@@ -44,9 +44,9 @@ class NMSRunner(CoreRun):
             klog: Logger
             pert: Perturbator (unused, kept for compatibility)
         """
-        # Initialize with empty element list
+        # Initialize with empty model list
         super().__init__(
-            elements=[],
+            models=[],
             settings=settings,
             rc_tpls=rc_tpls,
             sop_db=sop_db,
@@ -58,9 +58,9 @@ class NMSRunner(CoreRun):
             previous_el={},
             prefix='NMSG'  # Swarm Generation
         )
-        # Override elements with dynamic pool (consistent name)
-        self.elements: list[Element | None] = [None] * settings['threads']
-        # Override QueueingSystem with updated element count
+        # Override models with dynamic pool (consistent name)
+        self.models: list[Model | None] = [None] * settings['threads']
+        # Override QueueingSystem with updated model count
         self.qs = QueueingSystem(
             settings=self.settings,
             nel=settings['threads'],
@@ -77,15 +77,16 @@ class NMSRunner(CoreRun):
 
         # Lock to guard el_locks dict creation
         self.el_locks_lock = threading.Lock()
+        self.el_locks: dict[tuple[int, int], threading.Lock] = {}
 
-        # Element counter for defragmentation
-        self.elem_count: int = 0
+        # Model counter for defragmentation
+        self.mdl_count: int = 0
 
-    def add_element(self, el: Element) -> None:
-        """Add an element to the first available pool slot.
+    def add_model(self, mdl: Model) -> None:
+        """Add an model to the first available pool slot.
 
         Args:
-            el: Element to add
+            mdl: Model to add
 
         Returns:
             None
@@ -93,39 +94,39 @@ class NMSRunner(CoreRun):
 
         # Find first available slot
         for idx in range(self.settings['threads']):
-            if self.elements[idx] is None:
-                el.thread_id = idx
-                self.elements[idx] = el
+            if self.models[idx] is None:
+                mdl.thread_id = idx
+                self.models[idx] = mdl
                 self.klog.debug(
-                    f'Element {el.id} (Gen {el.gen}) added to pool at thread {idx}.')
+                    f'Model {mdl.id} (Gen {mdl.gen}) added to pool at thread {idx}.')
                 break
-        if el not in self.elements:
-            raise RuntimeError("Failed to add element to pool")
+        if mdl not in self.models:
+            raise RuntimeError("Failed to add model to pool")
         # Ensure tables and folders exist
-        self._ensure_infrastructure_exists(el)
+        self._ensure_infrastructure_exists(mdl)
 
-    def remove_element(self, el: Element) -> Element:
-        """Remove an element from the pool and return it.
+    def remove_model(self, mdl: Model) -> None:
+        """Remove an model from the pool and return it.
 
         Args:
-            el: Element to remove
+            el: Model to remove
 
         Returns:
-            The removed element
+            The removed model
         """
         with self.pool_lock:
-            self.elements[el.thread_id] = None
+            self.models[mdl.thread_id] = None
 
-        self.klog.debug(f'Element {el.id} (Gen {el.gen}) removed from pool.')
-        self.klog.debug(f'Thread {el.thread_id} is now available.')
+        self.klog.debug(f'Model {mdl.id} (Gen {mdl.gen}) removed from pool.')
+        self.klog.debug(f'Thread {mdl.thread_id} is now available.')
 
-    def _ensure_infrastructure_exists(self, el: Element) -> None:
-        """Ensure tables and folders exist for element's generation.
+    def _ensure_infrastructure_exists(self, mdl: Model) -> None:
+        """Ensure tables and folders exist for model's generation.
 
         Args:
-            el: Element whose infrastructure to create
+            mdl: Model whose infrastructure to create
         """
-        table_name: str = self.get_table_name(el)
+        table_name: str = self.get_table_name(mdl)
 
         # Thread-safe table creation
         with self.table_creation_lock:
@@ -141,125 +142,125 @@ class NMSRunner(CoreRun):
                 self.created_tables.add(table_name)
 
         # Create folder structure
-        gen_folder: str = self.get_gen_folder(el)
+        gen_folder: str = self.get_gen_folder(mdl)
         if not os.path.exists(gen_folder):
             os.makedirs(gen_folder + '/logs', exist_ok=True)
 
-        # Create subfolder for element (50 elements per subfolder)
-        subfolder: str = self.get_element_subfolder(el)
+        # Create subfolder for model (50 models per subfolder)
+        subfolder: str = self.get_model_subfolder(mdl)
         if not os.path.exists(subfolder):
             os.makedirs(subfolder + '/logs', exist_ok=True)
 
             # Symlink necessary files
-            for file in el.sop.files2copy:
+            for file in mdl.sop.files2copy:
                 src: str = f'{self.loc}/{file}'
                 dst: str = f'{subfolder}/{file}'
                 if os.path.exists(src) and not os.path.exists(dst):
                     os.symlink(src, dst)
 
-    def run(self, el: Element) -> Element:
-        """Process an element until it reaches DONE status.
+    def run(self, mdl: Model) -> Model:
+        """Process an model until it reaches DONE status.
 
         This is the main entry point for NelderMead swarm instances.
 
         Args:
-            el: Element to process
+            mdl: Model to process
 
         Returns:
-            The processed element (status == DONE)
+            The processed model (status == DONE)
         """
-        # Add element to pool with safeguard
+        # Add model to pool with safeguard
         with self.pool_lock:
-            if self.elements.count(None) == 0:
-                raise RuntimeError("No available slots in element pool")
+            if self.models.count(None) == 0:
+                raise RuntimeError("No available slots in model pool")
             else:
-                self.add_element(el)
+                self.add_model(mdl)
 
-        # Ensure lock exists for this element
-        if (el.gen, el.id) not in self.el_locks:
-            self.el_locks[(el.gen, el.id)] = threading.Lock()
+        # Ensure lock exists for this model
+        if (mdl.gen, mdl.id) not in self.el_locks:
+            self.el_locks[(mdl.gen, mdl.id)] = threading.Lock()
 
         # Process until done
-        while el.status != ElementStatus.DONE:
+        while mdl.status != ModelStatus.DONE:
             try:
-                self._process_single_element(el)
+                self._process_single_model(mdl)
             except Exception as e:
-                self.remove_element(el)
-                self.klog.error(f'Status of element {el.id}: {el.status}')
+                self.remove_model(mdl)
+                self.klog.error(f'Status of model {mdl.id}: {mdl.status}')
                 raise e
 
         # Remove and return
-        self.remove_element(el)
-        return el
+        self.remove_model(mdl)
+        return mdl
 
-    def _process_single_element(self, el: Element) -> None:
-        """Process one iteration of a single element.
+    def _process_single_model(self, mdl: Model) -> None:
+        """Process one iteration of a single model.
 
         Args:
-            el: Element to process
+            mdl: Model to process
         """
-        if el.status == ElementStatus.DONE:
+        if mdl.status == ModelStatus.DONE:
             return
 
         # Try to acquire lock (non-blocking)
-        if not self.el_locks[(el.gen, el.id)].acquire(blocking=False):
+        if not self.el_locks[(mdl.gen, mdl.id)].acquire(blocking=False):
             return
 
-        # Process element with lock held
+        # Process model with lock held
         try:
-            self._process_element_locked(el)
+            self._process_model_locked(mdl)
         except Exception as e:
-            self.klog.error(f'Error processing element {el.id}: {e}')
+            self.klog.error(f'Error processing model {mdl.id}: {e}')
             raise e
 
-        # Batch database operations (per element)
+        # Batch database operations (per model)
         self.sop_db.batch_upsert()
         self.kin_db.batch_upsert()
         self.sim_db.batch_upsert()
 
-        # Collect simulation profiles for this element
-        if el:
+        # Collect simulation profiles for this model
+        if mdl:
             self.collect_sim_profiles()
 
         # Run queuing system
         with self.qs_lock:
             self.qs.run()
 
-    def reset_element(self, el: Element) -> None:
+    def reset_model(self, mdl: Model) -> None:
         self.klog.warning(
-            f'Error detected for NelderMead {el.id}.',
+            f'Error detected for NelderMead {mdl.id}.',
             'Setting high score to vertice.'
         )
-        el.status = ElementStatus.DONE
+        mdl.status = ModelStatus.DONE
 
     def collect_sim_profiles(self) -> None:
-        """Override: Map DB profiles back to active elements by (gen,id).
+        """Override: Map DB profiles back to active models by (gen,id).
 
-        This version scans self.elements (thread-indexed) to find
-        the matching element rather than relying on CoreRun.elements.
+        This version scans self.models (thread-indexed) to find
+        the matching model rather than relying on CoreRun.models.
         """
         if len(self.sim_db._select) == 0:
             return
-        nsim: int = self.settings['n_exp']
 
         collecting = self.sim_db.batch_select()
-
+        # Number of simulations is number of experiments
+        nsim: int = len(self.settings['experiments'])
         # Process each table's results
-        for table_name, profiles in collecting.items():
+        for table_name, model_profiles in collecting.items():
             gen_id = int(table_name[1:5])  # Extract from G#### or SG####
 
-            for sim_id, db_data in profiles.items():
-                el_id = sim_id // nsim
+            for sim_id, db_data in model_profiles.items():
+                mdl_id = sim_id // nsim
                 sim_idx = sim_id % nsim
 
-                # Find element with matching ID and generation
-                el = None
+                # Find model with matching ID and generation
+                mdl = None
                 with self.pool_lock:
-                    for e in self.elements:
-                        if e is not None and e.id == el_id and e.gen == gen_id:
-                            el = e
+                    for e in self.models:
+                        if e is not None and e.id == mdl_id and e.gen == gen_id:
+                            mdl = e
                             break
-                if el is None:
+                if mdl is None:
                     continue
 
                 # number of timesteps
@@ -269,26 +270,26 @@ class NMSRunner(CoreRun):
                 if len(db_data) != nsteps:
                     continue
 
-                el.sim.profiles[sim_idx] = db_data
+                mdl.sim.profiles[sim_idx] = db_data
 
                 # Scoring needs all the profiles
-                if all([prof is not None for prof in el.sim.profiles]):
-                    el.status = ElementStatus.SCORING
+                if all([prof is not None for prof in mdl.sim.profiles]):
+                    mdl.status = ModelStatus.SCORING
 
     @property
     def finished(self) -> bool:
-        """Check if all elements in pool are done."""
+        """Check if all models in pool are done."""
         return all([
-            el is None or el.status == ElementStatus.DONE
-            for el in self.elements
+            mdl is None or mdl.status == ModelStatus.DONE
+            for mdl in self.models
         ])
 
     @property
     def best_score(self) -> float:
-        """Get best score from active elements."""
-        active_elements = [
-            el for el in self.elements if el is not None
+        """Get best score from active models."""
+        active_models = [
+            mdl for mdl  in self.models if mdl is not None
         ]
-        if not active_elements:
+        if not active_models:
             return float('inf')
-        return min([el.score for el in active_elements])
+        return min([mdl.score for mdl in active_models])

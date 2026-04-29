@@ -173,7 +173,7 @@ class RateCo:
             if np.isnan(mor.rc).any():
                 self.status = JobStatus.FAILED
                 self.klog.warning(
-                    f'Resetting element {self.id}: '
+                    f'Resetting model {self.id}: '
                     'NaN detected in rate coefficients.'
                 )
                 self.klog.warning(

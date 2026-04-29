@@ -11,6 +11,7 @@ from kimeco.gui.histogram import Histogram
 import numpy as np
 from kimeco.enums import Ptype
 from kimeco.database.kimeco_db import dbs
+from typing import cast
 
 
 class SOPSection(Section):
@@ -70,7 +71,7 @@ class SOPSection(Section):
             style={'display': 'none'},
             children=[
                 html.H3('Type of parameter to plot:'),
-                dcc.RadioItems(options=[
+                dcc.RadioItems(options=cast(Any, [
                     {'label': 'Energies',
                      'value': [Ptype.WE.value, Ptype.BE.value]},
                     {'label': 'Frequencies',
@@ -84,8 +85,8 @@ class SOPSection(Section):
                     {'label': 'Score',
                      'value': [Ptype.SCORE.value]},
                     {'label': 'ME collision',
-                     'value': [Ptype.ETF.value, Ptype.ETP.value]}],
-                                value='Energies',
+                     'value': [Ptype.ETF.value, Ptype.ETP.value]}]),
+                                value=cast(Any, [Ptype.WE.value, Ptype.BE.value]),
                                 inline=True,
                                 id='ptype'),
                 html.Div(className='row',
@@ -235,9 +236,9 @@ class SOPSection(Section):
         for ptype in Ptype:
             if ptype.value in param:
                 break
-        return self.pert.get_boundaries(
+        return list(self.pert.get_boundaries(
             ptype=ptype.value,
-            i_val=init_val)
+            i_val=init_val))
 
     def get_plot_options(self,
                          col: str,
@@ -270,7 +271,10 @@ class SOPSection(Section):
             if ptype in param:
                 break
         if ptype == Ptype.IF.value:
-            bar: Barrier = self.init_SOP.items[raw_molec]
+            item = self.init_SOP.items[raw_molec]
+            if not isinstance(item, Barrier):
+                raise TypeError(f'Expected Barrier for {raw_molec}, found {type(item)}')
+            bar: Barrier = cast(Barrier, item)
             if isinstance(bar.connected[0], Well):
                 From: str = bar.connected[0].name
             elif isinstance(bar.connected[0], Bimolecular):
@@ -318,15 +322,15 @@ class SOPSection(Section):
 
         all_gen_rows: dict[int, Any] = {}
         for gen_i in selected_gen:
-            # Use GOATs Element objects to extract parameter values
-            elements = self.gapp.goats.get_goat_for_gen(gen_i)
+            # Use GOATs Model objects to extract parameter values
+            models = self.gapp.goats.get_goat_for_gen(gen_i)
             values: list[float] = []
-            for el in elements:
+            for mdl in models:
                 try:
-                    val = el.sop.parameters_names[col]
+                    val = mdl.sop.parameters_names[col]
                 except Exception:
                     raise KeyError(
-                        f"Parameter {col} not found in SOP for element {el.id}"
+                        f"Parameter {col} not found in SOP for model {mdl.id}"
                     )
                 values.append(val)
             all_gen_rows[gen_i] = np.array(values)

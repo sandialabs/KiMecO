@@ -29,7 +29,7 @@ class WeightedDif(Scoring):
             sim (SIM): SIM object
 
         Returns:
-            float: the score of the element
+            float: the score of the model
         """
         exp_scores: list[float] = []
         for idx, exp in enumerate(self.settings['experiments']):

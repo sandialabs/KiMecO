@@ -4,13 +4,13 @@ from kimeco.logger_config import KMOLogger
 from typing import Any, List
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
-from kimeco.enums import ElementStatus, Pclass, Ptype, RestartType
+from kimeco.enums import ModelStatus, Pclass, Ptype, RestartType
 from kimeco.generation import Generation
 from kimeco.parameters import SOP
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.database.sop_db import SOP_DB
-from kimeco.element import Element
+from kimeco.model import Model
 import numpy as np
 from kimeco.sensitivity.linear import Linear
 from kimeco.database.kimeco_db import dbs
@@ -33,7 +33,7 @@ class GeneticAlgorithm(ABC):
                  sop_db: SOP_DB,
                  sim_db: SIM_DB,
                  kin_db: KIN_DB,
-                 f_el: Element,
+                 f_mdl: Model,
                  input_tpls: list[list[str]],
                  klog: KMOLogger
                  ) -> None:
@@ -44,11 +44,11 @@ class GeneticAlgorithm(ABC):
         self.sop_db: SOP_DB = sop_db
         self.kin_db: KIN_DB = kin_db
         self.sim_db: SIM_DB = sim_db
-        self.f_el: Element = f_el
+        self.f_mdl: Model = f_mdl
         self.input_tpls: list[list[str]] = input_tpls
         self.new_gen_has_been_created = False
         self.gen_0 = Generation(
-            elements=[f_el],
+            models=[f_mdl],
             settings=settings,
             rc_tpls=input_tpls,
             sop_db=sop_db,
@@ -67,7 +67,7 @@ class GeneticAlgorithm(ABC):
                 wdir=self.loc
             )
 
-        self.goat: list[Element] = []
+        self.goat: list[Model] = []
         self.__converged: dict[str, bool] = {}
         self.means: dict[str, float] = {}
         self.stds: dict[str, float] = {}
@@ -76,15 +76,18 @@ class GeneticAlgorithm(ABC):
 
     @property
     def goat_scores(self) -> list[float]:
-        return [el.score for el in self.goat]
+        return [mdl.score for mdl in self.goat]
 
     @property
     def converged(self) -> bool:
+        avrg = float(np.average(self.goat_scores))
         if Generation.total() < 2:
             return False
-        elif all([goat.score < self.settings['max_score']
-                  for goat in self.goat]) and all(
-                      [conv for conv in self.__converged.values()]):
+        elif (all([goat.score < self.settings['max_score']
+                  for goat in self.goat])
+              and all([conv
+                       for conv in self.__converged.values()])
+              and avrg < self.settings['score_conv']):
             return True
         else:
             return False
@@ -104,7 +107,7 @@ class GeneticAlgorithm(ABC):
                 mean_thresh: float = self.settings[f'conv_{ptype.value}']
                 std_thresh: float = self.settings[f'conv_{ptype.value}']
                 m_change: float = self.means[key] - self.old_means[key]
-                s_change: float = self.stds[key] - self.stds[key]
+                s_change: float = self.stds[key] - self.old_stds[key]
             else:
                 # Avoids dividing by 0
                 if self.old_means[key] == 0 or\
@@ -175,7 +178,7 @@ class GeneticAlgorithm(ABC):
                 column_name='kin_id'))
             sim_ids = set(self.sim_db.get_column(
                 table=gen_name,
-                column_name='model_id'))
+                column_name='mdl_id'))
             if sop_ids == kin_ids == sim_ids:
                 return True
             else:
@@ -183,14 +186,14 @@ class GeneticAlgorithm(ABC):
         else:
             return False
 
-    def get_gen_one(self) -> tuple[dict[int, Element], list[Element]]:
-        """Create the first generation from the initial element
+    def get_gen_one(self) -> tuple[dict[int, Model], list[Model]]:
+        """Create the first generation from the initial model
 
         Returns:
-            tuple[dict[int, Element], list[Element]]: _description_
+            tuple[dict[int, Model], list[Model]]: _description_
         """
-        next_elements: list[Element] = [self.f_el]
-        prev_elements: dict[int, Element] = {}
+        next_models: list[Model] = [self.f_mdl]
+        prev_models: dict[int, Model] = {}
         next_gen_id: int = Generation.total()
         next_gen_name: str = f"G{next_gen_id:04d}"
         if self.is_generation_finished(next_gen_id):
@@ -198,8 +201,8 @@ class GeneticAlgorithm(ABC):
                 table=next_gen_name,
                 column_name='id')
             self.klog.debug(
-                f'Found {len(sop_ids)} elements for next generation in DB')
-            if len(sop_ids) == self.settings['n_elem']-1:
+                f'Found {len(sop_ids)} models for next generation in DB')
+            if len(sop_ids) == self.settings['n_mdl']-1:
                 self.klog.debug(
                     'Generation restarted from DB')
                 if self.settings['restart'] == RestartType.RESCORE:
@@ -210,28 +213,28 @@ class GeneticAlgorithm(ABC):
                                         )
                 for e_id, row in zip(sop_ids, rows):
                     if self.settings['restart'] == RestartType.RESCORE:
-                        next_elements.append(
-                            Element(
+                        next_models.append(
+                            Model(
                                 sop=SOP.from_db_row(
-                                    sop_tpl=self.f_el.sop,
+                                    sop_tpl=self.f_mdl.sop,
                                     row=row[1:].tolist()
                                 ),
                                 id=e_id,
                                 gen=next_gen_id,
-                                status=ElementStatus.RESCORE.value))
+                                status=ModelStatus.RESCORE.value))
                     else:
-                        next_elements.append(
-                            Element(
+                        next_models.append(
+                            Model(
                                 sop=SOP.from_db_row(
-                                    sop_tpl=self.f_el.sop,
+                                    sop_tpl=self.f_mdl.sop,
                                     row=row[1:].tolist()
                                 ),
                                 id=e_id,
                                 gen=next_gen_id,
-                                status=ElementStatus.DONE.value))
+                                status=ModelStatus.DONE.value))
             else:
                 self.klog.debug(
-                    f'n_elem requested but only {len(sop_ids)} found in DB.')
+                    f'n_mdl requested but only {len(sop_ids)} found in DB.')
                 self.klog.debug(
                     'Tables erased from DB and Genereation recreated.')
                 if self.sop_db.table_exists(next_gen_name):
@@ -240,12 +243,12 @@ class GeneticAlgorithm(ABC):
                     self.kin_db.wipe_table(next_gen_name)
                 if self.sim_db.table_exists(next_gen_name):
                     self.sim_db.wipe_table(next_gen_name)
-                next_elements.extend([
-                    Element(
-                        sop=self.pert.perturb(sop=deepcopy(self.f_el.sop)),
+                next_models.extend([
+                    Model(
+                        sop=self.pert.perturb(sop=deepcopy(self.f_mdl.sop)),
                         id=id,
                         gen=next_gen_id)
-                    for id in range(1, self.settings['n_elem'])])
+                    for id in range(1, self.settings['n_mdl'])])
         else:
             self.klog.debug(
                 'Next generation not in DB. Creating it.')
@@ -259,26 +262,26 @@ class GeneticAlgorithm(ABC):
                 self.kin_db.wipe_table(next_gen_name)
             if self.sim_db.table_exists(next_gen_name):
                 self.sim_db.wipe_table(next_gen_name)
-            next_elements.extend([
-                Element(
-                    sop=self.pert.perturb(sop=deepcopy(self.f_el.sop)),
+            next_models.extend([
+                Model(
+                    sop=self.pert.perturb(sop=deepcopy(self.f_mdl.sop)),
                     id=id,
                     gen=next_gen_id)
-                for id in range(1, self.settings['n_elem'])])
+                for id in range(1, self.settings['n_mdl'])])
 
-        for id in range(self.settings['n_elem']):
-            prev_elements[id] = self.f_el
-        return prev_elements, next_elements
+        for id in range(self.settings['n_mdl']):
+            prev_models[id] = self.f_mdl
+        return prev_models, next_models
 
     def get_next_gen(self,
                      gen: Generation):
-        """Create the first generation from the initial element
+        """Create the first generation from the initial model
 
         Returns:
-            tuple[dict[int, Element], list[Element]]: _description_
+            tuple[dict[int, Model], list[Model]]: _description_
         """
-        next_elements: list[Element] = []
-        prev_elements: dict[int, Element] = {}
+        next_models: list[Model] = []
+        prev_models: dict[int, Model] = {}
         next_gen_id: int = Generation.total()
         next_gen_name: str = f"G{next_gen_id:04d}"
         if self.is_generation_finished(next_gen_id):
@@ -286,41 +289,41 @@ class GeneticAlgorithm(ABC):
                 table=next_gen_name,
                 column_name='id')
             self.klog.debug(
-                f'Found {len(sop_ids)} elements for next generation in DB')
+                f'Found {len(sop_ids)} models for next generation in DB')
             rows = np.array(
                 self.sop_db.get_table(table=f"G{next_gen_id:04d}")
                                     )
             if self.settings['restart'] == RestartType.RESCORE:
                 self.klog.debug(
                     'Rescoring only, no new calculations will be done.')
-            for el_id in range(self.settings['n_elem']):
-                if el_id in sop_ids:
-                    row = rows[rows[:, 0] == el_id][0]
+            for mdl_id in range(self.settings['n_mdl']):
+                if mdl_id in sop_ids:
+                    row = rows[rows[:, 0] == mdl_id][0]
                     if self.settings['restart'] == RestartType.RESCORE:
-                        next_elements.append(
-                            Element(
+                        next_models.append(
+                            Model(
                                 sop=SOP.from_db_row(
-                                    sop_tpl=self.f_el.sop,
+                                    sop_tpl=self.f_mdl.sop,
                                     row=row[1:].tolist()
                                 ),
-                                id=el_id,
+                                id=mdl_id,
                                 gen=next_gen_id,
-                                status=ElementStatus.RESCORE.value))
+                                status=ModelStatus.RESCORE.value))
                     else:
-                        next_elements.append(
-                            Element(
+                        next_models.append(
+                            Model(
                                 sop=SOP.from_db_row(
-                                    sop_tpl=self.f_el.sop,
+                                    sop_tpl=self.f_mdl.sop,
                                     row=row[1:].tolist()
                                 ),
-                                id=el_id,
+                                id=mdl_id,
                                 gen=next_gen_id,
-                                status=ElementStatus.DONE.value))
-                elif el_id in [el.id for el in gen.elements]:
-                    el_index: int = [el.id for el in gen.elements].index(el_id)
-                    next_elements.append(gen.elements[el_index])
+                                status=ModelStatus.DONE.value))
+                elif mdl_id in [mdl.id for mdl in gen.models]:
+                    el_index: int = [mdl.id for mdl in gen.models].index(mdl_id)
+                    next_models.append(gen.models[el_index])
                 else:
-                    msg: str = f'Element {el_id} not found in db or prev. gen'
+                    msg: str = f'Model {mdl_id} not found in db or prev. gen'
                     raise TypeError(msg)
         else:
             self.klog.debug(
@@ -335,27 +338,27 @@ class GeneticAlgorithm(ABC):
                 self.kin_db.wipe_table(next_gen_name)
             if self.sim_db.table_exists(next_gen_name):
                 self.sim_db.wipe_table(next_gen_name)
-            prev_elements, next_elements = self.create_next_gen(gen=gen)
-        return prev_elements, next_elements
+            prev_models, next_models = self.create_next_gen(gen=gen)
+        return prev_models, next_models
 
     def run(self) -> None:
-        """Run the genetic algorythm to optimize an ensemble of elements
+        """Run the genetic algorythm to optimize an ensemble of models
         """
         self.gen_0.run()
-        self.update_goat(new_els=self.gen_0.elements)
+        self.update_goat(new_mdls=self.gen_0.models)
         self.means, self.stds = self.get_stats(
-            elements=self.goat
+            models=self.goat
             )
         # Actualize which parameter is converged
         self.actualize_conv()
         # self.write_score_update(gen=self.gen_0)
-        prev_elements: dict[int, Element]
-        new_elements: list[Element]
-        prev_elements, new_elements = self.get_gen_one()
+        prev_models: dict[int, Model]
+        new_models: list[Model]
+        prev_models, new_models = self.get_gen_one()
         while (not self.converged and
                Generation.total() < self.settings['max_gen']):
             new_gen = Generation(
-                elements=new_elements,
+                models=new_models,
                 settings=self.settings,
                 rc_tpls=self.input_tpls,
                 sop_db=self.sop_db,
@@ -364,16 +367,16 @@ class GeneticAlgorithm(ABC):
                 sf=self.sf,
                 pert=self.pert,
                 klog=self.klog,
-                previous_el=prev_elements
+                previous_el=prev_models
                 )
             new_gen.run()
             # Update the goat list
-            self.update_goat(new_els=new_gen.elements)
+            self.update_goat(new_mdls=new_gen.models)
             # if new_gen.id > 1:
             self.old_means = self.means
             self.old_stds = self.stds
             self.means, self.stds = self.get_stats(
-                elements=self.goat
+                models=self.goat
                 )
             # Actualize which parameter is converged
             self.actualize_conv()
@@ -381,7 +384,7 @@ class GeneticAlgorithm(ABC):
             if new_gen.id > 1:
                 self.print_stats()
             if not self.converged:
-                prev_elements, new_elements = self.get_next_gen(gen=new_gen)
+                prev_models, new_models = self.get_next_gen(gen=new_gen)
                 if new_gen.id % self.settings['SA_freq'] == 0 and\
                    new_gen.id >= self.settings['SA_start'] and\
                    new_gen.id <= self.settings['SA_end']:
@@ -402,7 +405,7 @@ class GeneticAlgorithm(ABC):
         else:
             self.klog.info('On-the-fly sensitivity analysis.')
             sensitivity = Linear(
-                elements=self.goat,
+                models=self.goat,
                 settings=self.settings,
                 rc_tpls=self.input_tpls,
                 sf=self.sf,
@@ -424,26 +427,26 @@ class GeneticAlgorithm(ABC):
             self.klog.info(msg)
 
     def update_goat(self,
-                    new_els: list[Element]) -> None:
+                    new_mdls: list[Model]) -> None:
         # Delegate selection and persistence to the GOATs manager. The
-        # GOATs instance will keep a global pool of seen elements and
+        # GOATs instance will keep a global pool of seen models and
         # return the chosen goat list for this generation.
-        chosen: List[Element] = self.goats.update_with_generation(
-            elements=new_els,
+        chosen: List[Model] = self.goats.update_with_generation(
+            models=new_mdls,
             goat_length=self.settings['goat_length']
         )
 
         # Update local goat list and log stats
         self.goat = chosen
         if self.goat:
-            goat_avrg = float(np.average([el.score for el in self.goat]))
+            goat_avrg = float(np.average([mdl.score for mdl in self.goat]))
         else:
             goat_avrg = float('nan')
         self.klog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.2f}')
 
     def get_stats(
         self,
-        elements: list[Element],
+        models: list[Model],
     ) -> tuple[dict[str, float], dict[str, float]]:
         """Calculate the standard deviation of each key in the
         parameters_names dictionary across all SOP objects.
@@ -455,7 +458,7 @@ class GeneticAlgorithm(ABC):
         """
 
         sop_list: list[SOP] = [
-            el.sop for el in elements
+            mdl.sop for mdl in models
             ]
 
         # Initialize dictionaries to hold the sum of values,
@@ -484,32 +487,17 @@ class GeneticAlgorithm(ABC):
         return means, stds
 
     @abstractmethod
-    def isconverged(self,
-                    gen: Generation
-                    ) -> bool:
-        """Decide if a generation is converged or no
-        depending on the algorythm criteria.
-
-        Args:
-            gen (Generation): Previous generation
-
-        Returns:
-            bool: whether is converged
-        """
-        pass
-
-    @abstractmethod
     def create_next_gen(self,
                         gen: Generation
-                        ) -> tuple[dict[int, Element], list[Element]]:
-        """Return the list of elements of the next generation.
-        Important: reset the Element.__id before creating
-        the elements.
+                        ) -> tuple[dict[int, Model], list[Model]]:
+        """Return the list of models of the next generation.
+        Important: reset the Modmdl.__id before creating
+        the models.
 
         Args:
             gen (Generation): previous generation
 
         Returns:
-            list[Element]: Elements for the next generation
+            list[Model]: Models for the next generation
         """
         pass

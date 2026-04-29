@@ -7,7 +7,7 @@ from kimeco.optimizers.NelderMead.db_query_saver import DBQuerySaver
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
-from kimeco.element import Element
+from kimeco.model import Model
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.scoring_f.scoring import Scoring
 from kimeco.sensitivity.linear import Linear
@@ -20,12 +20,12 @@ class NelderMeadSwarm:
     """Parallel execution of multiple Nelder-Mead optimizations.
 
     Runs independent Nelder-Mead optimizations in parallel, each starting from
-    a different initial element. Performs a single upfront sensitivity analysis
+    a different initial model. Performs a single upfront sensitivity analysis
     to determine the parameter dimensions used by all NM instances.
     """
 
     def __init__(self,
-                 elements: list[Element],
+                 models: list[Model],
                  settings: dict[str, Any],
                  sf: Scoring,
                  sop_db: SOP_DB,
@@ -37,7 +37,7 @@ class NelderMeadSwarm:
         """Initialize the NelderMeadSwarm.
 
         Args:
-            elements: List of starting elements (one per NM instance)
+            models: List of starting models (one per NM instance)
             settings: Configuration dictionary
             sf: Scoring function
             pert: Perturbator
@@ -49,7 +49,7 @@ class NelderMeadSwarm:
         """
         self.new_folder_lock = threading.Lock()
         self.pert: Perturbator = pert
-        self.elements: list[Element] = elements
+        self.models: list[Model] = models
         self.settings: dict[str, Any] = settings
         self.sf: Scoring = sf
         self.input_tpls: list[list[str]] = input_tpls
@@ -88,7 +88,7 @@ class NelderMeadSwarm:
         cpu_count: int = multiprocessing.cpu_count()
         threads: int = self.settings['threads']
         self.max_workers: int = min(cpu_count, threads)
-        self.klog.info(f"N-M Swarm with {len(self.elements)} instances")
+        self.klog.info(f"N-M Swarm with {len(self.models)} instances")
         self.klog.info(
             f"Using {self.max_workers} parallel workers" + "\n"
             f"(CPU count: {cpu_count}, threads limit: {threads})"
@@ -99,7 +99,7 @@ class NelderMeadSwarm:
         """
         start_time: float = time.time()
         self.sop_db = SOP_DB(
-            sop=self.elements[0].sop,
+            sop=self.models[0].sop,
             name='NMS_DB_SOP',
             threads=self.settings['threads'],
             path=self.wdir,
@@ -109,7 +109,7 @@ class NelderMeadSwarm:
         msg = 'NMS_DB_SOP initialized:'
         self.klog.info(f"{msg:<65}{sop_db_time:>15.1f}")
         self.kin_db = KIN_DB(
-            sop=self.elements[0].sop,
+            sop=self.models[0].sop,
             name='NMS_DB_KIN',
             threads=self.settings['threads'],
             path=self.wdir,
@@ -134,7 +134,7 @@ class NelderMeadSwarm:
         """
         self.klog.info("Running sensitivity analysis NM Swarm")
         sensitivity = Linear(
-            elements=self.elements,
+            models=self.models,
             settings=self.settings,
             rc_tpls=self.input_tpls,
             sf=self.sf,
@@ -148,11 +148,11 @@ class NelderMeadSwarm:
             "Determined dimensions for all NM instances:\n" +
             f"{self.dimensions}")
 
-    def run(self) -> list[Element]:
+    def run(self) -> list[Model]:
         """Run all Nelder-Mead optimizations in parallel.
 
         Returns:
-            List of best elements (one per NM instance)
+            List of best models (one per NM instance)
         """
         self.klog.info(f"Optimizing dimensions: {self.dimensions}")
 
@@ -162,11 +162,11 @@ class NelderMeadSwarm:
         ) as executor:
             # Submit all tasks
             future_to_nm = {}
-            for nm_id, el in enumerate(self.elements):
+            for nm_id, mdl in enumerate(self.models):
                 future = executor.submit(
                     self._run_single_nm,
                     nm_id=nm_id,
-                    el=el
+                    el=mdl
                 )
                 future_to_nm[future] = nm_id
 
@@ -185,25 +185,25 @@ class NelderMeadSwarm:
                         'nm_id': nm_id,
                         'success': False,
                         'error': str(exc),
-                        'best_element': None
+                        'best_model': None
                     })
 
-        # Return best elements
-        best_elements: list[Element] = [
-            r['best_element'] for r in self.results if r['success']]
+        # Return best models
+        best_models: list[Model] = [
+            r['best_model'] for r in self.results if r['success']]
         self.klog.info(
-            f"NM Swarm completed: {len(best_elements)}/{len(self.elements)}")
+            f"NM Swarm completed: {len(best_models)}/{len(self.models)}")
 
-        return best_elements
+        return best_models
 
     def _run_single_nm(self,
                        nm_id: int,
-                       el: Element) -> dict[str, Any]:
+                       el: Model) -> dict[str, Any]:
         """Run a single Nelder-Mead optimization.
 
         Args:
             nm_id: ID for this NM instance
-            el: Starting element
+            el: Starting model
 
         Returns:
             Dictionary with results
@@ -218,7 +218,7 @@ class NelderMeadSwarm:
                 sop_db=self.sop_db,
                 sim_db=self.sim_db,
                 kin_db=self.kin_db,
-                f_el=el,
+                f_mdl=el,
                 input_tpls=self.input_tpls,
                 klog=self.klog,
                 dimensions=self.dimensions,
@@ -230,14 +230,14 @@ class NelderMeadSwarm:
         # Run optimization
         result_x = nm.run()
 
-        # Get best element
-        best_el: Element = nm.get_best_element()
+        # Get best model
+        best_el: Model = nm.get_best_model()
 
         return {
             'nm_id': nm_id,
             'success': True,
             'result_x': result_x,
-            'best_element': best_el,
+            'best_model': best_el,
             'iterations': nm.gen_counter
         }
 

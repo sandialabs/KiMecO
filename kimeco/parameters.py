@@ -4,7 +4,6 @@ from typing import Any, Iterator
 from collections.abc import Iterable
 
 from ase.atoms import Atoms
-from kimeco.enums import FreqMode
 from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from kimeco.barrier import Barrier
@@ -19,10 +18,8 @@ class SOP:
     Main object of the KIMECO code, to be perturbed and optimized."""
 
     def __init__(self,
-                 score_species: list[str],
-                 freq_mode: FreqMode = FreqMode.BATCH) -> None:
-        self.freq_mode: FreqMode = freq_mode
-        self.sc_species: list[str] = score_species
+                 n_exp: int) -> None:
+        self.n_exp: int = n_exp
         self.wells: list[Well] = []
         self.bimolecular: list[Bimolecular] = []
         self.barriers: list[Barrier] = []
@@ -38,7 +35,7 @@ class SOP:
         self.files2copy: list[str] = []
         self._default_score = float('inf')
         self.scores: dict[str, float] = {
-            sp: self._default_score for sp in self.sc_species
+            f"exp_{i}": self._default_score for i in range(n_exp)
             }
 
     @classmethod
@@ -193,7 +190,6 @@ class SOP:
         """
         self.wells.append(
             Well(name=name,
-                 freq_mode=self.freq_mode,
                  pes_ids=[pes_id]))
         self.items[name] = self.wells[-1]
 
@@ -245,8 +241,7 @@ class SOP:
             self.bimolecular.append(
                 Bimolecular(
                     name=name,
-                    pes_ids=[pes_id],
-                    freq_mode=self.freq_mode))
+                    pes_ids=[pes_id]))
             self.items[name] = self.bimolecular[-1]
 
     @property
@@ -307,7 +302,6 @@ class SOP:
         self.barriers.append(
             Barrier(
                 name=name,
-                freq_mode=self.freq_mode,
                 lside=self.items[lside],
                 rside=self.items[rside],
                 pes_id=pes_id))
@@ -322,32 +316,33 @@ class SOP:
             name (str): name of the object for which to set the frequencies
             freqs (list[float]): list of frequencies (cm-1)
         """
-        if isinstance(self.items[name], Bimolecular):
-            if hasattr(self.items[name].fragments[-1], '_freq'):
+        item = self.items[name]
+        if isinstance(item, Bimolecular):
+            if hasattr(item.fragments[-1], '_freq'):
                 f_arr = np.array(freqs)
                 if not np.allclose(
-                   self.items[name].fragments[-1]._freq, f_arr,
+                   item.fragments[-1]._freq, f_arr,
                    rtol=0.05, atol=0):
-                    msg = f"Fragment {self.items[name].fragments[-1].name}"
+                    msg = f"Fragment {item.fragments[-1].name}"
                     msg += "\n"
                     msg += "was already set with different frequencies."
                     msg += "\n"
                     msg += "Make your inputs consistents."
                     raise ValueError(msg)
-            self.items[name].fragments[-1].set_frequencies(freqs)
+            item.fragments[-1].set_frequencies(freqs)
         else:
-            if hasattr(self.items[name], '_freq'):
+            if hasattr(item, '_freq'):
                 f_arr = np.array(freqs)
                 if not np.allclose(
-                   self.items[name]._freq, f_arr,
+                   item._freq, f_arr,
                    rtol=0.05, atol=0):
-                    msg = f"Well {self.items[name].name}"
+                    msg = f"Well {item.name}"
                     msg += "\n"
                     msg += "was already set with different frequencies."
                     msg += "\n"
                     msg += "Make your inputs consistents."
                     raise ValueError(msg)
-            self.items[name].set_frequencies(freqs)
+            item.set_frequencies(freqs)
 
     def set_hrotor(self,
                    name: str,
@@ -374,22 +369,23 @@ class SOP:
         Returns:
             int: Index of the last rotor of the well
         """
-        if isinstance(self.items[name], Bimolecular):
-            self.items[name].fragments[-1].add_hrotor(thermalpowermax,
-                                                      group,
-                                                      axis,
-                                                      symmetry,
-                                                      scan,
-                                                      fexp,
-                                                      fcoef)
+        item = self.items[name]
+        if isinstance(item, Bimolecular):
+            item.fragments[-1].add_hrotor(thermalpowermax,
+                                          group,
+                                          axis,
+                                          symmetry,
+                                          scan,
+                                          fexp,
+                                          fcoef)
         else:
-            self.items[name].add_hrotor(thermalpowermax,
-                                        group,
-                                        axis,
-                                        symmetry,
-                                        scan,
-                                        fexp,
-                                        fcoef)
+            item.add_hrotor(thermalpowermax,
+                            group,
+                            axis,
+                            symmetry,
+                            scan,
+                            fexp,
+                            fcoef)
 
     def set_mrotor(self,
                    name: str,
@@ -412,22 +408,23 @@ class SOP:
         Returns:
             int: Index of the last rotor of the well
         """
-        if isinstance(self.items[name], Bimolecular):
-            self.items[name].fragments[-1].add_mrotor(
+        item = self.items[name]
+        if isinstance(item, Bimolecular):
+            item.fragments[-1].add_mrotor(
                 sf,
                 iem,
                 pes,
                 qlem,
                 irs)
-            return len(self.items[name].fragments[-1].m_rotors)-1
+            return len(item.fragments[-1].m_rotors)-1
         else:
-            self.items[name].add_mrotor(
+            item.add_mrotor(
                 sf,
                 iem,
                 pes,
                 qlem,
                 irs)
-            return len(self.items[name].m_rotors)-1
+            return len(item.m_rotors)-1
 
     def set_structure(self,
                       name: str,
@@ -438,36 +435,37 @@ class SOP:
 
         Args:
             name (str): name of the item
-            symbols (str | list[str]): Chemical elements
+            symbols (str | list[str]): Chemical models
             geom (list[list[float]]): 3D geometry
         """
-        if isinstance(self.items[name], Bimolecular):
-            if hasattr(self.items[name].fragments[-1], 'structure'):
+        item = self.items[name]
+        if isinstance(item, Bimolecular):
+            if hasattr(item.fragments[-1], 'structure'):
                 atm = Atoms(symbols=symbols,
                             positions=geom)
-                if self.items[name].fragments[-1].structure != atm:
-                    msg = f"Fragment {self.items[name].fragments[-1].name}"
+                if item.fragments[-1].structure != atm:
+                    msg = f"Fragment {item.fragments[-1].name}"
                     msg += "\n"
                     msg += "was already set with a different structure."
                     msg += "\n"
                     msg += "Make your inputs consistents"
                     msg += " to suppress this warning."
                     logger.warning(msg)
-            self.items[name].fragments[-1].set_structure(symbols,
-                                                         geom)
+            item.fragments[-1].set_structure(symbols,
+                                             geom)
         else:
-            if hasattr(self.items[name], 'structure'):
+            if hasattr(item, 'structure'):
                 atm = Atoms(symbols=symbols,
                             positions=geom)
-                if self.items[name].structure != atm:
-                    msg = f"Well {self.items[name].name}"
+                if item.structure != atm:
+                    msg = f"Well {item.name}"
                     msg += "\n"
                     msg += "was already set with a different structure."
                     msg += "\n"
                     msg += "Make your inputs consistents."
                     logger.warning(msg)
-            self.items[name].set_structure(symbols,
-                                           geom)
+            item.set_structure(symbols,
+                               geom)
 
     def update(self,
                key: str,
@@ -515,26 +513,54 @@ class SOP:
             self.items[item_name]._energy = value
         # Imaginary frequencies
         elif Ptype.IF.value in param_name:
-            self.items[item_name].ifreq = value
+            item = self.items[item_name]
+            if not isinstance(item, Barrier):
+                raise KeyError(f'Expected Barrier for IF parameter: {item_name}')
+            item.ifreq = value
         # symmetry factor
         elif Ptype.SFC.value in param_name:
-            self.items[item_name].sfc = value
+            item = self.items[item_name]
+            if not isinstance(item, Barrier):
+                raise KeyError(f'Expected Barrier for SFC parameter: {item_name}')
+            item.sfc = value
         # Frequencies
         elif Ptype.BFC.value in param_name:
-            self.items[item_name].bfc = float(value)
+            item = self.items[item_name]
+            if isinstance(item, Bimolecular):
+                msg: str = f'Unexpected BFC parameter'
+                msg += f' for bimolecular fragment: {item_name}'
+                raise KeyError(msg)
+            else:
+                item.bfc = float(value)
         elif Ptype.IFC.value in param_name:
             idx = int(param_name.split(Ptype.IFC.value)[-1])
-            self.items[item_name].ifc[idx] = float(value)
+            item = self.items[item_name]
+            if not isinstance(item, Barrier):
+                msg = f'Unexpected IFC parameter for'
+                msg += f' non-barrier item: {item_name}'
+                raise KeyError(msg)
+            else:
+                item.ifc[idx] = float(value)
         # Hindered rotors
         elif Ptype.HRS.value in param_name:
             idx = int(param_name.split(Ptype.HRS.value)[-1])
             # Reset the rotor's scan
-            self.items[item_name].h_rotors[idx].pert = value
+            item = self.items[item_name]
+            if isinstance(item, Bimolecular):
+                msg = f'Unexpected HRS parameter for'
+                msg += f' bimolecular fragment: {item_name}'
+                raise KeyError(msg)
+            else:
+                item.h_rotors[idx].pert = value
         # Multi rotors
         elif Ptype.MRC.value in param_name:
             idx = int(param_name.split(Ptype.MRC.value)[-1])
             # Reset the rotor's scan
-            self.items[item_name].m_rotors[idx].sfc = value
+            item = self.items[item_name]
+            if isinstance(item, Bimolecular):
+                item.fragments[-1].m_rotors[idx].sfc = value
+            else:
+                item.m_rotors[idx].sfc = value
         else:
             raise KeyError('Trying to restore unknown parameter.')
 

@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 from dash import dash_table, html, dcc
 import numpy as np
-from typing import Any
+from typing import Any, cast
 from enum import Enum
 
 
@@ -10,7 +10,7 @@ class StatColumns(Enum):
     MEAN = 'MEAN'
     STD = 'STD'
     MODE = 'MODE'
-    NEL = '# of elements'
+    NEL = '# of models'
 
 
 class Histogram:
@@ -95,7 +95,7 @@ class Histogram:
             ),
             yaxis=dict(
                 title={
-                    'text': 'Count of elements',
+                    'text': 'Count of models',
                     'font': {'family': self.font,
                              'size': 18,
                              'color': 'rgb(0, 0, 0)'}
@@ -132,7 +132,7 @@ class Histogram:
         ]
         self.stat_table = dash_table.DataTable(
             columns=header,
-            data=self.make_stats(data),
+            data=cast(Any, self.make_stats(data)),
             style_cell=dict(textAlign='center'),
             style_data=dict(backgroundColor="white"),
             id={"type": "stat_table", "index": self.id},
@@ -157,7 +157,7 @@ class Histogram:
                 {'column1 name': value row2, 'column2 name': value row2}
                 ]
         """
-        table_rows: list[dict[Any]] = []
+        table_rows: list[dict[str, Any]] = []
         for gen_id, trace in data.items():
             # Create bins and accumulate values
             hist, bin_edges = np.histogram(trace, bins=self.n_bin)

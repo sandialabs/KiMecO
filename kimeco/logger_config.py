@@ -91,6 +91,8 @@ class KMOLogger:
         writing."""
         if level >= self.level:
             self._ensure_initialized()
+            if self._logger is None:
+                return
             self._logger.log(level, msg, *args, **kwargs)
 
     def debug(self, msg: str, *args, **kwargs):
