@@ -70,12 +70,12 @@ class TestSchemeRuntime:
         assert nms == "G0001"
         assert mg == 1
 
-    def test_swarm_nm_goat_forces_max_gen_1(self):
+    def test_swarm_nm_goat_preserves_max_gen(self):
         opt, ga, nms, mg = _scheme_runtime(SCHEME_SWARM_NM_GOAT, max_gen=99)
         assert opt == "ga"
         assert ga == "exp"
         assert nms == "GT-1"
-        assert mg == 1
+        assert mg == 99
 
     def test_swarm_nm_nms_token(self):
         _, _, nms, _ = _scheme_runtime(SCHEME_SWARM_NM, max_gen=1)

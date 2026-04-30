@@ -324,7 +324,7 @@ class NelderMead:
                 iter=last_vertice.gen,
                 score=f"{last_vertice.score:.3f}"))
 
-    def run(self) -> NDArray:
+    def run(self) -> None:
         """Run the Nelder-Mead optimization."""
         initial = True
         # while self.dimensionality_changed or result['fun'] > 9:

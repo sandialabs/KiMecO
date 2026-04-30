@@ -1,7 +1,7 @@
 """Theoretical uncertainties (perturbation) section."""
 
 from typing import Any, Tuple
-from dash import dcc, html, Input, Output, callback
+from dash import ALL, State, callback_context, dcc, html, Input, Output, callback
 
 from kimeco.default_settings import default_settings
 from kimeco.enums import Distrib, Ptype, Pclass
@@ -393,6 +393,28 @@ def create_perturbation_section() -> html.Div:
             ], className="row g-2"),
         ], className="border rounded p-3 mt-3"),
 
+        html.Div([
+            html.H6(
+                "Parameter Specific Uncertainty",
+                className="fw-semibold mt-3"
+            ),
+            html.Small(
+                "Override the default standard deviation for individual SOP "
+                "parameters.",
+                className="text-muted d-block mb-2"
+            ),
+            html.Div(
+                id="perturbation-specific-std-rows-container",
+                children=[],
+                className="mt-2"
+            ),
+            html.Button(
+                "Add a parameter uncertainty",
+                id="perturbation-specific-std-add-button",
+                className="btn btn-outline-primary btn-sm mt-2",
+            ),
+        ], className="border rounded p-3 mt-3"),
+
         # Convergence Thresholds
         html.Div([
             html.H6("Convergence Thresholds",
@@ -446,6 +468,7 @@ def create_perturbation_section() -> html.Div:
         ], className="border rounded p-3 mt-3"),
 
         # Stores
+        dcc.Store(id="perturbation-specific-std-store", data=[]),
         dcc.Store(id="perturbation-config-store", data={}),
         dcc.Store(id="perturbation-valid-store", data=False),
         html.Div(
@@ -470,6 +493,149 @@ def _distrib_options_for_additive() -> list:
     return [
         {"label": d.value, "value": d.value}
         for d in allowed
+    ]
+
+
+def _build_specific_std_row(
+    row_idx: int,
+    param_options: list[Any],
+    row_data: dict[str, Any],
+) -> html.Div:
+    """Build one specific standard deviation row."""
+    return html.Div([
+        html.Div([
+            html.Div([
+                html.Label("Parameter", className="form-label form-label-sm"),
+                dcc.Dropdown(
+                    id={"type": "perturbation-specific-std-param",
+                        "index": row_idx},
+                    options=param_options,
+                    value=row_data.get("parameter"),
+                    clearable=True,
+                    placeholder="Select SOP parameter...",
+                    className="mt-0",
+                ),
+            ], className="col-md-8"),
+            html.Div([
+                html.Label(
+                    "Standard deviation",
+                    className="form-label form-label-sm"
+                ),
+                dcc.Input(
+                    id={"type": "perturbation-specific-std-value",
+                        "index": row_idx},
+                    type="number",
+                    min=0,
+                    step=0.01,
+                    value=row_data.get("std"),
+                    placeholder="e.g. 0.25",
+                    className="form-control form-control-sm",
+                ),
+            ], className="col-md-3"),
+            html.Div([
+                html.Button(
+                    "✕",
+                    id={"type": "perturbation-specific-std-remove",
+                        "index": row_idx},
+                    className="btn btn-danger btn-sm mt-4",
+                    style={"width": "100%"},
+                ),
+            ], className="col-md-1"),
+        ], className="row g-2 align-items-end"),
+    ], className="border rounded p-2 mb-2",
+       style={"backgroundColor": "#f8f9fa"})
+
+
+def _normalize_specific_std_store(data: Any) -> list[dict[str, Any]]:
+    """Normalize stored specific standard deviation rows."""
+    rows: list[dict[str, Any]] = []
+    if isinstance(data, dict):
+        for parameter, std in data.items():
+            rows.append({"parameter": parameter, "std": std})
+        return rows
+    if not isinstance(data, list):
+        return rows
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        rows.append({
+            "parameter": entry.get("parameter"),
+            "std": entry.get("std"),
+        })
+    return rows
+
+
+@callback(
+    Output("perturbation-specific-std-store", "data"),
+    Input("perturbation-specific-std-add-button", "n_clicks"),
+    Input({"type": "perturbation-specific-std-remove", "index": ALL},
+          "n_clicks"),
+    Input({"type": "perturbation-specific-std-param", "index": ALL},
+          "value"),
+    Input({"type": "perturbation-specific-std-value", "index": ALL},
+          "value"),
+    State("perturbation-specific-std-store", "data"),
+    prevent_initial_call=True,
+)
+def update_specific_std_store(
+    add_clicks: int,
+    _remove_clicks: list[int],
+    selected_params: list[str],
+    selected_stds: list[float],
+    current_store: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Manage the per-parameter uncertainty rows state."""
+    rows = _normalize_specific_std_store(current_store)
+    triggered = callback_context.triggered_id
+
+    if triggered == "perturbation-specific-std-add-button":
+        rows.append({"parameter": None, "std": None})
+        return rows
+
+    if (isinstance(triggered, dict) and
+            triggered.get("type") == "perturbation-specific-std-remove"):
+        row_idx = triggered.get("index")
+        if isinstance(row_idx, int) and 0 <= row_idx < len(rows):
+            rows.pop(row_idx)
+        return rows
+
+    row_count = max(len(rows), len(selected_params or []), len(selected_stds or []))
+    updated_rows: list[dict[str, Any]] = []
+    for idx in range(row_count):
+        existing = rows[idx] if idx < len(rows) else {}
+        updated_rows.append({
+            "parameter": (
+                selected_params[idx]
+                if idx < len(selected_params or [])
+                else existing.get("parameter")
+            ),
+            "std": (
+                selected_stds[idx]
+                if idx < len(selected_stds or [])
+                else existing.get("std")
+            ),
+        })
+    return updated_rows
+
+
+@callback(
+    Output("perturbation-specific-std-rows-container", "children"),
+    Input("perturbation-specific-std-store", "data"),
+    Input("sensitivity-sop-parameter-options-store", "data"),
+)
+def render_specific_std_rows(
+    specific_std_store: list[dict[str, Any]],
+    param_names: list[str],
+) -> list[html.Div]:
+    """Render the specific standard deviation rows."""
+    param_options = [
+        {"label": param, "value": param}
+        for param in (param_names or [])
+    ]
+    rows = _normalize_specific_std_store(specific_std_store)
+    return [
+        _build_specific_std_row(idx, param_options, row)
+        for idx, row in enumerate(rows)
     ]
 
 
@@ -525,6 +691,7 @@ def enforce_additive_distributions(_dummy) -> Tuple[list, list, list]:
     Input("perturbation-conv-we-input", "value"),
     Input("perturbation-conv-be-input", "value"),
     Input("perturbation-conv-etp-input", "value"),
+    Input("perturbation-specific-std-store", "data"),
     prevent_initial_call=True,
 )
 def update_perturbation_config(
@@ -558,12 +725,49 @@ def update_perturbation_config(
     conv_we: float,
     conv_be: float,
     conv_etp: float,
+    specific_std_rows: list[dict[str, Any]],
 ) -> Tuple[dict, bool, Any, dict]:
     """Validate and emit perturbation configuration."""
+    warnings = []
+    specific_std: dict[str, float] = {}
+    for idx, row in enumerate(_normalize_specific_std_store(specific_std_rows),
+                              start=1):
+        parameter = str(row.get("parameter") or "").strip()
+        std_value = row.get("std")
+        if not parameter and std_value in (None, ""):
+            continue
+        if not parameter:
+            warnings.append(f"Specific row {idx}: select a parameter")
+            continue
+        if std_value in (None, ""):
+            warnings.append(
+                f"Specific row {idx}: enter a standard deviation"
+            )
+            continue
+        try:
+            parsed_std = float(std_value)
+        except (TypeError, ValueError):
+            warnings.append(
+                f"Specific row {idx}: standard deviation must be numeric"
+            )
+            continue
+        if parsed_std <= 0:
+            warnings.append(
+                f"Specific row {idx}: standard deviation must be > 0"
+            )
+            continue
+        if parameter in specific_std:
+            warnings.append(
+                f"Specific row {idx}: parameter {parameter} is duplicated"
+            )
+            continue
+        specific_std[parameter] = parsed_std
+
     config = {
         "pert": pert or default_settings["pert"],
         "max_std": max_std or default_settings["max_std"],
         "freq_mode": default_settings["freq_mode"],
+        "specific_std": specific_std,
         f"std_{Ptype.WE.value}": std_we or
         default_settings[f"std_{Ptype.WE.value}"],
         f"std_{Ptype.BE.value}": std_be or
@@ -622,7 +826,6 @@ def update_perturbation_config(
 
     # Validate additive distributions
     additive_ptypes = Pclass.ADDITIVE.value
-    warnings = []
     for ptype in additive_ptypes:
         distrib_key = f"distrib_{ptype}"
         if distrib_key in config:

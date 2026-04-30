@@ -123,6 +123,8 @@ default_settings: dict[str, Any] = {
     f"std_{Ptype.BE.value}": 1.5,
     # Mode for frequency perturbation/saving
     "freq_mode": f"{FreqMode.BATCH.value}",
+    # Item specific standard deviations
+    "specific_std": {},
     # Standard deviation percentage perturbation for wells
     # and bimolecular individual vibrations
     f"std_{Ptype.IFC.value}": 1.1,

@@ -249,10 +249,7 @@ class NMSRunner(CoreRun):
         for table_name, model_profiles in collecting.items():
             gen_id = int(table_name[1:5])  # Extract from G#### or SG####
 
-            for sim_id, db_data in model_profiles.items():
-                mdl_id = sim_id // nsim
-                sim_idx = sim_id % nsim
-
+            for mdl_id, exp_profiles in model_profiles.items():
                 # Find model with matching ID and generation
                 mdl = None
                 with self.pool_lock:
@@ -263,14 +260,15 @@ class NMSRunner(CoreRun):
                 if mdl is None:
                     continue
 
-                # number of timesteps
-                nsteps: int = len(self.settings['exp_profiles'][sim_idx][0])
+                for sim_idx, db_data in exp_profiles.items():
+                    # number of timesteps
+                    nsteps: int = len(self.settings['exp_profiles'][sim_idx][0])
 
-                # Validate data completeness
-                if len(db_data) != nsteps:
-                    continue
+                    # Validate data completeness
+                    if len(db_data) != nsteps:
+                        continue
 
-                mdl.sim.profiles[sim_idx] = db_data
+                    mdl.sim.profiles[sim_idx] = db_data.T[1:]
 
                 # Scoring needs all the profiles
                 if all([prof is not None for prof in mdl.sim.profiles]):

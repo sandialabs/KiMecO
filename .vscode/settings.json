@@ -12,6 +12,9 @@
   "python.testing.pytestArgs": [
     "tests"
   ],
+  "flake8.enabled": true,
+  "flake8.args": [],
+  "flake8.importStrategy": "fromEnvironment",
   "python.testing.unittestEnabled": false,
   "python-envs.pythonProjects": [
     {

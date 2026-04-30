@@ -36,7 +36,7 @@ def _build_pressure_unit_options() -> list[dict[str, str]]:
         ureg = ctu.cantera_units_registry
         units = sorted(
             str(unit)
-            for unit in ureg.get_compatible_units("Pa")
+            for unit in ureg.get_compatible_units(ureg.parse_units("Pa"))  # type: ignore[arg-type]
             if str(unit) != "sound_pressure_level"
         )
     except Exception:
@@ -121,6 +121,7 @@ def _make_empty_experiment(exp_id: int) -> dict:
         "id": exp_id,
         "temp": None,
         "pres": None,
+        "weight": 1.0,
         "pres_unit": DEFAULT_PRESSURE_UNIT,
         "cantera_tpl": "",
         "scoring_func": default_settings["scoring_func"],
@@ -187,14 +188,9 @@ def _build_w_species_rows(w_species: dict) -> list:
                     placeholder="Weight",
                     value=weight,
                     className="form-control form-control-sm",
+                    readOnly=True,
                 ),
-            ], className="col-md-4"),
-            html.Div([
-                html.Button(
-                    "×",
-                    className="btn btn-danger btn-sm w-100",
-                ),
-            ], className="col-md-2"),
+            ], className="col-md-6"),
         ], className="row g-2 mb-2"))
     return rows
 
@@ -225,6 +221,17 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                 ),
             ], className="col-md-2"),
             html.Div([
+                html.Label("Experiment Weight", className="form-label"),
+                dcc.Input(
+                    id={"type": "exp-weight", "index": idx},
+                    type="number",
+                    min=0,
+                    step=0.1,
+                    value=exp.get("weight", 1.0),
+                    className="form-control form-control-sm",
+                ),
+            ], className="col-md-2"),
+            html.Div([
                 html.Label("Pressure Unit", className="form-label"),
                 dcc.Dropdown(
                     id={"type": "exp-pres-unit", "index": idx},
@@ -241,7 +248,7 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                     value=exp.get("scoring_func", "weighteddif"),
                     clearable=False,
                 ),
-            ], className="col-md-2"),
+            ], className="col-md-1"),
             html.Div([
                 html.Label("Initial composition mode", className="form-label"),
                 dcc.Dropdown(
@@ -250,7 +257,7 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                     value=exp.get("init_mode", "ratio"),
                     clearable=False,
                 ),
-            ], className="col-md-3"),
+            ], className="col-md-2"),
         ], className="row g-2 mb-2"),
         html.Div([
             html.Div([
@@ -332,11 +339,34 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                     exp.get("w_species", {})
                 ),
             ),
-            html.Button(
-                "+ Add Species",
-                id={"type": "exp-w-species-add", "index": idx},
-                className="btn btn-outline-primary btn-sm mt-2",
-            ),
+            html.Div([
+                html.Div([
+                    dcc.Input(
+                        id={"type": "exp-w-species-name", "index": idx},
+                        type="text",
+                        placeholder="Species name",
+                        className="form-control form-control-sm",
+                    ),
+                ], className="col-md-5"),
+                html.Div([
+                    dcc.Input(
+                        id={"type": "exp-w-species-value", "index": idx},
+                        type="number",
+                        min=0,
+                        step=0.1,
+                        placeholder="Weight",
+                        value=1.0,
+                        className="form-control form-control-sm",
+                    ),
+                ], className="col-md-4"),
+                html.Div([
+                    html.Button(
+                        "+ Add Species",
+                        id={"type": "exp-w-species-add", "index": idx},
+                        className="btn btn-outline-primary btn-sm w-100",
+                    ),
+                ], className="col-md-3"),
+            ], className="row g-2 mt-2"),
         ], className="mt-3"),
     ], className="card p-3 mb-2 bg-light")
 
@@ -642,10 +672,12 @@ def validate_experiment_forms(
     Output("experiments-store", "data"),
     Output("experiments-table", "children"),
     Input("add-experiment-button", "n_clicks"),
+    Input({"type": "exp-w-species-add", "index": ALL}, "n_clicks"),
     [
         State("experiments-store", "data"),
         State({"type": "exp-temp", "index": ALL}, "value"),
         State({"type": "exp-pres", "index": ALL}, "value"),
+        State({"type": "exp-weight", "index": ALL}, "value"),
         State({"type": "exp-pres-unit", "index": ALL}, "value"),
         State({"type": "exp-scoring-func", "index": ALL}, "value"),
         State({"type": "exp-init-mode", "index": ALL}, "value"),
@@ -653,14 +685,18 @@ def validate_experiment_forms(
         State({"type": "exp-data-file", "index": ALL}, "value"),
         State({"type": "exp-error-file", "index": ALL}, "value"),
         State({"type": "exp-init-value", "index": ALL}, "value"),
+        State({"type": "exp-w-species-name", "index": ALL}, "value"),
+        State({"type": "exp-w-species-value", "index": ALL}, "value"),
     ],
     prevent_initial_call=True,
 )
 def add_experiment(
     n_clicks: int,
+    _add_species_clicks: list,
     experiments: list,
     temps: list,
     press: list,
+    weights: list,
     press_units: list,
     scoring_funcs: list,
     init_modes: list,
@@ -668,8 +704,10 @@ def add_experiment(
     data_files: list,
     error_files: list,
     init_values: list,
+    w_species_names: list,
+    w_species_values: list,
 ) -> tuple[list, list]:
-    """Save current form values and append a new empty experiment."""
+    """Save form values, then append experiment or add one species weight."""
     if experiments is None:
         experiments = []
 
@@ -680,6 +718,9 @@ def add_experiment(
             **exp,
             "temp": temps[i] if i < len(temps) else None,
             "pres": press[i] if i < len(press) else None,
+            "weight": (
+                weights[i] if i < len(weights) else exp.get("weight", 1.0)
+            ) or 1.0,
             "pres_unit": (
                 press_units[i] if i < len(press_units)
                 else DEFAULT_PRESSURE_UNIT
@@ -705,7 +746,38 @@ def add_experiment(
             ) or "",
         })
 
-    # Append a new empty experiment
+    triggered = callback_context.triggered_id
+    if isinstance(triggered, dict) and triggered.get("type") == "exp-w-species-add":
+        exp_idx = triggered.get("index")
+        if isinstance(exp_idx, int) and 0 <= exp_idx < len(saved):
+            add_click = (
+                _add_species_clicks[exp_idx]
+                if exp_idx < len(_add_species_clicks or [])
+                else None
+            )
+            raw_species_name = (
+                w_species_names[exp_idx]
+                if exp_idx < len(w_species_names)
+                else ""
+            )
+            species_name = str(raw_species_name or "").strip()
+            if add_click and species_name:
+                raw_weight = (
+                    w_species_values[exp_idx]
+                    if exp_idx < len(w_species_values)
+                    else 1.0
+                )
+                try:
+                    parsed_weight = float(raw_weight)
+                except (TypeError, ValueError):
+                    parsed_weight = 1.0
+                if parsed_weight >= 0:
+                    existing = dict(saved[exp_idx].get("w_species") or {})
+                    existing[species_name] = parsed_weight
+                    saved[exp_idx]["w_species"] = existing
+        return saved, _render_table(saved)
+
+    # Add Experiment button path
     saved.append(_make_empty_experiment(len(saved) + 1))
 
     return saved, _render_table(saved)

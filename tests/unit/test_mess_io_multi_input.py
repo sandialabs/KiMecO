@@ -23,6 +23,7 @@ def _dme_settings() -> dict:
     return {
         "init_loc": str(DME_ROOT),
         "mess_inputs": payload["mess_inputs"],
+        "n_exp": 1,
         "score_sp": [],
         "freq_mode": FreqMode.BATCH,
         "rc_temp": payload["rc_temp"],

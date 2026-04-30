@@ -11,6 +11,7 @@ from dash import (
     State,
     callback,
     callback_context,
+    no_update,
 )
 from dash.dependencies import ALL
 
@@ -139,7 +140,7 @@ def update_mess_files_list(
     selected_entry: str,
     _remove_clicks,
     current_files: list,
-) -> list:
+) -> Any:
     """Update the mess_inputs list on file selection/remove actions."""
     if current_files is None:
         current_files = []
@@ -155,12 +156,14 @@ def update_mess_files_list(
     if isinstance(triggered_id, dict) and (
         triggered_id.get("type") == "sop-remove-file"
     ):
+        if not any(click for click in (_remove_clicks or [])):
+            return no_update
         filename_to_remove = triggered_id.get("index")
         if not filename_to_remove:
-            return current_files
+            return no_update
         return [f for f in current_files if f != filename_to_remove]
 
-    return current_files
+    return no_update
 
 
 @callback(

@@ -35,7 +35,7 @@ def test_request_sim_profiles_only_queues_missing_experiments() -> None:
     mdl.sim = cast(Any, SimpleNamespace(profiles=[None, object(), None]))
     db = DummySIMDB()
 
-    mdl.request_sim_profiles(sim_db=db, table='G0000')
+    mdl.request_sim_profiles(sim_db=cast(Any, db), table='G0000')
 
     assert db.requests == [('G0000', 7, 0), ('G0000', 7, 2)]
 
@@ -49,7 +49,7 @@ def test_save_sim_persists_blob_roundtrip_for_one_experiment(
         species=['A', 'B'],
         data=np.array([[0.0, 1.0, 2.0]], dtype=float),
     )
-    mdl.sim = SimpleNamespace(
+    mdl.sim = cast(Any, SimpleNamespace(
         settings={'experiments': [exp]},
         profiles=[
             np.array(
@@ -82,7 +82,7 @@ def test_save_sim_raises_for_missing_profile(tmp_path: Path) -> None:
         species=['A'],
         data=np.array([[0.0, 1.0]], dtype=float),
     )
-    mdl.sim = SimpleNamespace(
+    mdl.sim = cast(Any, SimpleNamespace(
         settings={'experiments': [exp]},
         profiles=[None],
     ))

@@ -6,6 +6,8 @@ valid JSON input files for KiMecO with a progressive validation workflow.
 """
 
 
+import argparse
+import os
 import dash
 from dash import html, dcc, Input, Output, State, callback
 
@@ -39,8 +41,9 @@ from kimeco.gui.input_sections.save_load_write_section import (
 class KMOStartApp:
     """Dash application for creating KiMecO input files."""
 
-    def __init__(self):
+    def __init__(self, initial_config_path: str = ""):
         """Initialize the KMO Start application."""
+        self.initial_config_path = initial_config_path or ""
         self.app = dash.Dash(
             __name__,
             external_stylesheets=[
@@ -169,7 +172,10 @@ class KMOStartApp:
                             value="save-write-tab",
                             children=[
                                 html.Div(
-                                    create_save_load_write_section(),
+                                    create_save_load_write_section(
+                                        initial_config_path=
+                                        self.initial_config_path
+                                    ),
                                     style={"marginTop": "20px"}
                                 )
                             ]
@@ -263,7 +269,28 @@ class KMOStartApp:
 
 def main() -> None:
     """Entry point for the kmo_start command."""
-    app = KMOStartApp()
+    parser = argparse.ArgumentParser(
+        description="Start kmo_start GUI and optionally auto-load a JSON config.",
+    )
+    parser.add_argument(
+        "config_json",
+        nargs="?",
+        default="",
+        help="Optional path to a JSON config file to auto-load on startup.",
+    )
+    args = parser.parse_args()
+
+    initial_config_path = ""
+    if args.config_json:
+        initial_config_path = os.path.abspath(args.config_json)
+        if not os.path.isfile(initial_config_path):
+            raise SystemExit(
+                f"Config file does not exist: {initial_config_path}"
+            )
+        if not initial_config_path.casefold().endswith(".json"):
+            raise SystemExit("Config argument must be a .json file.")
+
+    app = KMOStartApp(initial_config_path=initial_config_path)
     app.run(debug=True, port=8000)
 
 

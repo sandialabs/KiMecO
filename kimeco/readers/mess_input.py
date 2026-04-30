@@ -29,6 +29,7 @@ class MessInputReader:
             settings (dict): Content of the input file
                              with additional default parameters
         """
+        self.klog: KMOLogger = klog
         self.filenames: list[str] = []
         for mess_input in settings['mess_inputs']:
             if os.path.isabs(mess_input):

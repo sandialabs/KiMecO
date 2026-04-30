@@ -88,12 +88,4 @@ class Generation(CoreRun):
                 message='Best score:',
                 number=self.best_score))
 
-    def reset_model(self, mdl: Model) -> None:
-        """Reset a failed model."""
-        rst: int = mdl.reset
-        self.models[mdl.id] = Model(
-            sop=self.pert.perturb(sop=self.previous_el[mdl.id].sop),
-            id=mdl.id,
-            gen=self.id
-        )
-        self.models[mdl.id].reset = rst + 1
+

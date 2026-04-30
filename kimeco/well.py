@@ -159,9 +159,10 @@ class Well:
             to_ignore.append(Ptype.BFC)
         if not self.pert_e:
             to_ignore.append(Ptype.WE)
-        for unctt, val in settings.items():
-            if not unctt.startswith('std_'):
-                continue
+        general_uncertainties: dict[str, float] = {
+            k: v for k, v in settings.items() if k.startswith('std_')
+        }
+        for unctt, val in general_uncertainties.items():
             try:
                 ptype = Ptype(unctt.split('std_')[-1])
             except Exception as e:

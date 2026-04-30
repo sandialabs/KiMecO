@@ -586,6 +586,12 @@ class SOP:
             sp: Well | Barrier | Bimolecular
             sp.set_uncertainties(settings)
             self.uncertainties.update(sp.uncertainties)
+        for pname in settings["specific_std"].keys():
+            if pname not in self.uncertainties.keys():
+                msg = f"The parameter {pname} is not recognized."
+                msg += " Check your specific_std keys."
+                raise KeyError(msg)
+        self.uncertainties.update(settings["specific_std"])
 
 
 class PESReactionIterator:

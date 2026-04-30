@@ -252,6 +252,10 @@ class Linear(CoreRun):
         for ptype in Ptype:
             if ptype.value in param:
                 break
+        if self.pert is None:
+            raise RuntimeError(
+                'Cannot calculate derivative step without a perturbator.'
+            )
         scale: float = self.pert.get_scale(
                 ptype=ptype.value,
                 param=param
