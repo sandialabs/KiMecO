@@ -19,16 +19,16 @@ DME_INPUT_JSON = DME_ROOT / "input.json"
 
 # Create setting for the MESS reader
 def _dme_settings() -> dict:
-    payload = json.loads(DME_INPUT_JSON.read_text())
+    user_settings = json.loads(DME_INPUT_JSON.read_text())
     return {
         "init_loc": str(DME_ROOT),
-        "mess_inputs": payload["mess_inputs"],
+        "mess_inputs": user_settings["mess_inputs"],
         "n_exp": 1,
         "score_sp": [],
         "freq_mode": FreqMode.BATCH,
-        "rc_temp": payload["rc_temp"],
-        "rc_pres": payload["rc_pres"],
-        "pres_unit": payload["pres_unit"],
+        "rc_temp": user_settings["rc_temp"],
+        "rc_pres": user_settings["rc_pres"],
+        "pres_unit": user_settings["pres_unit"],
         "force_new_molecules": True,
     }
 
@@ -237,8 +237,8 @@ def test_save_rotor_reads_hindered_rotor_block(
 
 
 def test_integration_write_from_multi_input_sop(tmp_path: Path) -> None:
-    payload = json.loads(DME_INPUT_JSON.read_text())
-    relative_inputs: list[str] = payload["mess_inputs"]
+    user_settings = json.loads(DME_INPUT_JSON.read_text())
+    relative_inputs: list[str] = user_settings["mess_inputs"]
 
     parse_reader = _build_reader(tmp_path=tmp_path)
     try:

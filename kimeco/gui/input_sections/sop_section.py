@@ -118,11 +118,11 @@ def update_sop_browser_state(selected_value, _refresh, cwd):
     )
     options = _SOP_BROWSER.build_options(current_dir)
     path_label = _SOP_BROWSER.path_label(current_dir)
-    selected_payload = selected_file if selected_file is not None else None
+    selected_user_settings = selected_file if selected_file is not None else None
 
     return (
         current_dir,
-        selected_payload,
+        selected_user_settings,
         options,
         path_label,
         None,

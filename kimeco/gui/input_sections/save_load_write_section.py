@@ -88,7 +88,7 @@ def _parse_initial_values(raw_value: str) -> dict[str, Any]:
     return result
 
 
-def _build_experiments_payload(
+def _build_experiments_user_settings(
     experiments_store: list[dict[str, Any]],
 ) -> list:
     """Transform GUI experiment entries into runtime JSON schema."""
@@ -151,7 +151,7 @@ def _build_experiments_payload(
     return experiments
 
 
-def _build_payload(
+def _build_user_settings(
     ct_yaml: str,
     mess_inputs: list,
     force_new_molecules: list,
@@ -161,27 +161,27 @@ def _build_payload(
     perturbation_config: dict,
     resources_config: dict,
 ) -> dict[str, Any]:
-    """Build a JSON payload compatible with KMO input expectations."""
-    payload: dict[str, Any] = copy.deepcopy(default_settings)
-    payload.update(sensitivity_config or {})
-    payload.update(optimizer_config or {})
-    payload.update(perturbation_config or {})
-    payload.update(resources_config or {})
-    payload.pop("optimizer_scheme", None)
+    """Build a JSON user_settings compatible with KMO input expectations."""
+    user_settings: dict[str, Any] = copy.deepcopy(default_settings)
+    user_settings.update(sensitivity_config or {})
+    user_settings.update(optimizer_config or {})
+    user_settings.update(perturbation_config or {})
+    user_settings.update(resources_config or {})
+    user_settings.pop("optimizer_scheme", None)
 
-    payload["ct_yaml"] = (ct_yaml or "").strip()
-    payload["mess_inputs"] = list(mess_inputs or [])
-    payload["force_new_molecules"] = bool(
+    user_settings["ct_yaml"] = (ct_yaml or "").strip()
+    user_settings["mess_inputs"] = list(mess_inputs or [])
+    user_settings["force_new_molecules"] = bool(
         force_new_molecules and "enabled" in force_new_molecules
     )
-    payload["experiments"] = _build_experiments_payload(experiments_store)
+    user_settings["experiments"] = _build_experiments_user_settings(experiments_store)
 
-    if not payload["ct_yaml"]:
+    if not user_settings["ct_yaml"]:
         raise ValueError("ct_yaml is empty. Validate mechanism in tab 1.")
-    if not payload["mess_inputs"]:
+    if not user_settings["mess_inputs"]:
         raise ValueError("No MESS input file selected in tab 2.")
 
-    return payload
+    return user_settings
 
 
 def _value_at(values: list[Any], index: int, default: Any) -> Any:
@@ -272,7 +272,7 @@ def _format_initial_values(values: dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
-def _experiments_from_payload(raw_experiments: Any) -> list[dict[str, Any]]:
+def _experiments_from_user_settings(raw_experiments: Any) -> list[dict[str, Any]]:
     """Convert runtime JSON experiments list to GUI experiments store."""
     experiments: list[dict[str, Any]] = []
     for idx, exp in enumerate(raw_experiments or []):
@@ -304,11 +304,11 @@ def _experiments_from_payload(raw_experiments: Any) -> list[dict[str, Any]]:
     return experiments
 
 
-def _infer_optimizer_scheme(payload: dict[str, Any]) -> str:
+def _infer_optimizer_scheme(user_settings: dict[str, Any]) -> str:
     """Infer optimizer scheme selector value from runtime optimizer keys."""
-    optimizer = str(payload.get("optimizer", "ga"))
-    ga_type = str(payload.get("ga_type", "exp"))
-    nms_start = str(payload.get("NMS_start", "") or "")
+    optimizer = str(user_settings.get("optimizer", "ga"))
+    ga_type = str(user_settings.get("ga_type", "exp"))
+    nms_start = str(user_settings.get("NMS_start", "") or "")
 
     if optimizer == "nelder-mead":
         return "scheme-nelder-mead"
@@ -439,10 +439,10 @@ def update_load_browser_state(selected_value, _refresh, cwd):
     )
     options = _LOAD_BROWSER.build_options(current_dir)
     path_label = _LOAD_BROWSER.path_label(current_dir)
-    selected_payload = selected_file if selected_file is not None else None
+    selected_user_settings = selected_file if selected_file is not None else None
     return (
         current_dir,
-        selected_payload,
+        selected_user_settings,
         options,
         path_label,
         None,
@@ -570,7 +570,7 @@ def write_json_file(
             init_values=exp_init_values,
         )
 
-        payload = _build_payload(
+        user_settings = _build_user_settings(
             ct_yaml=ct_yaml,
             mess_inputs=mess_inputs,
             force_new_molecules=force_new_molecules,
@@ -582,7 +582,7 @@ def write_json_file(
         )
 
         with open(output_path, mode="w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
+            json.dump(user_settings, handle, indent=2)
 
         return (
             f"✅ JSON written successfully to {output_path}",
@@ -654,7 +654,7 @@ def save_config_download(
         init_values=exp_init_values,
     )
 
-    payload = _build_payload(
+    user_settings = _build_user_settings(
         ct_yaml=ct_yaml,
         mess_inputs=mess_inputs,
         force_new_molecules=force_new_molecules,
@@ -666,7 +666,7 @@ def save_config_download(
     )
 
     return dcc.send_string(
-        json.dumps(payload, indent=2),
+        json.dumps(user_settings, indent=2),
         filename="kimeco_config.json",
     )
 
@@ -761,7 +761,7 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
         loaded = copy.deepcopy(default_settings)
         loaded.update(loaded_raw)
 
-        experiments = _experiments_from_payload(loaded.get("experiments", []))
+        experiments = _experiments_from_user_settings(loaded.get("experiments", []))
         experiment_count = len([
             exp for exp in experiments
             if any(

@@ -127,14 +127,14 @@ class TestValidateConfig:
         )
         assert ok is True
 
-    def test_valid_swarm_payload(self):
-        """Swarm scheme emitted payload should pass validation."""
+    def test_valid_swarm_user_settings(self):
+        """Swarm scheme emitted user_settings should pass validation."""
         opt, ga, nms, mg = _scheme_runtime(SCHEME_SWARM_NM, max_gen=1)
         cfg = _config(optimizer=opt, ga_type=ga, NMS_start=nms, max_gen=mg)
         ok, msg = _validate_config(cfg)
         assert ok is True
 
-    def test_valid_goat_swarm_payload(self):
+    def test_valid_goat_swarm_user_settings(self):
         opt, ga, nms, mg = _scheme_runtime(SCHEME_SWARM_NM_GOAT, max_gen=1)
         cfg = _config(optimizer=opt, ga_type=ga, NMS_start=nms, max_gen=mg)
         ok, msg = _validate_config(cfg)

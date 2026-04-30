@@ -19,16 +19,16 @@ DME_INPUT_JSON = DME_ROOT / "input.json"
 
 
 def _dme_settings() -> dict:
-    payload = json.loads(DME_INPUT_JSON.read_text())
+    user_settings = json.loads(DME_INPUT_JSON.read_text())
     return {
         "init_loc": str(DME_ROOT),
-        "mess_inputs": payload["mess_inputs"],
+        "mess_inputs": user_settings["mess_inputs"],
         "n_exp": 1,
         "score_sp": [],
         "freq_mode": FreqMode.BATCH,
-        "rc_temp": payload["rc_temp"],
-        "rc_pres": payload["rc_pres"],
-        "pres_unit": payload["pres_unit"],
+        "rc_temp": user_settings["rc_temp"],
+        "rc_pres": user_settings["rc_pres"],
+        "pres_unit": user_settings["pres_unit"],
         "force_new_molecules": True,
     }
 
