@@ -11,9 +11,19 @@ from kimeco.q_sys import JobStatus
 import pyarrow as pa
 import pyarrow.feather as feather
 from io import BytesIO
+from kimeco.parameter_scoring import (
+    get_parameter_uncertainty_scale,
+    normalize_score_weights,
+)
 
 
 class Model:
+    _score_reference_values: dict[str, float] = {}
+    _score_reference_uncertainties: dict[str, float] = {}
+    _score_active_params: list[str] = []
+    _score_weight_theory: float = 0.5
+    _score_weight_experiments: float = 0.5
+
     def __init__(self,
                  sop: SOP,
                  id: int,
@@ -44,6 +54,26 @@ class Model:
         self.name: str = f'E{self.id:04d}'
         self.n_exp: int
         self.thread_id: int
+
+    @classmethod
+    def configure_scoring(
+        cls,
+        reference_sop: SOP,
+        settings: dict[str, Any],
+    ) -> None:
+        cls._score_reference_values = {
+            key: float(value)
+            for key, value in reference_sop.parameters_names.items()
+        }
+        cls._score_reference_uncertainties = {
+            key: float(value)
+            for key, value in reference_sop.uncertainties.items()
+        }
+        cls._score_active_params = list(settings.get('active_p', []))
+        (
+            cls._score_weight_theory,
+            cls._score_weight_experiments,
+        ) = normalize_score_weights(settings)
 
     def save_kin(self,
                  db: KIN_DB,
@@ -102,14 +132,44 @@ class Model:
         return [v for v in self.sop.scores.values()]
 
     @property
+    def experiment_score(self) -> float:
+        return float(np.average(self.scores))
+
+    @property
+    def theory_score(self) -> float:
+        if len(self._score_active_params) == 0:
+            return 0.0
+        if len(self._score_reference_values) == 0:
+            return 0.0
+
+        score = 0.0
+        current_values = self.sop.parameters_names
+        normalization_factor = 1/len(self._score_active_params)
+        for param in self._score_active_params:
+            scale = get_parameter_uncertainty_scale(
+                reference_values=self._score_reference_values,
+                reference_uncertainties=self._score_reference_uncertainties,
+                param=param,
+            )
+            delta = float(current_values[param]) - self._score_reference_values[param]
+            score += (delta ** 2) / (scale ** 2)
+        return float(score)*normalization_factor
+
+    @property
     def score(self) -> float:
         """Return the score of the selected species.
 
         Returns:
             float:
-                Average of per-experiment scores.
+                Weighted total of theory and experiment scores.
         """
-        return float(np.average(self.scores))
+        if (len(self._score_active_params) == 0 or
+                len(self._score_reference_values) == 0):
+            return self.experiment_score
+        return float(
+            self._score_weight_theory * self.theory_score
+            + self._score_weight_experiments * self.experiment_score
+        )
 
     def prepare_upsert(self,
                        db: Kimeco_db,

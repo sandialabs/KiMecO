@@ -422,6 +422,8 @@ class GeneticAlgorithm(ABC):
         for p in new_params:
             self.settings['active_p'].append(p)
         if new_p:
+            Model.configure_scoring(reference_sop=self.f_mdl.sop,
+                                    settings=self.settings)
             msg = 'Perturbing the following new parameters:\n'
             msg += "{}".format(new_params).replace("'", '"')
             self.klog.info(msg)

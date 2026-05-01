@@ -472,6 +472,11 @@ class KMOInput:
             self.klog.warning("'restart' has unknown type.")
             self.cancel_run = True
 
+        for key in ('weight_theory', 'weight_experiments'):
+            if self.json_file[key] < 0:
+                self.klog.warning(f"{key} must be non-negative.")
+                self.cancel_run = True
+
     def full_run_settings(self) -> dict[str, Any]:
         """Merge the users settings with the default values.
 

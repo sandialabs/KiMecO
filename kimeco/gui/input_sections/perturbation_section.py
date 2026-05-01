@@ -61,6 +61,39 @@ def create_perturbation_section() -> html.Div:
             ], className="row g-2"),
         ], className="border rounded p-3 mt-3"),
 
+        html.Div([
+            html.H6("Scoring Balance", className="fw-semibold mt-3"),
+            html.Small(
+                "Raw theory and experiment weights are normalized at runtime "
+                "so their sum is 1.",
+                className="text-muted d-block mb-2"
+            ),
+            html.Div([
+                html.Div([
+                    html.Label("Theory Weight", className="form-label"),
+                    dcc.Input(
+                        id="perturbation-weight-theory-input",
+                        type="number",
+                        min=0,
+                        step=0.1,
+                        value=default_settings["weight_theory"],
+                        className="form-control",
+                    ),
+                ], className="col-md-6"),
+                html.Div([
+                    html.Label("Experiment Weight", className="form-label"),
+                    dcc.Input(
+                        id="perturbation-weight-experiments-input",
+                        type="number",
+                        min=0,
+                        step=0.1,
+                        value=default_settings["weight_experiments"],
+                        className="form-control",
+                    ),
+                ], className="col-md-6"),
+            ], className="row g-2"),
+        ], className="border rounded p-3 mt-3"),
+
         # Uncertainty Standards (std_*)
         html.Div([
             html.H6("Standard Deviations (σ)", className="fw-semibold mt-3"),
@@ -663,6 +696,8 @@ def enforce_additive_distributions(_dummy) -> Tuple[list, list, list]:
     Output("perturbation-validation-message", "style"),
     Input("perturbation-pert-dropdown", "value"),
     Input("perturbation-max-std-input", "value"),
+    Input("perturbation-weight-theory-input", "value"),
+    Input("perturbation-weight-experiments-input", "value"),
     # Input("perturbation-freq-mode-dropdown", "value"),
     Input("perturbation-std-we-input", "value"),
     Input("perturbation-std-be-input", "value"),
@@ -697,6 +732,8 @@ def enforce_additive_distributions(_dummy) -> Tuple[list, list, list]:
 def update_perturbation_config(
     pert: str,
     max_std: int,
+    weight_theory: float,
+    weight_experiments: float,
     # freq_mode: str,
     std_we: float,
     std_be: float,
@@ -763,9 +800,29 @@ def update_perturbation_config(
             continue
         specific_std[parameter] = parsed_std
 
+    theory_weight_value = (
+        default_settings["weight_theory"]
+        if weight_theory is None else weight_theory
+    )
+    experiment_weight_value = (
+        default_settings["weight_experiments"]
+        if weight_experiments is None else weight_experiments
+    )
+    if theory_weight_value < 0:
+        warnings.append("Theory weight must be >= 0")
+    if experiment_weight_value < 0:
+        warnings.append("Experiment weight must be >= 0")
+    if theory_weight_value == 0 and experiment_weight_value == 0:
+        warnings.append(
+            "Theory and experiment weights are both zero; runtime scoring "
+            "will fall back to an equal split"
+        )
+
     config = {
         "pert": pert or default_settings["pert"],
         "max_std": max_std or default_settings["max_std"],
+        "weight_theory": theory_weight_value,
+        "weight_experiments": experiment_weight_value,
         "freq_mode": default_settings["freq_mode"],
         "specific_std": specific_std,
         f"std_{Ptype.WE.value}": std_we or

@@ -59,6 +59,8 @@ class KiMecO:
         self.input_tpls: list[list[str]]
         self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
+        Model.configure_scoring(reference_sop=self.init_SOP,
+                                settings=self.settings)
         self.mech.add_SOP(self.init_SOP)
         self.first_sensi: bool = len(self.settings['active_p']) == 0
 
@@ -166,6 +168,8 @@ class KiMecO:
             self.klog.info(f"{'SA read from DB':<65}")
         self.sensitivity.run()  # Only actually run if necessary
         self.settings['active_p'] = self.sensitivity.selected
+        Model.configure_scoring(reference_sop=self.init_SOP,
+                                settings=self.settings)
         self.f_mdl: Model = self.sensitivity.models[0]
         if not self.sensitivity.models_from_db or \
             (self.settings['restart'] == RestartType.RESCORE and

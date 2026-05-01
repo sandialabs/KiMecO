@@ -83,6 +83,12 @@ default_settings: dict[str, Any] = {
     "pres_unit": 'torr',
     # Scoring function for optimization
     "scoring_func": "weighteddif",
+    # Relative weight of parameter-theory score in total score.
+    # Runtime normalization enforces weight_theory + weight_experiments = 1.
+    "weight_theory": 1.0,
+    # Relative weight of experiment score in total score.
+    # Runtime normalization enforces weight_theory + weight_experiments = 1.
+    "weight_experiments": 1.0,
     # Allow species present in MESS but absent from mechanism file.
     # If False, run stops when a missing species is encountered.
     "force_new_molecules": False,

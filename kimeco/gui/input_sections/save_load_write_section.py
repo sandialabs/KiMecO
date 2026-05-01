@@ -702,6 +702,8 @@ def save_config_download(
     Output("optimizer-nm-adaptive-input", "value"),
     Output("perturbation-pert-dropdown", "value"),
     Output("perturbation-max-std-input", "value"),
+    Output("perturbation-weight-theory-input", "value"),
+    Output("perturbation-weight-experiments-input", "value"),
     Output("perturbation-std-we-input", "value"),
     Output("perturbation-std-be-input", "value"),
     Output("perturbation-std-bfc-input", "value"),
@@ -747,7 +749,7 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
     """Load JSON config from disk and update GUI controls/stores."""
     triggered_id = callback_context.triggered_id
     if not n_clicks and triggered_id != "autoload-config-path-store":
-        return (no_update,) * 66
+        return (no_update,) * 68
 
     try:
         requested_path = autoload_path if triggered_id == "autoload-config-path-store" else config_path
@@ -819,6 +821,8 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
             ["on"] if loaded.get("nm_adaptive", default_settings["nm_adaptive"]) else [],
             loaded.get("pert", default_settings["pert"]),
             loaded.get("max_std", default_settings["max_std"]),
+            loaded.get("weight_theory", default_settings["weight_theory"]),
+            loaded.get("weight_experiments", default_settings["weight_experiments"]),
             loaded.get("std_we", default_settings["std_we"]),
             loaded.get("std_be", default_settings["std_be"]),
             loaded.get("std_bfc", default_settings["std_bfc"]),
@@ -866,5 +870,5 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
         return (
             f"Failed to load config: {exc}",
             _status_style(success=False),
-            *([no_update] * 64),
+            *([no_update] * 66),
         )
