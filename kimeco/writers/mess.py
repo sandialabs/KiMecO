@@ -22,7 +22,29 @@ class MessWriter:
             value = self.SOP.items[root_name]
 
         for token in path.split('.'):
-            value = getattr(value, token)
+            # Support indexed placeholders such as m_rotors[0].symFact.
+            if '[' in token or ']' in token:
+                if token.count('[') != 1 or token.count(']') != 1:
+                    raise ValueError(
+                        f'Invalid indexed token in placeholder: {token}'
+                    )
+                attr_name, index_str = token.split('[', 1)
+                index_str = index_str[:-1] if index_str.endswith(']') else ''
+                if not attr_name or not index_str.isdigit():
+                    raise ValueError(
+                        f'Invalid indexed token in placeholder: {token}'
+                    )
+                value = getattr(value, attr_name)
+                idx = int(index_str)
+                try:
+                    value = value[idx]
+                except (IndexError, TypeError) as exc:
+                    raise ValueError(
+                        f'Cannot index token {token} in placeholder '
+                        f'{placeholder}'
+                    ) from exc
+            else:
+                value = getattr(value, token)
 
         return value
 

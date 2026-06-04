@@ -30,7 +30,7 @@
             "request": "launch",
             "program": "/home/csoulie/.conda/envs/game/bin/kmo",
             "console": "integratedTerminal",
-            "args": ["input.json"],
+            "args": ["input2.json"],
             "cwd": "/home/csoulie/kmo_dev",
             "python": "/home/csoulie/.conda/envs/game/bin/python"
         },

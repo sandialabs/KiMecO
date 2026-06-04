@@ -66,6 +66,33 @@ class DummyRecoverSOP:
         ])
 
 
+class DummyRotorForInput:
+    def __init__(self) -> None:
+        self._sym = 2.0
+        self.iem = 4000.0
+        self.file = "dummy_pes.dat"
+        self.qlem = 1500.0
+
+    @property
+    def symFact(self) -> float:
+        return self._sym
+
+
+class DummyWellForInput:
+    def __init__(self) -> None:
+        self.m_rotors = [DummyRotorForInput()]
+
+
+class DummySOPForInput:
+    def __init__(self) -> None:
+        self.pes_ids = [0]
+        self.parameters_names: dict[str, str] = {}
+        self.items = {"WELL": DummyWellForInput()}
+
+    def reaction_iterator(self):
+        return iter([])
+
+
 class FakeMessOutputReader:
     def __init__(self, filename: str, settings: dict, sop, klog) -> None:
         self.filename = filename
@@ -108,7 +135,10 @@ def rateco(tmp_path: Path) -> RateCo:
     )
 
 
-def test_q_up_passes_n_pes_to_queue(rateco: RateCo, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_q_up_passes_n_pes_to_queue(
+    rateco: RateCo,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(rateco, "create_input", lambda: None)
     rateco.status = JobStatus.NOT_IN_QUEUE
 
@@ -145,7 +175,10 @@ def test_recover_results_maps_output_slot_to_real_pes_id(
         db=cast(Any, DummyDB()),
         klog=KMOLogger(filename=str(tmp_path / "recover.log")),
     )
-    monkeypatch.setattr("kimeco.rate_coef.MessOutputReader", FakeMessOutputReader)
+    monkeypatch.setattr(
+        "kimeco.rate_coef.MessOutputReader",
+        FakeMessOutputReader,
+    )
 
     Path(rateco.loc).mkdir(parents=True, exist_ok=True)
     for output_name in rateco.output_names:
@@ -191,3 +224,48 @@ def test_set_status_surfaces_missing_generation_table_keyerror(
         rateco.set_status(table="G0000")
 
     assert exc.value.args == ("G0000",)
+
+
+def test_create_input_resolves_indexed_multirotor_placeholder(
+    tmp_path: Path,
+) -> None:
+    settings = {
+        "rc_software": "mess",
+        "postprocess": False,
+        "rc_pres": [1.0],
+        "rc_temp": [300.0],
+        "cpu_kin": 2,
+        "mem_kin": 500,
+    }
+    rateco = RateCo(
+        sop=cast(Any, DummySOPForInput()),
+        settings=settings,
+        software_tpls=[[
+            "Core MultiRotor\n",
+            "SymmetryFactor {WELL.m_rotors[0].symFact}\n",
+            "InterpolationEnergyMax {WELL.m_rotors[0].iem}\n",
+            "PotentialEnergySurface {WELL.m_rotors[0].file}\n",
+            "QuantumLevelEnergyMax {WELL.m_rotors[0].qlem}\n",
+            "End\n",
+        ]],
+        id=0,
+        q_idx=1,
+        name="G0000E0000",
+        loc=str(tmp_path),
+        q_sys=cast(Any, DummyQueue()),
+        db=cast(Any, DummyDB()),
+        klog=KMOLogger(filename=str(tmp_path / "create_input.log")),
+    )
+
+    Path(rateco.loc).mkdir(parents=True, exist_ok=True)
+    rateco.create_input()
+
+    generated = Path(rateco.loc) / "G0000E0000P00.inp"
+    assert generated.exists()
+    content = generated.read_text()
+    assert "SymmetryFactor 2.0" in content
+    assert "InterpolationEnergyMax 4000.0" in content
+    assert "PotentialEnergySurface dummy_pes.dat" in content
+    assert "QuantumLevelEnergyMax 1500.0" in content
+    assert "{" not in content
+    assert "}" not in content
