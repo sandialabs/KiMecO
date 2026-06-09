@@ -20,10 +20,6 @@ from kimeco.experiments.t_profile import TimeProfile
 from kimeco.default_settings import default_settings
 
 
-SCORING_FUNC_OPTIONS = [
-    {"label": default_settings["scoring_func"],
-     "value": default_settings["scoring_func"]}
-]
 INIT_MODE_OPTIONS = [
     {"label": "Ratio", "value": "ratio"},
     {"label": "Concentration", "value": "concentration"},
@@ -124,7 +120,6 @@ def _make_empty_experiment(exp_id: int) -> dict:
         "weight": 1.0,
         "pres_unit": DEFAULT_PRESSURE_UNIT,
         "cantera_tpl": "",
-        "scoring_func": default_settings["scoring_func"],
         "data_file": "",
         "error_file": "",
         "init_mode": "ratio",
@@ -239,16 +234,7 @@ def _experiment_form(exp: dict, idx: int) -> html.Div:
                     value=exp.get("pres_unit", DEFAULT_PRESSURE_UNIT),
                     clearable=False,
                 ),
-            ], className="col-md-2"),
-            html.Div([
-                html.Label("Scoring Function", className="form-label"),
-                dcc.Dropdown(
-                    id={"type": "exp-scoring-func", "index": idx},
-                    options=cast(Any, SCORING_FUNC_OPTIONS),
-                    value=exp.get("scoring_func", "weighteddif"),
-                    clearable=False,
-                ),
-            ], className="col-md-1"),
+            ], className="col-md-3"),
             html.Div([
                 html.Label("Initial composition mode", className="form-label"),
                 dcc.Dropdown(
@@ -679,7 +665,6 @@ def validate_experiment_forms(
         State({"type": "exp-pres", "index": ALL}, "value"),
         State({"type": "exp-weight", "index": ALL}, "value"),
         State({"type": "exp-pres-unit", "index": ALL}, "value"),
-        State({"type": "exp-scoring-func", "index": ALL}, "value"),
         State({"type": "exp-init-mode", "index": ALL}, "value"),
         State({"type": "exp-cantera-tpl", "index": ALL}, "value"),
         State({"type": "exp-data-file", "index": ALL}, "value"),
@@ -698,7 +683,6 @@ def add_experiment(
     press: list,
     weights: list,
     press_units: list,
-    scoring_funcs: list,
     init_modes: list,
     tpls: list,
     data_files: list,
@@ -725,10 +709,6 @@ def add_experiment(
                 press_units[i] if i < len(press_units)
                 else DEFAULT_PRESSURE_UNIT
             ) or DEFAULT_PRESSURE_UNIT,
-            "scoring_func": (
-                scoring_funcs[i] if i < len(scoring_funcs)
-                else default_settings["scoring_func"]
-            ) or default_settings["scoring_func"],
             "init_mode": (
                 init_modes[i] if i < len(init_modes) else "ratio"
             ) or "ratio",

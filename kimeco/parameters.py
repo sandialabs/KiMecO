@@ -11,6 +11,7 @@ from kimeco.rotors.internalrotation import InternalRotation
 from kimeco.database.kimeco_db import dbs
 from kimeco.enums import Ptype
 from kimeco.logger_config import KMOLogger
+from kimeco.experiments.experiment import name_base
 
 
 class SOP:
@@ -35,7 +36,7 @@ class SOP:
         self.files2copy: list[str] = []
         self._default_score = float('inf')
         self.scores: dict[str, float] = {
-            f"exp_{i}": self._default_score for i in range(n_exp)
+            f"{name_base}_{i:03d}": self._default_score for i in range(n_exp)
             }
 
     @classmethod

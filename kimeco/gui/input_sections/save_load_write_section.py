@@ -129,8 +129,6 @@ def _build_experiments_user_settings(
             "pres_unit": (exp.get("pres_unit")
                           or default_settings["pres_unit"]),
             "cantera_tpl": (exp.get("cantera_tpl") or "").strip(),
-            "scoring_func": exp.get("scoring_func")
-            or default_settings["scoring_func"],
             "data_file": (exp.get("data_file") or "").strip(),
             "error_file": (exp.get("error_file") or "").strip(),
         }
@@ -198,7 +196,6 @@ def _merge_live_experiments(
     press: list[Any],
     weights: list[Any],
     press_units: list[Any],
-    scoring_funcs: list[Any],
     init_modes: list[Any],
     tpls: list[Any],
     data_files: list[Any],
@@ -217,11 +214,6 @@ def _merge_live_experiments(
             press_units,
             i,
             exp.get("pres_unit", default_settings["pres_unit"]),
-        )
-        exp["scoring_func"] = _value_at(
-            scoring_funcs,
-            i,
-            exp.get("scoring_func", default_settings["scoring_func"]),
         )
         exp["init_mode"] = _value_at(init_modes, i, exp.get("init_mode"))
         exp["cantera_tpl"] = _value_at(tpls, i, exp.get("cantera_tpl", ""))
@@ -291,7 +283,6 @@ def _experiments_from_user_settings(raw_experiments: Any) -> list[dict[str, Any]
             "weight": exp.get("weight", 1.0),
             "pres_unit": exp.get("pres_unit", default_settings["pres_unit"]),
             "cantera_tpl": exp.get("cantera_tpl", ""),
-            "scoring_func": exp.get("scoring_func", default_settings["scoring_func"]),
             "data_file": exp.get("data_file", ""),
             "error_file": exp.get("error_file", ""),
             "init_mode": init_mode,
@@ -510,7 +501,6 @@ def request_write_confirmation(
     State({"type": "exp-pres", "index": ALL}, "value"),
     State({"type": "exp-weight", "index": ALL}, "value"),
     State({"type": "exp-pres-unit", "index": ALL}, "value"),
-    State({"type": "exp-scoring-func", "index": ALL}, "value"),
     State({"type": "exp-init-mode", "index": ALL}, "value"),
     State({"type": "exp-cantera-tpl", "index": ALL}, "value"),
     State({"type": "exp-data-file", "index": ALL}, "value"),
@@ -535,7 +525,6 @@ def write_json_file(
     exp_press: list[Any],
     exp_weights: list[Any],
     exp_press_units: list[Any],
-    exp_scoring_funcs: list[Any],
     exp_init_modes: list[Any],
     exp_tpls: list[Any],
     exp_data_files: list[Any],
@@ -562,7 +551,6 @@ def write_json_file(
             press=exp_press,
             weights=exp_weights,
             press_units=exp_press_units,
-            scoring_funcs=exp_scoring_funcs,
             init_modes=exp_init_modes,
             tpls=exp_tpls,
             data_files=exp_data_files,
@@ -607,7 +595,6 @@ def write_json_file(
     State({"type": "exp-pres", "index": ALL}, "value"),
     State({"type": "exp-weight", "index": ALL}, "value"),
     State({"type": "exp-pres-unit", "index": ALL}, "value"),
-    State({"type": "exp-scoring-func", "index": ALL}, "value"),
     State({"type": "exp-init-mode", "index": ALL}, "value"),
     State({"type": "exp-cantera-tpl", "index": ALL}, "value"),
     State({"type": "exp-data-file", "index": ALL}, "value"),
@@ -629,7 +616,6 @@ def save_config_download(
     exp_press: list[Any],
     exp_weights: list[Any],
     exp_press_units: list[Any],
-    exp_scoring_funcs: list[Any],
     exp_init_modes: list[Any],
     exp_tpls: list[Any],
     exp_data_files: list[Any],
@@ -646,7 +632,6 @@ def save_config_download(
         press=exp_press,
         weights=exp_weights,
         press_units=exp_press_units,
-        scoring_funcs=exp_scoring_funcs,
         init_modes=exp_init_modes,
         tpls=exp_tpls,
         data_files=exp_data_files,

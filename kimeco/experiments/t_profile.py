@@ -5,7 +5,6 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 from kimeco.experiments.experiment import Experiment
-from kimeco.scoring_f.scoring import Scoring
 from kimeco.logger_config import KMOLogger
 from kimeco.templates.sim_arr_tpl import ctjobtpl
 
@@ -23,7 +22,6 @@ class TimeProfile(Experiment):
                  composition: dict[str, float],
                  data_file: str,
                  error_file: str,
-                 scoring: Scoring,
                  sim_file: str,
                  settings: dict[str, Any],
                  klog: KMOLogger,
@@ -31,13 +29,12 @@ class TimeProfile(Experiment):
                  data: NDArray,
                  error: NDArray,
                  new_tpl: bool,
-                tpl_idx: int = 0,
+                 tpl_idx: int = 0,
                  weight: float = 1.0) -> None:
         super().__init__(
             temp,
             pres,
             composition,
-            scoring,
             sim_file,
             settings,
             klog,
@@ -45,6 +42,8 @@ class TimeProfile(Experiment):
             new_tpl,
             tpl_idx,
             weight)
+        # Weight of the different species in the score calculation
+        self.sp_weights: NDArray | None = None
         self.data_file: str = data_file
         self.error_file: str = error_file
         if data is None:
@@ -63,10 +62,11 @@ class TimeProfile(Experiment):
         Args:
             file (str): path to file
         Raises:
-            FileNotFoundError: _description_
-            KeyError: _description_
-            TypeError: _description_
-            ValueError: _description_
+            FileNotFoundError: if the file does not exist
+            ValueError: if the file is empty or has no header
+            KeyError: if the first column is not 'time'
+            TypeError: if any value cannot be converted to float
+            ValueError: if there are no data rows
 
         Returns:
             tuple[list[str], NDArray]:
@@ -109,6 +109,21 @@ class TimeProfile(Experiment):
                       error: NDArray,
                       data_file: str,
                       error_file: str) -> None:
+        """Validate the data and error arrays for this experiment.
+
+        Args:
+            data_headers (list[str]): Headers of the data array
+            data (NDArray): Data array
+            error_headers (list[str]): Headers of the error array
+            error (NDArray): Error array
+            data_file (str): Path to the data file
+            error_file (str): Path to the error file
+
+        Raises:
+            ValueError: If headers do not match
+            ValueError: If shapes do not match
+            ValueError: If time grids do not match
+        """
         if data_headers != error_headers:
             msg = f'Headers mismatch between {data_file} and {error_file}.'
             raise ValueError(msg)

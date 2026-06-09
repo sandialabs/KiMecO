@@ -173,6 +173,74 @@ class KIN_DB(Kimeco_db):
             for row in db_rslt
         ]
 
+    def get_rates_for_models(
+        self,
+        table_to_kin_ids: dict[str, list[int]],
+        pres: list[float] | None = None,
+        temp: list[float] | None = None,
+        pes_ids: list[int] | None = None,
+    ) -> list[tuple[str, int, float, float, int, str, str, float]]:
+        """Return rates for many kinetics objects across one or more tables.
+
+        Args:
+            table_to_kin_ids (dict[str, list[int]]):
+                Mapping from table name to requested kin_id values.
+            pres (list[float] | None): optional pressure filter.
+            temp (list[float] | None): optional temperature filter.
+            pes_ids (list[int] | None): optional PES id filter.
+
+        Returns:
+            list[tuple[str, int, float, float, int, str, str, float]]:
+                Rows as (table, kin_id, P, T, pes_id, from_name, to_name, k).
+        """
+        rows_out: list[
+            tuple[str, int, float, float, int, str, str, float]
+        ] = []
+
+        for table, kin_ids in table_to_kin_ids.items():
+            if table not in self.tables:
+                continue
+            if len(kin_ids) == 0:
+                continue
+
+            query = select(
+                self.tables[table].c.kin_id,
+                self.tables[table].c.P,
+                self.tables[table].c.T,
+                self.tables[table].c.pes_id,
+                self.tables[table].c.from_name,
+                self.tables[table].c.to_name,
+                self.tables[table].c.k,
+            ).where(
+                self.tables[table].c.kin_id.in_(kin_ids)
+            )
+
+            if pres is not None and len(pres) > 0:
+                query = query.where(self.tables[table].c.P.in_(pres))
+            if temp is not None and len(temp) > 0:
+                query = query.where(self.tables[table].c.T.in_(temp))
+            if pes_ids is not None and len(pes_ids) > 0:
+                query = query.where(self.tables[table].c.pes_id.in_(pes_ids))
+
+            with self.eng.begin() as conn:
+                db_rslt: Sequence[Row[Any]] = conn.execute(query).fetchall()
+
+            for row in db_rslt:
+                rows_out.append(
+                    (
+                        table,
+                        int(row[0]),
+                        float(row[1]),
+                        float(row[2]),
+                        int(row[3]),
+                        str(row[4]),
+                        str(row[5]),
+                        float(row[6]),
+                    )
+                )
+
+        return rows_out
+
     def prepare_batch_select(self,
                              table: str,
                              kin_id: int,

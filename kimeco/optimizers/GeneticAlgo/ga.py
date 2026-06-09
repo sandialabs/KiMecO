@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from copy import deepcopy
+import re
 from kimeco.logger_config import KMOLogger
 from typing import Any, List
 from kimeco.database.kin_db import KIN_DB
@@ -88,6 +90,12 @@ class GeneticAlgorithm(ABC):
               and all([conv
                        for conv in self.__converged.values()])
               and avrg < self.settings['score_conv']):
+            return True
+        elif Generation.total() >= self.settings['max_gen']:
+            self.klog.info(
+                f'Reached {self.settings["max_gen"]} (max_gen) generations '
+                'without convergence.'
+            )
             return True
         else:
             return False
@@ -320,7 +328,8 @@ class GeneticAlgorithm(ABC):
                                 gen=next_gen_id,
                                 status=ModelStatus.DONE.value))
                 elif mdl_id in [mdl.id for mdl in gen.models]:
-                    el_index: int = [mdl.id for mdl in gen.models].index(mdl_id)
+                    mdl_ids = [mdl.id for mdl in gen.models]
+                    el_index: int = mdl_ids.index(mdl_id)
                     next_models.append(gen.models[el_index])
                 else:
                     msg: str = f'Model {mdl_id} not found in db or prev. gen'
@@ -389,10 +398,252 @@ class GeneticAlgorithm(ABC):
                    new_gen.id >= self.settings['SA_start'] and\
                    new_gen.id <= self.settings['SA_end']:
                     self.run_sensitivity(gen_id=new_gen.id)
+
+        if self.converged:
+            try:
+                out_file = self.write_ga_rates_output()
+                self.klog.info(
+                    f'Convergence rate statistics written to {out_file}'
+                )
+            except Exception as exc:
+                self.klog.warning(
+                    'Failed to write GA convergence rate statistics: '
+                    f'{exc}'
+                )
+
         self.klog.info('Run Sucessful.')
         if Generation.total() > 1:
             self.klog.info(f'Termination at generation {new_gen.id}')
             self.klog.info(f'Final score: {new_gen.best_score}')
+
+    @staticmethod
+    def geometric_mean_and_std(
+        values: list[float],
+    ) -> tuple[float, float] | None:
+        """Compute geometric mean/std from strictly positive values."""
+        positives = [float(v) for v in values if float(v) > 0.0]
+        if len(positives) == 0:
+            return None
+        logs = np.log(np.array(positives, dtype=float))
+        gmean = float(np.exp(np.mean(logs)))
+        gstd = float(np.exp(np.std(logs)))
+        return gmean, gstd
+
+    def _rate_conditions(self) -> tuple[list[float], list[float]]:
+        if self.settings['postprocess']:
+            pres = list(self.settings['pp_pres'])
+            temp = list(self.settings['pp_temp'])
+        else:
+            pres = list(self.settings['rc_pres'])
+            temp = list(self.settings['rc_temp'])
+        return pres, temp
+
+    def _eligible_models_for_rate_output(
+        self,
+    ) -> tuple[list[tuple[str, int, float]], int]:
+        """Return eligible models from SOP DB and total scanned count.
+
+        Scans all generation tables up to the last available generation,
+        rebuilds each model SOP from DB rows, and selects models with
+        finite mdl.score < max_score.
+        """
+        max_score = float(self.settings['max_score'])
+        eligible: list[tuple[str, int, float]] = []
+        total_scanned = 0
+
+        gen_tables = [
+            table
+            for table in self.sop_db.tables.keys()
+            if re.match(r'^G\d{4}$', table)
+        ]
+        if len(gen_tables) == 0:
+            return eligible, total_scanned
+
+        last_gen = max(int(table[1:]) for table in gen_tables)
+        sorted_tables = sorted(
+            [table for table in gen_tables if int(table[1:]) <= last_gen],
+            key=lambda name: int(name[1:]),
+        )
+
+        for table in sorted_tables:
+            rows = self.sop_db.get_table(table=table)
+            for row in rows:
+                total_scanned += 1
+                mdl_id = int(row[0])
+                sop = SOP.from_db_row(
+                    sop_tpl=self.f_mdl.sop,
+                    row=list(row[1:]),
+                )
+                mdl = Model(
+                    sop=sop,
+                    id=mdl_id,
+                    gen=int(table[1:]),
+                    status=ModelStatus.DONE.value,
+                )
+                if np.isfinite(mdl.score) and mdl.score < max_score:
+                    eligible.append((table, mdl_id, mdl.score))
+        eligible.sort(key=lambda v: (int(v[0][1:]), v[1]))
+        return eligible, total_scanned
+
+    @staticmethod
+    def _format_geo_cell(value: tuple[float, float] | None) -> str:
+        if value is None:
+            return 'N/A'
+        gmean, gstd = value
+        return f'{gmean:.2e} ({gstd:.2f})'
+
+    @staticmethod
+    def _column_widths(rows: list[list[str]]) -> list[int]:
+        """Return per-column widths from max cell length plus padding."""
+        if len(rows) == 0:
+            return []
+        n_cols = max(len(row) for row in rows)
+        widths = [0] * n_cols
+        for row in rows:
+            for idx in range(n_cols):
+                cell = row[idx] if idx < len(row) else ''
+                widths[idx] = max(widths[idx], len(cell))
+        return [w + 2 for w in widths]
+
+    @staticmethod
+    def _format_row_with_widths(row: list[str], widths: list[int]) -> str:
+        """Render one table row using column widths and a format template."""
+        template = ''.join(f'{{:<{width}}}' for width in widths)
+        padded = row + [''] * (len(widths) - len(row))
+        return template.format(*padded).rstrip()
+
+    def write_ga_rates_output(self) -> str:
+        """Write GA_rates.out at convergence using full-history filtering."""
+        if self.settings['postprocess']:
+            output_file = f"{self.loc}/extrapolated_rates.out"
+        else:
+            output_file = f"{self.loc}/GA_rates.out"
+        pres, temp = self._rate_conditions()
+        pres_unit = str(self.settings.get('pres_unit', 'Torr'))
+        eligible, total_scanned = self._eligible_models_for_rate_output()
+
+        sop = self.f_mdl.sop
+        pes_ids = list(sop.pes_ids)
+        species_by_pes = {
+            pes_id: list(sop.species_names_in_pes(pes_id))
+            for pes_id in pes_ids
+        }
+
+        pairs_by_pes: dict[int, set[tuple[str, str]]] = {
+            pes_id: set() for pes_id in pes_ids
+        }
+        for pes_id, from_name, to_name in sop.reaction_iterator():
+            if pes_id in pairs_by_pes:
+                pairs_by_pes[pes_id].add((from_name, to_name))
+
+        with open(output_file, 'w', encoding='utf-8') as fobj:
+            fobj.write('GA convergence rate statistics\n')
+            fobj.write(
+                'max_score filter: score < '
+                f'{float(self.settings["max_score"]):.6g}\n'
+            )
+            fobj.write(
+                'geometric stats use strictly positive rates only '
+                '(k > 0)\n'
+            )
+            fobj.write(
+                'single-sample geometric std convention: 1.0\n'
+            )
+            fobj.write(
+                f'Found models: {len(eligible)} '
+                f'out of {total_scanned}\n\n'
+            )
+
+            if len(eligible) == 0:
+                fobj.write('No models satisfied score < max_score.\n')
+                return output_file
+
+            table_to_kin_ids: dict[str, set[int]] = defaultdict(set)
+            for table_name, mdl_id, _ in eligible:
+                table_to_kin_ids[table_name].add(int(mdl_id))
+
+            query_map = {
+                table: sorted(list(kin_ids))
+                for table, kin_ids in table_to_kin_ids.items()
+            }
+
+            db_rows = self.kin_db.get_rates_for_models(
+                table_to_kin_ids=query_map,
+                pres=pres,
+                temp=temp,
+                pes_ids=pes_ids,
+            )
+
+            values: dict[tuple[int, float, float, str, str], list[float]] = {
+                }
+            for (
+                table,
+                kin_id,
+                p,
+                t,
+                pes_id,
+                from_name,
+                to_name,
+                kval,
+            ) in db_rows:
+                _ = table
+                _ = kin_id
+                key = (int(pes_id), float(p), float(t), from_name, to_name)
+                if key not in values:
+                    values[key] = []
+                values[key].append(float(kval))
+
+            stats: dict[
+                tuple[int, float, float, str, str],
+                tuple[float, float] | None,
+            ] = {}
+            for key, kvals in values.items():
+                stats[key] = self.geometric_mean_and_std(kvals)
+
+            for pes_id in pes_ids:
+                species = species_by_pes.get(pes_id, [])
+                fobj.write(f'=== PES {pes_id} ===\n')
+                for p in pres:
+                    for t in temp:
+                        fobj.write(
+                            f'P = {p:g} {pres_unit} | T = {t:g} K\n'
+                        )
+
+                        table_rows: list[list[str]] = []
+                        table_rows.append(['from'] + list(species))
+                        for from_name in species:
+                            row: list[str] = [from_name]
+                            for to_name in species:
+                                if (
+                                    from_name,
+                                    to_name,
+                                ) not in pairs_by_pes[pes_id]:
+                                    row.append('N/A')
+                                    continue
+                                val = stats.get(
+                                    (
+                                        pes_id,
+                                        float(p),
+                                        float(t),
+                                        from_name,
+                                        to_name,
+                                    )
+                                )
+                                row.append(self._format_geo_cell(val))
+
+                            table_rows.append(row)
+
+                        col_widths = self._column_widths(table_rows)
+                        for row in table_rows:
+                            fobj.write(
+                                self._format_row_with_widths(
+                                    row=row,
+                                    widths=col_widths,
+                                ) + '\n'
+                            )
+                        fobj.write('\n')
+
+        return output_file
 
     def run_sensitivity(self,
                         gen_id: int) -> None:
@@ -422,8 +673,7 @@ class GeneticAlgorithm(ABC):
         for p in new_params:
             self.settings['active_p'].append(p)
         if new_p:
-            Model.configure_scoring(reference_sop=self.f_mdl.sop,
-                                    settings=self.settings)
+            self.sf.set_active_p(self.settings['active_p'])
             msg = 'Perturbing the following new parameters:\n'
             msg += "{}".format(new_params).replace("'", '"')
             self.klog.info(msg)

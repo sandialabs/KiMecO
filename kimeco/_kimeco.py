@@ -12,7 +12,7 @@ from kimeco.kinmec import KiMec
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
 from kimeco.database.sop_db import SOP_DB
-from kimeco.scoring_f.weighteddif import WeightedDif
+from kimeco.scoring_f.scoring import Scoring
 from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.sensitivity.linear import Linear
 from kimeco.model import Model
@@ -59,8 +59,7 @@ class KiMecO:
         self.input_tpls: list[list[str]]
         self.set_initial_sop()
         self.init_SOP.set_uncertainties(settings=self.settings)
-        Model.configure_scoring(reference_sop=self.init_SOP,
-                                settings=self.settings)
+
         self.mech.add_SOP(self.init_SOP)
         self.first_sensi: bool = len(self.settings['active_p']) == 0
 
@@ -132,11 +131,11 @@ class KiMecO:
     def set_scoring_function(self) -> None:
         """Define which scoring function to use"""
         if self.settings['scoring_func'].casefold() == 'weighteddif':
-            self.sf = WeightedDif(settings=self.settings)
+            self.sf = Scoring(settings=self.settings, initial_SOP=self.init_SOP)
         else:
             # Default scoring function
-            self.sf = WeightedDif(settings=self.settings)
-        self.klog.info(f"{'Scoring function:':<65}{self.sf.name:>15}")
+            self.sf = Scoring(settings=self.settings, initial_SOP=self.init_SOP)
+        # self.klog.info(f"{'Scoring function:':<65}{self.sf.name:>15}")
 
     def set_perturbator(self) -> None:
         """Initialize the perturbator"""
@@ -168,8 +167,7 @@ class KiMecO:
             self.klog.info(f"{'SA read from DB':<65}")
         self.sensitivity.run()  # Only actually run if necessary
         self.settings['active_p'] = self.sensitivity.selected
-        Model.configure_scoring(reference_sop=self.init_SOP,
-                                settings=self.settings)
+        self.sf.set_active_p(self.settings['active_p'])
         self.f_mdl: Model = self.sensitivity.models[0]
         if not self.sensitivity.models_from_db or \
             (self.settings['restart'] == RestartType.RESCORE and

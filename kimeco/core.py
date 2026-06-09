@@ -514,10 +514,9 @@ class CoreRun:
         Args:
             settings (dict[str, Any]): User input + default settings
         """
+        
         try:
-            scores: list[float] = self.sf.score(sim=mdl.sim)
-            for idx, k in enumerate(mdl.sop.scores):
-                mdl.sop.scores[k] = scores[idx]
+            self.sf.score(mdl=mdl)
             mdl.status = ModelStatus.TO_SAVE
         except IndexError as e:
             self.klog.debug(str(e))

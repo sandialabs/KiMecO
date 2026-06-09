@@ -268,13 +268,16 @@ class Linear(CoreRun):
         return dstep * self.lin_fact
 
     def prepare_models(self,
-                         models: list[Model]) -> list[Model]:
+                       models: list[Model]) -> list[Model]:
 
         # List to hold the new SOP objects
+        average_sop: SOP = self.average(sop_list=[mdl.sop for mdl in models])
         new_models: list[Model] = [
-            Model(sop=self.sop_tpl,
-                    id=0,
-                    gen=self.id)
+            Model(
+                sop=average_sop,
+                id=0,
+                gen=self.id
+                )
         ]
 
         # Get the parameters names and their current values
@@ -392,9 +395,11 @@ class Linear(CoreRun):
         initial_model: Model = self.models[0]
         initial_model.save_kin(db=kin_db, table=tbl_name)
         for sim_num in range(self.settings['n_exp']):
-            initial_model.save_sim(db=sim_db,
-                                     table=tbl_name,
-                                     sim_num=sim_num)
+            initial_model.save_sim(
+                db=sim_db,
+                table=tbl_name,
+                sim_num=sim_num
+            )
         initial_model.prepare_upsert(db=sop_db, table=tbl_name)
         sop_db.batch_upsert()
         kin_db.batch_upsert()

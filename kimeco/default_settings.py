@@ -194,7 +194,7 @@ default_settings: dict[str, Any] = {
     "restart": RestartType.DEFAULT.value,
     # Number of models per generation
     "n_mdl": 500,
-    # Value of score above which a generation won't converge
+    # Value of score above which the algorithm won't converge
     "max_score": 4.0,
     # Average value of best models' score for convergence
     "score_conv": 2,

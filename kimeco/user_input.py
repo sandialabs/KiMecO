@@ -12,7 +12,6 @@ from kimeco.logger_config import KMOLogger
 from kimeco.enums import Distrib, Optimizers, Pclass, Ptype
 from kimeco.enums import FreqMode, RestartType
 from kimeco.experiments.t_profile import TimeProfile
-from kimeco.scoring_f.weighteddif import WeightedDif
 
 
 ureg: ctu.UnitRegistry = ctu.cantera_units_registry
@@ -139,7 +138,6 @@ class KMOInput:
                     'temp',
                     'pres',
                     'cantera_tpl',
-                    'scoring_func',
                     'data_file',
                     'error_file',
                 ]
@@ -371,11 +369,6 @@ class KMOInput:
                     error_file=err_path,
                 )
                 species = data_headers[1:]
-                if exp_cfg['scoring_func'].casefold() != 'weighteddif':
-                    raise ValueError(
-                        f"Unknown scoring function: {exp_cfg['scoring_func']}"
-                    )
-                sf = WeightedDif(settings=self.json_file)
 
                 new_tpl = True
                 tpl_idx = 0
@@ -393,7 +386,6 @@ class KMOInput:
                     composition=ratio,
                     data_file=data_path,
                     error_file=err_path,
-                    scoring=sf,
                     sim_file=tpl_content,
                     settings=self.json_file,
                     klog=self.klog,
