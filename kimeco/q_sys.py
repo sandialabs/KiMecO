@@ -106,10 +106,14 @@ class QueueingSystem:
 
     @property
     def av_jobs(self) -> int:
-        kin_running = self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]
+        kin_running = self.kin_q[
+            self.kin_q['status'] == JobStatus.RUNNING.value
+        ]
         job_sum = int(np.sum(kin_running['n_pes']))
         job_sum += \
-            len(self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]) *\
+            len(self.sim_q[
+                self.sim_q['status'] == JobStatus.RUNNING.value
+            ]) *\
             self.n_exp
         return min(
             self._max_jobs - job_sum,
@@ -117,26 +121,38 @@ class QueueingSystem:
 
     @property
     def av_cpu(self) -> int:
-        kin_running = self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]
+        kin_running = self.kin_q[
+            self.kin_q['status'] == JobStatus.RUNNING.value
+        ]
         cpu_sum = np.sum(kin_running['cpu'] * kin_running['n_pes'])
         cpu_sum += np.sum(
-            self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['cpu']) *\
+            self.sim_q[
+                self.sim_q['status'] == JobStatus.RUNNING.value
+            ]['cpu']) *\
             self.n_exp
         return self._max_cpu - cpu_sum
 
     @property
     def av_mem(self) -> float:
-        kin_running = self.kin_q[self.kin_q['status'] == JobStatus.RUNNING]
+        kin_running = self.kin_q[
+            self.kin_q['status'] == JobStatus.RUNNING.value
+        ]
         mem_sum = np.sum(kin_running['mem'] * kin_running['n_pes'])
         mem_sum += np.sum(
-            self.sim_q[self.sim_q['status'] == JobStatus.RUNNING]['mem']) *\
+            self.sim_q[
+                self.sim_q['status'] == JobStatus.RUNNING.value
+            ]['mem']) *\
             self.n_exp
         return self._max_mem - mem_sum
 
     @property
     def n_ready(self) -> int:
-        n_ready: int = len(self.kin_q[self.kin_q['status'] == JobStatus.READY])
-        n_ready += len(self.sim_q[self.sim_q['status'] == JobStatus.READY])
+        n_ready: int = len(
+            self.kin_q[self.kin_q['status'] == JobStatus.READY.value]
+        )
+        n_ready += len(
+            self.sim_q[self.sim_q['status'] == JobStatus.READY.value]
+        )
         return n_ready
 
     def add_to_q(self,
@@ -386,12 +402,13 @@ class QueueingSystem:
         as long as ressources are available.
         """
         here: str = os.getcwd()
+        # Refresh user queue occupancy before trying any submission so
+        # max_user_jobs is enforced on the very first scheduling decision.
+        self.current_user_jobs = len(self.get_all_running())
         for q, jtype in zip(self.queues, self.queues_order):
             for idx, rdy in enumerate(q['status'] == JobStatus.READY.value):
                 if rdy:
-                    if self.enough_resources_for(
-                        job=q[idx],
-                        jtype=jtype):
+                    if self.enough_resources_for(job=q[idx], jtype=jtype):
                         self.submit(job=q[idx])
                     else:
                         self.actualize()
@@ -454,7 +471,10 @@ class QueueingSystem:
             '--format=\"%.20F\"'],
                         shell=False, stdout=PIPE, stdin=PIPE, stderr=PIPE)
         out, err = process.communicate()
-        jobids: list[str] = [jobid.strip('"').strip() for jobid in out.decode().split('\n')[1:]]
+        jobids: list[str] = [
+            jobid.strip('"').strip()
+            for jobid in out.decode().split('\n')[1:]
+        ]
         slurm_ids: NDArray[int32] = np.array(
             jobids[:-1],
             dtype=np.int32)
@@ -471,8 +491,7 @@ class QueueingSystem:
             return (JobStatus(self.sim_q[id]['status'])
                     if self.sim_q[id]['status']
                     else JobStatus.NOT_IN_QUEUE)
-        else:
-            raise NotImplementedError('Unknown type of job')
+        raise NotImplementedError('Unknown type of job')
 
     def factually_ready(self,
                         job) -> bool:

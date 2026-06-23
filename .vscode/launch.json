@@ -35,6 +35,16 @@
             "python": "/home/csoulie/.conda/envs/game/bin/python"
         },
         {
+            "name": "test_oisin",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/csoulie/.conda/envs/game/bin/kmo",
+            "console": "integratedTerminal",
+            "args": ["input2.json"],
+            "cwd": "/home/csoulie/test_oisin",
+            "python": "/home/csoulie/.conda/envs/game/bin/python"
+        },
+        {
             "name": "postprocess l3 nms small",
             "type": "debugpy",
             "request": "launch",
