@@ -1,0 +1,61 @@
+name: Publish Manual to Wiki
+
+# Mirrors the wiki/ folder in this repo onto the GitHub Wiki
+# (the separate <repo>.wiki.git repository) whenever wiki/ changes.
+#
+# One-time prerequisites on GitHub:
+#   1. Settings > Features > enable "Wikis".
+#   2. Open the Wiki tab and create the first page (this initializes
+#      the .wiki.git repository so it can be cloned/pushed below).
+#   3. Settings > Actions > General > Workflow permissions:
+#      select "Read and write permissions".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'wiki/**'
+      - '.github/workflows/publish-wiki.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+# Avoid overlapping wiki pushes.
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync wiki/ to the GitHub Wiki
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          WIKI_DIR="$RUNNER_TEMP/wiki"
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git clone --depth 1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" \
+            "$WIKI_DIR"
+
+          # Replace existing wiki content with the wiki/ folder, preserving .git.
+          find "$WIKI_DIR" -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
+          cp -R wiki/. "$WIKI_DIR"/
+
+          cd "$WIKI_DIR"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No wiki changes to publish."
+            exit 0
+          fi
+          git add -A
+          git commit -m "Sync wiki from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+          git push origin HEAD
