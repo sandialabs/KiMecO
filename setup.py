@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.2'
+VERSION = '1.0.0'
 DESCRIPTION = 'KiMecO'
 LONG_DESCRIPTION = 'Kinetic Mechanism Optimizer'
 
@@ -9,9 +9,9 @@ setup(
         name="kimeco",
         version=VERSION,
         author="Clement Soulie",
-        author_email="<csoulie@sandia.gov>",
+        author_email="clement.soulie31@gmail.com",
         maintainer="Clement Soulie",
-        maintainer_email="<csoulie@sandia.gov>",
+        maintainer_email="clement.soulie31@gmail.com",
         description=DESCRIPTION,
         long_description=LONG_DESCRIPTION,
         python_requires='>=3.10.14',
@@ -38,7 +38,7 @@ setup(
                   'non linear optimizer'],
         classifiers=[
             "Development Status :: 3 - Alpha",
-            "Intended Audience :: Research",
+            "Intended Audience :: Science/Research/Kinetics",
             "Programming Language :: Python :: 3",
             "Operating System :: MacOS :: MacOS X",
             "Operating System :: Microsoft :: Windows",
