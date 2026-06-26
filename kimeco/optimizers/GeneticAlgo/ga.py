@@ -66,7 +66,8 @@ class GeneticAlgorithm(ABC):
                 sop_db=self.sop_db,
                 kin_db=self.kin_db,
                 sim_db=self.sim_db,
-                wdir=self.loc
+                wdir=self.loc,
+                sf=self.sf
             )
 
         self.goat: list[Model] = []
@@ -240,6 +241,7 @@ class GeneticAlgorithm(ABC):
                                 id=e_id,
                                 gen=next_gen_id,
                                 status=ModelStatus.DONE.value))
+                        self.sf.fscore(mdl=next_models[-1])
             else:
                 self.klog.debug(
                     f'n_mdl requested but only {len(sop_ids)} found in DB.')
@@ -317,6 +319,7 @@ class GeneticAlgorithm(ABC):
                                 id=mdl_id,
                                 gen=next_gen_id,
                                 status=ModelStatus.RESCORE.value))
+                        self.sf.fscore(mdl=next_models[-1])
                     else:
                         next_models.append(
                             Model(
@@ -327,6 +330,7 @@ class GeneticAlgorithm(ABC):
                                 id=mdl_id,
                                 gen=next_gen_id,
                                 status=ModelStatus.DONE.value))
+                        self.sf.fscore(mdl=next_models[-1])
                 elif mdl_id in [mdl.id for mdl in gen.models]:
                     mdl_ids = [mdl.id for mdl in gen.models]
                     el_index: int = mdl_ids.index(mdl_id)
@@ -480,6 +484,7 @@ class GeneticAlgorithm(ABC):
                     gen=int(table[1:]),
                     status=ModelStatus.DONE.value,
                 )
+                self.sf.fscore(mdl=mdl)
                 if np.isfinite(mdl.score) and mdl.score < max_score:
                     eligible.append((table, mdl_id, mdl.score))
         eligible.sort(key=lambda v: (int(v[0][1:]), v[1]))

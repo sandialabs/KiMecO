@@ -21,11 +21,7 @@
   "rc_pres": [],
   "pp_temp": [],
   "pp_pres": [],
-  "pp_initial_X": [],
-  "pp_times": [
-    []
-  ],
-  "pp_species": [],
+  "pp_experiments": [],
   "pp_ensembles": [
     "G0001",
     "GT-1"

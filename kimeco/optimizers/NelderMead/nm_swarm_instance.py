@@ -200,6 +200,7 @@ class NelderMeadInstance(NelderMead):
                         id=self.nm_id,
                         gen=self.gen_counter,
                         status=ModelStatus.DONE.value)
+                    self.sf.fscore(mdl=vertice)
                 else:
                     vertice = Model(
                         sop=self.last_vertice,
@@ -251,6 +252,7 @@ class NelderMeadInstance(NelderMead):
                 id=row[0],  # id
                 gen=self.gen_counter,
                 status=ModelStatus.DONE.value)
+            self.sf.fscore(mdl=model)
             all_vertices.append(model)
 
         # Return model with best score

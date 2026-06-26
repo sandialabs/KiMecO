@@ -96,7 +96,10 @@ class KMOInput:
 
     def load_input(self) -> dict:
         # File exist?
-        input_path: str = self.init_loc + self.input_file
+        if os.path.isabs(self.input_file):
+            input_path: str = self.input_file
+        else:
+            input_path = self.init_loc + self.input_file
         if not os.path.isfile(path=input_path):
             self.klog.info(f'The input_file {input_path} was not found.')
             sys.exit(-1)
@@ -196,6 +199,79 @@ class KMOInput:
                 "Experiment pressure units detected "
                 f"({unit_list}) and converted to Pa."
             )
+
+        self._check_pp_experiments()
+
+    def _check_pp_experiments(self) -> None:
+        """Validate the optional pp_experiments block.
+
+        pp_experiments mirror the 'experiments' keyword but are only
+        simulated (never scored), so they carry no data/error files and
+        must instead define their own 'times' and 'species'.
+        """
+        pp_experiments = self.json_file.get('pp_experiments', [])
+        if not isinstance(pp_experiments, list):
+            self.klog.info("pp_experiments should be a list.")
+            self.cancel_run = True
+            return
+
+        for idx, exp in enumerate(pp_experiments):
+            if not isinstance(exp, dict):
+                self.klog.info(
+                    f"pp_experiment {idx} should be a dictionary."
+                )
+                self.cancel_run = True
+                continue
+            required = [
+                'temp',
+                'pres',
+                'cantera_tpl',
+                'times',
+                'species',
+            ]
+            for key in required:
+                if key not in exp:
+                    self.klog.info(
+                        f"pp_experiment {idx} missing mandatory key "
+                        f"'{key}'."
+                    )
+                    self.cancel_run = True
+            for forbidden in ('data_file', 'error_file'):
+                if forbidden in exp:
+                    self.klog.info(
+                        f"pp_experiment {idx} should not define "
+                        f"'{forbidden}' (pp experiments are not scored)."
+                    )
+                    self.cancel_run = True
+            has_ratio = 'initial_ratio' in exp
+            has_conc = 'initial_concentration' in exp
+            if has_ratio == has_conc:
+                self.klog.info(
+                    f"pp_experiment {idx} should define exactly one of "
+                    "initial_ratio or initial_concentration."
+                )
+                self.cancel_run = True
+            if 'times' in exp and (
+                    not isinstance(exp['times'], list) or
+                    len(exp['times']) == 0):
+                self.klog.info(
+                    f"pp_experiment {idx} 'times' should be a non-empty "
+                    "list."
+                )
+                self.cancel_run = True
+            if 'species' in exp and (
+                    not isinstance(exp['species'], list) or
+                    len(exp['species']) == 0):
+                self.klog.info(
+                    f"pp_experiment {idx} 'species' should be a non-empty "
+                    "list."
+                )
+                self.cancel_run = True
+            if 'pres_unit' in exp and not isinstance(exp['pres_unit'], str):
+                self.klog.info(
+                    f"pp_experiment {idx} pres_unit should be a string."
+                )
+                self.cancel_run = True
 
     def _validate_tpl(self,
                       tpl_path: str) -> str:
@@ -344,9 +420,6 @@ class KMOInput:
         experiments: list[TimeProfile] = []
         profiles: list[NDArray[float64]] = []
         errors: list[NDArray[float64]] = []
-        weights: list[NDArray[float64]] = []
-        initial_x: list[dict[str, float]] = []
-        raw_w: list[float] = []
         rc_temp: set[float] = set()
         rc_pres_pa: set[float] = set()
 
@@ -410,11 +483,11 @@ class KMOInput:
                 experiments.append(exp)
                 profiles.append(data)
                 errors.append(err)
-                weights.append(sp_weights)
-                raw_w.append(exp.weight)
-                initial_x.append(ratio)
                 rc_temp.add(exp.T)
                 rc_pres_pa.add(exp.P)
+                # weights.append(sp_weights)
+                # raw_w.append(exp.weight)
+                # initial_x.append(ratio)
             except Exception as e:
                 self.klog.info(f"Experiment {idx} is invalid: {e}")
                 self.cancel_run = True
@@ -424,41 +497,116 @@ class KMOInput:
             self.cancel_run = True
             return
 
-        w_sum = float(np.sum(raw_w))
-        norm_exp_w = [w * len(raw_w) / w_sum for w in raw_w]
-        for idx, exp in enumerate(experiments):
-            exp.weight = norm_exp_w[idx]
-            weights[idx] = weights[idx] * exp.weight
+        # w_sum = float(np.sum(raw_w))
+        # norm_exp_w = [w * len(raw_w) / w_sum for w in raw_w]
+        # for idx, exp in enumerate(experiments):
+        #     exp.weight = norm_exp_w[idx]
+        #     weights[idx] = weights[idx] * exp.weight
 
         self.n_exp = len(experiments)
         self.json_file['experiments'] = experiments
-        self.json_file['exp_profiles'] = profiles
-        self.json_file['exp_errors'] = errors
-        self.json_file['weights'] = weights
-        self.json_file['initial_X'] = initial_x
+        # Always derive MESS rate grids from validated experiments.
         self.json_file['rc_temp'] = sorted(list(rc_temp))
         self.json_file['rc_pres'] = sorted([
             float(np.round(Q_(p, 'Pa').to('bar').magnitude, 5))
             for p in rc_pres_pa
         ])
-        self.json_file['w_exp'] = norm_exp_w
-        self.json_file['to_watch'] = [exp.species for exp in experiments]
+        # self.json_file['exp_profiles'] = profiles
+        # self.json_file['exp_errors'] = errors
+        # self.json_file['weights'] = weights
+        # self.json_file['initial_X'] = initial_x
+        # self.json_file['w_exp'] = norm_exp_w
+        # self.json_file['to_watch'] = [exp.species for exp in experiments]
 
-        self.json_file['scoring_func'] = 'weighteddif'
+        # self.json_file['scoring_func'] = 'weighteddif'
+
+    def create_pp_experiments(self) -> None:
+        """Create simulation-only TimeProfile objects for postprocessing.
+
+        pp_experiments share the 'experiments' schema but provide their own
+        'times' and 'species' instead of data/error files, and are never
+        scored. The unique temperatures/pressures define the MESS
+        rate-coefficient grid used during extrapolation.
+        """
+        pp_experiments: list[TimeProfile] = []
+        pp_temp: set[float] = set()
+        pp_pres_pa: set[float] = set()
+
+        for idx, exp_cfg in enumerate(self.json_file['pp_experiments']):
+            try:
+                tpl_path = self.init_loc + exp_cfg['cantera_tpl']
+                tpl_content = self._validate_tpl(tpl_path)
+                ratio = self._initial_ratio_from_exp(exp_cfg)
+
+                species = list(exp_cfg['species'])
+                times = np.asarray(exp_cfg['times'], dtype=float64)
+                if times.ndim != 1 or times.size == 0:
+                    raise ValueError("'times' should be a non-empty list.")
+                if np.any(np.diff(times) < 0):
+                    raise ValueError(
+                        "'times' should be sorted in ascending order."
+                    )
+                # Row 0 holds the time grid; no species rows are needed
+                # because pp experiments are simulated, not scored.
+                data = times.reshape(1, -1)
+
+                new_tpl = True
+                tpl_idx = 0
+                for idxprev_exp, prev_exp in enumerate(pp_experiments):
+                    if prev_exp.sim_file == tpl_content:
+                        new_tpl = False
+                        tpl_idx = idxprev_exp
+                        break
+
+                normalized_pres = self._normalized_exp_pressure(exp_cfg)
+
+                exp = TimeProfile(
+                    temp=float(exp_cfg['temp']),
+                    pres=normalized_pres,
+                    composition=ratio,
+                    data_file='',
+                    error_file='',
+                    sim_file=tpl_content,
+                    settings=self.json_file,
+                    klog=self.klog,
+                    species=species,
+                    weight=1.0,
+                    data=data,
+                    error=data.copy(),
+                    new_tpl=new_tpl,
+                    tpl_idx=tpl_idx
+                )
+                exp.sp_weights = np.ones(shape=len(species), dtype=float64)
+
+                pp_experiments.append(exp)
+                pp_temp.add(exp.T)
+                pp_pres_pa.add(exp.P)
+            except Exception as e:
+                self.klog.info(f"pp_experiment {idx} is invalid: {e}")
+                self.cancel_run = True
+
+        if len(pp_experiments) == 0:
+            self.klog.info('No valid pp_experiment found in input.')
+            self.cancel_run = True
+            return
+
+        self.json_file['pp_experiments'] = pp_experiments
+        # Derive the MESS extrapolation grid from the pp conditions.
+        self.json_file['pp_temp'] = sorted(pp_temp)
+        self.json_file['pp_pres'] = sorted([
+            float(np.round(Q_(p, 'Pa').to('bar').magnitude, 5))
+            for p in pp_pres_pa
+        ])
 
     def other_checks_to_modif(self) -> None:
         """Early implementation checks that should be improved,
         but not super important
         """
-        implemented_sf: list[str] = ['weighteddif']
-        if self.json_file['scoring_func'].casefold() not in implemented_sf:
-            self.klog.info('Unknown scoring function. Check the spelling?')
-            self.cancel_run = True
         if any([self.json_file['restart'].casefold() == rt.value
                 for rt in RestartType]):
             self.json_file['restart'] = RestartType(
                 self.json_file['restart'].casefold())
-            self.klog.warning(
+            self.klog.debug(
                 f"'restart' set to {self.json_file['restart'].value}")
         else:
             self.klog.warning("'restart' has unknown type.")
@@ -483,6 +631,8 @@ class KMOInput:
         self.check_unknown_kwords()
         self.set_default_values()
         self.create_experiments()
+        if self.json_file.get('pp_experiments'):
+            self.create_pp_experiments()
         self.other_checks_to_modif()
         if self.cancel_run:
             sys.exit(-1)
@@ -491,7 +641,7 @@ class KMOInput:
             self.init_loc+self.json_file['project_name']
         self.json_file['input_file'] = self.input_file
         self.json_file['n_exp'] = self.n_exp
-        self.json_file['postprocess'] = False
+        self.json_file.setdefault('postprocess', False)
 
         return self.json_file
 

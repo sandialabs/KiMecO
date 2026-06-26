@@ -59,6 +59,7 @@ class Linear(CoreRun):
         self.sim_db = SIM_DB(
             name=f'{self.prefix}_DB_SIM',
             path=self.settings['workdir'])
+        self.sf = sf
         if self.SA_is_in_db() and restart:
             self.klog.debug('SA is in DB. Reading results.')
             self.models = self.get_models_from_db()
@@ -200,6 +201,7 @@ class Linear(CoreRun):
                             id=e_id,
                             gen=self.id,
                             status=ModelStatus.DONE.value))
+                    self.sf.fscore(mdl=next_models[-1])
         else:
             raise ValueError(
                 f'SA {self.name} in DB is incomplete. '

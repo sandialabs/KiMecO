@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from dash import Input, Output, State, callback, dcc, html
 from dash.exceptions import PreventUpdate
 import numpy as np
@@ -21,14 +23,15 @@ class SIMSection(Section):
     def layout(self) -> html.Div:
         return html.Div(
             id='sim',
-            style={'display': 'none'},
+            style={'display': 'block'},
             children=[
                 html.H4('Simulation source'),
                 dcc.RadioItems(
-                    options=[
-                        {'label': 'Optimization', 'value': 'REG'},
-                        {'label': 'Postprocessing', 'value': 'PP'},
-                    ],
+                    options=cast(Any, (
+                        [{'label': 'Optimization', 'value': 'REG'}]
+                        + ([{'label': 'Postprocessing', 'value': 'PP'}]
+                           if self.pp_sim_db is not None else [])
+                    )),
                     value='REG',
                     inline=True,
                     id='sim_source',
@@ -90,8 +93,8 @@ class SIMSection(Section):
             if source == 'PP':
                 return (
                     [sp for sp in self.pp_species],
-                    [p for p in self.settings['pp_pres']],
-                    [t for t in self.settings['pp_temp']],
+                    [p for p in self.settings.get('pp_pres', [])],
+                    [t for t in self.settings.get('pp_temp', [])],
                     {'display': 'block'},
                     self.pp_tables,
                 )
@@ -161,7 +164,7 @@ class SIMSection(Section):
                 p_idx = self._get_pressure_index(source=source, pressure=p)
                 for t in temp:
                     if source == 'PP':
-                        t_idx = self.settings['pp_temp'].index(t)
+                        t_idx = self.settings.get('pp_temp', []).index(t)
                         all_table_sims = self.get_pp_condition_profiles(
                             tables=pp_tables or [],
                             p_idx=p_idx,
@@ -213,7 +216,7 @@ class SIMSection(Section):
                             source: str,
                             pressure: float) -> int:
         if source == 'PP':
-            return self.settings['pp_pres'].index(pressure)
+            return self.settings.get('pp_pres', []).index(pressure)
         return self.settings['rc_pres'].index(pressure)
 
     def get_regular_condition_profiles(

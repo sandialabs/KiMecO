@@ -14,7 +14,7 @@ class KINSection(Section):
     def layout(self) -> html.Div:
         return html.Div(
             id='kin',
-            style={'display': 'none'},
+            style={'display': 'block'},
             children=[
                 html.H3('Select which rate coefficients to plot:'),
                 html.H4('From:'),

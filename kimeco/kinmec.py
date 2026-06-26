@@ -39,12 +39,19 @@ class KiMec:
         self.species = [sp for sp in self.mech.species()]
         self.reactions = [rc for rc in self.mech.reactions()]
         # Create a yaml template for the rate coefficients of a reaction
-        self.rc_tpl: str = ''
+        self.rc_tpl: str = self._build_rc_tpl()
+        self.new_reactions_tpls: dict[tuple[str, str], str] = {}
+
+    def _build_rc_tpl(self) -> str:
+        """Build the YAML block mapping each (pressure, temperature) point of
+        the active grid to a ``{rates[p][t]}`` substitution field.
+        """
+        rc_tpl: str = ''
         for pindex in range(len(self.pres)):
             for tindex in range(len(self.temp)):
-                self.rc_tpl += f'rc_{pindex}_{tindex}: ' +\
-                                '{rates[' + f'{pindex}][{tindex}]' + '}' + '\n'
-        self.new_reactions_tpls: dict[tuple[str, str], str] = {}
+                rc_tpl += f'rc_{pindex}_{tindex}: ' +\
+                    '{rates[' + f'{pindex}][{tindex}]' + '}' + '\n'
+        return rc_tpl
 
     def add_SOP(self, sop: SOP) -> None:
         """Add the SOP to the KiMec object to be able to create the reaction
@@ -164,10 +171,10 @@ class KiMec:
             reactant=reactant,
             product=product)
         p_yaml: str = ''
-        for p in self.settings["rc_pres"]:
-            p_yaml += f'  - {round(p, 5)} {self.settings["pres_unit"]}' + '\n'
+        for p in self.pres:
+            p_yaml += f'  - {round(p, 5)} bar' + '\n'
         t_yaml: str = ''
-        for t in self.settings["rc_temp"]:
+        for t in self.temp:
             t_yaml += f'  - {round(t, 5)} K' + '\n'
         reaction_tpl: str = reaction_yaml.format(equation=equation,
                                                  rates_yaml=self.rc_tpl,
@@ -376,6 +383,42 @@ class KiMec:
             )
         return new_reactions
 
+    def _sync_grid_to_rates(self,
+                            np_rates_by_pes: dict[int, NDArray]) -> None:
+        """Align the reaction templates with the (P, T) grid of the rates.
+
+        The injected rate arrays are the source of truth for the grid
+        dimensions. When they do not match the grid the templates were built
+        with (for example postprocessing rates evaluated on the ``pp_*`` grid
+        while the templates default to the ``rc_*`` grid), switch to the
+        settings grid whose lengths match and rebuild the templates.
+        """
+        if not np_rates_by_pes:
+            return
+        sample: NDArray = next(iter(np_rates_by_pes.values()))
+        if sample.ndim != 4:
+            return
+        n_pres, n_temp = int(sample.shape[0]), int(sample.shape[1])
+        if n_pres == len(self.pres) and n_temp == len(self.temp):
+            return
+        candidate_grids = (
+            (self.settings.get('pp_pres', []),
+             self.settings.get('pp_temp', [])),
+            (self.settings.get('rc_pres', []),
+             self.settings.get('rc_temp', [])),
+        )
+        for pres, temp in candidate_grids:
+            if len(pres) == n_pres and len(temp) == n_temp:
+                self.pres = list(pres)
+                self.temp = list(temp)
+                self.rc_tpl = self._build_rc_tpl()
+                self.create_reactions_templates()
+                return
+        raise ValueError(
+            f"Rate array grid ({n_pres} pressures x {n_temp} temperatures) "
+            "does not match the 'rc' or 'pp' grids defined in the settings."
+        )
+
     def get_updated_mech(self,
                          rates_by_pes: dict[int, list[Any]],
                          tbl_map_by_pes: dict[int, dict[str, int]]
@@ -391,6 +434,7 @@ class KiMec:
             int(pes_id): np.array(pes_rates)
             for pes_id, pes_rates in rates_by_pes.items()
         }
+        self._sync_grid_to_rates(np_rates_by_pes)
         new_reactions = self.create_reactions(
             rates_by_pes=np_rates_by_pes,
             tbl_map_by_pes=tbl_map_by_pes,

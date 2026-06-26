@@ -49,7 +49,8 @@ class NelderMead:
                            sim_db=sim_db,
                            kin_db=kin_db,
                            wdir=self.wdir,
-                           prefix=self.prefix)
+                           prefix=self.prefix,
+                           sf=self.sf)
         self.score_line_tpl = '{iter:>10}{score:>15}\n'
         with open(self.wdir + f'/{self.prefix}_scores.txt', 'w', encoding='utf-8') as f:
             f.write(self.score_line_tpl.format(
@@ -423,6 +424,7 @@ class NelderMead:
                         id=0,
                         gen=Generation.total(),
                         status=ModelStatus.DONE.value)
+                    self.sf.fscore(mdl=vertice)
                 else:
                     vertice = Model(
                         sop=self.last_vertice,

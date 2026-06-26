@@ -25,7 +25,8 @@ setup(
                           "dash",
                           "scipy>=1.10",
                           "plotly>=5",
-                          "pint"],
+                          "pint",
+                          "pyarrow>=14"],
         extras_require={"test": ["pytest>=9.0.2"]},
 
         keywords=['python',

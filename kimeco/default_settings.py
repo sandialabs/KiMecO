@@ -56,33 +56,24 @@ default_settings: dict[str, Any] = {
     # to create the initial simplex in NM
     "nm_dstep": 0.5,
     # Type of genetic algorythm to use
-    "ga_type": "tournament",
+    "ga_type": "exp",
     # Length of the GOAT list
     "goat_length": 250,
     # Software to use for the master equation code
     "rc_software": "mess",
-    # List of temperatures in Kelvin
-    "rc_temp": [],
-    # List of pressures in Torr
-    "rc_pres": [],
-    # List of temperatures in Kelvin
+    # MESS rate-coefficient grid for postprocessing. Derived at runtime
+    # from the unique temperatures/pressures of pp_experiments
+    # (not user-facing).
     "pp_temp": [],
-    # List of pressures in Torr
     "pp_pres": [],
-    # Postprocessing initial molar fractions.
-    # Same format as initial_X, one entry per pp P/T condition.
-    "pp_initial_X": [],
-    # List of times for postprocessing simulations.
-    # One list per pp P/T condition, ordered like pp_pres/pp_temp.
-    "pp_times": [[]],
-    # Species to save during postprocessing simulations.
-    "pp_species": [],
+    # Postprocessing experiments. Same format as 'experiments' but without
+    # data/error files (they are simulated, not scored). Each entry must
+    # additionally define its own 'times' and 'species'.
+    "pp_experiments": [],
     # List of ensembles for postprocessing
     "pp_ensembles": ["G0001", "GT-1"],
-    # User input unit of pressure
-    "pres_unit": 'torr',
-    # Scoring function for optimization
-    "scoring_func": "weighteddif",
+    # Default pressure unit.
+    "pres_unit": "bar",
     # Relative weight of parameter-theory score in total score.
     # Runtime normalization enforces weight_theory + weight_experiments = 1.
     "weight_theory": 1.0,
@@ -116,8 +107,6 @@ default_settings: dict[str, Any] = {
     "db_user": getpass.getuser(),
     # IP address of the database host.
     "db_host": "127.0.0.1",
-    # Type of perturbator
-    "pert": 'normal',
     # Boundary condition for maximal deviation
     "max_std": 4,
     # Standard deviation of energy (kcal/mol) perturbation for wells
@@ -188,8 +177,6 @@ default_settings: dict[str, Any] = {
     f"conv_{Ptype.ETP.value}": 0.01,
     # Weights of the species in the scoring function
     # Type should be dict[str, float]
-    # It is normalized so that the sum of the weights = number of species
-    "w_species": {},
     # Restart modes, and treatment of existing tables/db
     "restart": RestartType.DEFAULT.value,
     # Number of models per generation

@@ -1,6 +1,5 @@
 import logging
 from dash import Dash, html, dcc, Output, Input, State
-from dash.exceptions import PreventUpdate
 import sys
 import os
 from typing import Any
@@ -16,6 +15,7 @@ from kimeco.gui.sopsection import SOPSection
 from kimeco.gui.kinsection import KINSection
 from kimeco.gui.simsection import SIMSection
 from kimeco.gui.corsection import CORSection
+from kimeco.gui.dbsection import DBSection
 from kimeco import kimeco_path
 
 
@@ -74,6 +74,7 @@ class KimecoApp(KiMecO):
             sop_db=self.sop_db,
             kin_db=self.kin_db,
             sim_db=self.sim_db,
+            sf=self.sf,
         )
         self.n_gen: int = len(self.goats)
 
@@ -82,16 +83,6 @@ class KimecoApp(KiMecO):
             html.Div(className='row', children=[
                 html.H1('KiMecO Analyser'),
                 html.H2('Data to analyse:'),
-                dcc.RadioItems(options=[
-                    {'label': 'Set of parameters', 'value': 'SOP'},
-                    {'label': 'Rate coefficients', 'value': 'KIN'},
-                    {'label': 'Concentration profiles', 'value': 'SIM'},
-                    {'label': 'Correlation plots', 'value': 'COR'}
-                    ],
-                            value='Set of parameters',
-                            inline=True,
-                            id='rb_start')
-
             ]),
             ############################
             #   GENERATION SELECTION   #
@@ -126,10 +117,34 @@ class KimecoApp(KiMecO):
                             "always_visible": False,
                             "template": "Generation {value}"})
                     ]),
-            SOPSection(self).layout,
-            KINSection(self).layout,
-            SIMSection(self).layout,
-            CORSection(self).layout]
+            ############################
+            #       SECTION TABS       #
+            ############################
+            dcc.Tabs(
+                id='rb_start',
+                value='SOP',
+                children=[
+                    dcc.Tab(
+                        label='Set of parameters',
+                        value='SOP',
+                        children=[SOPSection(self).layout]),
+                    dcc.Tab(
+                        label='Rate coefficients',
+                        value='KIN',
+                        children=[KINSection(self).layout]),
+                    dcc.Tab(
+                        label='Concentration profiles',
+                        value='SIM',
+                        children=[SIMSection(self).layout]),
+                    dcc.Tab(
+                        label='Correlation plots',
+                        value='COR',
+                        children=[CORSection(self).layout]),
+                    dcc.Tab(
+                        label='Databases',
+                        value='DB',
+                        children=[DBSection(self).layout]),
+                ])]
 
     def register_callbacks(self):
         # GENERATION CONTROL
@@ -163,39 +178,6 @@ class KimecoApp(KiMecO):
                 else:
                     selected_gen.pop(-1)
             return selected_gen
-
-        # Select which division to show: sop, kin or sim
-        @self.app.callback(
-            Output(component_id='sop', component_property='style'),
-            Output(component_id='kin', component_property='style'),
-            Output(component_id='sim', component_property='style'),
-            Output(component_id='cor', component_property='style'),
-            Input(component_id='rb_start', component_property='value')
-        )
-        def update_layout(data_type):
-            if data_type == 'SOP':
-                sop_style = {'display': 'block'}
-                kin_style = {'display': 'none'}
-                sim_style = {'display': 'none'}
-                cor_style = {'display': 'none'}
-            elif data_type == 'KIN':
-                sop_style = {'display': 'none'}
-                kin_style = {'display': 'block'}
-                sim_style = {'display': 'none'}
-                cor_style = {'display': 'none'}
-            elif data_type == 'SIM':
-                sop_style = {'display': 'none'}
-                kin_style = {'display': 'none'}
-                sim_style = {'display': 'block'}
-                cor_style = {'display': 'none'}
-            elif data_type == 'COR':
-                sop_style = {'display': 'none'}
-                kin_style = {'display': 'none'}
-                sim_style = {'display': 'none'}
-                cor_style = {'display': 'block'}
-            else:
-                raise PreventUpdate
-            return sop_style, kin_style, sim_style, cor_style
 
     def run(self):
         PORT = '8000'
@@ -242,8 +224,8 @@ def main() -> None:
         sys.exit(-1)
     kmoui.initialize_workdir()
     kmoui.copy_necessary_files()
-    kmoui.initialize_databases()
     kmoui.set_scoring_function()
+    kmoui.initialize_databases()
     kmoui.set_perturbator()
     kmoui.set_important_parameters()
     kmoui.create_layout()

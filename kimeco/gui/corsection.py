@@ -22,7 +22,7 @@ class CORSection(Section):
     def layout(self) -> html.Div:
         return html.Div(
             id='cor',
-            style={'display': 'none'},
+            style={'display': 'block'},
             children=[
                 html.Div(
                     id='cor_plot_button',

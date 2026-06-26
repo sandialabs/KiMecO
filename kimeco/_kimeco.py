@@ -46,6 +46,14 @@ class KiMecO:
             init_loc=init_loc,
             klog=self.klog)
         self.settings: dict[str, Any] = self.raw_input.full_run_settings()
+        # Postprocessing simulations replay pp_experiments through the
+        # standard pipeline. When the (sub)process runs in postprocess mode
+        # the experiment list must follow the pp conditions; the rate grid
+        # follows automatically through settings['postprocess'].
+        if self.settings.get('postprocess') and \
+                self.settings.get('pp_experiments'):
+            self.settings['experiments'] = self.settings['pp_experiments']
+            self.settings['n_exp'] = len(self.settings['pp_experiments'])
         if not sim_job:
             self.klog.setLevel(self.settings['log_level'])
         self.klog.info(f"{'Input reading...':<65}{'PASSED':>15}")
@@ -130,11 +138,11 @@ class KiMecO:
 
     def set_scoring_function(self) -> None:
         """Define which scoring function to use"""
-        if self.settings['scoring_func'].casefold() == 'weighteddif':
-            self.sf = Scoring(settings=self.settings, initial_SOP=self.init_SOP)
-        else:
-            # Default scoring function
-            self.sf = Scoring(settings=self.settings, initial_SOP=self.init_SOP)
+        # if self.settings['scoring_func'].casefold() == 'weighteddif':
+        #     self.sf = Scoring(settings=self.settings, initial_SOP=self.init_SOP)
+        # else:
+        #     # Default scoring function
+        self.sf = Scoring(settings=self.settings, initial_SOP=self.init_SOP)
         # self.klog.info(f"{'Scoring function:':<65}{self.sf.name:>15}")
 
     def set_perturbator(self) -> None:
@@ -265,6 +273,7 @@ class KiMecO:
                     row=f_mdl_row[1:]),
                 id=0,
                 gen=0)
+            self.sf.fscore(mdl=f_mdl)
             models.append(f_mdl)
             if self.sop_db.table_exists(table):
                 rows = self.sop_db.get_table(table=table)

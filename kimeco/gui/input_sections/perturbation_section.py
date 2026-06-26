@@ -21,15 +21,6 @@ def create_perturbation_section() -> html.Div:
             html.H6("Global Settings", className="fw-semibold"),
             html.Div([
                 html.Div([
-                    html.Label("Perturbator Type", className="form-label"),
-                    dcc.Dropdown(
-                        id="perturbation-pert-dropdown",
-                        options=[{"label": "normal", "value": "normal"}],
-                        value=default_settings["pert"],
-                        clearable=False,
-                    ),
-                ], className="col-md-4"),
-                html.Div([
                     html.Label("Max Std Multiplier", className="form-label"),
                     dcc.Input(
                         id="perturbation-max-std-input",
@@ -819,7 +810,6 @@ def update_perturbation_config(
         )
 
     config = {
-        "pert": pert or default_settings["pert"],
         "max_std": max_std or default_settings["max_std"],
         "weight_theory": theory_weight_value,
         "weight_experiments": experiment_weight_value,

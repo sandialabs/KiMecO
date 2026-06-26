@@ -6,6 +6,7 @@ from sqlalchemy.engine import Row
 
 
 from kimeco.model import Model
+from kimeco.scoring_f.scoring import Scoring
 from kimeco.database.sop_db import SOP_DB
 from kimeco.database.kin_db import KIN_DB
 from kimeco.database.sim_db import SIM_DB
@@ -32,6 +33,7 @@ class GOATs:
                  sop_db: SOP_DB,
                  kin_db: KIN_DB,
                  sim_db: SIM_DB,
+                 sf: Scoring,
                  wdir: str = '.',
                  overwrite: bool = True,
                  prefix: str = 'G') -> None:
@@ -52,6 +54,7 @@ class GOATs:
         self.sim_db: SIM_DB = sim_db
         self.wdir: str = wdir
         self.prefix: str = prefix
+        self.sf: Scoring = sf
 
         # generations is a list where each index corresponds to a
         # generation number and stores a list of (gen_id, mdl_id) tuples
@@ -77,7 +80,8 @@ class GOATs:
                   filename: str,
                   sop_db: SOP_DB,
                   kin_db: KIN_DB,
-                  sim_db: SIM_DB) -> "GOATs":
+                  sim_db: SIM_DB,
+                  sf: Scoring) -> "GOATs":
         """Create a GOATs instance loaded from a goat file.
 
         This classmethod reads the file and returns a GOATs instance whose
@@ -88,6 +92,7 @@ class GOATs:
             sop_db=sop_db,
             kin_db=kin_db,
             sim_db=sim_db,
+            sf=sf,
             overwrite=False)
         inst.filename = filename
         gens: List[List[Tuple[int, int]]] = []
@@ -173,6 +178,7 @@ class GOATs:
                 row=row[0]
             )
             mdl = Model(sop=sop_obj, id=mdl_id, gen=gen_id)
+            self.sf.fscore(mdl=mdl)
             models.append(mdl)
 
         return models

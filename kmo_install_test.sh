@@ -84,6 +84,9 @@ kmo --help
 log "Checking kmoui --help"
 kmoui --help
 
+log "Checking GUI module imports"
+python -c "import kimeco.gui.kimecoapp, kimeco.gui.sopsection, kimeco.gui.kinsection, kimeco.gui.simsection, kimeco.gui.corsection"
+
 log "Checking kmopp --help"
 kmopp --help
 

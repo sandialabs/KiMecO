@@ -68,7 +68,7 @@ class SOPSection(Section):
     def layout(self) -> html.Div:
         return html.Div(
             id='sop',
-            style={'display': 'none'},
+            style={'display': 'block'},
             children=[
                 html.H3('Type of parameter to plot:'),
                 dcc.RadioItems(options=cast(Any, [
@@ -148,7 +148,7 @@ class SOPSection(Section):
                                 'value': col})
                         break
 
-            if ptype != '':
+            if ptypes:
                 style: dict[str, str] = {'display': 'block'}
             else:
                 style = {'display': 'none'}
@@ -159,7 +159,7 @@ class SOPSection(Section):
             Output('sop_plot_button', 'style'),
             Input('param_selection', 'value')
         )
-        def show_sop_plot_button(selected_param: str
+        def show_sop_plot_button(selected_param: list[str] | None
                                  ) -> dict[str, str]:
             if selected_param is None:
                 raise PreventUpdate

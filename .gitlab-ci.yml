@@ -37,6 +37,7 @@ installation:
       PY
     - kmo --help
     - kmoui --help
+    - python -c "import kimeco.gui.kimecoapp, kimeco.gui.sopsection, kimeco.gui.kinsection, kimeco.gui.simsection, kimeco.gui.corsection"
     - kmopp --help
 
   cache:

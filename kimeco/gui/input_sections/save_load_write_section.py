@@ -804,7 +804,6 @@ def load_config_to_gui(n_clicks: int, autoload_path: str, config_path: str):
             loaded.get("nm_maxfev", default_settings["nm_maxfev"]),
             loaded.get("nm_dstep", default_settings["nm_dstep"]),
             ["on"] if loaded.get("nm_adaptive", default_settings["nm_adaptive"]) else [],
-            loaded.get("pert", default_settings["pert"]),
             loaded.get("max_std", default_settings["max_std"]),
             loaded.get("weight_theory", default_settings["weight_theory"]),
             loaded.get("weight_experiments", default_settings["weight_experiments"]),

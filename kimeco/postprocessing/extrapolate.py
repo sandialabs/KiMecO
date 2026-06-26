@@ -8,7 +8,7 @@ from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.enums import ModelStatus
 from typing import Any
 from kimeco.logger_config import KMOLogger
-from kimeco.simulation import SIM_PP
+from kimeco.simulation import SIM
 from kimeco.rate_coef import RateCo
 
 
@@ -52,14 +52,13 @@ class Extrapolate(CoreRun):
             q_idx: int = mdl.thread_id
         else:
             q_idx = mdl.id
-        mdl.sim = SIM_PP(
+        mdl.sim = SIM(
             sop=mdl.sop,
             kin=mdl.rateCoef,
             id=mdl.id,
             q_idx=q_idx,
             db=self.sim_db,
             gen_name=table_name,
-            pp_species=self.settings['pp_species'],
             loc=self.get_gen_folder(mdl),
             q_sys=self.qs,
             set=self.settings,
@@ -67,9 +66,6 @@ class Extrapolate(CoreRun):
         )
         mdl.sim.q_up()
         mdl.status = ModelStatus.SIM
-
-    def get_sim_time_grid(self, sim_idx: int) -> list[float]:
-        return self.settings['pp_times'][sim_idx]
 
     def recalc_score(self,
                      mdl: Model) -> None:
@@ -91,14 +87,13 @@ class Extrapolate(CoreRun):
             db=self.kin_db,
             klog=self.klog
         )
-        mdl.sim = SIM_PP(
+        mdl.sim = SIM(
             sop=mdl.sop,
             kin=mdl.rateCoef,
             id=mdl.id,
             q_idx=q_idx,
             db=self.sim_db,
             gen_name=table_name,
-            pp_species=self.settings['pp_species'],
             loc=self.get_gen_folder(mdl),
             q_sys=self.qs,
             set=self.settings,
@@ -106,7 +101,7 @@ class Extrapolate(CoreRun):
         )
         if any([prof is None for prof in mdl.sim.profiles]):
             mdl.request_sim_profiles(sim_db=self.sim_db,
-                                    table=table_name)
+                                     table=table_name)
 
     def calc_score(self,
                    mdl: Model) -> None:

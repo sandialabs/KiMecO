@@ -116,6 +116,42 @@ class Scoring:
         )
         mdl.score = total_score
 
+    def fscore(self,
+               mdl: Model) -> None:
+        """Fast score calculation, when a model is reconstructed.
+        Calculate the score of a model as
+        the weighted average of the scores of the experiments,
+        plus the score of the theory.
+        """
+        t_score = self.score_theory(mdl.sop)
+        tot_exp_weights = np.sum(
+            [exp.weight for exp in self.settings['experiments']]
+        )
+        exp_score = np.sum([
+            mdl.experiment_scores[idx] * exp.weight/tot_exp_weights
+            for idx, exp in enumerate(self.settings['experiments'])
+        ])
+        mdl.theory_score = t_score
+        mdl.experiment_score = exp_score
+        score_divider = (
+            self.settings['weight_theory'] +
+            self.settings['weight_experiments']
+        )
+        if score_divider == 0:
+            # Keep the run numerically stable with a neutral split.
+            weight_theory = 0.5
+            weight_experiments = 0.5
+        else:
+            weight_theory = self.settings['weight_theory'] / score_divider
+            weight_experiments = (
+                self.settings['weight_experiments'] / score_divider
+            )
+        total_score = (
+            t_score * weight_theory +
+            exp_score * weight_experiments
+        )
+        mdl.score = total_score
+
     def score_experiment(self,
                          sim_profile: NDArray,
                          exp: Experiment) -> float:

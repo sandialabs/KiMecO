@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 import numpy as np
 from kimeco._kimeco import KiMecO
 from kimeco.database.kin_db import KIN_DB
@@ -24,120 +25,53 @@ class PostProcess(KiMecO):
         self.settings['postprocess'] = True
         self.prepare_postprocess_settings()
 
-    def _normalize_initial_X(self,
-                             compositions: list[dict[str, float | str]],
-                             n_exp: int,
-                             key: str) -> list[dict[str, float]]:
-        if not isinstance(compositions, list) or len(compositions) != n_exp:
-            raise ValueError(
-                f"{key} should contain one composition dictionary per pp "
-                f"condition ({n_exp} expected)."
-            )
-
-        normalized: list[dict[str, float]] = []
-        for idx, exp in enumerate(compositions):
-            if not isinstance(exp, dict):
-                raise ValueError(f"{key}[{idx}] should be a dictionary.")
-
-            base_key = 'n2'
-            base_given = False
-            total = 0.0
-            clean_exp: dict[str, float] = {}
-            for species, value in exp.items():
-                if not isinstance(species, str):
-                    raise ValueError(
-                        f"{key}[{idx}] keys should be species names."
-                    )
-                if isinstance(value, str):
-                    if value.casefold() != 'base':
-                        raise ValueError(
-                            f"{key}[{idx}]['{species}'] should be a "
-                            "float or 'base'."
-                        )
-                    if base_given:
-                        raise ValueError(
-                            f"{key}[{idx}] defines more than one base "
-                            "species."
-                        )
-                    base_key = species
-                    base_given = True
-                    continue
-                if not isinstance(value, (float, int)):
-                    raise ValueError(
-                        f"{key}[{idx}]['{species}'] should be numeric "
-                        "or 'base'."
-                    )
-                clean_exp[species] = float(value)
-                total += float(value)
-
-            if total > 1.0:
-                raise ValueError(
-                    f"{key}[{idx}] exceeds a total molar fraction of 1.0."
-                )
-
-            clean_exp[base_key] = 1.0 - total
-            normalized.append(clean_exp)
-
-        return normalized
-
-    def _normalize_pp_times(self,
-                            pp_times: list[list[float]],
-                            n_exp: int) -> list[list[float]]:
-        if not isinstance(pp_times, list) or len(pp_times) != n_exp:
-            raise ValueError(
-                "pp_times should contain one time list per pp condition."
-            )
-
-        normalized: list[list[float]] = []
-        for idx, times in enumerate(pp_times):
-            if not isinstance(times, list) or len(times) == 0:
-                raise ValueError(
-                    f"pp_times[{idx}] should be a non-empty list."
-                )
-            clean_times: list[float] = []
-            previous_time: float | None = None
-            for value in times:
-                if not isinstance(value, (float, int)):
-                    raise ValueError(
-                        f"pp_times[{idx}] should only contain numeric "
-                        "values."
-                    )
-                time_value = float(value)
-                if previous_time is not None and time_value < previous_time:
-                    raise ValueError(
-                        f"pp_times[{idx}] should be sorted in ascending "
-                        "order."
-                    )
-                clean_times.append(time_value)
-                previous_time = time_value
-            normalized.append(clean_times)
-
-        return normalized
-
     def prepare_postprocess_settings(self) -> None:
-        n_pp_exp = (
-            len(self.settings['pp_pres']) * len(self.settings['pp_temp'])
-        )
-        if n_pp_exp == 0:
+        """Route the postprocessing experiments through the standard
+        simulation pipeline.
+
+        pp_experiments are validated and built as TimeProfile objects during
+        input parsing. Here they replace the regular experiment list so the
+        queueing system, SIM and profile recovery all operate on the pp
+        conditions (one array task per unique cantera template).
+        """
+        pp_experiments = self.settings.get('pp_experiments', [])
+        if not pp_experiments:
             raise ValueError(
-                'pp_pres and pp_temp should both be non-empty for '
-                'postprocessing.'
-            )
-        if (not isinstance(self.settings['pp_species'], list) or
-                len(self.settings['pp_species']) == 0):
-            raise ValueError(
-                'pp_species should contain at least one species to save.'
+                'pp_experiments should define at least one experiment '
+                'for postprocessing.'
             )
 
-        self.settings['pp_initial_X'] = self._normalize_initial_X(
-            compositions=self.settings['pp_initial_X'],
-            n_exp=n_pp_exp,
-            key='pp_initial_X',
-        )
-        self.settings['pp_times'] = self._normalize_pp_times(
-            pp_times=self.settings['pp_times'],
-            n_exp=n_pp_exp,
-        )
+        self.settings['experiments'] = pp_experiments
+        self.settings['n_exp'] = len(pp_experiments)
+
+    def copy_necessary_files(self) -> None:
+        """Copy run files and emit a postprocess-flagged input file.
+
+        The per-experiment simulation subprocesses rebuild a plain ``KiMecO``
+        from the input file. Pointing them at a flagged copy makes them run in
+        postprocess mode (pp_experiments conditions and the pp_* rate grid)
+        without requiring any change to the user's cantera template.
+        """
+        super().copy_necessary_files()
+        self._write_postprocess_input()
+
+    def _write_postprocess_input(self) -> None:
+        """Write a copy of the input JSON with ``postprocess`` enabled and
+        redirect the simulation scripts to it.
+        """
+        input_file: str = self.settings['input_file']
+        if os.path.isabs(input_file):
+            original_input: str = input_file
+        else:
+            original_input = self.settings['init_loc'] + input_file
+        with open(original_input, 'r') as f:
+            raw_input = json.load(f)
+        raw_input['postprocess'] = True
+        flagged_input: str = os.path.join(
+            self.settings['workdir'], '_kmopp_input.json')
+        with open(flagged_input, 'w') as f:
+            json.dump(raw_input, f)
+        self.settings['input_file'] = flagged_input
 
     def set_initial_sop(self,
                         postprocess=True) -> None:
@@ -178,6 +112,7 @@ class PostProcess(KiMecO):
             sop_db=self.sop_db,
             kin_db=self.kin_db,
             sim_db=self.sim_db,
+            sf=self.sf,
         )
 
     def set_postprocessing(self) -> None:
