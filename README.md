@@ -50,7 +50,7 @@ conda activate kimeco
 Clone the project from GitHub:
 
 ```bash
-git clone git@github.com:csoulie/KiMecO.git
+git clone git@github.com:sandialabs/KiMecO.git
 ```
 
 and then, from within the KiMecO directory produced after cloning, type:

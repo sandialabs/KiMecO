@@ -53,9 +53,9 @@ test:
         - kmopp --help
 
 about:
-    home: https://github.com/csoulie/GAME
+    home: https://github.com/sandialabs/KiMecO
     summary: Kinetic Mechanism Optimizer
-    license: BSD-3-Clause
+    license: MIT
 
 extra:
     recipe-maintainers:

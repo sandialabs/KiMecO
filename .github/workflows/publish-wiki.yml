@@ -9,6 +9,12 @@ name: Publish Manual to Wiki
 #      the .wiki.git repository so it can be cloned/pushed below).
 #   3. Settings > Actions > General > Workflow permissions:
 #      select "Read and write permissions".
+#
+# If your organization enforces read-only GITHUB_TOKEN permissions (common in
+# enterprise orgs), the default token cannot push to the wiki. In that case,
+# create a Personal Access Token (or GitHub App token) with write access to this
+# repo's wiki and store it as a repository secret named WIKI_TOKEN. This workflow
+# uses WIKI_TOKEN when present and otherwise falls back to GITHUB_TOKEN.
 
 on:
   push:
@@ -35,7 +41,7 @@ jobs:
 
       - name: Sync wiki/ to the GitHub Wiki
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.WIKI_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           WIKI_DIR="$RUNNER_TEMP/wiki"
