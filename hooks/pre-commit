@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Runs the test suite before a commit is recorded; aborts the commit on failure.
+exec "$(git rev-parse --show-toplevel)/hooks/run_tests.sh"
