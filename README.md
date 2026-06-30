@@ -115,7 +115,7 @@ You can find additional keywords and options in the documentation.
 
 ## Documentation
 
-See the [wiki](https://github.com/csoulie/KiMecO/wiki) for the full list of input
+See the [wiki](https://github.com/sandialabs/KiMecO/wiki) for the full list of input
 keywords, outputs, and workflow details. The same content is also available in
 [MANUAL.md](MANUAL.md).
 
