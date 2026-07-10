@@ -12,10 +12,19 @@ class Experiment(ABC):
     """
     __id = 0
 
+    #: Human-readable label describing the experiment type. Subclasses
+    #: should override this to provide a friendly name shown in the GUI.
+    EXP_TYPE: str = 'Experiment'
+
     @classmethod
     def total(cls) -> int:
         """Return the total number of Generation instances."""
         return cls.__id
+
+    @property
+    def exp_type(self) -> str:
+        """Return the human-readable experiment type label."""
+        return self.EXP_TYPE
 
     def __init__(self,
                  temp: float,

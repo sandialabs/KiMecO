@@ -97,6 +97,76 @@ class SIM_DB(Kimeco_db):
 
         return rows, species
 
+    def get_single_result(self,
+                          table: str,
+                          mdl_id: int,
+                          experiment_id: int
+                          ) -> tuple[NDArray, list[str]] | None:
+        """Fetch and decode a single result blob on demand.
+
+        Returns the decoded ``[mdl_id, time, species...]`` matrix and the
+        species list, or ``None`` if the row does not exist.
+        """
+        if table not in self.tables:
+            if not self.table_exists(table):
+                return None
+            self.load_table(table)
+
+        query = select(
+            self.tables[table].c.result,
+        ).where(
+            and_(
+                self.tables[table].c.mdl_id == int(mdl_id),
+                self.tables[table].c.experiment_id == int(experiment_id),
+            )
+        )
+        with self.eng.begin() as conn:
+            row = conn.execute(query).fetchone()
+        if row is None:
+            return None
+
+        decoded, species = self.decode_result_blob(
+            result=row.result,
+            mdl_id=int(mdl_id),
+        )
+        if len(self.sv_species) == 0 and len(species) != 0:
+            self.sv_species = species
+        return decoded, species
+
+    def get_all_results(self,
+                        table: str
+                        ) -> list[tuple[int, int, NDArray, list[str]]]:
+        """Decode every row of ``table`` for bulk export.
+
+        Returns a list of ``(mdl_id, experiment_id, decoded, species)``
+        tuples where ``decoded`` is the ``[mdl_id, time, species...]``
+        matrix from :meth:`decode_result_blob`.
+        """
+        if table not in self.tables:
+            if not self.table_exists(table):
+                return []
+            self.load_table(table)
+
+        query = select(
+            self.tables[table].c.mdl_id,
+            self.tables[table].c.experiment_id,
+            self.tables[table].c.result,
+        )
+        with self.eng.begin() as conn:
+            db_rows = conn.execute(query).fetchall()
+
+        results: list[tuple[int, int, NDArray, list[str]]] = []
+        for row in db_rows:
+            decoded, species = self.decode_result_blob(
+                result=row.result,
+                mdl_id=int(row.mdl_id),
+            )
+            if len(self.sv_species) == 0 and len(species) != 0:
+                self.sv_species = species
+            results.append(
+                (int(row.mdl_id), int(row.experiment_id), decoded, species))
+        return results
+
     def prepare_batch_upsert(self,
                              table: str,
                              mdl_id: int,
