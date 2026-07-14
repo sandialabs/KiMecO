@@ -10,6 +10,7 @@ from kimeco.templates.sim_arr_tpl import ctjobtpl
 
 
 class TimeProfile(Experiment):
+    EXP_TYPE: str = 'Time profile'
     REQUIRED_TPL_KEYS: frozenset[str] = frozenset(
         field_name
         for _, field_name, _, _ in string.Formatter().parse(ctjobtpl)

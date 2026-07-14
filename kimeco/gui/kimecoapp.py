@@ -53,7 +53,8 @@ class KimecoApp(KiMecO):
         # GOAT file will be handled by a GOATs instance after DB init
         # Initialize app
         self.app = Dash(
-            assets_url_path=f"{kimeco_path}/gui/assets")
+            assets_url_path=f"{kimeco_path}/gui/assets",
+            suppress_callback_exceptions=True)
 
     def initialize_databases(self) -> None:
         super().initialize_databases()

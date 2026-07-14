@@ -154,3 +154,38 @@ def test_decode_result_blob_requires_time_column() -> None:
 
     with pytest.raises(ValueError, match='missing required time column'):
         SIM_DB.decode_result_blob(result=blob, mdl_id=1)
+
+
+def test_get_single_result_decodes_one_row(tmp_path: Path) -> None:
+    db = SIM_DB(name='TEST_DB_SIM_SINGLE', path=str(tmp_path), threads=1)
+    table_name = 'G0000'
+    db.create_new_table(name=table_name)
+
+    db.prepare_batch_upsert(
+        table=table_name,
+        mdl_id=4,
+        experiment_id=2,
+        result=_blob_from_dict(
+            {'time': [0.0, 1.0], 'A': [1.0, 0.5], 'B': [0.0, 0.3]}),
+    )
+    db.batch_upsert()
+
+    result = db.get_single_result(
+        table=table_name, mdl_id=4, experiment_id=2)
+
+    assert result is not None
+    decoded, species = result
+    assert species == ['A', 'B']
+    assert decoded.shape == (2, 4)
+    assert decoded[:, 0].tolist() == [4.0, 4.0]
+    assert decoded[:, 1].tolist() == [0.0, 1.0]
+    assert decoded[:, 3].tolist() == [0.0, 0.3]
+
+
+def test_get_single_result_missing_row_returns_none(tmp_path: Path) -> None:
+    db = SIM_DB(name='TEST_DB_SIM_SINGLE_MISS', path=str(tmp_path), threads=1)
+    table_name = 'G0000'
+    db.create_new_table(name=table_name)
+
+    assert db.get_single_result(
+        table=table_name, mdl_id=99, experiment_id=0) is None

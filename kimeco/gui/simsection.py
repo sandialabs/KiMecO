@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 import plotly.graph_objects as go
 from kimeco.database.sim_db import SIM_DB
 from kimeco.gui.section import Section
+from kimeco.gui.sim_plot import apply_profile_layout
 
 
 class SIMSection(Section):
@@ -355,40 +356,7 @@ class SIMSection(Section):
                 )
             )
 
-        fig.update_layout(
-            xaxis=dict(
-                title='time (s)',
-                showline=True,
-                showgrid=True,
-                showticklabels=True,
-                linecolor='rgb(0, 0, 0)',
-                linewidth=2,
-                ticks='inside',
-                tickformat='.2e',
-                tickfont=dict(
-                    family='Arial',
-                    size=12,
-                    color='rgb(0, 0, 0)',
-                ),
-            ),
-            yaxis=dict(
-                title='Density (molecules/cm</sub>3</sup>)',
-                showline=True,
-                showgrid=True,
-                showticklabels=True,
-                linecolor='rgb(0, 0, 0)',
-                linewidth=2,
-                ticks='inside',
-                tickformat='.2e',
-                tickfont=dict(
-                    family='Arial',
-                    size=12,
-                    color='rgb(0, 0, 0)',
-                ),
-            ),
-            plot_bgcolor='white',
-            hovermode='closest',
-        )
+        apply_profile_layout(fig)
         return [
             html.H3(children=[
                 f'Concentration profiles of {sp}',
