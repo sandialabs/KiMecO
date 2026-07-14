@@ -12,6 +12,7 @@ Root Coordinator Agent
   - Input and Config Agent
   - Mechanism and SOP Agent
   - Persistence, UI, and Postprocess Agent
+- Version Control Agent
 
 ## Domain Ownership Map
 
@@ -24,6 +25,7 @@ Root Coordinator Agent
 | Input and Config | `kimeco/user_input.py`, `kimeco/default_settings.py`, `kimeco/enums.py`, `kimeco/logger_config.py` |
 | Mechanism and SOP | `kimeco/parameters.py`, `kimeco/barrier.py`, `kimeco/well.py`, `kimeco/bimolecular.py`, `kimeco/kinmec.py`, `kimeco/rotors/`, `kimeco/readers/`, `kimeco/writers/`, `kimeco/templates/ct_reaction_tpl.py` |
 | Persistence, UI, and Postprocess | `kimeco/database/`, `kimeco/gui/`, `kimeco/postprocessing/` |
+| Version Control | `CHANGELOG.md`, version fields in `pyproject.toml` / `setup.py` / `meta.yaml`, release merges into `main` and annotated tags |
 
 Every `kimeco/` module has exactly one owner; `tests/` is shared and edited by the agent that owns the code under test.
 
