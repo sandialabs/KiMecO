@@ -7,7 +7,7 @@ exclude = ["build", "dist", "kimeco.egg-info"]
 
 [project]
 name = "kimeco"
-version = "1.0.0"
+version = "1.0.1"
 authors = [
   { name="Clement Soulie", email="csoulie@sandia.gov" }
 ]
