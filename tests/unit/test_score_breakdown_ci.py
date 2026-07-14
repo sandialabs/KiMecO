@@ -55,7 +55,7 @@ def test_block_starts_with_empty_line_then_label() -> None:
     )
     lines = block.split("\n")
     assert lines[0] == ""
-    assert lines[1] == "[GOAT]"
+    assert lines[1] == "[GOAT (species weighting only)]"
 
 
 def test_final_line_is_weighted_average_score() -> None:
@@ -162,7 +162,7 @@ def test_no_experiments_only_theory_and_exp_columns() -> None:
         [_mdl(1.0, 2.0, 3.0, {})], "GOAT"
     )
     header_lines = _header_lines(block)
-    assert len(header_lines) == 2
+    assert len(header_lines) == 1
     for header in header_lines:
         assert header.split() == ["THEORY", "EXP"]
     assert _value_lines(block)[0].split() == ["1.000", "2.000"]

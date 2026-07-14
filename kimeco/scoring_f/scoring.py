@@ -56,7 +56,7 @@ class Scoring:
         normalized by the corresponding uncertainty."""
 
         t_score = 0.0
-        n_active_p = np.sum(np.isclose(
+        n_active_p = np.sum(~np.isclose(
             np.array([sop.parameters_names[p] for p in sop.parameters_names]),
             np.array([self.SOP.parameters_names[p] for p in self.SOP.parameters_names])
         ))
