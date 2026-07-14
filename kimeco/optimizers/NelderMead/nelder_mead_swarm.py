@@ -193,6 +193,9 @@ class NelderMeadSwarm:
             r['best_model'] for r in self.results if r['success']]
         self.klog.info(
             f"NM Swarm completed: {len(best_models)}/{len(self.models)}")
+        self.klog.info(
+            self.sf.format_score_breakdown(best_models, 'NM SWARM')
+        )
 
         return best_models
 

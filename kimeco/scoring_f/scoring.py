@@ -56,7 +56,10 @@ class Scoring:
         normalized by the corresponding uncertainty."""
 
         t_score = 0.0
-        n_active_p = len(self.settings["active_p"])
+        n_active_p = np.sum(np.isclose(
+            np.array([sop.parameters_names[p] for p in sop.parameters_names]),
+            np.array([self.SOP.parameters_names[p] for p in self.SOP.parameters_names])
+        ))
         if n_active_p == 0:
             # During first sensitivity pass, no active parameters are set yet.
             # Theory term must be neutral so SA can rank perturbations.
@@ -191,3 +194,166 @@ class Scoring:
         else:
             exp_score = float(np.average(dif))
         return exp_score
+
+    @staticmethod
+    def _format_value(value: float) -> str:
+        """Format a score value.
+
+        Uses 3 decimal places, or scientific notation with 2 decimals when
+        the magnitude is >= 1000. Non-finite values render as 'nan'/'inf'.
+
+        Args:
+            value: the value to format.
+
+        Returns:
+            str: the formatted value.
+        """
+        if np.isnan(value):
+            return 'nan'
+        if np.isinf(value):
+            return 'inf' if value > 0 else '-inf'
+        if abs(value) >= 1000.0:
+            return f'{value:.2E}'
+        return f'{value:.3f}'
+
+    @classmethod
+    def _format_score_columns(cls,
+                              columns: list[tuple[str, float]],
+                              width: int,
+                              max_cols: int = 7) -> list[str]:
+        """Return header/value line pairs for the given columns.
+
+        Columns are wrapped so that no line holds more than ``max_cols``
+        columns. Every column uses the same ``width`` so that the columns
+        of successive header/value pairs line up into a single grid.
+        Consecutive header/value pairs are separated by a single blank line.
+
+        Args:
+            columns: list of (header, value) tuples.
+            width: uniform column width applied to every column.
+            max_cols: maximum number of columns per line.
+
+        Returns:
+            list[str]: alternating header and value lines.
+        """
+        lines: list[str] = []
+        for start in range(0, len(columns), max_cols):
+            if lines:
+                lines.append('')
+            chunk = columns[start:start + max_cols]
+            header = ' '.join(
+                f'{name:>{width}}' for name, _ in chunk
+            )
+            values = ' '.join(
+                f'{cls._format_value(value):>{width}}' for _, value in chunk
+            )
+            lines.append(header)
+            lines.append(values)
+        return lines
+
+    def _breakdown_columns(
+        self,
+        models: list[Model],
+    ) -> tuple[list[tuple[str, float]] | None, float]:
+        """Build the (header, value) columns averaged over ``models``.
+
+        Args:
+            models: models to average the score contributors over.
+
+        Returns:
+            tuple: the list of columns and the average weighted score, or
+            (None, nan) when no valid (finite-score) model is available.
+        """
+        experiments = self.settings.get('experiments', [])
+        valid = [
+            m for m in models
+            if m is not None and np.isfinite(m.score)
+        ]
+        if not valid:
+            return None, float('nan')
+
+        def avg(values: list[float]) -> float:
+            finite = [v for v in values if np.isfinite(v)]
+            return float(np.average(finite)) if finite else float('nan')
+
+        theory_avg = avg([m.theory_score for m in valid])
+        exp_avg = avg([m.experiment_score for m in valid])
+
+        columns: list[tuple[str, float]] = [
+            ('THEORY', theory_avg),
+            ('EXP', exp_avg),
+        ]
+        for exp in experiments:
+            per_mdl = [
+                float(m.sop.scores.get(exp.name, float('nan')))
+                for m in valid
+            ]
+            columns.append((exp.name, avg(per_mdl)))
+
+        total_avg = avg([m.score for m in valid])
+        return columns, total_avg
+
+    def _columns_width(self, columns: list[tuple[str, float]]) -> int:
+        """Return the uniform column width required for ``columns``."""
+        return max(
+            6,
+            max(len(name) for name, _ in columns),
+            max(len(self._format_value(v)) for _, v in columns),
+        )
+
+    def breakdown_width(self, models: list[Model]) -> int | None:
+        """Return the column width a breakdown of ``models`` would use.
+
+        Returns None when there is no valid model so callers can fall back
+        to per-block sizing.
+        """
+        columns, _ = self._breakdown_columns(models)
+        if columns is None:
+            return None
+        return self._columns_width(columns)
+
+    def format_score_breakdown(self,
+                               models: list[Model],
+                               label: str,
+                               width: int | None = None) -> str:
+        """Build a multi-line log block summarizing the score contributors
+        averaged over the provided models.
+
+        Layout:
+            - an empty first line (so the logger timestamp stands alone)
+            - a label line annotated with '(species weighting only)'
+            - a block of header/value pairs for THEORY, EXP and the score of
+              each experiment (species-weighted, not experiment-weighted),
+              wrapped to 7 columns
+            - two blank lines
+            - the average weighted score
+
+        Args:
+            models: models to average the contributors over.
+            label: header label identifying the model set (e.g. 'GOAT').
+            width: optional uniform column width to share across blocks. When
+                None the width is computed from this block's own values.
+
+        Returns:
+            str: the formatted multi-line block.
+        """
+        columns, total_avg = self._breakdown_columns(models)
+
+        if columns is None:
+            return (
+                f'\n[{label} (species weighting only)]\n'
+                'No scored models to report.'
+            )
+
+        if width is None:
+            width = self._columns_width(columns)
+        else:
+            width = max(width, self._columns_width(columns))
+
+        lines: list[str] = ['', f'[{label} (species weighting only)]']
+        lines.extend(self._format_score_columns(columns, width))
+        lines.extend(['', ''])
+        lines.append(
+            f'WEIGHTED AVERAGE SCORE: {self._format_value(total_avg)}'
+        )
+        return '\n'.join(lines)

@@ -418,7 +418,23 @@ class GeneticAlgorithm(ABC):
         self.klog.info('Run Sucessful.')
         if Generation.total() > 1:
             self.klog.info(f'Termination at generation {new_gen.id}')
-            self.klog.info(f'Final score: {new_gen.best_score}')
+            gen_width = self.sf.breakdown_width(new_gen.models)
+            self.klog.info(
+                self.sf.format_score_breakdown(
+                    new_gen.models, 'GENERATION - AVERAGE', width=gen_width
+                )
+            )
+            self.klog.info(
+                self.sf.format_score_breakdown(
+                    self._best_model_subset(self.goat), 'GOAT - BEST MODEL',
+                    width=gen_width
+                )
+            )
+            self.klog.info(
+                self.sf.format_score_breakdown(
+                    self.goat, 'GOAT - AVERAGE', width=gen_width
+                )
+            )
 
     @staticmethod
     def geometric_mean_and_std(
@@ -683,6 +699,21 @@ class GeneticAlgorithm(ABC):
             msg += "{}".format(new_params).replace("'", '"')
             self.klog.info(msg)
 
+    @staticmethod
+    def _best_model_subset(models: list[Model]) -> list[Model]:
+        """Return a single-element list holding the lowest-score model.
+
+        Returns an empty list when no finite-score model is available so the
+        score breakdown reports 'No scored models' instead of raising.
+        """
+        finite = [
+            m for m in models
+            if m is not None and np.isfinite(m.score)
+        ]
+        if not finite:
+            return []
+        return [min(finite, key=lambda mdl: mdl.score)]
+
     def update_goat(self,
                     new_mdls: list[Model]) -> None:
         # Delegate selection and persistence to the GOATs manager. The
@@ -695,11 +726,23 @@ class GeneticAlgorithm(ABC):
 
         # Update local goat list and log stats
         self.goat = chosen
-        if self.goat:
-            goat_avrg = float(np.average([mdl.score for mdl in self.goat]))
-        else:
-            goat_avrg = float('nan')
-        self.klog.info(f'GOAT AVERAGE SCORE: {goat_avrg:>60.2f}')
+        gen_width = self.sf.breakdown_width(new_mdls)
+        self.klog.info(
+            self.sf.format_score_breakdown(
+                new_mdls, 'GENERATION - AVERAGE', width=gen_width
+            )
+        )
+        self.klog.info(
+            self.sf.format_score_breakdown(
+                self._best_model_subset(self.goat), 'GOAT - BEST MODEL',
+                width=gen_width
+            )
+        )
+        self.klog.info(
+            self.sf.format_score_breakdown(
+                self.goat, 'GOAT - AVERAGE', width=gen_width
+            )
+        )
 
     def get_stats(
         self,
