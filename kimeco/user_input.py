@@ -471,10 +471,7 @@ class KMOInput:
                 )
 
                 sp_weights = np.ones(shape=len(species), dtype=float64)
-                w_species = exp_cfg.get(
-                    'w_species',
-                    self.json_file['w_species']
-                )
+                w_species = exp_cfg.get('w_species', {})
                 for sidx, sp in enumerate(species):
                     if sp in w_species:
                         sp_weights[sidx] = float(w_species[sp])

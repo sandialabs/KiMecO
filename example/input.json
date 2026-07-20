@@ -1,0 +1,188 @@
+{
+    "project_name": "ethyl_oxidation",
+    "rc_software": "mess",
+    "ct_yaml": "ThInK_Mech.yaml",
+    "mess_inputs": [
+        "mess_input_ethyl_oxidation.inp"
+    ],
+    "experiments": [
+        {
+            "temp": 550.0,
+            "pres": 0.01,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p1t1.csv",
+            "error_file": "ep1t1.csv",
+            "initial_ratio": {
+                "C2H5": 3.34e-5,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 600.0,
+            "pres": 0.01,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p1t2.csv",
+            "error_file": "ep1t2.csv",
+            "initial_ratio": {
+                "C2H5": 3.64e-5,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 650.0,
+            "pres": 0.01,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p1t3.csv",
+            "error_file": "ep1t3.csv",
+            "initial_ratio": {
+                "C2H5": 3.95e-5,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 550.0,
+            "pres": 0.1,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p2t1.csv",
+            "error_file": "ep2t1.csv",
+            "initial_ratio": {
+                "C2H5": 3.34e-6,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 600.0,
+            "pres": 0.1,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p2t2.csv",
+            "error_file": "ep2t2.csv",
+            "initial_ratio": {
+                "C2H5": 3.64e-6,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 650.0,
+            "pres": 0.1,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p2t3.csv",
+            "error_file": "ep2t3.csv",
+            "initial_ratio": {
+                "C2H5": 3.95e-6,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 550.0,
+            "pres": 1.0,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p3t1.csv",
+            "error_file": "ep3t1.csv",
+            "initial_ratio": {
+                "C2H5": 3.34e-7,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 600.0,
+            "pres": 1.0,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p3t2.csv",
+            "error_file": "ep3t2.csv",
+            "initial_ratio": {
+                "C2H5": 3.64e-7,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 650.0,
+            "pres": 1.0,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p3t3.csv",
+            "error_file": "ep3t3.csv",
+            "initial_ratio": {
+                "C2H5": 3.95e-7,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 550.0,
+            "pres": 10.0,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p4t1.csv",
+            "error_file": "ep4t1.csv",
+            "initial_ratio": {
+                "C2H5": 3.34e-8,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 600.0,
+            "pres": 10.0,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p4t2.csv",
+            "error_file": "ep4t2.csv",
+            "initial_ratio": {
+                "C2H5": 3.64e-8,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        },
+        {
+            "temp": 650.0,
+            "pres": 10.0,
+            "pres_unit": "bar",
+            "cantera_tpl": "concentration_time_isobar_adiabatic.tpl",
+            "data_file": "p4t3.csv",
+            "error_file": "ep4t3.csv",
+            "initial_ratio": {
+                "C2H5": 3.95e-8,
+                "O2": 0.1,
+                "HE": "base"
+            }
+        }
+    ],
+    "ga_type": "exp",
+    "n_mdl": 500,
+    "max_gen": 100,
+    "max_std": 3,
+    "std_we": 0.5,
+    "std_be": 1,
+    "std_bfc": 1.05,
+    "std_hrs": 0.1,
+    "std_if": 1.1,
+    "std_fact": 0.25,
+    "std_pow": 0.075,
+    "std_epsilon": 0.1,
+    "std_sigma": 0.1,
+    "std_sfc": 2,
+    "std_mrc": 1.5,
+    "param_conv": 0.01,
+    "sensi_d": 0.1,
+    "cumul_sensi": 0.95,
+    "SA_freq": 20,
+    "max_score": 4
+}
+
+
