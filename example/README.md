@@ -35,19 +35,11 @@ Files:
 
 The initial (nominal) SOP is read directly from the MESS input listed under
 `mess_inputs`: [`mess_input_ethyl_oxidation.inp`](mess_input_ethyl_oxidation.inp).
-This file encodes the *ab initio* PES of the C₂H₅ + O₂ system:
+This file encodes the PES of the C₂H₅ + O₂ system:
+See the associated publication:
+[https://doi.org/10.1016/j.proci.2016.07.100](https://doi.org/10.1016/j.proci.2016.07.100)
+[https://www.sciencedirect.com/science/article/pii/S1540748916303583](https://www.sciencedirect.com/science/article/pii/S1540748916303583)
 
-- **Wells:** `W1` (RO₂, CH₃CH₂O₂) and `W2` (C₂H₄OOH).
-- **Bimolecular channels:** `R` (C₂H₅ + O₂), `P1` (HO₂ + C₂H₄), `P2` (OH + c-C₂H₄O).
-- **Barriers:** `B1`–`B5` connecting those species
-  (e.g. `B5`: C₂H₅O₂ ⇌ C₂H₄OOH, `B1`: the barrierless C₂H₅O₂ ⇌ C₂H₅ + O₂).
-- **Molecular data** for each stationary point: harmonic frequencies, hindered
-  and multidimensional internal rotors, symmetry factors, plus the bath-gas
-  energy-transfer model and Lennard-Jones collision parameters.
-
-KiMecO reads every one of these quantities as a **parameter** and perturbs it
-inside its theoretical uncertainty. The `std_*` keywords in `input.json` set
-the standard deviation (uncertainty magnitude) for each parameter class.
 
 ## Parameter classes, their SOP examples, and the `std_*` uncertainties
 
@@ -59,23 +51,23 @@ that value is interpreted. Uncertainties fall into three kinds:
 - **Percentage / ratio** — a fractional spread of the nominal value
   (`0.1` = ±10 %).
 - **Multiplicative factor** — the nominal value is multiplied/divided by the
-  factor (`1.1` ⇒ up to ×1.1 or ÷1.1).
+  factor (`1.1` ⇒ up to ×1.1 or ÷1.1). Used as standard deviation of a log-normal distribution.
 
 | Parameter class | Example in this SOP | Keyword | Value | Interpretation |
 |---|---|---|---|---|
-| Well / fragment energy | `W1` ground energy (`ZeroEnergy -32.767 kcal/mol`), fragments `R`, `P1`, `P2` | `std_we` | `0.5` | **Absolute, kcal/mol** |
-| Barrier energy | transition states `B1`–`B5` (e.g. `B5`: C₂H₅O₂ ⇌ C₂H₄OOH) | `std_be` | `1` | **Absolute, kcal/mol** |
+| Well / fragment energy | `CH3CH2OO_we` (`ZeroEnergy[kcal/mol] -32.767`), ... | `std_we` | `0.5` | **Absolute, kcal/mol** |
+| Barrier energy | `CH3CH2OO=HO2+C2H4_be` (`ZeroEnergy[kcal/mol] -2.40`) | `std_be` | `1` | **Absolute, kcal/mol** |
 | Batch vibrational frequencies | `Frequencies[1/cm]` block of each well/fragment | `std_bfc` | `1.05` | **Multiplicative factor** |
-| Imaginary frequency | the imaginary mode at each barrier (`B1`–`B5`) | `std_if` | `1.1` | **Multiplicative factor** |
-| Hindered rotor | `Rotor Hindered` scans of `W2` (CH₂, OOH, OH tops) | `std_hrs` | `0.1` | **Percentage (±10 %)** |
-| Energy-transfer factor | `EnergyRelaxation … Factor[1/cm] 180` (He) | `std_fact` | `0.25` | **Percentage (±25 %)** |
-| Energy-transfer power | `EnergyRelaxation … Power 0.95` (exponent of `(T/298)`) | `std_pow` | `0.075` | **Absolute (dimensionless exponent)** |
-| Lennard-Jones ε | `CollisionFrequency … Epsilons[1/cm] 4.93 267.5` | `std_epsilon` | `0.1` | **Percentage (±10 %)** |
-| Lennard-Jones σ | `CollisionFrequency … Sigmas[angstrom] 2.576 4.144` | `std_sigma` | `0.1` | **Percentage (±10 %)** |
-| Barrierless symmetry factor | `SymmetryFactor` of the barrierless channel `R = C₂H₅ + O₂` | `std_sfc` | `2` | **Multiplicative factor** (scales the density of states) |
-| Multidimensional-rotor symmetry | `Core MultiRotor` internal rotations of `W1` | `std_mrc` | `1.5` | **Multiplicative factor** (scales the density of states) |
+| Imaginary frequency | `CH3CH2OO=HO2+C2H4_if`  (`ImaginaryFrequency[1/cm] 1340.6`) | `std_if` | `1.1` | **Multiplicative factor** |
+| Hindered rotor | `CH2CH2OOH_hrs2` (3rd hindered rotor scan of `CH2CH2OOH`) | `std_hrs` | `0.1` | **Percentage (±10 %)** |
+| Energy-transfer factor | `Factor[1/cm] 180`| `std_fact` | `0.25` | **Percentage (±25 %)** |
+| Energy-transfer power | `Power				.95` | `std_pow` | `0.075` | **Absolute (dimensionless exponent)** |
+| Lennard-Jones ε | `Epsilons[1/cm]	4.93  267.5` | `std_epsilon` | `0.1` | **Percentage (±10 %)** |
+| Lennard-Jones σ | `Sigmas[angstrom]	2.576 4.144` | `std_sigma` | `0.1` | **Percentage (±10 %)** |
+| Barrierless symmetry factor | `SymmetryFactor of C₂H₅O₂ = C₂H₅ + O₂` | `std_sfc` | `2` | **Multiplicative factor** (scales the density of states) |
+| Multidimensional-rotor symmetry | `SymmetryFactor of Core MultiRotor` internal rotations of `C₂H₅O₂` | `std_mrc` | `1.5` | **Multiplicative factor** (scales the density of states) |
 
-`max_std` (`4`) caps how many standard deviations away from the nominal SOP any
+`max_std` (`3`) caps how many standard deviations away from the nominal SOP any
 perturbed parameter is allowed to reach.
 
 > Note: the symmetry factors carry no genuine physical uncertainty; `std_sfc`

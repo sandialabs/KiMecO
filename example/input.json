@@ -5,6 +5,7 @@
     "mess_inputs": [
         "mess_input_ethyl_oxidation.inp"
     ],
+    "fixed_params": ["C2H5__we", "O2__we"],
     "experiments": [
         {
             "temp": 550.0,
