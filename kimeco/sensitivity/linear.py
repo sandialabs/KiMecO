@@ -296,10 +296,11 @@ class Linear(CoreRun):
                     [f'{dbs}{Ptype.SCORE.value}']):
                     self.to_test.append(False)
                     continue
-                if key in self.settings['fixed_params'] and side == 1:
+                if key in self.settings['fixed_params']:
                     self.to_test.append(False)
-                    self.klog.info(
-                        f'Parameter {key} is fixed. Skipped.')
+                    if side == 1:
+                        self.klog.info(
+                            f'Parameter {key} is fixed. Skipped.')
                     continue
                 # Create a new SOP object with the modified parameter
                 self.to_test.append(True)
