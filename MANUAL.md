@@ -253,6 +253,28 @@ This section controls perturbation model, uncertainty magnitudes, distributions,
 | weight_theory | 1.0 | Raw theory contribution weight; normalized at runtime with weight_experiments. |
 | weight_experiments | 1.0 | Raw experiment contribution weight; normalized at runtime with weight_theory. |
 | specific_std | {} | Per-parameter override map for standard deviations. |
+| frozen_params | [] | List of parameters (strings) that are frozen and will not be perturbed. The parameters names of a system are listed at the top of the logfile after starting a run. |
+
+Parameters names, used in `specific_std` and `frozen_params`, are constructed by concatenating the species name, two underscores, and the parameter type. For example, `C2H5__we` is the well energy of C2H5, and `O2__we` is the well energy of O2.
+To freeze the energy of a bimolecular specie, one has to freeze the energy of its 2 fragments.
+The parameter types are:
+`we`: well energy
+`be`: barrier energy
+`bfc`: batch frequency coefficient
+`hrs`: hindered rotor scan
+`if`: imaginary frequency
+`sfc`: symmetry factor coefficient for barrierless reactions
+`mrc`: multi-dimensional rotor coefficient
+`fact`: energy transfer factor (`\Delta E_{down}` at 300K)
+`pow`: energy transfer power (`n` in `\Delta E_{down} = \Delta E_{down,300K} * (T/300K)^n`)
+`epsilonX`: Lennard-Jones epsilon
+`sigmaX`: Lennard-Jones sigma
+
+Note: the X in `epsilonX` and `sigmaX` is the order in the MESS input.
+0 is for the bath gas and 1 for the reactive complex.
+These parameters are currently not associated with a species name, so they are not prefixed by a species name.
+Hence, to fix the Lennard-Jones parameters of the bath gas, one has to freeze `__epsilon0` and `__sigma0`.
+The same is applicable to `__fact` and `__pow` for the energy transfer parameters.
 
 ### 4.2 Standard deviations (std_*)
 

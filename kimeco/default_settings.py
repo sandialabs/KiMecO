@@ -109,6 +109,8 @@ default_settings: dict[str, Any] = {
     "db_host": "127.0.0.1",
     # Boundary condition for maximal deviation
     "max_std": 4,
+    #Parameters not perturbed in the optimization. List of strings.
+    "fixed_params": [],
     # Standard deviation of energy (kcal/mol) perturbation for wells
     # and bimolecular species
     # Ref for barriers:
