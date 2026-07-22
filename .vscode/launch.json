@@ -30,7 +30,7 @@
             "request": "launch",
             "program": "/home/csoulie/.conda/envs/game/bin/kmo",
             "console": "integratedTerminal",
-            "args": ["input2.json"],
+            "args": ["input.json"],
             "cwd": "/home/csoulie/kmo_dev",
             "python": "/home/csoulie/.conda/envs/game/bin/python"
         },
@@ -40,7 +40,7 @@
             "request": "launch",
             "program": "/home/csoulie/.conda/envs/game/bin/kmoui",
             "console": "integratedTerminal",
-            "args": ["input2.json"],
+            "args": ["input.json"],
             "cwd": "/home/csoulie/kmo_dev",
             "python": "/home/csoulie/.conda/envs/game/bin/python"
         }

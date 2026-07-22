@@ -480,8 +480,8 @@ class SOP:
         """
 
         if Ptype.SCORE.value in key:
-            specie: str = key.split(dbs)[0]
-            self.scores[specie] = float(value)
+            exp_name: str = key.split(dbs)[0]
+            self.scores[exp_name] = float(value)
             return
         # Energy transfer probability, factor
         elif Ptype.ETF.value in key:
