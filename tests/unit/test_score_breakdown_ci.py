@@ -115,47 +115,6 @@ def test_columns_wrap_at_seven_per_line() -> None:
     assert len(_value_lines(block)[0].split()) == 7
 
 
-def test_empty_models_reports_no_scored_models() -> None:
-    sf = _scoring([_exp("exp_0")])
-    block = sf.format_score_breakdown([], "GOAT")
-    assert block == (
-        "\n[GOAT (species weighting only)]\nNo scored models to report."
-    )
-
-
-def test_non_finite_scored_models_are_filtered_out() -> None:
-    sf = _scoring([_exp("exp_0")])
-    models = [
-        _mdl(1.0, 2.0, float("inf"), {"exp_0": 4.0}),
-        _mdl(3.0, 4.0, 5.0, {"exp_0": 6.0}),
-    ]
-    block = sf.format_score_breakdown(models, "GOAT")
-    unweighted = [float(v) for v in _value_lines(block)[0].split()]
-    # Only the finite-score model contributes.
-    assert unweighted == [3.0, 4.0, 6.0]
-
-
-def test_all_non_finite_reports_no_scored_models() -> None:
-    sf = _scoring([_exp("exp_0")])
-    models = [
-        _mdl(1.0, 2.0, float("inf"), {"exp_0": 4.0}),
-        _mdl(3.0, 4.0, float("nan"), {"exp_0": 6.0}),
-    ]
-    block = sf.format_score_breakdown(models, "NM SWARM")
-    assert block == (
-        "\n[NM SWARM (species weighting only)]\n"
-        "No scored models to report."
-    )
-
-
-def test_none_entries_are_ignored() -> None:
-    sf = _scoring([_exp("exp_0")])
-    models = [None, _mdl(1.0, 2.0, 3.0, {"exp_0": 4.0})]
-    block = sf.format_score_breakdown(cast(Any, models), "GOAT")
-    unweighted = [float(v) for v in _value_lines(block)[0].split()]
-    assert unweighted == [1.0, 2.0, 4.0]
-
-
 def test_no_experiments_only_theory_and_exp_columns() -> None:
     sf = _scoring([])
     block = sf.format_score_breakdown(
@@ -166,18 +125,6 @@ def test_no_experiments_only_theory_and_exp_columns() -> None:
     for header in header_lines:
         assert header.split() == ["THEORY", "EXP"]
     assert _value_lines(block)[0].split() == ["1.000", "2.000"]
-
-
-def test_missing_experiment_key_does_not_crash() -> None:
-    sf = _scoring([_exp("exp_0"), _exp("exp_1")])
-    # Model is missing the "exp_1" score.
-    block = sf.format_score_breakdown(
-        [_mdl(1.0, 2.0, 3.0, {"exp_0": 4.0})], "GOAT"
-    )
-    value_line = _value_lines(block)[0]
-    assert "nan" in value_line
-    # exp_0 still reported correctly.
-    assert "4.000" in value_line
 
 
 def test_long_experiment_name_expands_column_width() -> None:

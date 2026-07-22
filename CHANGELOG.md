@@ -7,8 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.3] - 2026-07-21
 
+### Added
+- Sensitivity analysis can restart with frozen parameters.
+
 ### Fixed
 - Two-sided derivatives properly skipped for frozen parameters in the linear sensitivity analysis.
+- Minor bug fix in the scoring module to correctly compute the experimental score when species weights are applied.
 
 ## [1.0.2] - 2026-07-20
 
