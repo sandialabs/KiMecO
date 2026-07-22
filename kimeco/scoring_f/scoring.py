@@ -1,5 +1,6 @@
 from kimeco.parameters import SOP
 import numpy as np
+from numpy import floating
 from numpy.typing import NDArray
 from typing import Any
 from kimeco.experiments.experiment import Experiment
@@ -56,10 +57,14 @@ class Scoring:
         normalized by the corresponding uncertainty."""
 
         t_score = 0.0
-        n_active_p = np.sum(~np.isclose(
-            np.array([sop.parameters_names[p] for p in sop.parameters_names]),
-            np.array([self.SOP.parameters_names[p] for p in self.SOP.parameters_names])
-        ))
+        sop_active_p = [
+            p for p in sop.parameters_names
+            if ~np.isclose(
+                np.array(sop.parameters_names[p]),
+                np.array(self.SOP.parameters_names[p])
+            )
+        ]
+        n_active_p = len(sop_active_p)
         if n_active_p == 0:
             # During first sensitivity pass, no active parameters are set yet.
             # Theory term must be neutral so SA can rank perturbations.
@@ -127,13 +132,12 @@ class Scoring:
         plus the score of the theory.
         """
         t_score = self.score_theory(mdl.sop)
-        tot_exp_weights = np.sum(
-            [exp.weight for exp in self.settings['experiments']]
-        )
-        exp_score = np.sum([
-            mdl.experiment_scores[idx] * exp.weight/tot_exp_weights
-            for idx, exp in enumerate(self.settings['experiments'])
-        ])
+        exp_divider = np.sum(
+                    [exp.weight for exp in self.settings['experiments']]
+                    )
+        exp_score = 0
+        for idx, exp in enumerate(self.settings['experiments']):
+            exp_score += exp.weight/exp_divider * mdl.sop.scores[exp.name]
         mdl.theory_score = t_score
         mdl.experiment_score = exp_score
         score_divider = (
@@ -190,13 +194,13 @@ class Scoring:
             if sp_divider == 0:
                 exp_score = float(np.average(dif))
             else:
-                exp_score = float(np.average(dif * sp_weights/sp_divider))
+                exp_score = float(np.sum(dif * sp_weights/sp_divider))
         else:
             exp_score = float(np.average(dif))
         return exp_score
 
     @staticmethod
-    def _format_value(value: float) -> str:
+    def _format_value(value: floating) -> str:
         """Format a score value.
 
         Uses 3 decimal places, or scientific notation with 2 decimals when
@@ -254,7 +258,7 @@ class Scoring:
     def _breakdown_columns(
         self,
         models: list[Model],
-    ) -> tuple[list[tuple[str, float]] | None, float]:
+    ) -> tuple[list[tuple[str, floating]], floating]:
         """Build the (header, value) columns averaged over ``models``.
 
         Args:
@@ -264,36 +268,34 @@ class Scoring:
             tuple: the list of columns and the average weighted score, or
             (None, nan) when no valid (finite-score) model is available.
         """
-        experiments = self.settings.get('experiments', [])
         valid = [
             m for m in models
             if m is not None and np.isfinite(m.score)
         ]
-        if not valid:
-            return None, float('nan')
+        if len(valid) != len(models):
+            raise ValueError(
+                f'Found {len(models) - len(valid)} invalid models '
+                f'with non-finite scores out of {len(models)}.'
+            )
 
-        def avg(values: list[float]) -> float:
-            finite = [v for v in values if np.isfinite(v)]
-            return float(np.average(finite)) if finite else float('nan')
+        theory_avg: np.floating = np.average([m.theory_score for m in models])
+        exp_avg: np.floating = np.average([m.experiment_score for m in models])
 
-        theory_avg = avg([m.theory_score for m in valid])
-        exp_avg = avg([m.experiment_score for m in valid])
-
-        columns: list[tuple[str, float]] = [
+        columns: list[tuple[str, floating]] = [
             ('THEORY', theory_avg),
             ('EXP', exp_avg),
         ]
-        for exp in experiments:
+        for exp in self.settings['experiments']:
             per_mdl = [
-                float(m.sop.scores.get(exp.name, float('nan')))
-                for m in valid
+                float(m.sop.scores[exp.name])
+                for m in models
             ]
-            columns.append((exp.name, avg(per_mdl)))
+            columns.append((exp.name, np.average(per_mdl)))
 
-        total_avg = avg([m.score for m in valid])
+        total_avg: floating = np.average([m.score for m in valid])
         return columns, total_avg
 
-    def _columns_width(self, columns: list[tuple[str, float]]) -> int:
+    def _columns_width(self, columns: list[tuple[str, floating]]) -> int:
         """Return the uniform column width required for ``columns``."""
         return max(
             6,

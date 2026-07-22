@@ -169,6 +169,9 @@ class Linear(CoreRun):
                     [f'{dbs}{Ptype.SCORE.value}']):
                     self.to_test.append(False)
                     continue
+                if key in self.settings['fixed_params']:
+                    self.to_test.append(False)
+                    continue
                 # Create a new SOP object with the modified parameter
                 self.to_test.append(True)
         if len(sop_ids) == sum(self.to_test)+1:
