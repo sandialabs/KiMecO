@@ -7,7 +7,7 @@ exclude = ["build", "dist", "kimeco.egg-info"]
 
 [project]
 name = "kimeco"
-version = "3"
+version = "1.0.4"
 authors = [
   { name="Clement Soulie", email="csoulie@sandia.gov" }
 ]
@@ -22,7 +22,7 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: Science/Research",
     "Natural Language :: English",
-    "License :: OSI Approved :: BSD License",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.10",
     "Topic :: Scientific/Engineering :: Chemistry"

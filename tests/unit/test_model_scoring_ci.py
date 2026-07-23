@@ -166,6 +166,6 @@ def test_scoring_keeps_finite_total_when_active_p_is_empty() -> None:
 
     sf.score(mdl=mdl)
 
-    assert mdl.theory_score == pytest.approx(0.0)
+    assert mdl.theory_score == pytest.approx(1.0)
     assert np.isfinite(mdl.score)
-    assert mdl.score == pytest.approx(0.0)
+    assert mdl.score == pytest.approx(0.5)

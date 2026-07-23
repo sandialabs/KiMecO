@@ -124,7 +124,7 @@ class GOATs:
     def get_goat_for_gen(self, generation_number: int) -> List[Model]:
         """Return a list of Model objects for the given generation number.
 
-        The GOAT file stores tokens as "genId_elId" (e.g. "0_12"). Each
+        The GOAT file stores tokens as "genId_modelId" (e.g. "0_12"). Each
         token corresponds to an model stored in the corresponding
         generation table in the SOP DB. This method queries the SOP_DB to
         reconstruct SOP objects (using SOP_DB.sop_tpl as template and
@@ -361,19 +361,19 @@ class GOATs:
         return out
 
     def get_p_for_gen(self,
-                      params: List[str],
+                      params: list[str],
                       gen_id: int) -> NDArray:
         """Return requested SOP parameters for GOAT models.
 
         Args:
             params: list of parameter names (keys in SOP.parameters_names)
-            gen_ids: list of generation indices to query
+            gen_id: generation index to query
 
         Returns:
-            dict mapping gen_id -> { param_name: np.array(values) }
+            dict mapping param_name -> np.array(values)
 
         """
-
+        
         for (gen_origin, mdl_id) in self.generations[gen_id]:
             table: str = f"{self.prefix}{gen_origin:04d}"
             self.sop_db.prepare_batch_select(table=table, row_id=mdl_id)

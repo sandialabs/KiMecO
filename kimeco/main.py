@@ -43,7 +43,6 @@ def main() -> None:
     kmo.initialize_workdir()
     kmo.copy_necessary_files()
     kmo.initialize_databases()
-    kmo.set_scoring_function()
     kmo.set_perturbator()
     kmo.set_important_parameters()
     kmo.set_optimizer()

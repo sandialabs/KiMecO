@@ -70,6 +70,15 @@ class KiMecO:
 
         self.mech.add_SOP(self.init_SOP)
         self.first_sensi: bool = len(self.settings['active_p']) == 0
+        self._set_scoring_function()
+
+    def _set_scoring_function(self) -> None:
+        """Set the scoring function.
+        TODO: Extend to print the detail of all the weights in logfile.
+        """
+        self.sf = Scoring(
+            settings=self.settings,
+            initial_SOP=self.init_SOP)
 
     def set_initial_sop(self,
                         postprocess=False) -> None:
@@ -135,15 +144,6 @@ class KiMecO:
             time.time() - start_time - sop_db_time - kin_db_time)
         msg = 'SIM_DB initialized:'
         self.klog.info(f"{msg:<65}{sim_db_time:>15.1f}")
-
-    def set_scoring_function(self) -> None:
-        """Define which scoring function to use"""
-        # if self.settings['scoring_func'].casefold() == 'weighteddif':
-        #     self.sf = Scoring(settings=self.settings, initial_SOP=self.init_SOP)
-        # else:
-        #     # Default scoring function
-        self.sf = Scoring(settings=self.settings, initial_SOP=self.init_SOP)
-        # self.klog.info(f"{'Scoring function:':<65}{self.sf.name:>15}")
 
     def set_perturbator(self) -> None:
         """Initialize the perturbator"""

@@ -333,7 +333,6 @@ Options:
     pp.initialize_workdir()
     pp.copy_necessary_files()
     pp.initialize_databases()
-    pp.set_scoring_function()
     pp.set_perturbator()
     pp.load_goats()
     pp.set_postprocessing()

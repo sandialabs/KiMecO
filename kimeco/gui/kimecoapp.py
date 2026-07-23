@@ -225,7 +225,6 @@ def main() -> None:
         sys.exit(-1)
     kmoui.initialize_workdir()
     kmoui.copy_necessary_files()
-    kmoui.set_scoring_function()
     kmoui.initialize_databases()
     kmoui.set_perturbator()
     kmoui.set_important_parameters()

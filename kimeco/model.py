@@ -49,6 +49,13 @@ class Model:
         self.experiment_score: float = float('inf')
         self.score: float = float('inf')
 
+    def __getitem__(self, key):
+        return self.sop.parameters_names[key]
+
+    def __iter__(self):
+        # Returns the iterator for the dictionary's keys
+        return iter(self.sop.parameters_names)
+
     def save_kin(self,
                  db: KIN_DB,
                  table: str) -> None:
@@ -88,18 +95,6 @@ class Model:
                     table=table,
                     mdl_id=self.id,
                     experiment_id=exp_id)
-
-    def get_p_val(self,
-                  param: str) -> float:
-        """Return the value of the given parameter in the SOP.
-
-        Args:
-            param (str): parameter name
-
-        Returns:
-            float: value of the parameter
-        """
-        return self.sop.parameters_names[param]
 
     @property
     def experiment_scores(self) -> list[float]:

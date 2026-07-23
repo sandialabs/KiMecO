@@ -62,14 +62,14 @@ class Scoring:
             if ~np.isclose(
                 np.array(sop.parameters_names[p]),
                 np.array(self.SOP.parameters_names[p])
-            )
+            ) and 'score' not in p
         ]
         n_active_p = len(sop_active_p)
         if n_active_p == 0:
             # During first sensitivity pass, no active parameters are set yet.
             # Theory term must be neutral so SA can rank perturbations.
             return 0.0
-        for p in self.settings["active_p"]:
+        for p in sop_active_p:
             score = sop.parameters_names[p] - self.SOP.parameters_names[p]
             score /= get_parameter_uncertainty_scale(
                 reference_values=self.SOP.parameters_names,

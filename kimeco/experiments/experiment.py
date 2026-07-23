@@ -49,8 +49,8 @@ class Experiment(ABC):
                 float: Initial molar fraction
         """
         self.id = Experiment.__id
-        Experiment.__id += 1
         self.name = f"{name_base}_{self.id:03d}"
+        Experiment.__id += 1
         self.T: float = temp
         self.P: float = pres
         self.X: dict[str, float] = composition
@@ -74,6 +74,11 @@ class Experiment(ABC):
         Args:
             file (str): path to experimental data file
         """
+        pass
+
+    @abstractmethod
+    def plot(self) -> None:
+        """Plot the experimental data"""
         pass
 
     def check_template(self,

@@ -15,9 +15,6 @@ from kimeco._kimeco import KiMecO
 ureg = ctu.cantera_units_registry
 Q_ = ureg.Quantity
 
-R = Q_(gas_constant, 'J mol^-1 K^-1')
-Vol = Q_(1, 'cm^3')
-
 kmo = KiMecO(input_file='{input_file}',
              init_loc='{init_loc}',
              name='E{mdl_id:04d}_sims',
@@ -39,16 +36,10 @@ gas = kmo.mech.get_updated_mech(
 
 gas.X = experiment.X
 
-# Total number of molecules
+# T is in K, P is in Pa
 gas.TP = experiment.T,experiment.P
+
 # number of mol of gas in 1 cm^3
-
-
-import cantera as ct
-
-ureg = ctu.cantera_units_registry
-Q_ = ureg.Quantity
-
 R = Q_(gas_constant, 'J mol^-1 K^-1')
 Vol = Q_(1, 'cm^3')
 pres = Q_(experiment.P, 'Pa')
@@ -105,11 +96,14 @@ for idx, t in enumerate(times):
             # density (molecules/cm^3)
             # traces[i.name][idx] = gas.X[snum] * ntot.magnitude
             # Remove if response on
+            
 traces_serializable = \
     {{key: value.tolist() if isinstance(value, np.ndarray)
     else value for key, value in traces.items()}}
+
 # Serializing json
 json_object = json.dumps(traces_serializable, indent=4)
+
 # Writing to sample.json
 with open(
     f"{gen_name}E{mdl_id:04d}S{{exp_id:02d}}.json", "w"

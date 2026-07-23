@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-07-23
+
+### Added
+- Analysis notebook for the ethyl oxidation example included in the `example` folder.
+- QoL improvements to the experiment class, allowing easy plotting of TimeProfile type experiments in a jupyter notebook.
+
+### Fixed
+- Bug in the scoring module that caused the count of active parameters to be incorrectly computed. The issue has been resolved, and the count of active parameters is now independent from the active parameter list used by the perturbation and updated by the sensitivity analysis.
+
 ## [1.0.3] - 2026-07-21
 
 ### Added
@@ -37,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release of KiMecO (Kinetic Mechanism Optimizer).
 
+[1.0.4]: https://github.com/sandialabs/KiMecO/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/sandialabs/KiMecO/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/sandialabs/KiMecO/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/sandialabs/KiMecO/compare/v1.0.0...v1.0.1
