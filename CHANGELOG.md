@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Perturbation boundaries for multiplicative parameters (`if`, `sfc`, `mrc`, `bfc`, `freq`) are now geometric: the `max_std`-sigma wall of a lognormal prior with uncertainty factor `f` sits at `i_val * f**max_std` instead of `i_val * (1 + (f-1)*max_std)`. The previous linear form is the correct wall for a *normal* proposal, but all five multiplicative types default to `log-normal`, and it placed the wall short of the requested `max_std` — increasingly so as `f` grows (at `max_std = 4`: 3.74 sigma for `f = 1.05`, 2.32 sigma for `f = 2`, 1.57 sigma for `f = 10`). This widens the sampled volume (9x to 81x at `f = 3`), so runs made with earlier versions will not reproduce.
+- Sampling a `log-normal` distribution for an additive parameter (`we`, `be`, `pow`) now raises `TypeError` instead of silently taking `log()` of a possibly negative energy.
+
+### Fixed
+- The `log-normal` branch of the perturbator converted the distribution's location to log space but passed `get_scale`'s linear-space spread, `(f-1)*value`, through unchanged as the scale of a normal in log space; the sigma actually used therefore scaled with the parameter's magnitude. The correct log-space sigma is `ln(f)`, with no dependence on the value. A new `Perturbator.get_log_scale` supplies it; `get_scale` is unchanged and still serves the `normal` branch and the derivative steps in the linear sensitivity and Nelder-Mead modules.
+- As a consequence of the above, the imaginary frequency `if` — the only multiplicative parameter carrying a physical value rather than a coefficient of order 1 — was effectively not being sampled from its intended distribution. At a realistic 1000 cm-1 with `f = 1.1` the log-space sigma used was 100 rather than 0.095, so draws spanned tens of orders of magnitude, were rejected against the boundaries by the retry loop in `perturb_ifreq`, and what survived was uniform in log across the allowed band (Kolmogorov-Smirnov against Uniform(0,1) in log space: D = 0.005, p = 0.68) at a cost of some 370 rejected draws per accepted sample. Coefficient-valued multiplicative parameters were only mildly affected, since `(f-1)*x` approximates `ln(f)` when `x` is near 1.
+
 ## [1.1.0] - 2026-08-04
 
 ### Added
