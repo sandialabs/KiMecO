@@ -97,9 +97,10 @@ class Perturbator:
                       i_val + i_val
                       * self.settings[std_p] * mult)
         elif ptype in self.multiplicative:
+            # uncertainty is a factor f: n sigma spans [x/f**n, x*f**n]
             bounds = (
-                i_val / (1 + (self.settings[std_p]-1) * mult),
-                i_val * (1 + (self.settings[std_p]-1) * mult))
+                i_val / self.settings[std_p] ** mult,
+                i_val * self.settings[std_p] ** mult)
         else:
             raise NotImplementedError('Parameter not parametrised.')
         if ptype in self.zero_bound and min(bounds) < 0:
@@ -155,6 +156,39 @@ class Perturbator:
         else:
             raise TypeError('Unknown parameter type in get_scale.')
 
+    def get_log_scale(self,
+                      ptype: str,
+                      param: str) -> float:
+        """Get the standard deviation in log space, for lognormal sampling.
+
+        Unlike get_scale, which returns a spread in the parameter's own units,
+        this returns a dimensionless sigma to be used as the scale of a normal
+        distribution in log space.
+
+        Args:
+            ptype (str): parameter's type
+            param (str): parameter's name
+
+        Raises:
+            TypeError: additive or unknown parameter type
+
+        Returns:
+            float: The standard deviation of log(parameter).
+        """
+        uncertainty: float = self.i_sop.uncertainties[param]
+        if ptype in self.multiplicative:
+            # uncertainty is a factor f: 1 sigma spans [x/f, x*f]
+            return float(np.log(uncertainty))
+        elif ptype in self.percent:
+            # uncertainty is a fraction: treat 1+u as the factor
+            return float(np.log(1 + uncertainty))
+        elif ptype in self.additive:
+            raise TypeError(
+                f'Lognormal distribution is not defined for additive '
+                f'parameter {param}: it may take non-positive values.')
+        else:
+            raise TypeError('Unknown parameter type in get_log_scale.')
+
     def get_mean_sigma(self,
                        ptype: str,
                        param: str,
@@ -205,19 +239,9 @@ class Perturbator:
                                           ptype=ptype)
             return float(np.random.normal(loc=loc, scale=scale))
         elif distrib == Distrib.LOGNORMAL:
-            # This shift is simply for negative values
-            bounds = self.get_boundaries(
-                ptype=ptype,
-                i_val=i_val)
-            # mean, sigma, shift = self.get_mean_sigma(
-            #     param=param,
-            #     ptype=ptype,
-            #     c_val=c_val,
-            #     bounds=bounds)
-            # return float(np.random.lognormal(mean, sigma)) # + shift
             loc: float = c_val
-            scale: float = self.get_scale(param=param,
-                                          ptype=ptype)
+            scale: float = self.get_log_scale(param=param,
+                                              ptype=ptype)
             return float(
                 np.exp(np.random.normal(loc=np.log(loc), scale=scale)))
         else:
