@@ -40,6 +40,65 @@ def get_parameter_uncertainty_scale(
     return float(scale)
 
 
+def get_parameter_deviation(
+    reference_values: dict[str, float],
+    reference_uncertainties: dict[str, float],
+    param: str,
+    value: float,
+) -> float:
+    """Deviation of ``value`` from its reference, in units of one sigma.
+
+    Multiplicative parameters carry a lognormal prior with uncertainty
+    factor f, so their deviation is measured in log space: x0*f and x0/f
+    are both one sigma from x0. Measuring them linearly instead makes
+    shrinking a parameter cheaper than growing it by the same factor, by
+    a ratio of f**2, and caps the total cost of driving one to zero at
+    1/(f-1)**2 -- for f >= 2, less than a single f-fold increase.
+
+    Additive and percent parameters keep their linear-space deviation,
+    which matches both their normal prior and the linear boundaries the
+    perturbator applies to them.
+
+    Args:
+        reference_values (dict[str, float]): initial parameter values
+        reference_uncertainties (dict[str, float]): parameter uncertainties
+        param (str): parameter's name
+        value (float): the perturbed value to measure
+
+    Raises:
+        ValueError: unusable uncertainty, or a non-positive multiplicative
+            parameter, which has no log-space deviation.
+
+    Returns:
+        float: the deviation in units of one sigma.
+    """
+    ptype = get_parameter_type(param)
+    reference_value = float(reference_values[param])
+
+    if ptype.value in Pclass.MULTIPLICATIVE.value:
+        uncertainty = float(reference_uncertainties[param])
+        if uncertainty <= 0.0 or uncertainty == 1.0:
+            raise ValueError(
+                f"Uncertainty factor for '{param}' must be positive and "
+                f"different from 1 to score a multiplicative parameter."
+            )
+        if value <= 0.0 or reference_value <= 0.0:
+            raise ValueError(
+                f"Multiplicative parameter '{param}' must stay positive to "
+                f"be scored in log space."
+            )
+        return float(
+            np.log(value / reference_value) / np.log(uncertainty)
+        )
+
+    scale = get_parameter_uncertainty_scale(
+        reference_values=reference_values,
+        reference_uncertainties=reference_uncertainties,
+        param=param,
+    )
+    return float((value - reference_value) / scale)
+
+
 class Scoring:
     def __init__(self,
                  settings: dict[str, Any],
@@ -70,11 +129,11 @@ class Scoring:
             # Theory term must be neutral so SA can rank perturbations.
             return 0.0
         for p in sop_active_p:
-            score = sop.parameters_names[p] - self.SOP.parameters_names[p]
-            score /= get_parameter_uncertainty_scale(
+            score = get_parameter_deviation(
                 reference_values=self.SOP.parameters_names,
                 reference_uncertainties=self.SOP.uncertainties,
-                param=p
+                param=p,
+                value=sop.parameters_names[p]
             )
             score = score**2
             score = score/n_active_p
