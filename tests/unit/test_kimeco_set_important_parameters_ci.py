@@ -56,6 +56,7 @@ class _LinearStub:
     def __init__(self, **kwargs: Any) -> None:
         type(self).instances += 1
         self.kwargs = kwargs
+        self.models = list(kwargs.get("models", []))
         self.models_from_db = type(self).models_from_db
         self.selected = list(type(self).selected)
 

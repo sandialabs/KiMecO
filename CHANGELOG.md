@@ -5,7 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+
+## [1.1.7] - 2026-08-27
 
 ### Added
 - New `fix_theory_divider` setting (default `false`). When `true`, the theory divider used to average the active parameters' scores is fixed for the whole run, so models with different numbers of active parameters are never compared under different dividers. Exposed in the `kmo_start` launcher GUI Sensitivity tab (with save/load round-trip).
@@ -164,6 +165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release of KiMecO (Kinetic Mechanism Optimizer).
 
+[1.1.7]: https://github.com/sandialabs/KiMecO/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/sandialabs/KiMecO/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/sandialabs/KiMecO/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/sandialabs/KiMecO/compare/v1.1.3...v1.1.4

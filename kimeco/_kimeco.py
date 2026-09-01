@@ -192,7 +192,7 @@ class KiMecO:
                 self.klog.info(f"{'SA read from DB':<65}")
             self.sensitivity.run()  # Only actually run if necessary
             self.settings['active_p'] = self.sensitivity.selected
-            # self.f_mdl: Model = self.sensitivity.models[0]
+            self.f_mdl: Model = self.sensitivity.models[0]
             if not self.sensitivity.models_from_db or \
                 (self.settings['restart'] == RestartType.RESCORE and
                 self.sensitivity.models_from_db):
