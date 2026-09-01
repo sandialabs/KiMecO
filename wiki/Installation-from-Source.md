@@ -72,7 +72,8 @@ which mess
 
 ## 6) automech dependency (optional)
 
-`automech` (which provides `autoio`/`mess_io`) is an **optional** dependency needed only when you enable the two-pass MESS WellExtension path with `use_automech=true`. When `use_automech=false` (the default), automech is not imported and does not need to be installed.
+`automech` (which provides `autoio`/`mess_io`) is an **optional** dependency needed only when you enable the conditional two-pass MESS WellExtension path with `use_automech=true`. When `use_automech=false` (the default), automech is not imported and does not need to be installed.
 
 - automech can be obtained from GitHub: https://github.com/Auto-Mech/autochem (and related Auto-Mech packages).
 - If you set `use_automech=true`, `mess_io` must be importable in **both** the run environment and the job (compute-node) environment; otherwise KiMecO cancels the run early with a clear message.
+- If you set `use_automech=true`, **KiMecO itself (`kimeco`) must also be importable in the job (compute-node) environment**, not only in the run environment: the emitted per-PES driver imports `kimeco.readers.mess_output.MessOutputReader` to decide whether MESS pass 2 is needed. The import is side-effect-free (no database connection), but the compute node must be able to resolve KiMecO's dependency chain. In practice, install KiMecO in the same environment the jobs activate.

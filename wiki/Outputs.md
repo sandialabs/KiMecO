@@ -11,7 +11,7 @@ KiMecO writes both text outputs and SQLite databases.
 | goats.txt | `KMO_Project/` | GOAT membership history by generation. Each line corresponds to one generation and stores model tokens as `gen_id_model_id` pairs (for example `3_42`), representing the selected best models used as the GOAT ensemble for that generation. |
 | GA_rates.out | `KMO_Project/` | Rate-statistics report written at GA convergence. Contains the selected model count after `max_score` filtering, then pressure/temperature-resolved tables of reaction rates (organized by PES), with geometric-mean and geometric-standard-deviation summaries across eligible models. |
 | `{name}P{slot:02d}.out` | Per-job work directory | Final MESS rate-coefficient output for a PES slot. |
-| `_{name}P{slot:02d}.out` | Per-job work directory | Preserved MESS pass-1 output, written only when `use_automech=true`. It is the first-pass result kept before the automatic WellExtension well-lumping produces the extended pass-2 input whose result becomes `{name}P{slot:02d}.out`. |
+| `_{name}P{slot:02d}.out` | Per-job work directory | Transient MESS pass-1 output, written only when `use_automech=true`. The pass-1 result is always moved here first, but it only survives when well merging was detected: in that case it is the first-pass result kept before the automatic WellExtension well-lumping produces the extended pass-2 input whose result becomes `{name}P{slot:02d}.out`. When no well merging is detected, pass 2 is skipped and this file is moved back to `{name}P{slot:02d}.out`. |
 
 
 ## 7.2 Databases (run state and results)

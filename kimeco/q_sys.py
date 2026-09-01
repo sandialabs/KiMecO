@@ -360,12 +360,17 @@ class QueueingSystem:
             base: str = f"{job['loc']}/{job['name']}"
             for p_aux in glob.glob(f"{base}P*.aux"):
                 os.remove(p_aux)
-            # Automech-driven runs leave per-slot python driver scripts and
-            # leading-underscore pass-1 outputs. On success remove both; on
-            # failure keep the .py scripts so the job can be resubmitted.
+            for p_log in glob.glob(f"{base}P*.log"):
+                os.remove(p_log)
+            # Automech-driven runs leave per-slot python driver scripts,
+            # MESS inputs and leading-underscore pass-1 outputs. On success
+            # remove them; on failure keep the .py scripts and .inp files so
+            # the job can be resubmitted.
             if job['status'] == JobStatus.PICKED_UP.value:
                 for p_py in glob.glob(f"{base}P*.py"):
                     os.remove(p_py)
+                for p_inp in glob.glob(f"{base}P*.inp"):
+                    os.remove(p_inp)
                 underscore_base: str = f"{job['loc']}/_{job['name']}"
                 for p_pass1 in glob.glob(f"{underscore_base}P*.out"):
                     os.remove(p_pass1)

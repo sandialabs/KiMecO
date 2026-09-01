@@ -69,6 +69,35 @@ class MessOutputReader:
                     return nearest_idx
             raise
 
+    @staticmethod
+    def well_merging(filename: str) -> bool:
+        """True if any T/P rate coefficient is missing (``***``)."""
+        with open(file=filename, mode='r') as f:
+            lines: list[str] = f.readlines()
+        recording = False
+        in_tp_table = False
+        for lnum, line in enumerate(lines):
+            if line.lstrip().casefold().startswith('species-species rate'):
+                recording = True
+                continue
+            if not recording:
+                continue
+            if 'temperature' in line.casefold() and \
+                    'pressure' in line.casefold():
+                in_tp_table = True
+            elif line.lstrip().casefold().startswith('temperature'):
+                # High-pressure block: '***' entries are legitimate there.
+                in_tp_table = False
+            elif "_______________" in line:
+                break
+            elif "From\\To" in line and in_tp_table:
+                for row in lines[lnum + 1:]:
+                    if row == "\n":
+                        break
+                    if any("*" in v for v in row.split()[1:]):
+                        return True
+        return False
+
     def read(self) -> None:
         recording = False
 

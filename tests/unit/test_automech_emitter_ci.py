@@ -264,14 +264,21 @@ def test_emitted_script_has_no_database_reference(tmp_path, shape) -> None:
 @pytest.mark.parametrize('shape', sorted(_SHAPES))
 def test_emitted_script_two_pass_structure(tmp_path, shape) -> None:
     script, _ = _emit(tmp_path, _SHAPES[shape])
-    # Pass 1 writes the base input and runs mess, the pass-1 output is
-    # preserved under a leading-underscore copy, WellExtension caps are
-    # derived, then pass 2 runs.
+    # Pass 1 writes the base input and runs mess, the pass-1 output is moved
+    # to a leading-underscore intermediate, and pass 2 (WellExtension caps via
+    # well_lumped_input_file) runs only behind the merged-well gate; the
+    # second _run_mess therefore sits deeper inside main() than the first.
     assert 'well_lumped_input_file(' in script
     assert 'pass1_copy = "_" + base' in script
-    assert 'shutil.copyfile(out_name, pass1_copy)' in script
-    # Two mess invocations (pass 1 + pass 2); the def line is not indented.
-    assert script.count('    _run_mess(inp_name)') == 2
+    assert 'os.replace(out_name, pass1_copy)' in script
+    assert 'shutil' not in script
+    # Two mess invocations (pass 1 + pass 2), regardless of indentation.
+    run_lines = [ln for ln in script.splitlines()
+                 if ln.strip() == '_run_mess(inp_name)']
+    assert len(run_lines) == 2
+    # Pass 2 is nested one level deeper: it lives in the merging branch.
+    indent = [len(ln) - len(ln.lstrip()) for ln in run_lines]
+    assert indent[1] > indent[0]
 
 
 @pytest.mark.parametrize('shape', sorted(_SHAPES))

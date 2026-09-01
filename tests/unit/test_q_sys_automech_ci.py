@@ -181,6 +181,98 @@ def test_clean_files_success_removes_py_and_underscore(tmp_path: Path) -> None:
     assert not under.exists()
 
 
+def test_clean_files_success_removes_per_slot_log_and_inp(
+        tmp_path: Path) -> None:
+    """On success the per-slot .log and .inp artifacts are swept too."""
+    qs = _qs(tmp_path, use_automech=True)
+    name = "G0000E0008"
+    p_log = tmp_path / f"{name}P00.log"
+    p_inp = tmp_path / f"{name}P00.inp"
+    p_aux = tmp_path / f"{name}P00.aux"
+    for f in (p_log, p_inp, p_aux):
+        f.write_text("x")
+
+    job = _kin_job_array(tmp_path, name, JobStatus.PICKED_UP.value)
+    qs.clean_files(job, clear_err=True)
+
+    assert not p_log.exists()
+    assert not p_inp.exists()
+    assert not p_aux.exists()
+
+
+def test_clean_files_failed_removes_log_but_retains_inp(
+        tmp_path: Path) -> None:
+    """Per-slot .log is always swept; .inp is kept for resubmission."""
+    qs = _qs(tmp_path, use_automech=True)
+    name = "G0000E0009"
+    p_log = tmp_path / f"{name}P00.log"
+    p_inp = tmp_path / f"{name}P00.inp"
+    p_py = tmp_path / f"{name}P00.py"
+    for f in (p_log, p_inp, p_py):
+        f.write_text("x")
+
+    job = _kin_job_array(tmp_path, name, JobStatus.FAILED.value)
+    qs.clean_files(job, clear_err=False)
+
+    # .log carries no resubmission value and is removed on both branches.
+    assert not p_log.exists()
+    # Inputs and drivers survive so the job can be resubmitted as-is.
+    assert p_inp.exists()
+    assert p_py.exists()
+
+
+def test_clean_files_ready_job_keeps_every_per_slot_artifact(
+        tmp_path: Path) -> None:
+    """READY jobs are pending resubmission: nothing is deleted."""
+    qs = _qs(tmp_path, use_automech=True)
+    name = "G0000E0010"
+    artifacts = [tmp_path / f"{name}P00.{ext}"
+                 for ext in ("log", "inp", "py", "aux")]
+    for f in artifacts:
+        f.write_text("x")
+
+    job = _kin_job_array(tmp_path, name, JobStatus.READY.value)
+    qs.clean_files(job, clear_err=True)
+
+    assert all(f.exists() for f in artifacts)
+
+
+def test_clean_files_sim_job_leaves_per_slot_kin_artifacts(
+        tmp_path: Path) -> None:
+    """The per-slot sweep is gated on job type 'kin'."""
+    qs = _qs(tmp_path, use_automech=True)
+    name = "G0000E0011"
+    p_log = tmp_path / f"{name}P00.log"
+    p_inp = tmp_path / f"{name}P00.inp"
+    for f in (p_log, p_inp):
+        f.write_text("x")
+
+    job = _kin_job_array(tmp_path, name, JobStatus.PICKED_UP.value)
+    job['type'] = 'sim'
+    qs.clean_files(job, clear_err=True)
+
+    assert p_log.exists()
+    assert p_inp.exists()
+
+
+def test_clean_files_success_keeps_final_outputs(tmp_path: Path) -> None:
+    """Cleanup must never touch the per-slot MESS outputs being read back."""
+    qs = _qs(tmp_path, use_automech=True)
+    name = "G0000E0012"
+    out0 = tmp_path / f"{name}P00.out"
+    out1 = tmp_path / f"{name}P01.out"
+    for f in (out0, out1):
+        f.write_text("rates")
+        (tmp_path / f.name.replace(".out", ".log")).write_text("x")
+
+    job = _kin_job_array(tmp_path, name, JobStatus.PICKED_UP.value)
+    qs.clean_files(job, clear_err=True)
+
+    assert out0.exists() and out1.exists()
+    assert not (tmp_path / f"{name}P00.log").exists()
+    assert not (tmp_path / f"{name}P01.log").exists()
+
+
 def test_clean_files_failed_retains_py(tmp_path: Path) -> None:
     qs = _qs(tmp_path, use_automech=True)
     name = "G0000E0007"

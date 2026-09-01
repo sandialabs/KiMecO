@@ -18,18 +18,23 @@ When executed on the compute node the emitted script:
    ``collision_frequency`` -> ``global_energy_transfer_input``;
 4. builds the global keyword section via ``global_rates_input_v1`` on the
    embedded (possibly sub-grid) temperature/pressure grid;
-5. writes the base input, runs MESS (pass 1), copies the pass-1 output to a
-   leading-underscore intermediate, derives WellExtension caps via
+5. writes the base input, runs MESS (pass 1), moves the pass-1 output to a
+   leading-underscore intermediate, and only if rate coefficients are missing
+   (merged wells) derives WellExtension caps via
    ``mess_io.well_lumped_input_file``, overwrites the input and runs MESS
-   (pass 2) to produce the final ``<name>P<slot>.out``.
+   (pass 2); otherwise the pass-1 output is moved back to
+   ``<name>P<slot>.out`` and pass 2 is skipped.
 
 External files referenced by bare relative filename (multirotor PES files,
 barrierless rotd flux files) are read from the run cwd at execution time - they
 are copied there through ``SOP.files2copy`` and are never inlined. The emitted
-script reads no database.
+script reads no database; it imports only ``MessOutputReader`` from kimeco to
+detect merged wells.
 """
 
 from typing import Any
+
+import cantera.with_units as ctu
 
 from kimeco.parameters import SOP
 from kimeco.well import Well
@@ -37,8 +42,8 @@ from kimeco.bimolecular import Bimolecular
 from kimeco.barrier import Barrier
 
 
-# bar -> atm (MESS global keywords write PressureList[atm]).
-_BAR2ATM = 0.9869232667160128
+ureg: ctu.UnitRegistry = ctu.cantera_units_registry
+Q_ = ureg.Quantity
 
 
 # The runtime driver body. Only the top-level placeholders
@@ -47,7 +52,6 @@ _BAR2ATM = 0.9869232667160128
 # f-strings, no dict/set literals other than dict()) so formatting is safe.
 automech_kin_tpl = '''"""Auto-generated automech MESS driver. Do not edit."""
 import os
-import shutil
 import subprocess
 
 from phydat import phycon
@@ -60,6 +64,7 @@ from mess_io.writer import global_energy_transfer_input, global_rates_input_v1
 from mess_io.writer import messrates_inp_str
 from mess_io.writer import energy_down, collision_frequency
 from mess_io import well_lumped_input_file
+from kimeco.readers.mess_output import MessOutputReader
 
 
 PES_PAYLOAD = {payload}
@@ -260,24 +265,33 @@ def main():
     handle.close()
 
     _run_mess(inp_name)
-    shutil.copyfile(out_name, pass1_copy)
+    if not os.path.isfile(out_name):
+        # MESS pass 1 produced no output: clean exit, no pass 2, no rename.
+        # The final output stays absent so the job is retried, not picked up.
+        print("MESS pass 1 produced no output " + out_name + ", aborting.")
+        return
+    os.replace(out_name, pass1_copy)
 
-    out_str = open(pass1_copy).read()
-    aux_str = ""
-    if os.path.isfile(aux_name):
-        aux_str = open(aux_name).read()
-    log_str = ""
-    if os.path.isfile(log_name):
-        log_str = open(log_name).read()
+    if MessOutputReader.well_merging(pass1_copy):
+        out_str = open(pass1_copy).read()
+        aux_str = ""
+        if os.path.isfile(aux_name):
+            aux_str = open(aux_name).read()
+        log_str = ""
+        if os.path.isfile(log_name):
+            log_str = open(log_name).read()
 
-    extended_inp = well_lumped_input_file(
-        base_inp, out_str, aux_str, log_str, LUMP_PRESSURE, LUMP_TEMP)
-    handle = open(inp_name, "w")
-    handle.write(extended_inp)
-    handle.close()
+        extended_inp = well_lumped_input_file(
+            base_inp, out_str, aux_str, log_str, LUMP_PRESSURE, LUMP_TEMP)
+        handle = open(inp_name, "w")
+        handle.write(extended_inp)
+        handle.close()
 
-    # Pass 2: final SOP-consistent output at <name>P<slot>.out.
-    _run_mess(inp_name)
+        # Pass 2: final SOP-consistent output at <name>P<slot>.out.
+        _run_mess(inp_name)
+    else:
+        # No merged wells: pass 1 is already the final result.
+        os.replace(pass1_copy, out_name)
 
 
 if __name__ == "__main__":
@@ -486,7 +500,8 @@ class AutomechKinWriter:
             if payload is not None:
                 barrier_payloads.append(payload)
         grid_pres = [
-            float(p) * _BAR2ATM for p in self.pres_bar
+            float(Q_(float(p), 'bar').to('atm').magnitude)
+            for p in self.pres_bar
         ]
         return {
             'name': f'{self.pes_id:02d}',
