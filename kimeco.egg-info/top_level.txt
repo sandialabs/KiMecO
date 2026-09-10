@@ -1,5 +1,9 @@
 LICENSES
+agentic_pipeline
 conda-recipes
-dev_tests
+example
+graphics
+hooks
 kimeco
 tests
+wiki

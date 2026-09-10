@@ -1,6 +1,7 @@
 {
     "project_name": "ethyl_oxidation",
     "rc_software": "mess",
+    "q_name": "day-long-cpu",
     "ct_yaml": "ThInK_Mech.yaml",
     "mess_inputs": [
         "mess_input_ethyl_oxidation.inp"

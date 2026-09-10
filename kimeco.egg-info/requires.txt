@@ -10,5 +10,10 @@ plotly>=5
 pint
 pyarrow>=14
 
+[agentic]
+anthropic>=0.69
+pydantic>=2
+pyyaml
+
 [test]
 pytest>=9.0.2

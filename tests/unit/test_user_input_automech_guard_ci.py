@@ -1,9 +1,9 @@
 """CI-safe tests for ``KMOInput._check_automech`` and its gating.
 
-The guard imports the ``mess_io`` writer symbols used by the automech driver
-scripts before any job is submitted. These tests simulate mess_io being
-absent (import failure) or present (a stub module injected into sys.modules)
-without requiring automech to be installed.
+The guard imports the ``mess_io`` writer symbols *and* ``phydat.phycon`` used
+by the automech driver scripts before any job is submitted. These tests
+simulate either dependency being absent (import failure) or present (stub
+modules injected into sys.modules) without requiring automech to be installed.
 """
 from __future__ import annotations
 
@@ -49,6 +49,21 @@ def _inject_stub_mess_io(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, 'mess_io.writer', writer)
 
 
+def _inject_stub_phydat(monkeypatch) -> None:
+    """Register a stub ``phydat`` exposing a ``phycon`` submodule.
+
+    ``phycon`` only ever supplies plain float physical constants, so real
+    values are good enough for the import-only probe in the guard.
+    """
+    phydat = types.ModuleType('phydat')
+    phycon = types.ModuleType('phydat.phycon')
+    phycon.BOHR2ANG = 0.529177249  # type: ignore[attr-defined]
+    phycon.EH2WAVEN = 219474.6313705  # type: ignore[attr-defined]
+    phydat.phycon = phycon  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, 'phydat', phydat)
+    monkeypatch.setitem(sys.modules, 'phydat.phycon', phycon)
+
+
 def _force_mess_io_import_error(monkeypatch) -> None:
     real_import = builtins.__import__
 
@@ -60,6 +75,30 @@ def _force_mess_io_import_error(monkeypatch) -> None:
     monkeypatch.delitem(sys.modules, 'mess_io', raising=False)
     monkeypatch.delitem(sys.modules, 'mess_io.writer', raising=False)
     monkeypatch.setattr(builtins, '__import__', _fake_import)
+
+
+def _force_phydat_import_error(monkeypatch) -> None:
+    """Make ``phydat`` unimportable even where automech is really installed."""
+    real_import = builtins.__import__
+
+    def _fake_import(name, *args, **kwargs):
+        if name == 'phydat' or name.startswith('phydat.'):
+            raise ImportError(f'No module named {name!r}')
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.delitem(sys.modules, 'phydat', raising=False)
+    monkeypatch.delitem(sys.modules, 'phydat.phycon', raising=False)
+    monkeypatch.setattr(builtins, '__import__', _fake_import)
+
+
+class _WarningRecorder:
+    """Minimal klog stand-in capturing warning messages in memory."""
+
+    def __init__(self) -> None:
+        self.warnings: list[str] = []
+
+    def warning(self, message: Any) -> None:
+        self.warnings.append(str(message))
 
 
 # ---------------------------------------------------------------------------
@@ -75,14 +114,31 @@ def test_check_automech_cancels_when_import_fails(
     assert obj.cancel_run is True
 
 
-def test_check_automech_passes_with_stub_mess_io(
+def test_check_automech_passes_with_stub_automech_deps(
         tmp_path: Path, monkeypatch) -> None:
     _inject_stub_mess_io(monkeypatch)
+    _inject_stub_phydat(monkeypatch)
     obj = _bare_input(tmp_path)
 
     obj._check_automech()
 
     assert obj.cancel_run is False
+
+
+def test_check_automech_cancels_when_phydat_missing(
+        tmp_path: Path, monkeypatch) -> None:
+    """mess_io present but phydat missing must still cancel the run."""
+    _inject_stub_mess_io(monkeypatch)
+    _force_phydat_import_error(monkeypatch)
+    obj = _bare_input(tmp_path)
+    recorder = _WarningRecorder()
+    obj.klog = recorder
+
+    obj._check_automech()
+
+    assert obj.cancel_run is True
+    assert len(recorder.warnings) == 1
+    assert 'phydat' in recorder.warnings[0]
 
 
 # ---------------------------------------------------------------------------

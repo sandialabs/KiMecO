@@ -644,14 +644,15 @@ class KMOInput:
             self.cancel_run = True
 
     def _check_automech(self) -> None:
-        """Verify the mess_io symbols required by the automech-driven MESS
+        """Verify the automech symbols required by the automech-driven MESS
         path are importable before submitting any job.
 
         The automech per-slot driver scripts emitted by
         ``AutomechKinWriter`` import a fixed set of ``mess_io`` writer symbols
-        (plus ``mess_io.well_lumped_input_file``) at runtime on the compute
-        node. Missing any of them would only surface as an opaque node-side
-        crash, so fail fast here with an actionable message.
+        (plus ``mess_io.well_lumped_input_file``) and ``phydat.phycon`` at
+        runtime on the compute node. Missing any of them would only surface
+        as an opaque node-side crash, so fail fast here with an actionable
+        message.
         """
         try:
             from mess_io.writer import (  # noqa: F401
@@ -674,12 +675,14 @@ class KMOInput:
                 collision_frequency,
             )
             from mess_io import well_lumped_input_file  # noqa: F401
+            from phydat import phycon  # noqa: F401
         except ImportError as exc:
             self.klog.warning(
-                "'use_automech' is enabled but the required mess_io symbols "
-                "could not be imported: "
-                f"{exc}. Install/expose the automech 'mess_io' package "
-                "(autoio) on this environment or set 'use_automech' to false."
+                "'use_automech' is enabled but the required automech "
+                "symbols could not be imported: "
+                f"{exc}. Install/expose the automech 'mess_io' (autoio) and "
+                "'phydat' (autochem) packages on this environment or set "
+                "'use_automech' to false."
             )
             self.cancel_run = True
 
