@@ -37,8 +37,8 @@ log "Conda version: $(conda --version)"
 log "Removing existing environment if present"
 conda env remove -n "${ENV_NAME}" -y >/dev/null 2>&1 || true
 
-log "Creating fresh conda environment with Python 3.10 and pip"
-conda create -n "${ENV_NAME}" -c conda-forge python=3.10 pip -y
+log "Creating fresh conda environment with Python 3.11 and pip"
+conda create -n "${ENV_NAME}" -c conda-forge python=3.11 pip -y
 
 log "Loading conda shell support"
 source "$(conda info --base)/etc/profile.d/conda.sh"

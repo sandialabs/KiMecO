@@ -7,7 +7,7 @@ These instructions are written for users who are not familiar with command-line 
 Using a dedicated environment avoids conflicts with other Python projects.
 
 ```bash
-conda create -n kimeco -c conda-forge python=3.10 -y
+conda create -n kimeco -c conda-forge python=3.11 -y
 conda activate kimeco
 ```
 
@@ -72,8 +72,16 @@ which mess
 
 ## 6) automech dependency (optional)
 
-`automech` (which provides `autoio`/`mess_io`) is an **optional** dependency needed only when you enable the conditional two-pass MESS WellExtension path with `use_automech=true`. When `use_automech=false` (the default), automech is not imported and does not need to be installed.
+`automech` is an **optional** dependency needed only when you enable the two-pass MESS WellExtension path with `use_automech=true`. It provides `mess_io` (from `autoio`) and `phydat` (from `autochem`). When `use_automech=false` (the default), automech is not imported and does not need to be installed.
 
-- automech can be obtained from GitHub: https://github.com/Auto-Mech/autochem (and related Auto-Mech packages).
-- If you set `use_automech=true`, `mess_io` must be importable in **both** the run environment and the job (compute-node) environment; otherwise KiMecO cancels the run early with a clear message.
-- If you set `use_automech=true`, **KiMecO itself (`kimeco`) must also be importable in the job (compute-node) environment**, not only in the run environment: the emitted per-PES driver imports `kimeco.readers.mess_output.MessOutputReader` to decide whether MESS pass 2 is needed. The import is side-effect-free (no database connection), but the compute node must be able to resolve KiMecO's dependency chain. In practice, install KiMecO in the same environment the jobs activate.
+To install KiMecO together with the automech dependencies, from the repository root run:
+
+```bash
+pip install -e .[automech]
+```
+
+(`pip install kimeco[automech]` for a non-editable install.) Alternatively, with conda: `conda install autoio autochem -c auto-mech`.
+
+- The minimum Python version is 3.11 with or without the `automech` extra.
+- If you set `use_automech=true`, `mess_io` must be importable in **both** the run environment and the job (compute-node) environment; otherwise KiMecO cancels the run early with a message pointing to `pip install kimeco[automech]`.
+- If you set `use_automech=true`, **KiMecO itself (`kimeco`) must also be importable in the job (compute-node) environment**, not only in the run environment: the emitted per-PES driver imports `kimeco.readers.mess_output.MessOutputReader` to decide whether MESS pass 2 is needed. The import is side-effect-free (no database connection), but the compute node must be able to resolve KiMecO's dependency chain. In practice, install KiMecO (with the `automech` extra) in the same environment the jobs activate.

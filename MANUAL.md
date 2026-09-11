@@ -15,7 +15,7 @@ These instructions are written for users who are not familiar with command-line 
 Using a dedicated environment avoids conflicts with other Python projects.
 
 ```bash
-conda create -n kimeco -c conda-forge python=3.10 -y
+conda create -n kimeco -c conda-forge python=3.11 -y
 conda activate kimeco
 ```
 
@@ -77,6 +77,22 @@ Once copied there, the MESS executables are available from the active conda envi
 ```bash
 which mess
 ```
+
+### 6) automech dependency (optional)
+
+`automech` is an **optional** dependency needed only when you enable the two-pass MESS WellExtension path with `use_automech=true`. It provides `mess_io` (from `autoio`) and `phydat` (from `autochem`). When `use_automech=false` (the default), automech is not imported and does not need to be installed.
+
+To install KiMecO together with the automech dependencies, from the repository root run:
+
+```bash
+pip install -e .[automech]
+```
+
+(`pip install kimeco[automech]` for a non-editable install.) Alternatively, with conda: `conda install autoio autochem -c auto-mech`.
+
+- The minimum Python version is 3.11 with or without the `automech` extra.
+- If you set `use_automech=true`, `mess_io` must be importable in **both** the run environment and the job (compute-node) environment; otherwise KiMecO cancels the run early with a message pointing to `pip install kimeco[automech]`.
+- If you set `use_automech=true`, **KiMecO itself (`kimeco`) must also be importable in the job (compute-node) environment**: the emitted per-PES driver imports `kimeco.readers.mess_output.MessOutputReader` to decide whether MESS pass 2 is needed. In practice, install KiMecO (with the `automech` extra) in the same environment the jobs activate.
 
 ## Getting started
 
@@ -514,7 +530,7 @@ These settings are still part of default_settings and therefore can appear in ru
 | project_name | "KMO_Project" | Work directory/project folder name. |
 | log_level | 20 (INFO) | Logging verbosity. |
 | rc_software | "mess" | Master equation software backend selector. Currently the only other supported Master Equation backend. |
-| use_automech | false | Optional rate-coefficient path. When false, KiMecO runs the standard single-pass MESS. When true, KiMecO emits a per-PES Python driver that uses automech's `mess_io` API to run MESS pass 1 and then checks the pass-1 output for well merging (missing rate coefficients); the extended pass 2 with automatic WellExtension well-lumping is run **only when well merging is detected**, otherwise the pass-1 result is kept as the final output. Requires `automech` (`autoio`/`mess_io`) installed in both the run and job environments; the run is cancelled early with a clear message if it is missing. The emitted driver also imports KiMecO itself, so `kimeco` must be importable in the job (compute-node) environment too. In the `kmo_start` GUI this appears under the "Rate Coefficients" category. |
+| use_automech | false | Optional rate-coefficient path. When false, KiMecO runs the standard single-pass MESS. When true, KiMecO emits a per-PES Python driver that uses automech's `mess_io` API to run MESS pass 1 and then checks the pass-1 output for well merging (missing rate coefficients); the extended pass 2 with automatic WellExtension well-lumping is run **only when well merging is detected**, otherwise the pass-1 result is kept as the final output. Requires `automech` (`autoio`/`mess_io`) installed in both the run and job environments, e.g. via `pip install kimeco[automech]` (or `pip install -e .[automech]` from source); the run is cancelled early with a clear message if it is missing. The emitted driver also imports KiMecO itself, so `kimeco` must be importable in the job (compute-node) environment too. In the `kmo_start` GUI this appears under the "Rate Coefficients" category. |
 | restart | "default" | Restart strategy for database/table handling. Only other possible value is "rescore". Will not produce new models but will rescore existing ones. Be sure you know what you're doing if changing this option. Backing up your databases ahead is recommended as the scores will be overwritten.|
 | db_user | current username | Database user name. |
 | db_host | "127.0.0.1" | Database host address. |

@@ -35,7 +35,7 @@ it locally. It additionally relies on the MESS master-equation code, which must 
 installed separately.
 
 > **Note**
-> KiMecO only works with Python >= 3.10.
+> KiMecO only works with Python >= 3.11.
 
 ### From GitHub
 
@@ -43,7 +43,7 @@ A dedicated conda environment is recommended to avoid conflicts with other Pytho
 projects:
 
 ```bash
-conda create -n kimeco -c conda-forge python=3.10 -y
+conda create -n kimeco -c conda-forge python=3.11 -y
 conda activate kimeco
 ```
 
@@ -58,6 +58,16 @@ and then, from within the KiMecO directory produced after cloning, type:
 ```bash
 pip install -e .
 ```
+
+To also enable the optional automech-driven MESS input path (`use_automech`),
+install the `automech` extra instead:
+
+```bash
+pip install -e .[automech]
+```
+
+(`pip install kimeco[automech]` for a non-editable install.) Alternatively, with
+conda: `conda install autoio autochem -c auto-mech`.
 
 You can verify the Python-side installation with:
 

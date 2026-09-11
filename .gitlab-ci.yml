@@ -23,7 +23,7 @@ installation:
     - mamba --version
     - conda config --set ssl_verify false
     - mkdir -p "$CI_PROJECT_DIR/.ci"
-    - mamba create -p "$CONDA_ENV_PATH" python=3.10 pip -y
+    - mamba create -p "$CONDA_ENV_PATH" python=3.11 pip -y
     - conda activate "$CONDA_ENV_PATH"
     - mamba install --file requirements.txt setuptools wheel -y
     - pip install --no-build-isolation --no-deps -e .

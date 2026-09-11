@@ -33,9 +33,10 @@ Classifier: Intended Audience :: Science/Research
 Classifier: Natural Language :: English
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
-Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Scientific/Engineering :: Chemistry
-Requires-Python: >=3.10.14
+Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: ase>=3.22.1
@@ -51,10 +52,19 @@ Requires-Dist: pint
 Requires-Dist: pyarrow>=14
 Provides-Extra: test
 Requires-Dist: pytest>=9.0.2; extra == "test"
-Provides-Extra: agentic
-Requires-Dist: anthropic>=0.69; extra == "agentic"
-Requires-Dist: pydantic>=2; extra == "agentic"
-Requires-Dist: pyyaml; extra == "agentic"
+Provides-Extra: automech
+Requires-Dist: autoio>=0.2026.0; extra == "automech"
+Requires-Dist: autochem<2.0.0,>=0.2025.0; extra == "automech"
+Requires-Dist: mako>=1.3.10; extra == "automech"
+Requires-Dist: more-itertools>=10.8.0; extra == "automech"
+Requires-Dist: networkx>=3.3; extra == "automech"
+Requires-Dist: pint>=0.25; extra == "automech"
+Requires-Dist: pyparsing>=3.2.5; extra == "automech"
+Requires-Dist: pyyaml>=6.0.3; extra == "automech"
+Requires-Dist: qcelemental>=0.29.0; extra == "automech"
+Requires-Dist: rdkit>=2025.9.1; extra == "automech"
+Requires-Dist: scipy>=1.12; extra == "automech"
+Requires-Dist: xarray>=2023.8; extra == "automech"
 Dynamic: author
 Dynamic: license-file
 Dynamic: maintainer
@@ -97,7 +107,7 @@ it locally. It additionally relies on the MESS master-equation code, which must 
 installed separately.
 
 > **Note**
-> KiMecO only works with Python >= 3.10.
+> KiMecO only works with Python >= 3.11.
 
 ### From GitHub
 
@@ -105,7 +115,7 @@ A dedicated conda environment is recommended to avoid conflicts with other Pytho
 projects:
 
 ```bash
-conda create -n kimeco -c conda-forge python=3.10 -y
+conda create -n kimeco -c conda-forge python=3.11 -y
 conda activate kimeco
 ```
 
@@ -120,6 +130,16 @@ and then, from within the KiMecO directory produced after cloning, type:
 ```bash
 pip install -e .
 ```
+
+To also enable the optional automech-driven MESS input path (`use_automech`),
+install the `automech` extra instead:
+
+```bash
+pip install -e .[automech]
+```
+
+(`pip install kimeco[automech]` for a non-editable install.) Alternatively, with
+conda: `conda install autoio autochem -c auto-mech`.
 
 You can verify the Python-side installation with:
 

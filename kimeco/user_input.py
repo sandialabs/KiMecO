@@ -680,9 +680,10 @@ class KMOInput:
             self.klog.warning(
                 "'use_automech' is enabled but the required automech "
                 "symbols could not be imported: "
-                f"{exc}. Install/expose the automech 'mess_io' (autoio) and "
-                "'phydat' (autochem) packages on this environment or set "
-                "'use_automech' to false."
+                f"{exc}. Install the automech optional dependencies with "
+                "'pip install kimeco[automech]' (provides 'mess_io' from "
+                "autoio and 'phydat' from autochem) or set 'use_automech' "
+                "to false."
             )
             self.cancel_run = True
 

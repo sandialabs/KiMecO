@@ -1,5 +1,4 @@
 LICENSES
-agentic_pipeline
 conda-recipes
 example
 graphics
