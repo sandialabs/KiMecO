@@ -77,10 +77,13 @@ Starting from a fresh environment, the complete automech-enabled sequence is:
 ```bash
 conda create -n kimeco -c conda-forge python=3.11 pip -y
 conda activate kimeco
+conda install -c auto-mech mess-static -y
 pip install "autoio @ git+https://github.com/Auto-Mech/autoio@0.2026.0" "autochem @ git+https://github.com/Auto-Mech/autochem@0.2026.3"
 pip install -e .[automech]
 python -c "import mess_io, phydat, kimeco"
 ```
+
+Run `which mess` afterwards to confirm the MESS binary resolves inside the environment.
 
 You can verify the Python-side installation with:
 
@@ -100,13 +103,22 @@ pip install --no-build-isolation --no-deps -e .
 ### MESS dependency (required)
 
 KiMecO relies on [MESS](https://github.com/Auto-Mech/MESS) for master-equation
-calculations. Build or obtain the static MESS binaries separately, then copy them
+calculations. The recommended route is the pre-built static binary package from
+the `auto-mech` conda channel; with the environment activated, run:
+
+```bash
+conda install -c auto-mech mess-static -y
+```
+
+As a fallback, build or obtain the static MESS binaries separately and copy them
 into the conda environment binary directory (on Linux, typically `$CONDA_PREFIX/bin`).
 You can check whether MESS is available with:
 
 ```bash
 which mess
 ```
+
+It must print a path inside the active environment (e.g. `.../envs/kimeco/bin/mess`).
 
 ## How to Run
 

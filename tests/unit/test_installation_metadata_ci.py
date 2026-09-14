@@ -12,12 +12,20 @@ pipeline was removed from the package:
 * the documented installation procedure (README, MANUAL, wiki) matches the
   declared extras and python floor;
 * README, MANUAL and wiki all carry the same fresh-environment automech
-  recipe (conda env, git+ pre-install of autoio/autochem, ``[automech]``,
-  verification import), MANUAL/wiki mention ``[automech,test]``, and the
-  git+ refs match the ones the CI ``test-automech-extra`` job installs;
+  recipe (conda env, ``mess-static`` from the auto-mech channel, git+
+  pre-install of autoio/autochem, ``[automech]``, verification import),
+  MANUAL/wiki mention ``[automech,test]``, and the git+ refs match the ones
+  the CI ``test-automech-extra`` job installs;
+* README, MANUAL and wiki document the MESS binary route
+  (``conda install -c auto-mech mess-static -y`` + a ``which mess`` check
+  that must resolve inside the active environment), MANUAL and wiki keep
+  their MESS section identical, and the fresh-env lead sentence says the
+  recipe replaces the MESS step too;
 * ``.github/workflows/tests.yml`` has a job installing ``[automech,test]``
-  with ``KIMECO_REQUIRE_EXTRAS`` set, and ``hooks/run_tests.sh`` looks for
-  the documented ``kimeco`` / ``kmo`` conda envs;
+  with ``KIMECO_REQUIRE_EXTRAS`` set, a ``test-mess-binary`` job installing
+  ``mess-static`` with ``KIMECO_REQUIRE_MESS`` set, and
+  ``hooks/run_tests.sh`` looks for the documented ``kimeco`` / ``kmo`` conda
+  envs;
 * the ``use_automech`` guard points users to ``kimeco[automech]``.
 
 Only the standard library plus ``packaging`` (a setuptools/pip dependency,
@@ -85,17 +93,25 @@ FORBIDDEN_TOKENS = ("anthropic", "pydantic", "agentic")
 # Fresh-environment automech recipe that README, MANUAL and the wiki must all
 # carry in a single fenced block (one regex per line, matched in order).
 # The `conda create` line tolerates extra packages (e.g. `pip`) before `-y`.
+# Line index 2 is the MESS binary (mess-static from the auto-mech channel).
 GIT_PREINSTALL_RE = (
     r'pip install "autoio @ git\+https://github\.com/Auto-Mech/autoio@[^"]+" '
     r'"autochem @ git\+https://github\.com/Auto-Mech/autochem@[^"]+"')
+MESS_STATIC_INSTALL = "conda install -c auto-mech mess-static -y"
+MESS_STATIC_INSTALL_RE = re.escape(MESS_STATIC_INSTALL)
+MESS_RECIPE_INDEX = 2
 FRESH_ENV_RECIPE_RES = (
     r"conda create -n kimeco -c conda-forge python=3\.11(?: \S+)* -y",
     r"conda activate kimeco",
+    MESS_STATIC_INSTALL_RE,
     GIT_PREINSTALL_RE,
     r"pip install -e \.\[automech\]",
     r'python -c "import mess_io, phydat, kimeco"',
 )
 REQUIRE_EXTRAS_ENV = "KIMECO_REQUIRE_EXTRAS"
+REQUIRE_MESS_ENV = "KIMECO_REQUIRE_MESS"
+WHICH_MESS = "which mess"
+MESS_SECTION_TITLE = "5) MESS dependency (required)"
 
 
 # ---------------------------------------------------------------------------
@@ -328,9 +344,9 @@ def test_docs_extras_exist_in_pyproject(doc: Path) -> None:
 @pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
 def test_docs_fresh_env_recipe_in_one_fenced_block(doc: Path) -> None:
     """Each installation document carries the complete fresh-env automech
-    sequence (create env, activate, git+ pre-install of autoio/autochem,
-    editable install with [automech], verification import) as ONE fenced
-    block, in that order."""
+    sequence (create env, activate, mess-static from auto-mech, git+
+    pre-install of autoio/autochem, editable install with [automech],
+    verification import) as ONE fenced block, in that order."""
     blocks = _fresh_env_recipe_blocks(doc)
     assert len(blocks) == 1, (
         f"{doc.relative_to(REPO)}: expected exactly one fenced block with "
@@ -378,6 +394,166 @@ def test_docs_and_ci_pin_same_autoio_autochem_refs() -> None:
             refs[name] |= found
     for name, found in refs.items():
         assert len(found) == 1, f"{name} pinned to several refs: {found}"
+
+
+# ---------------------------------------------------------------------------
+# Standard cases: MESS binary route documented (mess-static + which mess)
+# ---------------------------------------------------------------------------
+def _markdown_section(path: Path, title: str) -> tuple[int, str]:
+    """Return (heading level, body) of the ``#..# <title>`` section, where
+    the body runs until the next heading of the same or a higher level."""
+    text = path.read_text(encoding="utf-8")
+    match = re.search(rf"^(#+) {re.escape(title)}\s*$", text, flags=re.M)
+    assert match, f"{path.name}: section {title!r} not found"
+    level = len(match.group(1))
+    rest = text[match.end():]
+    nxt = re.search(rf"^#{{1,{level}}} ", rest, flags=re.M)
+    body = rest[:nxt.start()] if nxt else rest
+    return level, body.strip("\n")
+
+
+@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
+def test_docs_document_mess_static_install_and_which_check(doc: Path) -> None:
+    """Every installation document shows the exact mess-static install line
+    as a fenced command, a fenced block whose body is exactly ``which mess``,
+    and says the path must be inside the active environment."""
+    blocks = [b.strip("\n") for b in _fenced_block_list(doc)]
+    fenced_lines = [ln.rstrip() for b in blocks for ln in b.splitlines()]
+    assert fenced_lines.count(MESS_STATIC_INSTALL) >= 1, (
+        f"{doc.relative_to(REPO)}: fenced code lacks {MESS_STATIC_INSTALL!r}")
+    assert MESS_STATIC_INSTALL in blocks, (
+        f"{doc.relative_to(REPO)}: no fenced block consisting only of "
+        f"{MESS_STATIC_INSTALL!r} (the standalone MESS step)")
+    assert blocks.count(WHICH_MESS) == 1, (
+        f"{doc.relative_to(REPO)}: expected exactly one fenced block whose "
+        f"body is exactly {WHICH_MESS!r}; got {blocks.count(WHICH_MESS)}")
+    text = doc.read_text(encoding="utf-8")
+    assert "inside the active environment" in text, (
+        f"{doc.relative_to(REPO)}: must state that `which mess` prints a "
+        "path inside the active environment")
+    which_idx = text.index("```bash\n" + WHICH_MESS + "\n```")
+    assert "inside the active environment" in text[which_idx:], (
+        f"{doc.relative_to(REPO)}: the 'inside the active environment' "
+        "sentence must follow the `which mess` block")
+    # No competing MESS install command (pip / other channel) in fenced code.
+    for line in fenced_lines:
+        if "mess-static" in line:
+            assert line == MESS_STATIC_INSTALL, line
+
+
+def test_manual_and_wiki_mess_section_identical() -> None:
+    """MANUAL and wiki are maintained in lock-step: the MESS section body is
+    identical (the heading level differs: ### in MANUAL, ## in the wiki)."""
+    manual_level, manual_body = _markdown_section(MANUAL, MESS_SECTION_TITLE)
+    wiki_level, wiki_body = _markdown_section(WIKI_INSTALL, MESS_SECTION_TITLE)
+    assert manual_level == 3 and wiki_level == 2, (manual_level, wiki_level)
+    assert manual_body == wiki_body
+    for needle in (MESS_STATIC_INSTALL, WHICH_MESS, "$CONDA_PREFIX/bin",
+                   "inside the active environment"):
+        assert needle in manual_body, f"MESS section lacks {needle!r}"
+
+
+@pytest.mark.parametrize("doc", (MANUAL, WIKI_INSTALL), ids=lambda p: p.name)
+def test_manual_wiki_recipe_lead_mentions_steps_2_and_5(doc: Path) -> None:
+    """The fresh-env recipe now includes the MESS step, so its lead sentence
+    must say it replaces steps 2 (install) AND 5 (MESS), and name MESS."""
+    lead = _recipe_with_lead_sentence(doc).splitlines()[0]
+    assert "replaces steps 2 and 5" in lead, lead
+    assert "install MESS" in lead, lead
+    assert "steps 2 and 6" not in lead and "step 2 above" not in lead, lead
+
+
+@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
+def test_docs_which_mess_follow_up_after_recipe(doc: Path) -> None:
+    """The prose after the fresh-env recipe tells the user to run
+    ``which mess`` and expects it inside the environment."""
+    text = doc.read_text(encoding="utf-8")
+    recipe = _fresh_env_recipe_blocks(doc)[0]
+    after = text[text.index(recipe) + len(recipe):]
+    assert re.search(r"Run `which mess` afterwards", after), (
+        f"{doc.relative_to(REPO)}: no `which mess` follow-up after the recipe")
+
+
+def test_mess_regex_is_recipe_index_2_and_lacks_autoio_tokens() -> None:
+    """Guard the recipe table itself: 6 lines, MESS at index 2 between
+    ``conda activate`` and the git+ pre-install, and the MESS regex matches
+    only the exact mess-static line (never the autoio/autochem conda form
+    that :func:`test_docs_preinstall_autoio_autochem_from_auto_mech`
+    recognises)."""
+    assert len(FRESH_ENV_RECIPE_RES) == 6
+    mess_re = FRESH_ENV_RECIPE_RES[MESS_RECIPE_INDEX]
+    assert re.fullmatch(mess_re, MESS_STATIC_INSTALL)
+    assert re.fullmatch(FRESH_ENV_RECIPE_RES[1], "conda activate kimeco")
+    assert FRESH_ENV_RECIPE_RES[MESS_RECIPE_INDEX + 1] == GIT_PREINSTALL_RE
+    for other in ("conda install autoio autochem -c auto-mech",
+                  "conda install -c auto-mech mess-static",
+                  "conda install -c auto-mech mess -y",
+                  "pip install mess-static",
+                  MESS_STATIC_INSTALL + " --force"):
+        assert not re.fullmatch(mess_re, other), other
+    assert "autoio" not in mess_re and "autochem" not in mess_re
+    # The mess-static line must not be mistaken for the autoio/autochem
+    # conda pre-install form used elsewhere in this module.
+    assert re.search(r"conda install .*autoio .*autochem .*-c auto-mech",
+                     MESS_STATIC_INSTALL) is None
+    for pattern in FRESH_ENV_RECIPE_RES:
+        if pattern is not mess_re:
+            assert not re.fullmatch(pattern, MESS_STATIC_INSTALL), pattern
+
+
+def test_tests_yml_has_mess_binary_job() -> None:
+    """CI proves the documented MESS route: a ``test-mess-binary`` job
+    creates a micromamba env from conda-forge + auto-mech with mess-static,
+    installs ``[automech,test]``, checks ``which mess`` is the env binary
+    and runs tests/unit with KIMECO_REQUIRE_MESS=1 (skips become failures)."""
+    tests_yml = TESTS_YML.read_text(encoding="utf-8")
+    job = re.search(r"^  test-mess-binary:\s*$(.*?)(?=^  \S|\Z)", tests_yml,
+                    flags=re.M | re.S)
+    assert job, "tests.yml: missing 'test-mess-binary' job"
+    body = job.group(1)
+    assert re.search(rf"{REQUIRE_MESS_ENV}:\s*[\"']?1[\"']?\s*$", body, flags=re.M), (
+        f"test-mess-binary must set {REQUIRE_MESS_ENV}=1")
+    assert re.search(rf"{REQUIRE_EXTRAS_ENV}:\s*automech,test\s*$", body,
+                     flags=re.M), body
+    assert "mamba-org/setup-micromamba@v2" in body
+    assert re.search(r"^\s+shell: bash -el \{0\}\s*$", body, flags=re.M), (
+        "micromamba activation needs a login shell (bash -el {0})")
+    assert re.search(r"python=\$\{\{ matrix\.python-version \}\}", body)
+    assert "mess-static" in body and "- auto-mech" in body and "- conda-forge" in body
+    assert "cache-environment: true" in body
+    assert "pip install -e .[automech,test]" in body
+    assert re.search(r"^\s+which mess\s*$", body, flags=re.M), (
+        "the job must run the documented `which mess` check")
+    assert 'test "$(which mess)" = "${CONDA_PREFIX}/bin/mess"' in body
+    assert re.search(r"pytest tests/unit/ -v", body)
+    # Ordering: env creation -> pip installs -> which mess -> pytest.
+    idx = [body.index(x) for x in ("setup-micromamba", "git+https://github.com/Auto-Mech/autoio@",
+                                   "pip install -e .[automech,test]", "which mess",
+                                   "pytest tests/unit/")]
+    assert idx == sorted(idx), "test-mess-binary steps are out of order"
+    # Same autoio/autochem refs as the automech job (checked globally too).
+    pins = _git_pins(body)
+    assert pins["autoio"] and pins["autochem"]
+    # This job installs MESS but must never run a real MESS input.
+    assert not re.search(r"^\s+run:.*\bmess\s+\S+\.inp", body, flags=re.M)
+    header = tests_yml[:tests_yml.index("jobs:")]
+    assert "test-mess-binary" in header and "never" in header, (
+        "header comment must explain the MESS job never runs a MESS input")
+
+    yaml = pytest.importorskip("yaml")
+    parsed = yaml.safe_load(tests_yml)
+    mess_job = parsed["jobs"]["test-mess-binary"]
+    assert mess_job["strategy"]["matrix"]["python-version"] == ["3.11", "3.12"]
+    assert str(mess_job["env"][REQUIRE_MESS_ENV]) == "1"
+    assert mess_job["env"][REQUIRE_EXTRAS_ENV] == "automech,test"
+    assert mess_job["defaults"]["run"]["shell"] == "bash -el {0}"
+    steps = mess_job["steps"]
+    mm = next(s for s in steps if s.get("uses", "").startswith("mamba-org/setup-micromamba@v2"))
+    assert mm["with"]["environment-name"] == "kimeco"
+    assert mm["with"]["cache-environment"] is True
+    create_args = mm["with"]["create-args"].split()
+    assert "pip" in create_args and "mess-static" in create_args
+    assert set(parsed["jobs"]) == {"test", "test-automech-extra", "test-mess-binary"}
 
 
 # ---------------------------------------------------------------------------

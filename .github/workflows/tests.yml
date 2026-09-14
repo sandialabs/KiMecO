@@ -2,7 +2,10 @@ name: Tests
 
 # Runs the unit test suite on every push and pull request so failures are
 # caught before code is merged. Only tests/unit/ is run here because tests
-# that depend on the external MESS binary cannot run in vanilla CI.
+# that depend on the external MESS binary cannot run in vanilla CI. The
+# test-mess-binary job installs MESS (mess-static from the auto-mech conda
+# channel, the documented route) and checks that `which mess` resolves inside
+# the environment, but it never runs a real MESS input.
 
 on:
   push:
@@ -83,4 +86,61 @@ jobs:
         run: python -c "import mess_io, phydat, kimeco"
 
       - name: Run unit tests with the automech extra required
+        run: pytest tests/unit/ -v
+
+  # Proves the documented MESS route: a micromamba env created from
+  # conda-forge + auto-mech with `mess-static`, then the same git+ pins and
+  # `.[automech,test]` install as test-automech-extra. `which mess` must be the
+  # environment's own binary, and KIMECO_REQUIRE_MESS=1 turns every "mess not
+  # installed" skip in tests/unit/ into a failure. Bare `mess` (usage only) is
+  # the sole MESS invocation; no MESS input is ever run.
+  test-mess-binary:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    env:
+      KIMECO_REQUIRE_EXTRAS: automech,test
+      KIMECO_REQUIRE_MESS: "1"
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up micromamba env with Python ${{ matrix.python-version }} and mess-static
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: kimeco
+          create-args: >-
+            python=${{ matrix.python-version }}
+            pip
+            mess-static
+          condarc: |
+            channels:
+              - conda-forge
+              - auto-mech
+          cache-environment: true
+          init-shell: bash
+
+      - name: Pre-install autoio and autochem from GitHub (not on PyPI)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "autoio @ git+https://github.com/Auto-Mech/autoio@0.2026.0" "autochem @ git+https://github.com/Auto-Mech/autochem@0.2026.3"
+
+      - name: Install package with automech and test extras
+        run: pip install -e .[automech,test]
+
+      - name: Verify the documented automech imports
+        run: python -c "import mess_io, phydat, kimeco"
+
+      - name: Verify the MESS binary resolves inside the environment
+        run: |
+          which mess
+          test "$(which mess)" = "${CONDA_PREFIX}/bin/mess"
+
+      - name: Run unit tests with the automech extra and MESS required
         run: pytest tests/unit/ -v
