@@ -15,7 +15,7 @@ These instructions are written for users who are not familiar with command-line 
 Using a dedicated environment avoids conflicts with other Python projects.
 
 ```bash
-conda create -n kimeco -c conda-forge python=3.11 -y
+conda create -n kimeco -c conda-forge python=3.11 pip -y
 conda activate kimeco
 ```
 
@@ -82,13 +82,26 @@ which mess
 
 `automech` is an **optional** dependency needed only when you enable the two-pass MESS WellExtension path with `use_automech=true`. It provides `mess_io` (from `autoio`) and `phydat` (from `autochem`). When `use_automech=false` (the default), automech is not imported and does not need to be installed.
 
-To install KiMecO together with the automech dependencies, from the repository root run:
+To install KiMecO together with the automech dependencies, from the repository root run (`autoio` and `autochem` are not published on PyPI, so they are installed from GitHub first):
 
 ```bash
+pip install "autoio @ git+https://github.com/Auto-Mech/autoio@0.2026.0" "autochem @ git+https://github.com/Auto-Mech/autochem@0.2026.3"
 pip install -e .[automech]
 ```
 
-(`pip install kimeco[automech]` for a non-editable install.) Alternatively, with conda: `conda install autoio autochem -c auto-mech`.
+(`pip install kimeco[automech]` for a non-editable install, after the same `autoio`/`autochem` pre-install.) Alternatively, with conda: `conda install autoio autochem -c auto-mech`.
+
+If you are starting from a fresh environment, the following sequence replaces step 2 above (create the environment, install `autoio`/`autochem` from GitHub — they are not published on PyPI — then install KiMecO with the automech extra):
+
+```bash
+conda create -n kimeco -c conda-forge python=3.11 pip -y
+conda activate kimeco
+pip install "autoio @ git+https://github.com/Auto-Mech/autoio@0.2026.0" "autochem @ git+https://github.com/Auto-Mech/autochem@0.2026.3"
+pip install -e .[automech]
+python -c "import mess_io, phydat, kimeco"
+```
+
+The last command prints nothing when the automech dependencies are importable. Developers who also want the git hooks / `pytest` can use `pip install -e .[automech,test]` instead.
 
 - The minimum Python version is 3.11 with or without the `automech` extra.
 - If you set `use_automech=true`, `mess_io` must be importable in **both** the run environment and the job (compute-node) environment; otherwise KiMecO cancels the run early with a message pointing to `pip install kimeco[automech]`.
@@ -530,7 +543,7 @@ These settings are still part of default_settings and therefore can appear in ru
 | project_name | "KMO_Project" | Work directory/project folder name. |
 | log_level | 20 (INFO) | Logging verbosity. |
 | rc_software | "mess" | Master equation software backend selector. Currently the only other supported Master Equation backend. |
-| use_automech | false | Optional rate-coefficient path. When false, KiMecO runs the standard single-pass MESS. When true, KiMecO emits a per-PES Python driver that uses automech's `mess_io` API to run MESS pass 1 and then checks the pass-1 output for well merging (missing rate coefficients); the extended pass 2 with automatic WellExtension well-lumping is run **only when well merging is detected**, otherwise the pass-1 result is kept as the final output. Requires `automech` (`autoio`/`mess_io`) installed in both the run and job environments, e.g. via `pip install kimeco[automech]` (or `pip install -e .[automech]` from source); the run is cancelled early with a clear message if it is missing. The emitted driver also imports KiMecO itself, so `kimeco` must be importable in the job (compute-node) environment too. In the `kmo_start` GUI this appears under the "Rate Coefficients" category. |
+| use_automech | false | Optional rate-coefficient path. When false, KiMecO runs the standard single-pass MESS. When true, KiMecO emits a per-PES Python driver that uses automech's `mess_io` API to run MESS pass 1 and then checks the pass-1 output for well merging (missing rate coefficients); the extended pass 2 with automatic WellExtension well-lumping is run **only when well merging is detected**, otherwise the pass-1 result is kept as the final output. Requires `automech` (`autoio`/`mess_io`) installed in both the run and job environments, e.g. via `pip install kimeco[automech]` (or `pip install -e .[automech]` from source) after pre-installing `autoio`/`autochem` from GitHub as described in the installation instructions, since they are not published on PyPI; the run is cancelled early with a clear message if it is missing. The emitted driver also imports KiMecO itself, so `kimeco` must be importable in the job (compute-node) environment too. In the `kmo_start` GUI this appears under the "Rate Coefficients" category. |
 | restart | "default" | Restart strategy for database/table handling. Only other possible value is "rescore". Will not produce new models but will rescore existing ones. Be sure you know what you're doing if changing this option. Backing up your databases ahead is recommended as the scores will be overwritten.|
 | db_user | current username | Database user name. |
 | db_host | "127.0.0.1" | Database host address. |

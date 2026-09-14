@@ -11,6 +11,13 @@ pipeline was removed from the package:
 * no agentic / anthropic / pydantic dependency remains in any packaging file;
 * the documented installation procedure (README, MANUAL, wiki) matches the
   declared extras and python floor;
+* README, MANUAL and wiki all carry the same fresh-environment automech
+  recipe (conda env, git+ pre-install of autoio/autochem, ``[automech]``,
+  verification import), MANUAL/wiki mention ``[automech,test]``, and the
+  git+ refs match the ones the CI ``test-automech-extra`` job installs;
+* ``.github/workflows/tests.yml`` has a job installing ``[automech,test]``
+  with ``KIMECO_REQUIRE_EXTRAS`` set, and ``hooks/run_tests.sh`` looks for
+  the documented ``kimeco`` / ``kmo`` conda envs;
 * the ``use_automech`` guard points users to ``kimeco[automech]``.
 
 Only the standard library plus ``packaging`` (a setuptools/pip dependency,
@@ -53,16 +60,19 @@ README = REPO / "README.md"
 MANUAL = REPO / "MANUAL.md"
 WIKI_INSTALL = REPO / "wiki" / "Installation-from-Source.md"
 DOC_FILES = (README, MANUAL, WIKI_INSTALL)
+RUN_TESTS_SH = REPO / "hooks" / "run_tests.sh"
 
 EXPECTED_EXTRAS = {"test", "automech"}
 EXPECTED_PYTHON_FLOOR = ">=3.11"
 EXPECTED_AUTOMECH = [
     "autoio>=0.2026.0",
     "autochem>=0.2025.0,<2.0.0",
+    "ipython>=8.0",
     "mako>=1.3.10",
     "more-itertools>=10.8.0",
     "networkx>=3.3",
     "pint>=0.25",
+    "py3dmol>=2.0",
     "pyparsing>=3.2.5",
     "pyyaml>=6.0.3",
     "qcelemental>=0.29.0",
@@ -71,6 +81,21 @@ EXPECTED_AUTOMECH = [
     "xarray>=2023.8",
 ]
 FORBIDDEN_TOKENS = ("anthropic", "pydantic", "agentic")
+
+# Fresh-environment automech recipe that README, MANUAL and the wiki must all
+# carry in a single fenced block (one regex per line, matched in order).
+# The `conda create` line tolerates extra packages (e.g. `pip`) before `-y`.
+GIT_PREINSTALL_RE = (
+    r'pip install "autoio @ git\+https://github\.com/Auto-Mech/autoio@[^"]+" '
+    r'"autochem @ git\+https://github\.com/Auto-Mech/autochem@[^"]+"')
+FRESH_ENV_RECIPE_RES = (
+    r"conda create -n kimeco -c conda-forge python=3\.11(?: \S+)* -y",
+    r"conda activate kimeco",
+    GIT_PREINSTALL_RE,
+    r"pip install -e \.\[automech\]",
+    r'python -c "import mess_io, phydat, kimeco"',
+)
+REQUIRE_EXTRAS_ENV = "KIMECO_REQUIRE_EXTRAS"
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +150,45 @@ def _pip_install_extras(text: str) -> set[str]:
 def _is_ci() -> bool:
     import os
     return bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
+
+
+def _fenced_block_list(path: Path) -> list[str]:
+    """Return the body of every fenced code block, in document order."""
+    text = path.read_text(encoding="utf-8")
+    return re.findall(r"```[^\n]*\n(.*?)```", text, flags=re.DOTALL)
+
+
+def _block_matches_recipe(block: str) -> bool:
+    lines = [ln.rstrip() for ln in block.strip("\n").splitlines()]
+    if len(lines) != len(FRESH_ENV_RECIPE_RES):
+        return False
+    return all(re.fullmatch(pattern, line)
+               for pattern, line in zip(FRESH_ENV_RECIPE_RES, lines))
+
+
+def _fresh_env_recipe_blocks(path: Path) -> list[str]:
+    return [b for b in _fenced_block_list(path) if _block_matches_recipe(b)]
+
+
+def _recipe_with_lead_sentence(path: Path) -> str:
+    """The fresh-env fenced block plus the prose line right before it."""
+    text = path.read_text(encoding="utf-8")
+    for match in re.finditer(r"```[^\n]*\n(.*?)```", text, flags=re.DOTALL):
+        if _block_matches_recipe(match.group(1)):
+            before = text[:match.start()].rstrip("\n").splitlines()
+            lead = before[-1] if before else ""
+            return lead + "\n" + match.group(1)
+    raise AssertionError(f"{path.name}: fresh-env recipe block not found")
+
+
+def _git_pins(text: str) -> dict[str, set[str]]:
+    """Map autoio/autochem -> set of git refs pinned via git+...Auto-Mech/."""
+    out: dict[str, set[str]] = {"autoio": set(), "autochem": set()}
+    for name, ref in re.findall(
+            r"git\+https://github\.com/Auto-Mech/(autoio|autochem)@([^\s\"']+)",
+            text):
+        out[name].add(ref)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +320,119 @@ def test_docs_extras_exist_in_pyproject(doc: Path) -> None:
         f"{doc.relative_to(REPO)} references undeclared extras {unknown}")
     assert "automech" in referenced, (
         f"{doc.relative_to(REPO)} does not document the [automech] extra")
+
+
+# ---------------------------------------------------------------------------
+# Standard cases: fresh-environment automech recipe in the docs
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
+def test_docs_fresh_env_recipe_in_one_fenced_block(doc: Path) -> None:
+    """Each installation document carries the complete fresh-env automech
+    sequence (create env, activate, git+ pre-install of autoio/autochem,
+    editable install with [automech], verification import) as ONE fenced
+    block, in that order."""
+    blocks = _fresh_env_recipe_blocks(doc)
+    assert len(blocks) == 1, (
+        f"{doc.relative_to(REPO)}: expected exactly one fenced block with "
+        f"the fresh-env recipe, found {len(blocks)}")
+
+
+def test_manual_and_wiki_fresh_env_recipe_identical() -> None:
+    """MANUAL and wiki are maintained in lock-step: the fresh-env fenced
+    block and the sentence introducing it must be line-identical."""
+    assert (_recipe_with_lead_sentence(MANUAL)
+            == _recipe_with_lead_sentence(WIKI_INSTALL))
+
+
+@pytest.mark.parametrize("doc", (MANUAL, WIKI_INSTALL), ids=lambda p: p.name)
+def test_docs_mention_combined_automech_test_extra(doc: Path) -> None:
+    text = doc.read_text(encoding="utf-8")
+    assert "pip install -e .[automech,test]" in text, (
+        f"{doc.relative_to(REPO)} must document 'pip install -e "
+        ".[automech,test]' for developers")
+
+
+@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
+def test_docs_preinstall_autoio_autochem_from_auto_mech(doc: Path) -> None:
+    """autoio/autochem are not on PyPI: the automech instructions must
+    pre-install them from GitHub (git+.../Auto-Mech/) and/or the auto-mech
+    conda channel, and the fresh-env block must use the git+ form."""
+    code = _fenced_code_blocks(doc)
+    pins = _git_pins(code)
+    conda_channel = re.search(r"conda install .*autoio .*autochem .*-c auto-mech",
+                              code) is not None
+    assert (pins["autoio"] and pins["autochem"]) or conda_channel, (
+        f"{doc.relative_to(REPO)}: no git+…Auto-Mech/ or -c auto-mech "
+        "pre-install of autoio/autochem")
+    recipe = _fresh_env_recipe_blocks(doc)[0]
+    recipe_pins = _git_pins(recipe)
+    assert recipe_pins["autoio"] and recipe_pins["autochem"]
+
+
+def test_docs_and_ci_pin_same_autoio_autochem_refs() -> None:
+    """Every git+ pin of autoio/autochem (docs and tests.yml) uses the same
+    ref, so CI exercises exactly what the docs tell users to install."""
+    refs = {"autoio": set(), "autochem": set()}
+    for path in (*DOC_FILES, TESTS_YML):
+        for name, found in _git_pins(path.read_text(encoding="utf-8")).items():
+            refs[name] |= found
+    for name, found in refs.items():
+        assert len(found) == 1, f"{name} pinned to several refs: {found}"
+
+
+# ---------------------------------------------------------------------------
+# Standard cases: CI proves the automech extra installs
+# ---------------------------------------------------------------------------
+def test_tests_yml_has_automech_extra_job() -> None:
+    tests_yml = TESTS_YML.read_text(encoding="utf-8")
+    assert re.search(r"^  test-automech-extra:\s*$", tests_yml, flags=re.M), (
+        "tests.yml: missing 'test-automech-extra' job")
+    install_lines = [ln.strip() for ln in tests_yml.splitlines()
+                     if "pip install" in ln and "-e" in ln]
+    assert any(re.search(r"pip install -e \.\[automech,test\]", ln)
+               for ln in install_lines), install_lines
+    # KIMECO_REQUIRE_EXTRAS turns automech skips into failures in that job.
+    match = re.search(rf"{REQUIRE_EXTRAS_ENV}:\s*([^\n#]+)", tests_yml)
+    assert match, f"tests.yml does not set {REQUIRE_EXTRAS_ENV}"
+    required = {x.strip().lower() for x in match.group(1).strip().strip('"\'').split(",")}
+    assert required == {"automech", "test"}, required
+    # autoio/autochem are pre-installed from GitHub before the extra.
+    pins = _git_pins(tests_yml)
+    assert pins["autoio"] and pins["autochem"], (
+        "tests.yml: automech job must pre-install autoio/autochem via git+")
+    git_idx = tests_yml.index("git+https://github.com/Auto-Mech/autoio@")
+    extra_idx = tests_yml.index("pip install -e .[automech,test]")
+    assert git_idx < extra_idx, "git+ pre-install must precede the extra"
+
+
+def test_tests_yml_base_job_still_installs_test_extra_only() -> None:
+    """The first job keeps proving the base install without automech."""
+    tests_yml = TESTS_YML.read_text(encoding="utf-8")
+    assert re.search(r"pip install -e \.\[test\]\s*$", tests_yml, flags=re.M)
+
+
+def test_tests_yml_every_python_matrix_is_311_and_312() -> None:
+    tests_yml = TESTS_YML.read_text(encoding="utf-8")
+    matrices = re.findall(r"python-version:\s*\[([^\]]*)\]", tests_yml)
+    assert len(matrices) >= 2, "tests.yml: expected a matrix per job"
+    for raw in matrices:
+        matrix = [v.strip().strip('"\'') for v in raw.split(",")]
+        assert matrix == ["3.11", "3.12"], matrix
+
+
+# ---------------------------------------------------------------------------
+# Standard case: the git hook looks for the documented env names
+# ---------------------------------------------------------------------------
+def test_run_tests_hook_candidates_include_kimeco_and_kmo() -> None:
+    text = RUN_TESTS_SH.read_text(encoding="utf-8")
+    match = re.search(r"^CANDIDATES=\((.*)\)\s*$", text, flags=re.M)
+    assert match, "hooks/run_tests.sh: CANDIDATES=(...) not found"
+    tokens = match.group(1).split()
+    assert "kimeco" in tokens, tokens
+    assert "kmo" in tokens, tokens
+    assert "game" not in tokens, tokens
+    # KIMECO_HOOK_ENV (when set) must be tried before the defaults.
+    assert tokens[0].startswith("${KIMECO_HOOK_ENV"), tokens
 
 
 # ---------------------------------------------------------------------------

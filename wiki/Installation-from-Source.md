@@ -7,7 +7,7 @@ These instructions are written for users who are not familiar with command-line 
 Using a dedicated environment avoids conflicts with other Python projects.
 
 ```bash
-conda create -n kimeco -c conda-forge python=3.11 -y
+conda create -n kimeco -c conda-forge python=3.11 pip -y
 conda activate kimeco
 ```
 
@@ -74,13 +74,26 @@ which mess
 
 `automech` is an **optional** dependency needed only when you enable the two-pass MESS WellExtension path with `use_automech=true`. It provides `mess_io` (from `autoio`) and `phydat` (from `autochem`). When `use_automech=false` (the default), automech is not imported and does not need to be installed.
 
-To install KiMecO together with the automech dependencies, from the repository root run:
+To install KiMecO together with the automech dependencies, from the repository root run (`autoio` and `autochem` are not published on PyPI, so they are installed from GitHub first):
 
 ```bash
+pip install "autoio @ git+https://github.com/Auto-Mech/autoio@0.2026.0" "autochem @ git+https://github.com/Auto-Mech/autochem@0.2026.3"
 pip install -e .[automech]
 ```
 
-(`pip install kimeco[automech]` for a non-editable install.) Alternatively, with conda: `conda install autoio autochem -c auto-mech`.
+(`pip install kimeco[automech]` for a non-editable install, after the same `autoio`/`autochem` pre-install.) Alternatively, with conda: `conda install autoio autochem -c auto-mech`.
+
+If you are starting from a fresh environment, the following sequence replaces step 2 above (create the environment, install `autoio`/`autochem` from GitHub — they are not published on PyPI — then install KiMecO with the automech extra):
+
+```bash
+conda create -n kimeco -c conda-forge python=3.11 pip -y
+conda activate kimeco
+pip install "autoio @ git+https://github.com/Auto-Mech/autoio@0.2026.0" "autochem @ git+https://github.com/Auto-Mech/autochem@0.2026.3"
+pip install -e .[automech]
+python -c "import mess_io, phydat, kimeco"
+```
+
+The last command prints nothing when the automech dependencies are importable. Developers who also want the git hooks / `pytest` can use `pip install -e .[automech,test]` instead.
 
 - The minimum Python version is 3.11 with or without the `automech` extra.
 - If you set `use_automech=true`, `mess_io` must be importable in **both** the run environment and the job (compute-node) environment; otherwise KiMecO cancels the run early with a message pointing to `pip install kimeco[automech]`.

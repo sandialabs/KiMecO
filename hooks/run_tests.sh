@@ -26,7 +26,7 @@ py_desc() { "$@" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))
 # Candidate conda envs, first usable one wins: KIMECO_HOOK_ENV (if set), then
 # the project defaults. Envs are located via `conda` when it is on PATH, or
 # directly under ~/.conda/envs (IDE git hooks often run without conda on PATH).
-CANDIDATES=(${KIMECO_HOOK_ENV:+"${KIMECO_HOOK_ENV}"} game automech)
+CANDIDATES=(${KIMECO_HOOK_ENV:+"${KIMECO_HOOK_ENV}"} kmo kimeco automech)
 PYTHON=()
 CHOSEN=""
 TRIED=()

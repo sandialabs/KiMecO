@@ -43,7 +43,7 @@ A dedicated conda environment is recommended to avoid conflicts with other Pytho
 projects:
 
 ```bash
-conda create -n kimeco -c conda-forge python=3.11 -y
+conda create -n kimeco -c conda-forge python=3.11 pip -y
 conda activate kimeco
 ```
 
@@ -60,19 +60,33 @@ pip install -e .
 ```
 
 To also enable the optional automech-driven MESS input path (`use_automech`),
-install the `automech` extra instead:
+install the `automech` extra instead (`autoio` and `autochem` are not published on
+PyPI, so they are installed from GitHub first):
 
 ```bash
+pip install "autoio @ git+https://github.com/Auto-Mech/autoio@0.2026.0" "autochem @ git+https://github.com/Auto-Mech/autochem@0.2026.3"
 pip install -e .[automech]
 ```
 
-(`pip install kimeco[automech]` for a non-editable install.) Alternatively, with
-conda: `conda install autoio autochem -c auto-mech`.
+(`pip install kimeco[automech]` for a non-editable install, after the same
+`autoio`/`autochem` pre-install.) Alternatively, with conda:
+`conda install autoio autochem -c auto-mech`.
+
+Starting from a fresh environment, the complete automech-enabled sequence is:
+
+```bash
+conda create -n kimeco -c conda-forge python=3.11 pip -y
+conda activate kimeco
+pip install "autoio @ git+https://github.com/Auto-Mech/autoio@0.2026.0" "autochem @ git+https://github.com/Auto-Mech/autochem@0.2026.3"
+pip install -e .[automech]
+python -c "import mess_io, phydat, kimeco"
+```
 
 You can verify the Python-side installation with:
 
 ```bash
 which kmo
+python -c "import mess_io, phydat, kimeco"   # only if you installed the automech extra
 ```
 
 ### Faster dependency solving with mamba (optional)

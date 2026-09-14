@@ -111,6 +111,8 @@ tests/unit/test_ga_run_sensitivity_ci.py
 tests/unit/test_goat_get_goat_for_gen_ci.py
 tests/unit/test_goat_get_p_for_gen_ci.py
 tests/unit/test_goat_param_values_ci.py
+tests/unit/test_installation_imports_ci.py
+tests/unit/test_installation_metadata_ci.py
 tests/unit/test_kimeco_set_important_parameters_ci.py
 tests/unit/test_kin_db_batch_select_ci.py
 tests/unit/test_kinmec_get_reaction_eq_ci.py
