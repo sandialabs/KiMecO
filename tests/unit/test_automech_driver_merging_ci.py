@@ -95,13 +95,34 @@ def _emit(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Stub third-party modules so the emitted driver imports without automech.
 # ---------------------------------------------------------------------------
+#: Shaped like the real ``mess_io.writer.global_rates_input_v1`` output: the
+#: driver rewrites the hardcoded ``[atm]`` label to the payload unit, so the
+#: stub must contain that literal or the driver refuses to write the input.
+_GLOBKEY_ATM = (
+    '!===================================================\n'
+    '!  GLOBAL KEYWORDS\n'
+    '!===================================================\n'
+    'TemperatureList[K]                     500.0  1000.0\n'
+    'PressureList[atm]                      1.0  10.0\n'
+    '!\n'
+    'RateOutput                             ' + _OUT + '\n'
+)
+
+
 class _Recorder:
-    """Records every stubbed mess_io call by name."""
+    """Records every stubbed mess_io call by name.
+
+    Every stub returns a ``str``: the emitted driver does string surgery on
+    the global-keyword block, so a non-string return would blow up in the
+    driver rather than in the code under test.
+    """
 
     def __init__(self) -> None:
         self.calls: dict[str, list[tuple[Any, ...]]] = {}
 
     def fn(self, name: str, ret: str = ''):
+        assert isinstance(ret, str)
+
         def _stub(*args, **kwargs):
             self.calls.setdefault(name, []).append((args, kwargs))
             return ret
@@ -131,6 +152,8 @@ def _install_stubs(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
     setattr(writer_mod, '__getattr__', _writer_getattr)
     setattr(writer_mod, 'messrates_inp_str',
             rec.fn('messrates_inp_str', ret='BASE_INP\n'))
+    setattr(writer_mod, 'global_rates_input_v1',
+            rec.fn('global_rates_input_v1', ret=_GLOBKEY_ATM))
 
     mess_io = types.ModuleType('mess_io')
     setattr(mess_io, 'writer', writer_mod)
@@ -357,6 +380,35 @@ def test_pass1_globkey_requests_no_well_extension(
     _args, kwargs = rec.calls['global_rates_input_v1'][0]
     assert kwargs['well_extension'] is None
     assert kwargs['ktp_outname'] == _OUT
+
+
+def test_pass1_globkey_reaches_messrates_with_the_payload_unit(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """End to end in the driver: mess_io's ``[atm]`` never reaches the input.
+
+    ``global_rates_input_v1`` hardcodes ``PressureList[atm]``; the grid handed
+    to it is in bar, so the driver relabels the block before handing it to
+    ``messrates_inp_str``.
+    """
+    mod, rec, _fake = _run_driver(tmp_path, monkeypatch, [_HEALTHY_OUT])
+    args, _kwargs = rec.calls['messrates_inp_str'][0]
+    globkey = args[0]
+    assert 'PressureList[' + mod.PRES_UNIT + ']' in globkey
+    assert 'PressureList[atm]' not in globkey
+    assert 'atm' not in globkey
+    # Only the unit label changed; the rest of the mess_io block is intact.
+    assert globkey == _GLOBKEY_ATM.replace(
+        'PressureList[atm]', 'PressureList[' + mod.PRES_UNIT + ']')
+
+
+def test_pass1_globkey_pressures_are_the_unconverted_payload_grid(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The numbers sent to mess_io are the payload grid, in bar."""
+    mod, rec, _fake = _run_driver(tmp_path, monkeypatch, [_HEALTHY_OUT])
+    _args, kwargs = rec.calls['global_rates_input_v1'][0]
+    assert kwargs['pressures'] == mod.PES_PAYLOAD['grid_pres']
+    assert kwargs['pressures'] == [1.0, 10.0]
+    assert mod.LUMP_PRESSURE == 10.0
 
 
 # ---------------------------------------------------------------------------

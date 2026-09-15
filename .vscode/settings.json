@@ -1,5 +1,5 @@
 {
-  "python.defaultInterpreterPath": "/home/csoulie/.conda/envs/game/bin/python",
+  "python.defaultInterpreterPath": "/home/csoulie/.conda/envs/kimeco/bin/python",
   "python.terminal.activateEnvironment": true,
   "python.venvPath": "/home/csoulie/.conda/envs/",
   "gitlens.advanced.caching.gitPath": true,

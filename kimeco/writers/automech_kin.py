@@ -34,22 +34,17 @@ detect merged wells.
 
 from typing import Any
 
-import cantera.with_units as ctu
-
 from kimeco.parameters import SOP
 from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from kimeco.barrier import Barrier
 
 
-ureg: ctu.UnitRegistry = ctu.cantera_units_registry
-Q_ = ureg.Quantity
-
-
 # The runtime driver body. Only the top-level placeholders
-# ({payload}/{name}/{slot}/{lump_pressure}/{lump_temp}) are substituted via
-# str.format; the body is intentionally free of literal ``{``/``}`` (no
-# f-strings, no dict/set literals other than dict()) so formatting is safe.
+# ({payload}/{name}/{slot}/{pres_unit}/{lump_pressure}/{lump_temp}) are
+# substituted via str.format; the body is intentionally free of literal
+# ``{``/``}`` (no f-strings, no dict/set literals other than dict()) so
+# formatting is safe.
 automech_kin_tpl = '''"""Auto-generated automech MESS driver. Do not edit."""
 import os
 import subprocess
@@ -70,6 +65,7 @@ from kimeco.readers.mess_output import MessOutputReader
 PES_PAYLOAD = {payload}
 NAME = "{name}"
 SLOT = {slot}
+PRES_UNIT = "{pres_unit}"
 LUMP_PRESSURE = {lump_pressure}
 LUMP_TEMP = {lump_temp}
 
@@ -241,11 +237,19 @@ def _rxn_chan_str():
 
 
 def _globkey_str(out_name, well_extension):
-    return global_rates_input_v1(
+    globkey_str = global_rates_input_v1(
         temperatures=PES_PAYLOAD["grid_temp"],
         pressures=PES_PAYLOAD["grid_pres"],
         well_extension=well_extension,
         ktp_outname=out_name)
+    old = "PressureList[atm]"
+    new = "PressureList[" + PRES_UNIT + "]"
+    if old not in globkey_str:
+        raise RuntimeError(
+            "mess_io did not emit the expected " + old + " literal; the "
+            "automech driver refuses to write a MESS input with the wrong "
+            "pressure unit (the pressure grid is in " + PRES_UNIT + ").")
+    return globkey_str.replace(old, new)
 
 
 def _run_mess(inp_name):
@@ -327,6 +331,7 @@ class AutomechKinWriter:
             sub_t if sub_t is not None else sop.temp)
         self.pres_bar: list[float] = list(
             sub_p if sub_p is not None else sop.pres)
+        self.pres_unit: str = str(getattr(self.sop, 'pres_unit', 'bar'))
 
     # ---- serialization helpers (main process; SOP objects available) ----
 
@@ -509,10 +514,7 @@ class AutomechKinWriter:
             payload = self._barrier_payload(bar)
             if payload is not None:
                 barrier_payloads.append(payload)
-        grid_pres = [
-            float(Q_(float(p), 'bar').to('atm').magnitude)
-            for p in self.pres_bar
-        ]
+        grid_pres = [float(p) for p in self.pres_bar]
         return {
             'name': f'{self.pes_id:02d}',
             'factor': float(getattr(self.sop, 'factor', 0.0)),
@@ -551,6 +553,7 @@ class AutomechKinWriter:
             payload=repr(payload),
             name=name,
             slot=slot,
+            pres_unit=self.pres_unit,
             lump_pressure=repr(lump_pressure),
             lump_temp=repr(lump_temp),
         )
