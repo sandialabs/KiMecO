@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - The development-only `agentic_pipeline/` package, its unit test `tests/unit/test_agentic_pipeline_ci.py`, and the `agentic` pip extra (`anthropic`, `pydantic`, `pyyaml`); CI no longer installs `[agentic]`. Agents are used only to develop the code and never at run time, so these runtime dependencies are gone. The developer prompt files under `.claude/` and `.github/agents/` are kept.
 
+### Fixed
+- The emitted automech per-PES driver (`kimeco/writers/automech_kin.py`) now calls `mess_io.writer.rotor_hindered(..., potential_form="fourier")` for every scan-based hindered rotor (species and saddle-point barriers), so the MESS inputs it produces use `Potential[kcal/mol] N` + energies (the MESS Fourier form, identical to the native KiMecO MESS writer) instead of mess_io's default `PotentialSpline[kcal/mol] N N-1` + angle grid. This fixes a MESS abort for rotors with few scan points (e.g. the C2H5 CH3 rotor with 2 points: `Model::HinderedRotor::_read: PotentialSpline[kcal/mol]: potential spline size, 2, is too small`) and removes the per-rotor `unknown keyword: PotentialSpline` warnings. This is unrelated to the skip of rotors already given as a Fourier expansion (`hr.fourier=True`), which is unchanged.
+
 
 ## [1.1.7] - 2026-08-27
 

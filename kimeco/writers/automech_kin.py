@@ -96,7 +96,8 @@ def _hind_rot_str(rotors):
             axis=hr["axis"],
             symmetry=hr["symmetry"],
             potential=pot,
-            therm_pow_max=hr["therm_pow_max"])
+            therm_pow_max=hr["therm_pow_max"],
+            potential_form="fourier")
     return out
 
 
@@ -212,25 +213,31 @@ def _energy_transfer_str():
 
 
 def _rxn_chan_str():
-    out = ""
+    # mess_io block writers (well/bimolecular/ts_sadpt) return strings
+    # without a trailing newline (their Mako templates end with a backslash
+    # line continuation), so blocks must be joined explicitly. Plain string
+    # concatenation glues the next header onto the previous "End  ! ..."
+    # comment (e.g. "End  ! WellWell CH2CH2OOH"), which makes MESS abort
+    # with "Model::init: unknown keyword Species".
+    blocks = []
     for w in PES_PAYLOAD["wells"]:
-        out += well(
+        blocks.append(well(
             well_label=w["label"],
             well_data=_species_data(w),
-            zero_ene=w["zero_ene"])
+            zero_ene=w["zero_ene"]))
     for b in PES_PAYLOAD["bimols"]:
         f1 = b["frag1"]
         f2 = b["frag2"]
-        out += bimolecular(
+        blocks.append(bimolecular(
             bimol_label=b["label"],
             spc1_label=f1["label"],
             spc1_data=_species_data(f1),
             spc2_label=f2["label"],
             spc2_data=_species_data(f2),
-            ground_ene=b["ground_ene"])
+            ground_ene=b["ground_ene"]))
     for bar in PES_PAYLOAD["barriers"]:
-        out += _barrier_str(bar)
-    return out
+        blocks.append(_barrier_str(bar))
+    return "\\n".join(blocks)
 
 
 def _globkey_str(out_name, well_extension):
@@ -360,6 +367,9 @@ class AutomechKinWriter:
             npot = len(scan)
             if npot == 0:
                 continue
+            # Angles are ignored by mess_io under potential_form="fourier"
+            # (only the energies are emitted), but rotor_hindered still
+            # requires a dict-typed potential, so the grid is kept.
             sym = hr.symmetry if hr.symmetry else 1
             step = (360.0 / sym) / npot
             potential = [[i * step, scan[i]] for i in range(npot)]

@@ -14,6 +14,8 @@ Bimolecular.name/.energy/.fragments; Barrier.connected/.barrierless/.energy/
 """
 from __future__ import annotations
 
+import ast
+import re
 from typing import Any, cast
 
 import pytest
@@ -50,9 +52,10 @@ class _FakeStruct:
 class _FakeRotor:
     """Scan-based hindered rotor double (mess_io.rotor_hindered)."""
 
-    def __init__(self, fourier: bool = False) -> None:
+    def __init__(self, fourier: bool = False,
+                 scan: list[float] | None = None) -> None:
         self.fourier = fourier
-        self.scan = [0.0, 1.5, 3.0, 1.5]
+        self.scan = list(scan) if scan is not None else [0.0, 1.5, 3.0, 1.5]
         self.symmetry = 2
         self.ThermalPowerMax = 10.0
         self.group = [3, 4]
@@ -218,12 +221,29 @@ def _rotor_pes() -> tuple[_FakeSOP, list[str]]:
     return _FakeSOP([w], [bim], [bar]), ['WR', 'BR']
 
 
+def _two_point_rotor_pes() -> tuple[_FakeSOP, list[str]]:
+    # C2H5-like well with a single scan-based rotor holding only two grid
+    # points (no Fourier rotor, no multirotor): the smallest non-empty
+    # potential grid the serializer has to carry through the template.
+    w = _FakeWell(
+        'W2P',
+        ['C', 'C', 'H', 'H', 'H', 'H', 'H'],
+        h_rotors=[_FakeRotor(scan=[0.0, 2.7])],
+    )
+    prod = _FakeWell('P2P', ['C', 'O'])
+    bim = _FakeBimolecular('B2P', prod, _FakeWell('H2P', ['H']))
+    bar = _FakeBarrier('TS2P', connected=[w, bim],
+                       symbols=['C', 'C', 'H', 'H'])
+    return _FakeSOP([w], [bim], [bar]), ['W2P', 'B2P']
+
+
 _SHAPES = {
     'single_well': _single_well,
     'multi_well': _multi_well,
     'bimolecular_only': _bimolecular_only,
     'abstraction': _abstraction,
     'hindered_multi_rotor': _rotor_pes,
+    'two_point_scan_rotor': _two_point_rotor_pes,
 }
 
 
@@ -302,3 +322,91 @@ def test_bimolecular_only_pes_emits_both_bimols(tmp_path) -> None:
     assert species == ['R', 'P']
     # Barrierless phasespace kind is serialized (no 'file' attr on barrier).
     assert "'phasespace'" in script
+
+
+# ---------------------------------------------------------------------------
+# Hindered-rotor potential form: rotor_hindered(..., potential_form="fourier")
+# ---------------------------------------------------------------------------
+_FOURIER_KWARG = 'potential_form="fourier"'
+
+
+def _hind_rot_str_source(script: str) -> str:
+    """Return the emitted source of ``_hind_rot_str`` only."""
+    start = script.index('def _hind_rot_str')
+    end = script.index('def _int_rot_str')
+    assert start < end
+    return script[start:end]
+
+
+def _payload_wells(script: str) -> dict[str, dict[str, Any]]:
+    """Parse the embedded ``PES_PAYLOAD`` literal and index wells by label."""
+    line = next(ln for ln in script.splitlines()
+                if ln.startswith('PES_PAYLOAD = '))
+    payload = ast.literal_eval(line[len('PES_PAYLOAD = '):])
+    return {w['label']: w for w in payload['wells']}
+
+
+@pytest.mark.parametrize('builder', [_rotor_pes, _two_point_rotor_pes],
+                         ids=['hindered_multi_rotor', 'two_point_scan_rotor'])
+def test_rotor_hindered_uses_fourier_potential_form(tmp_path, builder) -> None:
+    script, _ = _emit(tmp_path, builder)
+    assert _FOURIER_KWARG in script
+    # The spline form (mess_io default) must not be requested anywhere.
+    assert 'PotentialSpline' not in script
+    compile(script, 'fourier_form.py', 'exec')
+
+
+def test_rotor_hindered_call_has_fourier_kwarg_exactly_once(tmp_path) -> None:
+    script, _ = _emit(tmp_path, _rotor_pes)
+    body = _hind_rot_str_source(script)
+    assert body.count(_FOURIER_KWARG) == 1
+    # The potential grid is still forwarded alongside the new form kwarg.
+    assert 'potential=pot' in body
+
+
+def test_two_point_scan_rotor_payload_serialized(tmp_path) -> None:
+    # symmetry 2, two scan points -> step = (360 / 2) / 2 = 90 degrees.
+    script, species = _emit(tmp_path, _two_point_rotor_pes)
+    assert species == ['W2P', 'B2P']
+    expected = '[[0.0, 0.0], [90.0, 2.7]]'
+    if expected not in script:
+        # Whitespace-tolerant fallback in case repr formatting changes.
+        pattern = re.compile(
+            r'\[\s*\[\s*0\.0\s*,\s*0\.0\s*\]\s*,'
+            r'\s*\[\s*90\.0\s*,\s*2\.7\s*\]\s*\]')
+        assert pattern.search(script), 'two-point potential grid not emitted'
+    wells = _payload_wells(script)
+    rotors = wells['W2P']['hind_rotors']
+    assert len(rotors) == 1
+    assert rotors[0]['potential'] == [[0.0, 0.0], [90.0, 2.7]]
+    assert rotors[0]['symmetry'] == 2
+
+
+def test_fourier_flag_rotor_still_skipped_with_fourier_form(tmp_path) -> None:
+    # A well whose only hindered rotor is flagged ``fourier`` carries no scan
+    # grid: it must still be dropped from the payload, independently of the
+    # potential_form requested in the template.
+    def _fourier_only() -> tuple[_FakeSOP, list[str]]:
+        w = _FakeWell('WF', ['C', 'C', 'H', 'H', 'H', 'H'],
+                      h_rotors=[_FakeRotor(fourier=True)])
+        prod = _FakeWell('PF', ['C', 'O'])
+        bim = _FakeBimolecular('BF', prod, _FakeWell('HF', ['H']))
+        bar = _FakeBarrier('TSF', connected=[w, bim],
+                           symbols=['C', 'C', 'H', 'H'])
+        return _FakeSOP([w], [bim], [bar]), ['WF', 'BF']
+
+    script, _ = _emit(tmp_path, _fourier_only)
+    wells = _payload_wells(script)
+    assert wells['WF']['hind_rotors'] == []
+    assert _FOURIER_KWARG in script
+    compile(script, 'fourier_only.py', 'exec')
+
+
+def test_no_rotor_shape_still_emits_fourier_form_in_template(tmp_path) -> None:
+    # The kwarg lives in the static template, so it is present even when no
+    # species carries a hindered rotor.
+    script, _ = _emit(tmp_path, _single_well)
+    assert _FOURIER_KWARG in script
+    assert 'PotentialSpline' not in script
+    wells = _payload_wells(script)
+    assert all(w['hind_rotors'] == [] for w in wells.values())
