@@ -24,7 +24,7 @@ class Barrier(Well):
         self._energy: float
         self.ifreq: float
         # Barrierless parameters
-        self._symFact: float
+        self._symFact: float = 1.0
         self.sfc: float = 1.0  # Symmetry Factor Coefficient
         self.barrierless: bool = False
         # Only used to retroactively set energy of a side if dummy

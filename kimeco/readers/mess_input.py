@@ -10,7 +10,7 @@ from kimeco.database.kimeco_db import dbs
 
 import os
 import sys
-from typing import cast
+from typing import Any, cast
 
 
 # TODO: Make the parsing robust to file swap on
@@ -114,6 +114,7 @@ class MessInputReader:
             [SetOfParameters, mess_templates]
         """
         name = ''
+        last_item = ''
         skip = 0
         for fid, file in enumerate(self.pes_files):
             self.tpls.append([])
@@ -219,6 +220,104 @@ class MessInputReader:
                                     self._trigger_stop = True
                             else:
                                 break
+                    continue
+                elif line.lstrip().casefold().startswith('masses'):
+                    tpl.append(line)
+                    masses: list[float] = []
+                    for arg in line.split()[1:]:
+                        # Avoid reading comments
+                        if arg.replace('.', ''
+                                       ).replace('-', ''
+                                                 ).isnumeric():
+                            masses.append(float(arg))
+                        else:
+                            break
+                    if len(self.SOP.masses) == 0:
+                        self.SOP.masses = masses
+                    elif (len(masses) > 0 and
+                          masses[0] != self.SOP.masses[0]):
+                        msg = "Different bath mass"
+                        msg += f" in {self.filenames[fid]}."
+                        msg += "\n"
+                        msg += " Saved value:"
+                        msg += f" {self.SOP.masses[0]}."
+                        self.klog.warning(msg)
+                        self._trigger_stop = True
+                    continue
+                elif line.lstrip().casefold().startswith(
+                        'calculationmethod'):
+                    tpl.append(line)
+                    calc_method = line.split()[1]
+                    if self.SOP.calculation_method is None:
+                        self.SOP.calculation_method = calc_method
+                    elif calc_method != self.SOP.calculation_method:
+                        msg = "Different CalculationMethod"
+                        msg += f" in {self.filenames[fid]}."
+                        msg += "\n"
+                        msg += " Saved value:"
+                        msg += f" {self.SOP.calculation_method}."
+                        self.klog.warning(msg)
+                        self._trigger_stop = True
+                    continue
+                elif line.lstrip().casefold().startswith(
+                        'modelenergylimit'):
+                    tpl.append(line)
+                    mel = float(line.split()[1])
+                    key = line.split()[0].casefold()
+                    unit = ''
+                    if '[' in key and ']' in key:
+                        unit = key.split('[')[1].split(']')[0]
+                    if unit == '1/cm':
+                        mel = mel / 349.755
+                    elif unit == 'kj/mol':
+                        mel = mel / 4.184
+                    elif unit in ('', 'kcal/mol'):
+                        pass
+                    else:
+                        msg = f"Unknown ModelEnergyLimit unit '{unit}'"
+                        msg += f" in {self.filenames[fid]};"
+                        msg += " raw value stored."
+                        self.klog.warning(msg)
+                    if self.SOP.model_ene_limit is None:
+                        self.SOP.model_ene_limit = mel
+                    elif mel != self.SOP.model_ene_limit:
+                        msg = "Different ModelEnergyLimit"
+                        msg += f" in {self.filenames[fid]}."
+                        msg += "\n"
+                        msg += " Saved value:"
+                        msg += f" {self.SOP.model_ene_limit}."
+                        self.klog.warning(msg)
+                        self._trigger_stop = True
+                    continue
+                elif line.lstrip().casefold().startswith(
+                        'excessenergyovertemperature'):
+                    tpl.append(line)
+                    eet = float(line.split()[1])
+                    if self.SOP.excess_ene_temp is None:
+                        self.SOP.excess_ene_temp = eet
+                    elif eet != self.SOP.excess_ene_temp:
+                        msg = "Different ExcessEnergyOverTemperature"
+                        msg += f" in {self.filenames[fid]}."
+                        msg += "\n"
+                        msg += " Saved value:"
+                        msg += f" {self.SOP.excess_ene_temp}."
+                        self.klog.warning(msg)
+                        self._trigger_stop = True
+                    continue
+                elif line.lstrip().casefold().startswith(
+                        'chemicaleigenvaluemax'):
+                    tpl.append(line)
+                    cem = float(line.split()[1])
+                    if self.SOP.chem_eig_max is None:
+                        self.SOP.chem_eig_max = cem
+                    elif cem != self.SOP.chem_eig_max:
+                        msg = "Different ChemicalEigenvalueMax"
+                        msg += f" in {self.filenames[fid]}."
+                        msg += "\n"
+                        msg += " Saved value:"
+                        msg += f" {self.SOP.chem_eig_max}."
+                        self.klog.warning(msg)
+                        self._trigger_stop = True
                     continue
 
                 # Set the name of the current item
@@ -456,6 +555,18 @@ class MessInputReader:
                     else:
                         skip += self.save_multirotor(name=name,
                                                      lnum=lnum)
+                    continue
+
+                # SYMMETRY FACTOR (rigid-rotor core of a well / saddle)
+                elif line.lstrip().casefold().startswith('symmetryfactor'):
+                    target = fname if last_item == 'frag' else name
+                    if target in self.SOP.items:
+                        item = self.SOP.items[target]
+                        if isinstance(item, Barrier):
+                            item._symFact = float(line.split()[1])
+                        elif isinstance(item, Well):
+                            item.sym_factor = float(line.split()[1])
+                    tpl.append(line)
                     continue
 
                 # ENERGY
@@ -832,6 +943,7 @@ class MessInputReader:
         saved_f: int = 0
         group: list[int] = []
         axis: list[int] = []
+        geo: list[list[Any]] = []
         # Read the file
         fid: int = len(self.tpls)-1
         file: list[str] = self.pes_files[fid]
@@ -911,9 +1023,17 @@ class MessInputReader:
                 skip += 1
                 continue
             elif line.lstrip().casefold().startswith('geometry'):
-                local_skip += int(line.split()[1])
-                skip += int(line.split()[1]) + 1
+                natom = int(line.split()[1])
+                local_skip += natom
+                skip += natom + 1
                 self.tpls[-1].append(line)
+                abs_idx = lnum + 1 + lnum2
+                geo = [
+                    [row.split()[0],
+                     float(row.split()[1]),
+                     float(row.split()[2]),
+                     float(row.split()[3])]
+                    for row in file[abs_idx+1:abs_idx+1+natom]]
                 continue
             elif line.lstrip().casefold().startswith('symmetry'):
                 symmetry = int(line.split()[1])
@@ -933,7 +1053,8 @@ class MessInputReader:
                     symmetry=symmetry,
                     scan=scan,
                     fexp=fexp,
-                    fcoef=fcoef)
+                    fcoef=fcoef,
+                    geo=geo if geo else None)
                 self.tpls[-1].append(line)
                 skip += 1
                 return skip

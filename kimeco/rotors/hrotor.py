@@ -12,9 +12,12 @@ class HinRotor:
                  symmetry: int,
                  scan: list[float],
                  fexp: list[int],
-                 fcoef: list[float]) -> None:
+                 fcoef: list[float],
+                 geo=None) -> None:
 
         self.ThermalPowerMax: float = ThermalPowerMax
+        # Optional rotor-specific geometry (angstrom rows [sym, x, y, z])
+        self.geo = geo
         self.group: list[int] = group
         self.axis: list[int] = axis
         self.symmetry: int = symmetry

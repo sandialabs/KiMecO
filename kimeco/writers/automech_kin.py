@@ -17,7 +17,10 @@ When executed on the compute node the emitted script:
 3. builds the global energy-transfer section from ``energy_down`` +
    ``collision_frequency`` -> ``global_energy_transfer_input``;
 4. builds the global keyword section via ``global_rates_input_v1`` on the
-   embedded (possibly sub-grid) temperature/pressure grid;
+   embedded (possibly sub-grid) temperature/pressure grid, forwarding the
+   header keys read from the parsed MESS input (CalculationMethod,
+   ModelEnergyLimit, ExcessEnergyOverTemperature, ChemicalEigenvalueMax)
+   when they are present in the payload;
 5. writes the base input, runs MESS (pass 1), moves the pass-1 output to a
    leading-underscore intermediate, and only if rate coefficients are missing
    (merged wells) derives WellExtension caps via
@@ -32,6 +35,7 @@ script reads no database; it imports only ``MessOutputReader`` from kimeco to
 detect merged wells.
 """
 
+import logging
 from typing import Any
 
 from kimeco.parameters import SOP
@@ -87,13 +91,16 @@ def _hind_rot_str(rotors):
         pot = dict()
         for pair in hr["potential"]:
             pot[(float(pair[0]),)] = float(pair[1])
-        out += rotor_hindered(
+        kwargs = dict(
             group=hr["group"],
             axis=hr["axis"],
             symmetry=hr["symmetry"],
             potential=pot,
             therm_pow_max=hr["therm_pow_max"],
             potential_form="fourier")
+        if hr.get("geo"):
+            kwargs["geo"] = _geo_bohr(hr["geo"])
+        out += rotor_hindered(**kwargs)
     return out
 
 
@@ -174,7 +181,11 @@ def _barrier_str(bar):
         sym_factor=bar["sym_factor"],
         flux_file_name=bar["flux_file"],
         stoich=bar["stoich"])
-    data = molecule(core=core, elec_levels=elec, freqs=bar["freqs"])
+    data = molecule(
+        core=core,
+        elec_levels=elec,
+        freqs=bar["freqs"],
+        hind_rot=_hind_rot_str(bar.get("hind_rotors", [])))
     return ts_sadpt(
         ts_label=bar["label"],
         reac_label=bar["reac"],
@@ -237,11 +248,22 @@ def _rxn_chan_str():
 
 
 def _globkey_str(out_name, well_extension):
-    globkey_str = global_rates_input_v1(
+    kwargs = dict(
         temperatures=PES_PAYLOAD["grid_temp"],
         pressures=PES_PAYLOAD["grid_pres"],
         well_extension=well_extension,
         ktp_outname=out_name)
+    # Header keys are only forwarded when the parsed input carried them so
+    # mess_io keeps its own defaults otherwise.
+    for key, arg in (
+            ("calc_method", "calculation_method"),
+            ("model_ene_limit", "model_ene_limit"),
+            ("excess_ene_temp", "excess_ene_temp"),
+            ("chem_eig_max", "chem_eig_max")):
+        val = PES_PAYLOAD.get(key)
+        if val is not None:
+            kwargs[arg] = val
+    globkey_str = global_rates_input_v1(**kwargs)
     old = "PressureList[atm]"
     new = "PressureList[" + PRES_UNIT + "]"
     if old not in globkey_str:
@@ -379,13 +401,19 @@ class AutomechKinWriter:
             step = (360.0 / sym) / npot
             potential = [[i * step, scan[i]] for i in range(npot)]
             tpm = float(hr.ThermalPowerMax)
-            rotors.append({
+            rotor: dict[str, Any] = {
                 'group': [g - 1 for g in hr.group],
                 'axis': [a - 1 for a in hr.axis],
                 'symmetry': int(hr.symmetry),
                 'potential': potential,
                 'therm_pow_max': tpm if tpm > 0 else None,
-            })
+            }
+            geo = getattr(hr, 'geo', None)
+            if geo:
+                rotor['geo'] = [
+                    [row[0], float(row[1]), float(row[2]), float(row[3])]
+                    for row in geo]
+            rotors.append(rotor)
         return rotors
 
     def _multi_rotors(self, item) -> list[dict[str, Any]]:
@@ -418,7 +446,7 @@ class AutomechKinWriter:
             'zero_ene': float(item.energy),
             'geo': self._geo(item.structure),
             'mass': self._mass(item.structure),
-            'sym_factor': 1.0,
+            'sym_factor': float(getattr(item, 'sym_factor', 1.0)),
             'freqs': [float(f) for f in item.frequencies],
             'elec_levels': self._elec_levels(item),
             'hind_rotors': self._hind_rotors(item),
@@ -445,7 +473,7 @@ class AutomechKinWriter:
                 'prod': prod,
                 'zero_ene': float(bar.energy),
                 'geo': self._geo(bar.structure),
-                'sym_factor': 1.0,
+                'sym_factor': float(bar.symFact),
                 'freqs': [float(f) for f in bar.frequencies],
                 'elec_levels': elec,
                 'hind_rotors': self._hind_rotors(bar),
@@ -477,6 +505,7 @@ class AutomechKinWriter:
         if hasattr(bar, 'file'):
             common['kind'] = 'rotd'
             common['flux_file'] = bar.file
+            common['hind_rotors'] = self._hind_rotors(bar)
             return common
         common['kind'] = 'phasespace'
         common['geo1'] = self._geo(struct1)
@@ -488,10 +517,18 @@ class AutomechKinWriter:
     def _lj_masses(self, wells: list[Well]) -> list[float]:
         """Bath/species collider masses for collision_frequency.
 
-        The reader does not capture the LennardJones ``Masses`` line, so the
-        species mass is taken from the heaviest well structure and the bath
-        gas defaults to N2 (28.0134 amu).
+        The two masses are taken from the ``Masses[amu]`` line captured by
+        the reader (``SOP.masses``) when available. Otherwise the species
+        mass falls back to the heaviest well structure and the bath gas to
+        N2 (28.0134 amu), and a warning is logged.
         """
+        masses = list(getattr(self.sop, 'masses', []) or [])
+        if len(masses) >= 2:
+            return [float(masses[0]), float(masses[1])]
+        logging.getLogger(__name__).warning(
+            'No Masses[amu] line was read from the MESS input; the automech '
+            'driver falls back to an N2 bath gas (28.0134 amu) and the '
+            'heaviest well mass for the collision frequency.')
         species_mass = 0.0
         for well_item in wells:
             try:
@@ -515,8 +552,20 @@ class AutomechKinWriter:
             if payload is not None:
                 barrier_payloads.append(payload)
         grid_pres = [float(p) for p in self.pres_bar]
+        model_ene_limit = getattr(self.sop, 'model_ene_limit', None)
+        excess_ene_temp = getattr(self.sop, 'excess_ene_temp', None)
+        chem_eig_max = getattr(self.sop, 'chem_eig_max', None)
         return {
             'name': f'{self.pes_id:02d}',
+            'calc_method': getattr(self.sop, 'calculation_method', None),
+            'model_ene_limit': (
+                float(model_ene_limit) if model_ene_limit is not None
+                else None),
+            'excess_ene_temp': (
+                float(excess_ene_temp) if excess_ene_temp is not None
+                else None),
+            'chem_eig_max': (
+                float(chem_eig_max) if chem_eig_max is not None else None),
             'factor': float(getattr(self.sop, 'factor', 0.0)),
             'power': float(getattr(self.sop, 'power', 0.0)),
             'epsilons': [float(e) for e in self.sop.epsilons],

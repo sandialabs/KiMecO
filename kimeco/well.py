@@ -44,6 +44,8 @@ class Well:
         self.freq_mode: FreqMode = freq_mode
         self.uncertainties: dict[str, float] = {}
         self.pes_ids: list[int] = pes_ids
+        # MESS SymmetryFactor of the rigid-rotor core
+        self.sym_factor: float = 1.0
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -212,7 +214,8 @@ class Well:
                    symmetry: int,
                    scan: list[float],
                    fexp: list[int],
-                   fcoef: list[float]) -> None:
+                   fcoef: list[float],
+                   geo=None) -> None:
         """Add a new rotor object to the well
 
         Args:
@@ -228,6 +231,7 @@ class Well:
                     fcoef == hr.fcoef and
                     hr.symmetry == symmetry and
                     hr.ThermalPowerMax == thermalpowermax and
+                    hr.geo == geo and
                     np.array_equal(
                         hr._scan, np.array(scan, dtype=np.float32))):
                     break
@@ -245,7 +249,8 @@ class Well:
             symmetry=symmetry,
             scan=scan,
             fexp=fexp,
-            fcoef=fcoef))
+            fcoef=fcoef,
+            geo=geo))
 
     def add_mrotor(self,
                    sf: float,

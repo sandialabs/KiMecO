@@ -129,6 +129,7 @@ class _FakeBarrier:
         self.dummy = False
         if not barrierless:
             self.structure = _FakeStruct(symbols or ['C', 'H', 'O'])
+            self.symFact = 1.0
             self.ifreq = -800.0
             self.r_lenergy = 20.0
             self.r_renergy = 15.0

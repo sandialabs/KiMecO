@@ -12,57 +12,57 @@
             "program": "/home/csoulie/.local/bin/kmo_start",
             "console": "integratedTerminal",
             "cwd": "/home/csoulie/projects/dme/kmo",
-            "python": "/home/csoulie/.conda/envs/game/bin/python"
+            "python": "/home/csoulie/.conda/envs/kimeco/bin/python"
         },
         {
             "name": "kmo dme",
             "type": "debugpy",
             "request": "launch",
-            "program": "/home/csoulie/.conda/envs/game/bin/kmo",
+            "program": "/home/csoulie/.conda/envs/kimeco/bin/kmo",
             "console": "integratedTerminal",
             "args": ["input.json"],
             "cwd": "/home/csoulie/projects/dme/kmo",
-            "python": "/home/csoulie/.conda/envs/game/bin/python"
+            "python": "/home/csoulie/.conda/envs/kimeco/bin/python"
         },
         {
             "name": "kmopp dev",
             "type": "debugpy",
             "request": "launch",
-            "program": "/home/csoulie/.conda/envs/game/bin/kmopp",
+            "program": "/home/csoulie/.conda/envs/kimeco/bin/kmopp",
             "console": "integratedTerminal",
             "args": ["input.json"],
             "cwd": "/home/csoulie/kmo_dev",
-            "python": "/home/csoulie/.conda/envs/game/bin/python"
+            "python": "/home/csoulie/.conda/envs/kimeco/bin/python"
         },
         {
             "name": "kmo dev test",
             "type": "debugpy",
             "request": "launch",
-            "program": "/home/csoulie/.conda/envs/game/bin/kmo",
+            "program": "/home/csoulie/.conda/envs/kimeco/bin/kmo",
             "console": "integratedTerminal",
             "args": ["input.json"],
             "cwd": "/home/csoulie/kmo_dev",
-            "python": "/home/csoulie/.conda/envs/game/bin/python"
+            "python": "/home/csoulie/.conda/envs/kimeco/bin/python"
         },
         {
             "name": "kmopp dev test",
             "type": "debugpy",
             "request": "launch",
-            "program": "/home/csoulie/.conda/envs/game/bin/kmopp",
+            "program": "/home/csoulie/.conda/envs/kimeco/bin/kmopp",
             "console": "integratedTerminal",
             "args": ["input.json"],
             "cwd": "/home/csoulie/kmo_dev",
-            "python": "/home/csoulie/.conda/envs/game/bin/python"
+            "python": "/home/csoulie/.conda/envs/kimeco/bin/python"
         },
         {
             "name": "kmoui dev test",
             "type": "debugpy",
             "request": "launch",
-            "program": "/home/csoulie/.conda/envs/game/bin/kmoui",
+            "program": "/home/csoulie/.conda/envs/kimeco/bin/kmoui",
             "console": "integratedTerminal",
             "args": ["input.json"],
             "cwd": "/home/csoulie/kmo_dev",
-            "python": "/home/csoulie/.conda/envs/game/bin/python"
+            "python": "/home/csoulie/.conda/envs/kimeco/bin/python"
         }
     ]
 }

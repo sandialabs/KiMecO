@@ -33,6 +33,13 @@ class SOP:
         self.pres: list[float]
         self.pres_unit: str
         self.epsilons: list[float] = []
+        # LennardJones Masses[amu] (bath first, species second)
+        self.masses: list[float] = []
+        # Global MESS keywords (None when absent from the inputs)
+        self.calculation_method: str | None = None
+        self.model_ene_limit: float | None = None  # kcal/mol
+        self.excess_ene_temp: float | None = None
+        self.chem_eig_max: float | None = None
         self.files2copy: list[str] = []
         self._default_score = float('inf')
         self.scores: dict[str, float] = {
@@ -379,7 +386,8 @@ class SOP:
                    symmetry: int,
                    scan: list[float],
                    fexp: list[int],
-                   fcoef: list[float]) -> None:
+                   fcoef: list[float],
+                   geo=None) -> None:
         """Create a new rotor object for a well
 
         Args:
@@ -404,7 +412,8 @@ class SOP:
                                           symmetry,
                                           scan,
                                           fexp,
-                                          fcoef)
+                                          fcoef,
+                                          geo=geo)
         else:
             item.add_hrotor(thermalpowermax,
                             group,
@@ -412,7 +421,8 @@ class SOP:
                             symmetry,
                             scan,
                             fexp,
-                            fcoef)
+                            fcoef,
+                            geo=geo)
 
     def set_mrotor(self,
                    name: str,
