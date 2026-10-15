@@ -1,0 +1,6 @@
+- [AutoMech fake wells doc](automech-fake-wells-doc.md) — where the full fake-well write-up and automech source/env live
+- [C4H8 prompt system map](c4h8-prompt-system-map.md) — 13 MESS inputs (5 PESs), locations, missing O_C4H71-4
+- [Prompt paper reference](prompt-paper-reference.md) — Pratali Maffei CNF 2023 full-text URL (OSTI; ScienceDirect blocks fetch)
+- [Prompt branching fractions](prompt_branching_fractions.md) — how prompt BFs and k = BF·k1 are computed: data from each PES, models, Eq. 9, code map
+- [ped.out file](ped_output_file.md) — what MESS PEDOutput contains: block layout, energy zero, typical α(E), P-independence, how get_ped reads it
+- [PESViewer C4H8 inputs](pesviewer-c4h8-inputs.md) — non_thermal/PESVIEWER layout + pesviewer bugs (single-TS crash, save arg, TkAgg)

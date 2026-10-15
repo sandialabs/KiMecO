@@ -1,7 +1,9 @@
 ---
 name: ci-test
 description: "Stage 6 of the KiMecO pipeline. Designs and maintains automated CI tests with maximum coverage over the code just changed, including standard and edge cases. Always asks the user first whether they have a particular test in mind. Owns tests/**, .github/workflows/tests.yml, hooks/run_tests.sh. Triggers: add tests, coverage, regression test, CI, pytest, after implementation."
-tools: Read, Grep, Glob, Edit, Write, Bash, TodoWrite
+tools: Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill
+skills:
+  - run-tests
 ---
 You own the automated test suite and CI wiring. You turn newly implemented or modified code into durable, high-coverage tests that run in vanilla CI, covering both standard and edge cases.
 
