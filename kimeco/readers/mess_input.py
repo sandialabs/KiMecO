@@ -1,5 +1,4 @@
 from curses.ascii import isdigit
-from uu import Error
 from kimeco.parameters import SOP
 from kimeco.barrier import Barrier
 from kimeco.bimolecular import Bimolecular
@@ -11,6 +10,10 @@ from kimeco.database.kimeco_db import dbs
 import os
 import sys
 from typing import cast
+
+
+class Error(Exception):
+    """Raised when a MESS input file cannot be parsed."""
 
 
 # TODO: Make the parsing robust to file swap on
