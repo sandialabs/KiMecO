@@ -96,6 +96,10 @@ Add the skill to an agent's `skills:` frontmatter list only if that agent uses i
 | `postprocess-run-results` | `kmopp` extrapolation and `kmoui` dashboard | operational if outside repo |
 | `cut-release` | Version bump, changelog finalize, tag prep | pipeline |
 | `build-mess-conda-package` | Build/upload the `mess-static` conda package | operational build; recipe edits pipeline |
+| `add-dependency` | Add, remove or re-pin a dependency or extra in lockstep | small-fix lane |
+| `literature-search` | Find and verify published kinetics/combustion literature | operational (needs `WebSearch`/`WebFetch`, which no pipeline agent holds today) |
+| `record-memory-note` | Turn verified facts into tracked or local memory notes and keep the indexes in sync | bounded orchestrator exception (end of chain, "remember" requests) |
+| `learn-new-skills` | Create a new skill (this one) | bounded orchestrator exception |
 
 ## Backlog candidates
 

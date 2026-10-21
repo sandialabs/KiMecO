@@ -8,7 +8,7 @@ metadata:
   modified: 2026-10-01T22:31:48.050Z
 ---
 
-Written 2026-10-01 from inspecting `amech-dev/C4H8-prompt/H_C4H71-3/ped.out` and `mess_io/reader/ped.py:get_ped` (in `/data/home/csoulie/automech/autoio/src/`). How α(E) is used afterwards: [[prompt-branching-fractions]]. Which inputs have outputs: [[c4h8-prompt-system-map]].
+Written 2026-10-01 from inspecting `amech-dev/C4H8-prompt/H_C4H71-3/ped.out` and `mess_io/reader/ped.py:get_ped` (in `autoio/src/` of the AutoMech source checkout). How α(E) is used afterwards: [[prompt-branching-fractions]]. Which inputs have outputs: [[c4h8-prompt-system-map]].
 
 **Why:** `ped.out` is the input to every prompt BF. Its energy zero and normalisation are easy to misread, and the energy shift applied when it is read explains the SOP's product-energy pitfall.
 **How to apply:** use this when checking a new abstraction run (e.g. the CH3 inputs once they are run), when debugging odd BFs, or when changing product energies.

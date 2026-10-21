@@ -8,7 +8,7 @@ metadata:
   modified: 2026-10-01T22:31:55.652Z
 ---
 
-Summary written 2026-10-01 from the paper (see [[prompt-paper-reference]]), `non-thermal-sop.md`, and the code in `/data/home/csoulie/automech/` (paths below are relative to it). System map: [[c4h8-prompt-system-map]].
+Summary written 2026-10-01 from the paper (see [[prompt-paper-reference]]), `non-thermal-sop.md` (local note), and the code of the AutoMech source checkout (paths below are relative to its root; its location is in the local notes). System map: [[c4h8-prompt-system-map]].
 
 **Why:** this is the reasoning behind every `prompt.py` run and every file in `RATE CONSTANTS/`; it took reading the paper and the code together to work out.
 **How to apply:** use it when explaining, checking or extending prompt results (new abstractors, other models, thresholds). Check line numbers against the code before quoting them; they were correct on 2026-10-01.

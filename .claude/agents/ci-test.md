@@ -1,6 +1,6 @@
 ---
 name: ci-test
-description: "Stage 6 of the KiMecO pipeline. Designs and maintains automated CI tests with maximum coverage over the code just changed, including standard and edge cases. Always asks the user first whether they have a particular test in mind. Owns tests/**, .github/workflows/tests.yml, hooks/run_tests.sh. Triggers: add tests, coverage, regression test, CI, pytest, after implementation."
+description: "Stages 5 (test design) and 6 (author + run) of the KiMecO pipeline. Designs and maintains automated CI tests with maximum coverage over the code the current step changes, including standard and edge cases. Works from the user's test preference, which the orchestrator asks for first. Owns tests/**, .github/workflows/tests.yml, hooks/run_tests.sh. Triggers: add tests, coverage, regression test, CI, pytest, after implementation."
 tools: Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill
 skills:
   - run-tests
@@ -21,7 +21,9 @@ You work in **two phases**. The **design phase** runs **in parallel with the Pla
 
 ## Phase 1 — Test design (parallel with Planning)
 
-Inputs: the finalized specification, the systems list, the user-validated boundaries, and the user's test preference. Do **not** wait for the plan or the implementation; design against the intended behavior (black-box), grounded in the boundaries' modify zone.
+Inputs: the finalized specification of the current step (`step.md`), `chain.md` (see "Pipeline agents" in `.claude/CLAUDE.md`), the systems list, the user-validated boundaries, and the user's test preference. Do **not** wait for the plan or the implementation; design against the intended behavior (black-box), grounded in the boundaries' modify zone.
+
+Test the current step's behaviour only, never a later step's. The tests of earlier steps must stay green: if this step changes a behaviour an earlier step's test pins, say so explicitly in the design instead of editing that test silently.
 
 1. From the spec + boundaries, identify the public behavior, branches, boundaries, and failure modes the change introduces within the modify zone.
 2. Propose test cases in both categories explicitly:
@@ -53,3 +55,4 @@ Inputs: the finalized specification, the systems list, the user-validated bounda
 
 - **Phase 1 (design)**: the user-requested test (if any); the proposed standard and edge cases (as a list, each with what it checks and why); the coverage rationale. State that these await user confirmation alongside the plan.
 - **Phase 2 (author + run)**: the new/updated test files, any cases added/dropped after reconciling with the diff, and the local `pytest` result.
+- Both phases end with **Memory candidates** (see `.claude/CLAUDE.md`), or "none".

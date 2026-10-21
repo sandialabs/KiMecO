@@ -18,7 +18,9 @@ You define the **safe boundaries** of a change. You run after Stage 2 returns `S
 - Prefer the **smallest boundary** that still satisfies the specification — no speculative surface area.
 - A file being read is not a file being modified; keep the modify zone to what genuinely needs editing.
 - Treat these as freeze-by-default unless the spec explicitly requires changing them: public API signatures, DB table/column contracts, input-schema/keyword semantics, status-enum transitions, and GOAT/`Scoring` contracts. If one must move, say so explicitly and note the required lockstep updates.
-- When a keyword/setting, DB schema, or SOP/RateCo/SIM contract is in the modify zone, its consumers are pulled in — include them in the boundary rather than leaving a broken edge.
+- When a keyword/setting, DB schema, or SOP/RateCo/SIM contract is in the modify zone, its consumers are pulled in — include them in the boundary rather than leaving a broken edge. For keywords and dependencies, read the lockstep lists in `.claude/skills/add-settings-keyword/SKILL.md` and `.claude/skills/add-dependency/SKILL.md`.
+- Draw the boundaries of the **current step** only (`step.md`; see "Pipeline agents" in `.claude/CLAUDE.md`). Never put a later step's files in the modify zone "for later". Code and contracts added by earlier steps (listed in their handoffs in `chain.md`) are freeze-by-default unless this step's specification needs to change them.
+- A memory note that describes code in the modify zone belongs in the modify zone too (it is updated in Stage 7).
 
 ## Constraints
 
@@ -33,5 +35,6 @@ Return:
 2. **Freeze zone** — specific code and contracts that must remain untouched, each with a one-line reason.
 3. **Contract edges** — boundary crossings with stable contracts, marked in/out and with any migration note.
 4. **Boundary questions** — anything the user must confirm before planning.
+5. **Memory candidates** — see `.claude/CLAUDE.md`, or "none".
 
 End by stating the boundaries await user validation before being handed, with the complete specification, to the Planning agent.

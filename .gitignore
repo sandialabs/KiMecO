@@ -4,3 +4,8 @@
 .DS_Store
 dev_tests/**
 .vscode/**
+# Claude Code: personal, machine-specific notes and in-progress agent work
+CLAUDE.local.md
+.claude/memory-local/
+.claude/work/
+.claude/settings.local.json

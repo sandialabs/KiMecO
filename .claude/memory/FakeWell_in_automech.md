@@ -1,7 +1,9 @@
 # Fake wells in AutoMech: how they are built, read and post-processed
 
-Written 2026-10-01 from the source code and git history of the local AutoMech checkout
-(`/data/home/csoulie/automech`) and from the MESS runs in this folder (`C4H8-prompt/`).
+Written 2026-10-01 from the source code and git history of a local AutoMech checkout and from the
+MESS runs of the C4H8 prompt system (`C4H8-prompt/`). "This folder" below means that run folder. The
+checkout, the run folder and the conda env are machine-specific; their locations are in the local
+notes (`CLAUDE.local.md`), which may be absent on other machines.
 
 Code versions inspected (clean checkouts, no local changes):
 
@@ -311,10 +313,14 @@ mixed these features differently.
      `FW-` wells. Three have only high-pressure data and two are empty:
      `FW-C4H8-1+H → FW-C4H71-3+H2`, `FW-C4H8-1+H → C4H71-3+H2`, `FW-C4H71-3+H2 → C4H8-1+H`,
      `C4H8-1+H → FW-C4H8-1+H`, `C4H71-3+H2 → FW-C4H71-3+H2`.
-   - `rates_equip_simple.txt` nonetheless contains no `FW` reactions. Either something downstream drops
-     them or that file came from an older code version. **Not verified**: the full mechanalyzer stack
-     is not importable in any local Python environment (missing `igraph`, etc.).
-   - Fix: rename `FW-` → `FakeW-` in old inputs, or extend the gate to `'FW-'`.
+   - **They do reach the final rate file with the current code (verified 2026-10-01).** Rerunning
+     `prompt.py` with the current `FLDs` in an `automech` conda env (with mechanalyzer installed)
+     writes **10 spurious reactions** to `rates_equip_simple.txt`, fitted from high-pressure values only,
+     for example `C4H8-1 + H = FW-C4H8-1 + H` and `FW-C4H8-1 + H = FW-C4H71-3 + H2`.
+     - The existing `rates_equip_simple.txt` in this folder has none, so it was made with older code.
+     - The 20 real reactions are reproduced to within 0.7 %.
+   - Fix: rename `FW-` → `FakeW-` in old inputs **before running MESS** (the reader parses the labels in
+     `rate.out`), or delete the `FW-` reactions from the rate file afterwards, or extend the gate to `'FW-'`.
 2. **`FakeW-A → FakeW-B` would be merged into `A → B` (code reading, not triggered here).**
    - The stash condition only asks that the *product* be fake, and the stripping applies to both sides.
    - Labels like `FakeW-C4H8-2+H` contain `+`, so `ktp_dct` treats them as bimolecular

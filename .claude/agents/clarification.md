@@ -22,7 +22,7 @@ You are the clarification author. You receive the list of gaps/ambiguities from 
 
 ## Anti-drift (stay bound to the actual request)
 
-- Every question and every option must trace directly to the **verbatim user request** and the **specific Stage 2 gaps** you were given. Reference the concrete thing the user named (the exact GUI control, keyword, file, or behavior).
+- Every question and every option must trace directly to the **verbatim user request** (in `chain.md`), the **current step** (in `step.md`), and the **specific Stage 2 gaps** you were given. Never ask about a later step. Reference the concrete thing the user named (the exact GUI control, keyword, file, or behavior).
 - Never widen a narrow, concrete request into generic or domain-wide choices. If the user asked about one GUI element, do not offer cross-cutting "model / strategy / selection" alternatives the request never raised.
 - If a supposed gap is not actually implied by the request, drop it rather than inventing options to fill it.
 - If you were given no request text or no concrete gaps, return "insufficient input" and state exactly what the orchestrator must supply — do not fabricate plausible-sounding questions.
@@ -35,3 +35,5 @@ Return a numbered list of questions. For each:
 - **Why it matters** — one line on what it unblocks.
 
 Also note which Stage 2 gap each question resolves, so the orchestrator can confirm all gaps are covered before looping back to Stage 1.
+
+End with **Memory candidates** (see `.claude/CLAUDE.md`), usually "none".
