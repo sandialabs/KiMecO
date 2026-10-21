@@ -86,8 +86,11 @@ class _MinimalSOP:
         return []
 
 
-def _emit(tmp_path: Path) -> Path:
-    writer = AutomechKinWriter(sop=cast(Any, _MinimalSOP()), pes_id=0)
+def _emit(tmp_path: Path, pres_unit: str | None = None) -> Path:
+    sop = _MinimalSOP()
+    if pres_unit is not None:
+        setattr(sop, 'pres_unit', pres_unit)
+    writer = AutomechKinWriter(sop=cast(Any, sop), pes_id=0)
     writer.write(loc=str(tmp_path), filename=_FILENAME)
     return tmp_path / _FILENAME
 
@@ -107,6 +110,11 @@ _GLOBKEY_ATM = (
     '!\n'
     'RateOutput                             ' + _OUT + '\n'
 )
+
+
+#: phydat.phycon conversion factors (the ones mess_io's reader applies).
+_BAR2ATM = 0.9869232667160128
+_TORR2ATM = 0.0013157894736842105
 
 
 class _Recorder:
@@ -138,6 +146,8 @@ def _install_stubs(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
     phycon = types.ModuleType('phydat.phycon')
     setattr(phycon, 'BOHR2ANG', 0.52917721092)
     setattr(phycon, 'EH2WAVEN', 219474.6313702)
+    setattr(phycon, 'BAR2ATM', _BAR2ATM)
+    setattr(phycon, 'TORR2ATM', _TORR2ATM)
     phydat = types.ModuleType('phydat')
     setattr(phydat, 'phycon', phycon)
 
@@ -200,8 +210,10 @@ class _FakeMess:
 
 def _run_driver(tmp_path: Path,
                 monkeypatch: pytest.MonkeyPatch,
-                outputs: list[str | None]) -> tuple[Any, _Recorder, _FakeMess]:
-    script = _emit(tmp_path)
+                outputs: list[str | None],
+                pres_unit: str | None = None
+                ) -> tuple[Any, _Recorder, _FakeMess]:
+    script = _emit(tmp_path, pres_unit=pres_unit)
     mod, rec = _load_driver(script, monkeypatch)
     fake = _FakeMess(tmp_path, outputs)
     monkeypatch.setattr(mod.subprocess, 'run', fake)
@@ -317,7 +329,7 @@ def test_merging_output_triggers_second_pass(
     assert args[1] == _MERGING_OUT          # pass-1 output text
     assert args[2] == 'AUX-DATA'            # aux text
     assert args[3] == 'LOG-DATA'            # log text
-    assert args[4] == mod.LUMP_PRESSURE
+    assert args[4] == pytest.approx(mod.LUMP_PRESSURE * _BAR2ATM)
     assert args[5] == mod.LUMP_TEMP
 
     # The input was rewritten with the WellExtension-capped version.
@@ -350,6 +362,42 @@ def test_merging_branch_tolerates_absent_aux_and_log(
     args, _kwargs = rec.calls['well_lumped_input_file'][0]
     assert args[2] == ''
     assert args[3] == ''
+
+
+# ---------------------------------------------------------------------------
+# Lump pressure unit: mess_io compares it with output pressures in atm
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize('pres_unit, to_atm', [
+    ('bar', _BAR2ATM), ('torr', _TORR2ATM), ('atm', 1.0)])
+def test_lump_pressure_reaches_mess_io_in_atm(
+        tmp_path, monkeypatch: pytest.MonkeyPatch,
+        pres_unit: str, to_atm: float) -> None:
+    mod, rec, _fake = _run_driver(
+        tmp_path, monkeypatch, [_MERGING_OUT, 'PASS2-OUTPUT'],
+        pres_unit=pres_unit)
+
+    args, _kwargs = rec.calls['well_lumped_input_file'][0]
+    # The emitted literal stays in the grid unit; only the call converts.
+    assert mod.LUMP_PRESSURE == 10.0
+    assert args[4] == pytest.approx(10.0 * to_atm)
+
+
+@pytest.mark.parametrize('pres_unit', ['bar', 'torr', 'atm'])
+def test_lump_pressure_matches_mess_io_output_pressure(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, pres_unit: str) -> None:
+    """The lump pressure must equal (numpy.isclose) the key mess_io gives
+    the max grid pressure when it parses the MESS output; a mismatch makes
+    well_energies fall back to the lowest temperature of the run."""
+    rates = pytest.importorskip('mess_io.reader.rates')
+    numpy = pytest.importorskip('numpy')
+    parsed = rates._convert_pressure(10.0, pres_unit)
+
+    _mod, rec, _fake = _run_driver(
+        tmp_path, monkeypatch, [_MERGING_OUT, 'PASS2-OUTPUT'],
+        pres_unit=pres_unit)
+
+    args, _kwargs = rec.calls['well_lumped_input_file'][0]
+    assert numpy.isclose(args[4], parsed)
 
 
 # ---------------------------------------------------------------------------

@@ -1,11 +1,20 @@
+import threading
 from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.parameters import SOP
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.sql import text
 from sqlalchemy.engine import Row
 from typing import Any, Sequence
 import numpy as np
 from numpy import int32, str_, float64
+
+
+# First row id of the postprocessing rows, above the ids of the
+# optimisation run (kin_id * n_P * n_T * n_pairs + ...).
+PP_KIN_ROWID_BASE = 10 ** 12
+
+# Natural key of a rate row: (P, T, pes_id, from_name, to_name)
+RateKey = tuple[float, float, int, str, str]
 
 
 class KIN_DB(Kimeco_db):
@@ -29,6 +38,10 @@ class KIN_DB(Kimeco_db):
             'k',
         ]
         self.types: list = [float, float, int, int, str, str, float]
+
+        # Next free postprocessing row id of each table (see pp_row_ids)
+        self._pp_next_id: dict[str, int] = {}
+        self._pp_id_lock = threading.Lock()
 
         tbls_in_db = self.get_table_names()
 
@@ -172,6 +185,81 @@ class KIN_DB(Kimeco_db):
             )
             for row in db_rslt
         ]
+
+    @staticmethod
+    def _rate_key(pres: Any,
+                  temp: Any,
+                  pes_id: Any,
+                  from_name: Any,
+                  to_name: Any) -> RateKey:
+        """Natural key of a rate row, rounded as in RateCo.is_in_db."""
+        return (round(float(pres), 5), round(float(temp), 5), int(pes_id),
+                str(from_name), str(to_name))
+
+    def pp_row_ids(self,
+                   table: str,
+                   kin_id: int,
+                   keys: list[RateKey]) -> list[int]:
+        """Row ids for the postprocessing rates of one kinetics object.
+
+        A key already stored (or waiting in the batch upsert) for this
+        kin_id keeps its row id, so rewriting a cell never duplicates it.
+        Any other key gets a new id above every id of the table, so rows
+        written by an earlier postprocessing on another (P,T) grid are
+        never overwritten.
+
+        Args:
+            table (str): generation table name
+            kin_id (int): kinetics identifier
+            keys (list[RateKey]): (P, T, pes_id, from_name, to_name)
+                of each row to write
+
+        Returns:
+            list[int]: one row id per key, in the same order
+        """
+        sql_table = self.tables[table]
+        query = select(
+            sql_table.c.id,
+            sql_table.c.P,
+            sql_table.c.T,
+            sql_table.c.pes_id,
+            sql_table.c.from_name,
+            sql_table.c.to_name,
+        ).where(
+            sql_table.c.kin_id == kin_id
+        )
+        with self.eng.begin() as conn:
+            stored: Sequence[Row[Any]] = conn.execute(query).fetchall()
+        known: dict[RateKey, int] = {
+            self._rate_key(*row[1:]): int(row[0]) for row in stored}
+        # Rows prepared but not yet upserted (values may be numpy strings)
+        with self._upsert_lock:
+            pending: dict = dict(self._upsert.get(table, {}))
+        for row_id, vals in pending.items():
+            if int(vals['kin_id']) == kin_id:
+                known[self._rate_key(vals['P'], vals['T'], vals['pes_id'],
+                                     vals['from_name'], vals['to_name'])
+                      ] = int(row_id)
+
+        ids: list[int] = []
+        with self._pp_id_lock:
+            if table not in self._pp_next_id:
+                with self.eng.begin() as conn:
+                    max_id = conn.execute(
+                        select(func.max(sql_table.c.id))).scalar()
+                with self._upsert_lock:
+                    pending_ids = [int(row_id) for row_id in
+                                   self._upsert.get(table, {})]
+                self._pp_next_id[table] = max(
+                    PP_KIN_ROWID_BASE, int(max_id or 0) + 1,
+                    max(pending_ids, default=0) + 1)
+            for key in keys:
+                key = self._rate_key(*key)
+                if key not in known:
+                    known[key] = self._pp_next_id[table]
+                    self._pp_next_id[table] += 1
+                ids.append(known[key])
+        return ids
 
     def get_rates_for_models(
         self,

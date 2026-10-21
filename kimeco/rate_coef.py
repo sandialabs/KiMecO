@@ -2,7 +2,8 @@ from genericpath import isfile
 import time
 from typing import Any
 
-from kimeco.database.kin_db import KIN_DB
+# PP_KIN_ROWID_BASE is re-exported for existing imports
+from kimeco.database.kin_db import KIN_DB, PP_KIN_ROWID_BASE  # noqa: F401
 from kimeco.parameters import SOP
 from kimeco.q_sys import QueueingSystem, JobStatus
 from kimeco.writers.mess import MessWriter
@@ -11,11 +12,6 @@ from kimeco.readers.mess_output import MessOutputReader
 import os
 import numpy as np
 from kimeco.logger_config import KMOLogger
-
-
-# Reserved row-id band for additive postprocessing writes so partial
-# (per-(P,T)) rate rows never collide with the original run's rows.
-PP_KIN_ROWID_BASE = 10 ** 12
 
 
 class RateCo:
@@ -74,6 +70,8 @@ class RateCo:
         self.rc_by_pes: dict[int, np.ndarray] = {}
         # (P,T) cells not yet persisted for this object (postprocessing).
         self.missing_grid: list[tuple[float, float]] = []
+        # Generation table that missing_grid was evaluated on.
+        self.table: str | None = None
 
     def set_status(self,
                    table: str) -> None:
@@ -101,6 +99,7 @@ class RateCo:
         Returns:
             bool: True when every (P,T) cell is present (normal-run parity).
         """
+        self.table = table
         rows = self.db.get_rates_for_kin_id(table=table,
                                             kin_id=self.id)
         n_pairs: int = len(list(self.sop.reaction_iterator()))
@@ -242,19 +241,16 @@ class RateCo:
         n_t: int = len(self.temp)
         n_pairs: int = len(all_pairs)
         # In postprocessing, only the missing (P,T) cells are recomputed and
-        # appended; present cells stay untouched. A reserved row-id band keeps
-        # these additive rows from clobbering the original run's rows.
+        # appended; present cells stay untouched.
         partial: bool = bool(
             self.settings['postprocess'] and self.missing_grid)
         if partial:
             missing: set[tuple[float, float]] = {
                 (round(p, 5), round(t, 5)) for p, t in self.missing_grid
             }
-            base_id: int = PP_KIN_ROWID_BASE + int(
-                self.id * n_p * n_t * n_pairs)
         else:
             missing = set()
-            base_id = int(self.id * n_p * n_t * n_pairs)
+        base_id: int = int(self.id * n_p * n_t * n_pairs)
         for pidx, p in enumerate(self.pres):
             for tidx, t in enumerate(self.temp):
                 if partial and (round(p, 5), round(t, 5)) not in missing:
@@ -283,6 +279,20 @@ class RateCo:
                          to_name,
                          k_value)
                     )
+        if partial and rows:
+            # The table may already hold rows of an earlier postprocessing
+            # on another (P,T) grid: ids derived from this grid's layout
+            # would overwrite them, so the database allocates the ids.
+            if self.table is None:
+                raise RuntimeError(
+                    'is_in_db() must run before recover_rslts() '
+                    'in postprocessing.')
+            ids: list[int] = self.db.pp_row_ids(
+                table=self.table,
+                kin_id=self.id,
+                keys=[(row[1], row[2], row[4], row[5], row[6])
+                      for row in rows])
+            rows = [(row_id, *row[1:]) for row_id, row in zip(ids, rows)]
         return rows
 
     def load_rates_from_db(self,

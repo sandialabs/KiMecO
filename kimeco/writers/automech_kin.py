@@ -24,7 +24,8 @@ When executed on the compute node the emitted script:
 5. writes the base input, runs MESS (pass 1), moves the pass-1 output to a
    leading-underscore intermediate, and only if rate coefficients are missing
    (merged wells) derives WellExtension caps via
-   ``mess_io.well_lumped_input_file``, overwrites the input and runs MESS
+   ``mess_io.well_lumped_input_file`` (at the lump pressure converted to atm,
+   the unit mess_io parses the output in), overwrites the input and runs MESS
    (pass 2); otherwise the pass-1 output is moved back to
    ``<name>P<slot>.out`` and pass 2 is skipped.
 
@@ -278,6 +279,18 @@ def _run_mess(inp_name):
     subprocess.run(["mess", inp_name], check=False)
 
 
+def _lump_pressure_atm():
+    # mess_io parses the output pressures into atm whatever the unit of the
+    # PressureList, so the lump pressure is compared in atm too. Otherwise no
+    # k(T) is found there and the WellExtension caps fall back to the
+    # lowest temperature of the run.
+    if PRES_UNIT == "bar":
+        return LUMP_PRESSURE * phycon.BAR2ATM
+    if PRES_UNIT == "torr":
+        return LUMP_PRESSURE * phycon.TORR2ATM
+    return LUMP_PRESSURE
+
+
 def main():
     base = NAME + "P" + ("%02d" % SLOT)
     inp_name = base + ".inp"
@@ -315,7 +328,8 @@ def main():
             log_str = open(log_name).read()
 
         extended_inp = well_lumped_input_file(
-            base_inp, out_str, aux_str, log_str, LUMP_PRESSURE, LUMP_TEMP)
+            base_inp, out_str, aux_str, log_str, _lump_pressure_atm(),
+            LUMP_TEMP)
         handle = open(inp_name, "w")
         handle.write(extended_inp)
         handle.close()

@@ -55,28 +55,10 @@ class Extrapolate(CoreRun):
         mdl.reset += 1
         mdl.status = ModelStatus.SOP
 
-    def run_simulation(self,
-                       mdl: Model) -> None:
-        """Run a postprocessing Cantera simulation for an model."""
-        table_name: str = self.get_table_name(mdl)
-        if hasattr(mdl, 'thread_id'):
-            q_idx: int = mdl.thread_id
-        else:
-            q_idx = mdl.id
-        mdl.sim = SIM(
-            sop=mdl.sop,
-            kin=mdl.rateCoef,
-            id=mdl.id,
-            q_idx=q_idx,
-            db=self.sim_db,
-            gen_name=table_name,
-            loc=self.get_gen_folder(mdl),
-            q_sys=self.qs,
-            set=self.settings,
-            klog=self.klog
-        )
-        mdl.sim.q_up()
-        mdl.status = ModelStatus.SIM
+    # run_simulation() is inherited from CoreRun: it must reload the rates
+    # from KIN_DB before writing the simulation scripts, because the
+    # postprocess reuse branch of calculate_rate_coefficients() leaves
+    # rc_by_pes empty.
 
     def recalc_score(self,
                      mdl: Model) -> None:

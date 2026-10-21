@@ -10,11 +10,12 @@ Running the existing suite before commit/push, reproducing a CI failure, install
 
 ## Prerequisites
 
-- A Python 3.10–3.12 environment with KiMecO installed editable, including test and agentic extras:
+- A Python 3.11 or 3.12 environment (the package floor is `>=3.11`) with KiMecO installed editable, plus the `test` extra:
   ```bash
-  pip install -e .[test,agentic]
+  pip install -e .[test]            # or .[automech,test] to also run the automech-dependent cases
   ```
-  (`test` = `pytest>=9.0.2`; `agentic` = `anthropic`, `pydantic`, `pyyaml`, see `pyproject.toml`.)
+  `test` = `pytest>=9.0.2`. The only extras are `test` and `automech` (see `pyproject.toml`).
+- Never validate in Python 3.10 (e.g. the `game` env). `tests/unit/test_installation_metadata_ci.py` skips at module level without `tomllib`, so a broken dependency mirror still looks green.
 - No MESS binary or Slurm needed: unit tests that touch the queue or partition checks patch those calls (e.g. `QueueingSystem.get_all_running`, `sinfo`) instead of running them (the CI workflow comment states MESS-dependent tests are excluded from `tests/unit/`).
 
 ## Steps
@@ -34,15 +35,18 @@ Running the existing suite before commit/push, reproducing a CI failure, install
    ./hooks/run_tests.sh
    KIMECO_HOOK_TESTS=tests/unit/test_<subject>_ci.py ./hooks/run_tests.sh
    ```
-   `hooks/run_tests.sh` uses `TEST_PATH=${KIMECO_HOOK_TESTS:-tests/unit/}`, `cd`s to the repo root, and runs `conda run -n game python -m pytest` if a conda env named `game` exists, else `python -m pytest`.
+   `hooks/run_tests.sh` uses `TEST_PATH=${KIMECO_HOOK_TESTS:-tests/unit/}` and `cd`s to the repo root. It then picks the first usable conda env among `${KIMECO_HOOK_ENV}` (if set), `kmo`, `kimeco` and `automech`. An env is found with `conda env list`, or at `~/.conda/envs/<env>/bin/python`. It is usable when it has Python >= 3.11 and can import `pytest`. If none is usable, the hook uses the active `python` when that meets the same check, and otherwise exits 1. The first output line names the chosen env (`[git hook] Using conda env '<env>'`). Force one with `KIMECO_HOOK_ENV=<env> ./hooks/run_tests.sh`.
 4. Install the hooks (they are not installed automatically):
    ```bash
    git config core.hooksPath hooks
    ```
    `hooks/pre-commit` and `hooks/pre-push` both `exec hooks/run_tests.sh`.
 5. Reproduce CI:
-   - **GitHub Actions** (`.github/workflows/tests.yml`): Python 3.10, 3.11, 3.12 matrix; `pip install -e .[test,agentic]`; `pytest tests/unit/ -v`.
-   - **GitLab** (`.gitlab-ci.yml`): mamba env with Python 3.10, `mamba install --file requirements.txt setuptools wheel`, `pip install --no-build-isolation --no-deps -e .`; smoke checks (import `kimeco` and deps, `kmo --help`, `kmoui --help`, GUI module imports, `kmopp --help`); then `pytest tests/unit/ -v`; then `pytest tests/examples/ -v`, where exit code 5 (no tests collected) is tolerated.
+   - **GitHub Actions** (`.github/workflows/tests.yml`) has three jobs, each on a Python 3.11 / 3.12 matrix and each running `pytest tests/unit/ -v`:
+     - `test`: `pip install -e .[test]`, then the opt-in editable-install test (`KIMECO_RUN_INSTALL_TEST=1`).
+     - `test-automech-extra`: GitHub pre-install of `autoio`/`autochem`/`autofile`/`mechanalyzer`, `pip install -e .[automech,test]`, and `KIMECO_REQUIRE_EXTRAS=automech,test`, which turns skips into failures.
+     - `test-mess-binary`: a micromamba env with `mess-static`, plus `KIMECO_REQUIRE_MESS=1`.
+   - **GitLab** (`.gitlab-ci.yml`): mamba env with Python 3.11, `mamba install --file requirements.txt setuptools wheel`, `pip install --no-build-isolation --no-deps -e .`; smoke checks (import `kimeco` and deps, `kmo --help`, `kmoui --help`, GUI module imports, `kmopp --help`); then `pytest tests/unit/ -v`; then `pytest tests/examples/ -v`, where exit code 5 (no tests collected) is tolerated.
 
 ## Key files
 
@@ -53,11 +57,12 @@ Running the existing suite before commit/push, reproducing a CI failure, install
 
 ## Checks & pitfalls
 
-- **Collection error in `tests/unit/test_agentic_pipeline_ci.py`** (e.g. `ModuleNotFoundError: anthropic`/`yaml`/`pydantic`) means the `agentic` extra is missing: `pip install -e .[agentic]`. Note the GitLab job installs `requirements.txt` only, which does not include these packages.
-- If the `game` env exists but is stale, the hook runs tests there, not in your active env — compare with `python -m pytest` directly.
+- The hook may run in a different env than your active one (see step 3). If results differ, compare the hook's `Using conda env ...` line with `python -m pytest` in your env. The counts also differ between envs: an env without the `automech` extra skips those cases.
+- `test_agentic_pipeline_folder_absent` / `test_agentic_pipeline_not_importable` failing means a leftover `agentic_pipeline/` folder holding only `__pycache__/` exists at the repo root. Checking out `main`, which still has the package, and running Python there creates it. Delete the folder (`rm -rf agentic_pipeline/`).
+- A dependency-mirror failure (`extras_require[...] in setup.py differs from pyproject`, `DIST_TO_MODULES maps ...`) means a dependency was changed in one place only: follow the `add-dependency` skill.
 - Never bypass hooks with `--no-verify`, never skip, delete, or weaken tests to get green. Report failures (test name, assertion, traceback head) to the orchestrator so `ci-test` or `planning` can act.
 - `tests/examples/` and `tests/parse_pes/` may need MESS/cluster resources; they are not part of the hook/CI unit run.
 
 ## Lane
 
-Operational: running tests changes no tracked file. Pytest may create `.pytest_cache/` and `__pycache__/`; `.pytest_cache/` is not gitignored, so check `git status --short` afterwards and do not commit it.
+Operational: running tests changes no tracked file. Pytest may create `.pytest_cache/` and `__pycache__/`. Both are ignored: `.pytest_cache/` carries its own `.gitignore` written by pytest, and `**.pyc` is in the repo `.gitignore`. A quick `git status --short` afterwards still confirms that nothing else changed.

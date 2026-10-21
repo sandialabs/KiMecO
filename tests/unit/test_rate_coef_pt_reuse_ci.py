@@ -29,6 +29,9 @@ class _FakeKinDB:
     def get_rates_for_kin_id(self, table, kin_id, pes_id=None):
         return list(self._rows)
 
+    def pp_row_ids(self, table, kin_id, keys):
+        return [PP_KIN_ROWID_BASE + i for i in range(len(keys))]
+
 
 class _StatusQueue:
     def status(self, id: int, jtype: str) -> JobStatus:
@@ -191,6 +194,7 @@ def test_recover_rslts_partial_appends_only_missing_cells(
         'kimeco.rate_coef.MessOutputReader', _FakeMOR)
     rc = _rateco(tmp_path, _PARTIAL_ROWS, postprocess=True,
                  q_sys=_RecoverQueue())
+    rc.table = 'G0000'
     rc.missing_grid = [(1.0, 400.0)]
     Path(rc.loc).mkdir(parents=True, exist_ok=True)
     for output_name in rc.output_names:

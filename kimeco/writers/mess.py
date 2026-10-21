@@ -21,7 +21,11 @@ class MessWriter:
     def _fmt_grid(values: list[float]) -> str:
         out = ""
         for v in values:
-            out += f" {v: 8.2f}"
+            # 5 significant figures: decimals depend on the magnitude.
+            # Exponent taken after rounding so 9.99996 -> 10.000, not 10.0000.
+            exponent = int(f"{v:.4e}".split('e')[1])
+            decimals = max(0, 4 - exponent)
+            out += f" {v: .{decimals}f}"
         out += '\n'
         return out
 
