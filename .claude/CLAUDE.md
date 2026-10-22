@@ -45,6 +45,11 @@ relative to the repository root. `[[name]]` links inside a note refer to the `na
 another note, tracked or local.
 
 Rules for every agent:
+- Before you finish a task, check whether it explored or created complicated logic that a future
+  session would otherwise have to work out again: how an algorithm or data flow works across
+  several files, a non-obvious invariant, an external tool's behaviour, a pitfall that cost time.
+  If so, write or extend a note with the `record-memory-note` skill before you report; skip routine
+  work. Pipeline subagents report it as a memory candidate instead.
 - A note describes code that exists in the repository alongside it, or external facts. Never write
   a note about planned, in-progress or discarded work: step chains, step specs, drafts and review
   notes live in `.claude/work/` (gitignored). Note edits are part of a step's diff, committed or

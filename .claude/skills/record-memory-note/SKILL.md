@@ -1,12 +1,16 @@
 ---
 name: record-memory-note
-description: "Turn verified facts into KiMecO memory notes that later sessions and every agent can read: filter the candidates, re-verify them, choose a tracked (portable) or local (machine-specific) note, write or extend the note, and keep the indexes in .claude/CLAUDE.md and CLAUDE.local.md in sync. Use when a step chain finishes and .claude/work/<topic>/chain.md lists memory candidates, when the user says remember, note, save or record this for later, or after an investigation uncovered a non-obvious fact (an external tool's behaviour, a pitfall, where data or code lives)."
+description: "Turn verified facts into KiMecO memory notes that later sessions and every agent can read: filter the candidates, re-verify them, choose a tracked (portable) or local (machine-specific) note, write or extend the note, and keep the indexes in .claude/CLAUDE.md and CLAUDE.local.md in sync. Use at the end of any task or session that explored or created complicated logic a future session would otherwise have to work out again (how an algorithm or data flow works across several files, a non-obvious invariant, a pitfall that cost time), when a pipeline step closes with memory candidates in .claude/work/<topic>/chain.md, when the user says remember, note, save or record this for later, or after an investigation uncovered a non-obvious fact (an external tool's behaviour, a pitfall, where data or code lives)."
 ---
 # Record a memory note
 
 ## When to use
 
-- A step chain is finished: process the memory candidates collected in its `chain.md`.
+- A task or session is ending and it explored or created complicated logic that a future session
+  would otherwise have to work out again: how an algorithm or data flow works across several
+  files, a non-obvious invariant, a pitfall that cost time.
+- A pipeline step closes (or its chain finishes): process the memory candidates collected in its
+  `chain.md`.
 - The user asks to remember, note, save or record something for later sessions.
 - An investigation (operational lane, debugging, reading external code) established a fact that a
   later task will need and that took real effort to find.

@@ -46,10 +46,10 @@ Before Stage 1, classify the request:
 
 ### Recording memory notes
 
-Run the `record-memory-note` skill directly, without the pipeline stages:
-- when a chain finishes (see **Step chain**, Lifecycle 5);
-- when the user asks to remember, note, save or record something for later;
-- after an operational-lane run or an investigation that established a fact a later task will need.
+Run the `record-memory-note` skill directly, without the pipeline stages, at the end of every task in every lane whenever the task explored or created complicated logic that a future session would otherwise have to work out again (see "Project memory" in `.claude/CLAUDE.md`):
+- when a pipeline step closes, on that step's memory candidates (see **Step chain**, Lifecycle 3), not only when the chain finishes;
+- after a small-fix-lane or operational-lane run, or an investigation;
+- when the user asks to remember, note, save or record something for later.
 
 Write the notes the skill accepts without asking first, and list every note created, extended or dropped (one line each, with the reason for drops) in your report. Tracked notes then show in the git diff the user reviews; local notes are visible only in that list.
 
@@ -78,16 +78,16 @@ Both live in `.claude/work/<topic>/` (gitignored; `<topic>` is a short kebab-cas
 1. **Build the chain.** For a new pipeline-lane request, first dispatch `scope-assessment` in **chain mode** with the verbatim request. Present the step chain, and any open scope questions, to the user and get explicit validation; relay changes back to `scope-assessment` and re-present until validated. Then write `chain.md` and start step 1. A chain of one step is fine and still gets its files.
 2. **Run a step.** Write its `step.md`, then run Stages 1–7, with Stage 1 in **step mode**. Give every dispatch the paths of `chain.md` and `step.md` plus what its stage needs, instead of pasting earlier conversation. Each step keeps all its user gates (Stages 3, 4 and 5c).
 3. **Close the step** after Stage 7:
-   1. Write its handoff in `chain.md`, add the step's memory candidates to the list there, and mark the step `done`.
+   1. Write its handoff in `chain.md`, run `record-memory-note` on the step's memory candidates (see **Recording memory notes**), keep in the list there only the candidates it did not process, and mark the step `done`.
    2. **Clear out the context the next step does not need.**
       - Overwrite `step.md` with the next step's header only. No scope maps, questions and answers, drafts, plans or test details of the finished step carry over.
       - Remove superseded text from `chain.md` (decisions that no longer apply, chain revisions replaced by newer ones).
       - Check that `version-control` reported the memory notes it updated or deleted for this step (or "notes unaffected"); memory keeps only what a later task will need (see "Project memory" in `.claude/CLAUDE.md`).
       - From then on, build dispatches only from `chain.md`, the new `step.md` and the code, never from the finished step's conversation.
-   3. Tell the user in one short message: step k is done (behaviour, files changed, tests) and which step starts now. The files are listed so the user can review and commit step by step.
+   3. Tell the user in one short message: step k is done (behaviour, files changed, tests, memory notes written) and which step starts now. The files are listed so the user can review and commit step by step.
    4. **Start the next step automatically** at Stage 1, without asking whether to continue.
 4. **Stop the chain and ask the user** when the Stage 1 chain check says the chain no longer holds (present the proposed revision), a step cannot be made green, a step would have to cross its validated boundaries, or the user rejects a gate. If the user says "pause" or "stop after this step", finish and close the current step, then stop.
-5. **Finish.** When the last step is closed, run `record-memory-note` on the chain's memory candidates (see **Recording memory notes**), mark the chain `done` in `chain.md`, and give the final summary (see Output Format).
+5. **Finish.** When the last step is closed, run `record-memory-note` on any memory candidates still listed in `chain.md` (see **Recording memory notes**), mark the chain `done` in `chain.md`, and give the final summary (see Output Format).
 6. **Resume.** At the start of a session, look for a `.claude/work/*/chain.md` with unfinished steps. If there is one, tell the user which step is next and ask whether to resume it before starting new work.
 
 ## Pipeline (run in order, once per step)
