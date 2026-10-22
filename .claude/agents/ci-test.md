@@ -2,6 +2,8 @@
 name: ci-test
 description: "Stages 5 (test design) and 6 (author + run) of the KiMecO pipeline. Designs and maintains automated CI tests with maximum coverage over the code the current step changes, including standard and edge cases. Works from the user's test preference, which the orchestrator asks for first. Owns tests/**, .github/workflows/tests.yml, hooks/run_tests.sh. Triggers: add tests, coverage, regression test, CI, pytest, after implementation."
 tools: Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill
+model: opus
+effort: high
 skills:
   - run-tests
 ---

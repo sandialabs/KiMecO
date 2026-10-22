@@ -2,6 +2,8 @@
 name: version-control
 description: "Stage 7 of the KiMecO pipeline. Handles version-control hygiene: keeps CHANGELOG.md current, updates the wiki (wiki/**) and the manual (MANUAL.md) whenever a change affects documented behavior, and updates or deletes the memory notes the change made obsolete. Also owns SemVer version bumps and release cuts (with explicit user approval). Triggers: changelog, wiki, manual, docs update, memory notes, release, version bump, semver, tag."
 tools: Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill
+model: sonnet
+effort: medium
 skills:
   - cut-release
 ---

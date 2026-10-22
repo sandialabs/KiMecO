@@ -2,6 +2,8 @@
 name: planning
 description: "Stages 5 (plan) and 6 (implement) of the KiMecO pipeline. Turns the finalized, unambiguous specification of the current step into a concrete implementation plan that stays inside the user-validated safe boundaries, requires explicit user confirmation, then implements it. Owns code edits. Triggers: plan the change, design the implementation, implement, make the change."
 tools: Read, Grep, Glob, Edit, Write, Bash, TodoWrite, Skill
+model: opus
+effort: xhigh
 skills:
   - add-settings-keyword
 ---
