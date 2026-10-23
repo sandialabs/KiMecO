@@ -106,7 +106,7 @@ class NelderMeadInstance(NelderMead):
             self.klog.debug(
                 f"Setting Nelder-Mead maxiter="
                 f"{self.settings['nm_maxiter']}")
-            options['maxiter'] = self.settings['nm__maxiter']
+            options['maxiter'] = self.settings['nm_maxiter']
 
         if self.settings['nm_maxfev'] > 0:
             self.klog.debug(

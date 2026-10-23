@@ -74,12 +74,56 @@ def test_real_mess_output_without_missing_tp_rates_is_not_merging() -> None:
     assert MessOutputReader.well_merging(str(_REAL_OUT)) is False
 
 
-def test_synthetic_healthy_section_is_not_merging(tmp_path: Path) -> None:
+def test_non_merging_edge_cases(tmp_path) -> None:
+    """A healthy section, an empty file, a truncated healthy table and an empty
+    section are not merging."""
+    _tmp_root = tmp_path
+    # -- test_synthetic_healthy_section_is_not_merging
+    tmp_path = _tmp_root / 'test_synthetic_healthy_section_is_not_merging'
+    tmp_path.mkdir(parents=True)
     assert MessOutputReader.well_merging(_write(tmp_path, _HEALTHY)) is False
 
+    # -- test_empty_file_is_not_merging
+    tmp_path = _tmp_root / 'test_empty_file_is_not_merging'
+    tmp_path.mkdir(parents=True)
+    path = tmp_path / 'empty.out'
+    path.write_text('')
+    assert MessOutputReader.well_merging(str(path)) is False
 
-def test_starred_tp_cell_reports_merging(tmp_path: Path) -> None:
-    """A single missing coefficient in a T/P table flips the gate to True."""
+    # -- test_truncated_healthy_table_is_not_merging: Truncation alone is not
+    #    merging - only missing star cells are.
+    tmp_path = _tmp_root / 'test_truncated_healthy_table_is_not_merging'
+    tmp_path.mkdir(parents=True)
+    path = tmp_path / 'truncated_ok.out'
+    path.write_text(
+        'Species-Species Rate Tables:\n'
+        '\n'
+        'Temperature = 550 K    Pressure = 1 bar\n'
+        '\n'
+        'From\\To            W1        W2\n'
+        'W1                5.42    0.00363\n'
+        'W2            3.34e+03')
+    assert MessOutputReader.well_merging(str(path)) is False
+
+    # -- test_terminator_immediately_after_section_header: An empty rate-table
+    #    section is not merging.
+    tmp_path = _tmp_root / 'test_terminator_immediately_after_section_header'
+    tmp_path.mkdir(parents=True)
+    path = _write(tmp_path, """\
+        Species-Species Rate Tables:
+        ______________________________________________________________________
+        """)
+    assert MessOutputReader.well_merging(path) is False
+
+
+def test_starred_cells_report_merging(tmp_path) -> None:
+    """A starred T/P cell in any value column, every star token variant, a
+    truncated table and case/whitespace-variant headers all report merging."""
+    _tmp_root = tmp_path
+    # -- test_starred_tp_cell_reports_merging: A single missing coefficient in
+    #    a T/P table flips the gate to True.
+    tmp_path = _tmp_root / 'test_starred_tp_cell_reports_merging'
+    tmp_path.mkdir(parents=True)
     path = _write(tmp_path, """\
         Species-Species Rate Tables:
 
@@ -93,9 +137,102 @@ def test_starred_tp_cell_reports_merging(tmp_path: Path) -> None:
         """)
     assert MessOutputReader.well_merging(path) is True
 
+    # -- test_star_detected_in_any_value_column: The scan covers every value
+    #    cell, not just the first or last.
+    _failures = []
+    _case = 0
+    for column in [0, 1, 2]:
+        _case += 1
+        try:
+            tmp_path = _tmp_root / f'test_star_detected_in_any_value_column_{_case}'
+            tmp_path.mkdir(parents=True)
+            cells = ['5.42', '0.00363', '7.7e+02']
+            cells[column] = '***'
+            path = _write(tmp_path, f"""\
+                Species-Species Rate Tables:
 
-def test_high_pressure_block_stars_are_ignored(tmp_path: Path) -> None:
-    """``***`` in a High Pressure table is legitimate, not a merged well."""
+                Temperature = 550 K    Pressure = 1 bar
+
+                From\\To            W1        W2        W3
+                W1        {cells[0]:>10} {cells[1]:>10} {cells[2]:>10}
+                W2            3.34e+03   2.01e+05   1.00e+02
+
+                ______________________________________________________________________
+                """)
+            assert MessOutputReader.well_merging(path) is True
+        except AssertionError as _exc:
+            _failures.append(
+                f"test_star_detected_in_any_value_column"
+                f"[column={column!r}]: {_exc}")
+    assert not _failures, '\n'.join(_failures)
+
+    # -- test_all_star_token_variants_report_merging: MESS renders
+    #    overflow/missing cells with variable star widths.
+    _failures = []
+    _case = 0
+    for token in ['***', '*', '*****', '-***']:
+        _case += 1
+        try:
+            tmp_path = _tmp_root / f'test_all_star_token_variants_report_merging_{_case}'
+            tmp_path.mkdir(parents=True)
+            path = _write(tmp_path, f"""\
+                Species-Species Rate Tables:
+
+                Temperature = 550 K    Pressure = 1 bar
+
+                From\\To            W1        W2
+                W1                5.42 {token:>10}
+                W2            3.34e+03   2.01e+05
+
+                ______________________________________________________________________
+                """)
+            assert MessOutputReader.well_merging(path) is True
+        except AssertionError as _exc:
+            _failures.append(
+                f"test_all_star_token_variants_report_merging"
+                f"[token={token!r}]: {_exc}")
+    assert not _failures, '\n'.join(_failures)
+
+    # -- test_truncated_table_without_trailing_blank_line_still_detects_star: A
+    #    MESS run killed mid-table must not hide a missing coefficient.
+    tmp_path = _tmp_root / 'test_truncated_table_without_trailing_blank_line_still_detects_star'
+    tmp_path.mkdir(parents=True)
+    path = tmp_path / 'truncated.out'
+    path.write_text(
+        'Species-Species Rate Tables:\n'
+        '\n'
+        'Temperature = 550 K    Pressure = 1 bar\n'
+        '\n'
+        'From\\To            W1        W2\n'
+        'W1                5.42        ***\n'
+        'W2            3.34e+03')
+    assert MessOutputReader.well_merging(str(path)) is True
+
+    # -- test_headers_are_case_and_whitespace_insensitive: Section/table
+    #    detection uses lstrip + casefold on the headers.
+    tmp_path = _tmp_root / 'test_headers_are_case_and_whitespace_insensitive'
+    tmp_path.mkdir(parents=True)
+    path = _write(tmp_path, """\
+           SPECIES-SPECIES RATE TABLES:
+
+           TEMPERATURE = 550 K    PRESSURE = 1 bar
+
+           From\\To            W1        W2
+           W1                5.42        ***
+
+           ____________________________________________________________
+           """)
+    assert MessOutputReader.well_merging(path) is True
+
+
+def test_stars_outside_rate_cells_are_ignored(tmp_path) -> None:
+    """Stars in the high-pressure block, after the terminator, in a row label or
+    before the section header do not trip the gate."""
+    _tmp_root = tmp_path
+    # -- test_high_pressure_block_stars_are_ignored: ``***`` in a High Pressure
+    #    table is legitimate, not a merged well.
+    tmp_path = _tmp_root / 'test_high_pressure_block_stars_are_ignored'
+    tmp_path.mkdir(parents=True)
     path = _write(tmp_path, """\
         Species-Species Rate Tables:
 
@@ -117,14 +254,10 @@ def test_high_pressure_block_stars_are_ignored(tmp_path: Path) -> None:
         """)
     assert MessOutputReader.well_merging(path) is False
 
-
-def test_terminator_stops_scan_before_trailing_starred_section(
-        tmp_path: Path) -> None:
-    """Everything after the ``____`` rule is out of scope for the gate.
-
-    Without the ``break`` the trailing (starred) T/P-looking table below would
-    wrongly report merging.
-    """
+    # -- test_terminator_stops_scan_before_trailing_starred_section: Everything
+    #    after the ``____`` rule is out of scope for the gate.
+    tmp_path = _tmp_root / 'test_terminator_stops_scan_before_trailing_starred_section'
+    tmp_path.mkdir(parents=True)
     path = _write(tmp_path, """\
         Species-Species Rate Tables:
 
@@ -145,68 +278,10 @@ def test_terminator_stops_scan_before_trailing_starred_section(
         """)
     assert MessOutputReader.well_merging(path) is False
 
-
-def test_well_merging_is_a_staticmethod_callable_without_an_instance(
-        tmp_path: Path) -> None:
-    """The gate runs on the compute node with no SOP/settings/logger."""
-    raw = inspect.getattr_static(MessOutputReader, 'well_merging')
-    assert isinstance(raw, staticmethod)
-    params = list(inspect.signature(MessOutputReader.well_merging).parameters)
-    assert params == ['filename']
-    # No instantiation, no settings dict, no SOP, no KMOLogger.
-    assert MessOutputReader.well_merging(_write(tmp_path, _HEALTHY)) is False
-
-
-def test_well_merging_does_not_mutate_the_file(tmp_path: Path) -> None:
-    path = _write(tmp_path, _HEALTHY)
-    before = Path(path).read_bytes()
-    MessOutputReader.well_merging(path)
-    assert Path(path).read_bytes() == before
-
-
-# ---------------------------------------------------------------------------
-# Edge cases
-# ---------------------------------------------------------------------------
-@pytest.mark.parametrize('column', [0, 1, 2])
-def test_star_detected_in_any_value_column(tmp_path: Path,
-                                           column: int) -> None:
-    """The scan covers every value cell, not just the first or last."""
-    cells = ['5.42', '0.00363', '7.7e+02']
-    cells[column] = '***'
-    path = _write(tmp_path, f"""\
-        Species-Species Rate Tables:
-
-        Temperature = 550 K    Pressure = 1 bar
-
-        From\\To            W1        W2        W3
-        W1        {cells[0]:>10} {cells[1]:>10} {cells[2]:>10}
-        W2            3.34e+03   2.01e+05   1.00e+02
-
-        ______________________________________________________________________
-        """)
-    assert MessOutputReader.well_merging(path) is True
-
-
-@pytest.mark.parametrize('token', ['***', '*', '*****', '-***'])
-def test_all_star_token_variants_report_merging(tmp_path: Path,
-                                                token: str) -> None:
-    """MESS renders overflow/missing cells with variable star widths."""
-    path = _write(tmp_path, f"""\
-        Species-Species Rate Tables:
-
-        Temperature = 550 K    Pressure = 1 bar
-
-        From\\To            W1        W2
-        W1                5.42 {token:>10}
-        W2            3.34e+03   2.01e+05
-
-        ______________________________________________________________________
-        """)
-    assert MessOutputReader.well_merging(path) is True
-
-
-def test_star_in_row_label_is_ignored(tmp_path: Path) -> None:
-    """Only ``split()[1:]`` is scanned, so a starred species name is safe."""
+    # -- test_star_in_row_label_is_ignored: Only ``split()[1:]`` is scanned, so
+    #    a starred species name is safe.
+    tmp_path = _tmp_root / 'test_star_in_row_label_is_ignored'
+    tmp_path.mkdir(parents=True)
     path = _write(tmp_path, """\
         Species-Species Rate Tables:
 
@@ -220,68 +295,10 @@ def test_star_in_row_label_is_ignored(tmp_path: Path) -> None:
         """)
     assert MessOutputReader.well_merging(path) is False
 
-
-def test_empty_file_is_not_merging(tmp_path: Path) -> None:
-    path = tmp_path / 'empty.out'
-    path.write_text('')
-    assert MessOutputReader.well_merging(str(path)) is False
-
-
-def test_truncated_table_without_trailing_blank_line_still_detects_star(
-        tmp_path: Path) -> None:
-    """A MESS run killed mid-table must not hide a missing coefficient."""
-    path = tmp_path / 'truncated.out'
-    path.write_text(
-        'Species-Species Rate Tables:\n'
-        '\n'
-        'Temperature = 550 K    Pressure = 1 bar\n'
-        '\n'
-        'From\\To            W1        W2\n'
-        'W1                5.42        ***\n'
-        'W2            3.34e+03')
-    assert MessOutputReader.well_merging(str(path)) is True
-
-
-def test_truncated_healthy_table_is_not_merging(tmp_path: Path) -> None:
-    """Truncation alone is not merging - only missing star cells are."""
-    path = tmp_path / 'truncated_ok.out'
-    path.write_text(
-        'Species-Species Rate Tables:\n'
-        '\n'
-        'Temperature = 550 K    Pressure = 1 bar\n'
-        '\n'
-        'From\\To            W1        W2\n'
-        'W1                5.42    0.00363\n'
-        'W2            3.34e+03')
-    assert MessOutputReader.well_merging(str(path)) is False
-
-
-def test_headers_are_case_and_whitespace_insensitive(tmp_path: Path) -> None:
-    """Section/table detection uses lstrip + casefold on the headers."""
-    path = _write(tmp_path, """\
-           SPECIES-SPECIES RATE TABLES:
-
-           TEMPERATURE = 550 K    PRESSURE = 1 bar
-
-           From\\To            W1        W2
-           W1                5.42        ***
-
-           ____________________________________________________________
-           """)
-    assert MessOutputReader.well_merging(path) is True
-
-
-def test_terminator_immediately_after_section_header(tmp_path: Path) -> None:
-    """An empty rate-table section is not merging."""
-    path = _write(tmp_path, """\
-        Species-Species Rate Tables:
-        ______________________________________________________________________
-        """)
-    assert MessOutputReader.well_merging(path) is False
-
-
-def test_lines_before_the_section_header_are_ignored(tmp_path: Path) -> None:
-    """Starred preamble tables must not trip the gate."""
+    # -- test_lines_before_the_section_header_are_ignored: Starred preamble
+    #    tables must not trip the gate.
+    tmp_path = _tmp_root / 'test_lines_before_the_section_header_are_ignored'
+    tmp_path.mkdir(parents=True)
     path = _write(tmp_path, """\
         Temperature = 550 K    Pressure = 1 bar
 
@@ -300,12 +317,40 @@ def test_lines_before_the_section_header_are_ignored(tmp_path: Path) -> None:
     assert MessOutputReader.well_merging(path) is False
 
 
-def test_missing_file_propagates_filenotfounderror(tmp_path: Path) -> None:
-    """``well_merging`` itself does not guard existence.
+def test_well_merging_contract(tmp_path) -> None:
+    """well_merging is a static method callable without an instance, does not
+    mutate the file, and lets FileNotFoundError propagate (the emitted driver
+    checks existence first)."""
+    _tmp_root = tmp_path
+    # -- test_well_merging_is_a_staticmethod_callable_without_an_instance: The
+    #    gate runs on the compute node with no SOP/settings/logger.
+    tmp_path = _tmp_root / 'test_well_merging_is_a_staticmethod_callable_without_an_instance'
+    tmp_path.mkdir(parents=True)
+    raw = inspect.getattr_static(MessOutputReader, 'well_merging')
+    assert isinstance(raw, staticmethod)
+    params = list(inspect.signature(MessOutputReader.well_merging).parameters)
+    assert params == ['filename']
+    # No instantiation, no settings dict, no SOP, no KMOLogger.
+    assert MessOutputReader.well_merging(_write(tmp_path, _HEALTHY)) is False
 
-    The emitted driver checks ``os.path.isfile`` before calling it (see
-    ``test_automech_driver_merging_ci.py``), so the raw helper is only ever
-    invoked on a path known to exist.
-    """
+    # -- test_well_merging_does_not_mutate_the_file
+    tmp_path = _tmp_root / 'test_well_merging_does_not_mutate_the_file'
+    tmp_path.mkdir(parents=True)
+    path = _write(tmp_path, _HEALTHY)
+    before = Path(path).read_bytes()
+    MessOutputReader.well_merging(path)
+    assert Path(path).read_bytes() == before
+
+    # -- test_missing_file_propagates_filenotfounderror: ``well_merging``
+    #    itself does not guard existence.
+    tmp_path = _tmp_root / 'test_missing_file_propagates_filenotfounderror'
+    tmp_path.mkdir(parents=True)
     with pytest.raises(FileNotFoundError):
         MessOutputReader.well_merging(str(tmp_path / 'does_not_exist.out'))
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+

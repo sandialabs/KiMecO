@@ -52,7 +52,11 @@ def _build_sop(swapped: bool = False) -> SOP:
     return sop
 
 
-def test_item_pes_ids_excludes_fragments_and_includes_barriers() -> None:
+def test_item_pes_ids_and_table_round_trip(tmp_path) -> None:
+    """item_pes_ids excludes fragments and includes barriers; SOP_DB creates the
+    item PES table and loads it back."""
+    _tmp_root = tmp_path
+    # -- test_item_pes_ids_excludes_fragments_and_includes_barriers
     sop = _build_sop()
 
     assert sop.item_pes_ids == {
@@ -62,8 +66,9 @@ def test_item_pes_ids_excludes_fragments_and_includes_barriers() -> None:
         'TS_LEFT_RIGHT': (1,),
     }
 
-
-def test_sop_db_creates_and_loads_item_pes_table(tmp_path: Path) -> None:
+    # -- test_sop_db_creates_and_loads_item_pes_table
+    tmp_path = _tmp_root / 'test_sop_db_creates_and_loads_item_pes_table'
+    tmp_path.mkdir(parents=True)
     log_file = tmp_path / 'sop_db.log'
     sop = _build_sop()
 

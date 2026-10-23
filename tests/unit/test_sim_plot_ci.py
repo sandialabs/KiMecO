@@ -20,7 +20,10 @@ def _decoded() -> np.ndarray:
     )
 
 
-def test_build_profile_figure_only_plots_selected_species() -> None:
+def test_build_profile_figure_plots_selected_species_only() -> None:
+    """Only the selected species are plotted; an experiment without the species
+    is skipped."""
+    # -- test_build_profile_figure_only_plots_selected_species
     fig = build_profile_figure(
         decoded=_decoded(),
         species=['A', 'B'],
@@ -31,6 +34,21 @@ def test_build_profile_figure_only_plots_selected_species() -> None:
     assert len(fig.data) == 1
     assert fig.data[0].name == 'A (sim)'
     assert list(fig.data[0].y) == [1.0, 0.5, 0.25]
+
+    # -- test_build_profile_figure_skips_experiment_without_species
+    exp = SimpleNamespace(
+        species=['A'],
+        data=np.array([[0.0, 1.0], [1.0, 0.5]], dtype=float),
+        error=None,
+    )
+    fig = build_profile_figure(
+        decoded=_decoded(),
+        species=['A', 'B'],
+        selected_species=['B'],
+        exp=exp,
+    )
+    # B has no experimental counterpart -> only the simulated trace.
+    assert [t.name for t in fig.data] == ['B (sim)']
 
 
 def test_build_profile_figure_overlays_experimental_profile() -> None:
@@ -52,17 +70,3 @@ def test_build_profile_figure_overlays_experimental_profile() -> None:
     assert list(exp_trace.error_y.array) == [0.1, 0.1, 0.1]
 
 
-def test_build_profile_figure_skips_experiment_without_species() -> None:
-    exp = SimpleNamespace(
-        species=['A'],
-        data=np.array([[0.0, 1.0], [1.0, 0.5]], dtype=float),
-        error=None,
-    )
-    fig = build_profile_figure(
-        decoded=_decoded(),
-        species=['A', 'B'],
-        selected_species=['B'],
-        exp=exp,
-    )
-    # B has no experimental counterpart -> only the simulated trace.
-    assert [t.name for t in fig.data] == ['B (sim)']

@@ -114,97 +114,104 @@ def test_get_generation_uses_stored_row_id(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 # set_postprocessing
 # ---------------------------------------------------------------------------
-def test_set_postprocessing_runs_extrapolate_once_with_primary_dbs(
-        monkeypatch) -> None:
-    _patch_from_db_row(monkeypatch)
-    recorded = _install_extrapolate_spy(monkeypatch)
-    pp = _pp(
-        sop_db=_FakeSopDB({'G0000': [(5, 1.0), (9, 2.0)]}),
-        settings=_base_settings(),
-    )
+def test_set_postprocessing_runs_extrapolate_once_with_primary_dbs(monkeypatch) -> None:
+    """set_postprocessing runs Extrapolate once with the primary databases and
+    deduplicates models across ensembles."""
+    _mp_root = monkeypatch
+    # -- test_set_postprocessing_runs_extrapolate_once_with_primary_dbs
+    with _mp_root.context() as monkeypatch:
+        _patch_from_db_row(monkeypatch)
+        recorded = _install_extrapolate_spy(monkeypatch)
+        pp = _pp(
+            sop_db=_FakeSopDB({'G0000': [(5, 1.0), (9, 2.0)]}),
+            settings=_base_settings(),
+        )
 
-    pp.set_postprocessing()
+        pp.set_postprocessing()
 
-    assert recorded['init'] == 1
-    assert recorded['ran'] == 1
-    kwargs = recorded['kwargs']
-    # Primary run databases, not any PP_DB_* clones.
-    assert kwargs['sop_db'] is pp.sop_db
-    assert kwargs['kin_db'] is pp.kin_db
-    assert kwargs['sim_db'] is pp.sim_db
-    assert kwargs['prefix'] == 'PP'
+        assert recorded['init'] == 1
+        assert recorded['ran'] == 1
+        kwargs = recorded['kwargs']
+        # Primary run databases, not any PP_DB_* clones.
+        assert kwargs['sop_db'] is pp.sop_db
+        assert kwargs['kin_db'] is pp.kin_db
+        assert kwargs['sim_db'] is pp.sim_db
+        assert kwargs['prefix'] == 'PP'
 
-    models = kwargs['models']
-    assert [m.id for m in models] == [5, 9]
-    assert all(m.origin_prefix == 'G' for m in models)
-    assert all(m.gen == 0 for m in models)
-    # _sim_offset = n_run + pp_band * n_pp = 3 + 0 * 1.
-    assert all(m._sim_offset == 3 for m in models)
-    assert [m.thread_id for m in models] == [0, 1]
+        models = kwargs['models']
+        assert [m.id for m in models] == [5, 9]
+        assert all(m.origin_prefix == 'G' for m in models)
+        assert all(m.gen == 0 for m in models)
+        # _sim_offset = n_run + pp_band * n_pp = 3 + 0 * 1.
+        assert all(m._sim_offset == 3 for m in models)
+        assert [m.thread_id for m in models] == [0, 1]
 
+    # -- test_set_postprocessing_dedup_across_ensembles
+    with _mp_root.context() as monkeypatch:
+        _patch_from_db_row(monkeypatch)
+        recorded = _install_extrapolate_spy(monkeypatch)
+        pp = _pp(
+            sop_db=_FakeSopDB({'G0000': [(5, 1.0), (9, 2.0)]}),
+            settings=_base_settings(pp_ensembles=['G0000', 'G0000']),
+        )
 
-def test_set_postprocessing_dedup_across_ensembles(monkeypatch) -> None:
-    _patch_from_db_row(monkeypatch)
-    recorded = _install_extrapolate_spy(monkeypatch)
-    pp = _pp(
-        sop_db=_FakeSopDB({'G0000': [(5, 1.0), (9, 2.0)]}),
-        settings=_base_settings(pp_ensembles=['G0000', 'G0000']),
-    )
+        pp.set_postprocessing()
 
-    pp.set_postprocessing()
-
-    models = recorded['kwargs']['models']
-    # Four models collected across two bands collapse to two unique ones.
-    assert [m.id for m in models] == [5, 9]
-    assert len(models) == 2
-    # Dedup keeps the first band, so the offset stays at band 0.
-    assert all(m._sim_offset == 3 for m in models)
-    assert recorded['init'] == 1
-
-
-def test_set_postprocessing_gt_models_carry_origin_prefix_and_gen(
-        monkeypatch) -> None:
-    shared = _patch_from_db_row(monkeypatch)
-    recorded = _install_extrapolate_spy(monkeypatch)
-    goat_model = SimpleNamespace(sop=shared, id=42, gen=7)
-    pp = _pp(
-        sop_db=_FakeSopDB({}),
-        goats=SimpleNamespace(
-            prefix='G',
-            get_goat_for_gen=lambda gen_id: [goat_model]),
-        settings=_base_settings(pp_ensembles=['GT0002']),
-    )
-
-    pp.set_postprocessing()
-
-    models = recorded['kwargs']['models']
-    assert len(models) == 1
-    mdl = models[0]
-    assert mdl.id == 42
-    assert mdl.gen == 7
-    assert mdl.origin_prefix == 'G'  # == goats.prefix
+        models = recorded['kwargs']['models']
+        # Four models collected across two bands collapse to two unique ones.
+        assert [m.id for m in models] == [5, 9]
+        assert len(models) == 2
+        # Dedup keeps the first band, so the offset stays at band 0.
+        assert all(m._sim_offset == 3 for m in models)
+        assert recorded['init'] == 1
 
 
-def test_set_postprocessing_logs_experiment_metadata_not_grid(
-        monkeypatch) -> None:
-    pp = _pp(
-        sop_db=_FakeSopDB({}),
-        settings=_base_settings(
-            pp_ensembles=[],
-            pp_experiments=[
-                SimpleNamespace(P=101325.0, exp_type='TP', T=300.0,
-                                species=['A', 'B'], X={'A': 0.5, 'B': 0.5}),
-            ],
-        ),
-    )
+def test_set_postprocessing_gt_models_carry_origin_prefix_and_gen(monkeypatch) -> None:
+    """gt models carry their origin prefix and generation; the log reports
+    experiment metadata, not the grid."""
+    _mp_root = monkeypatch
+    # -- test_set_postprocessing_gt_models_carry_origin_prefix_and_gen
+    with _mp_root.context() as monkeypatch:
+        shared = _patch_from_db_row(monkeypatch)
+        recorded = _install_extrapolate_spy(monkeypatch)
+        goat_model = SimpleNamespace(sop=shared, id=42, gen=7)
+        pp = _pp(
+            sop_db=_FakeSopDB({}),
+            goats=SimpleNamespace(
+                prefix='G',
+                get_goat_for_gen=lambda gen_id: [goat_model]),
+            settings=_base_settings(pp_ensembles=['GT0002']),
+        )
 
-    pp.set_postprocessing()
+        pp.set_postprocessing()
 
-    msgs = cast(_SpyLog, pp.klog).infos
-    assert any('pp_exp #0' in m for m in msgs)
-    assert any('TP' in m and 'A' in m for m in msgs)
-    # The flat pp_temp / pp_pres grid dump must be gone.
-    assert not any('pp_temp' in m or 'pp_pres' in m for m in msgs)
+        models = recorded['kwargs']['models']
+        assert len(models) == 1
+        mdl = models[0]
+        assert mdl.id == 42
+        assert mdl.gen == 7
+        assert mdl.origin_prefix == 'G'  # == goats.prefix
+
+    # -- test_set_postprocessing_logs_experiment_metadata_not_grid
+    with _mp_root.context() as monkeypatch:
+        pp = _pp(
+            sop_db=_FakeSopDB({}),
+            settings=_base_settings(
+                pp_ensembles=[],
+                pp_experiments=[
+                    SimpleNamespace(P=101325.0, exp_type='TP', T=300.0,
+                                    species=['A', 'B'], X={'A': 0.5, 'B': 0.5}),
+                ],
+            ),
+        )
+
+        pp.set_postprocessing()
+
+        msgs = cast(_SpyLog, pp.klog).infos
+        assert any('pp_exp #0' in m for m in msgs)
+        assert any('TP' in m and 'A' in m for m in msgs)
+        # The flat pp_temp / pp_pres grid dump must be gone.
+        assert not any('pp_temp' in m or 'pp_pres' in m for m in msgs)
 
 
 # ---------------------------------------------------------------------------

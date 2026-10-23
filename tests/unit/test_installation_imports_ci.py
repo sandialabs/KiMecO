@@ -10,7 +10,10 @@ Imports are probed in a fresh subprocess so a module that only imports
 because something else already populated ``sys.modules`` is caught. A
 second pass blocks the automech modules (``mess_io``, ``phydat``, ``autoio``,
 ``autochem``) to prove the base install works without the ``[automech]``
-extra.
+extra. Every fresh-interpreter command of this module is started at once by
+the module-scoped :func:`fresh_runs` fixture (not autouse, so
+``-k editable_install`` starts none of them), which bounds the wall time by
+the slowest process instead of their sum.
 
 ``test_editable_install_in_fresh_venv`` performs a real editable install in a
 throw-away venv and is opt-in via ``KIMECO_RUN_INSTALL_TEST=1`` (it is run in
@@ -28,6 +31,9 @@ from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
+
+from tests.unit.test_installation_extras_ci import (
+    DOCUMENTED_VERIFY_COMMAND, import_or_skip)
 
 REPO = Path(__file__).resolve().parents[2]
 PACKAGE_DIR = REPO / "kimeco"
@@ -73,27 +79,12 @@ def _is_ci() -> bool:
     return bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
 
 
-def _module_path(module: str) -> Path:
-    parts = module.split(".")
-    pkg = REPO.joinpath(*parts)
-    return pkg / "__init__.py" if pkg.is_dir() else pkg.with_suffix(".py")
-
-
 def _run_python(code: str, *, env: dict[str, str] | None = None,
                 python: str | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         [python or sys.executable, "-c", code],
         capture_output=True, text=True, timeout=300,
         cwd=str(REPO), env=env)
-
-
-# ---------------------------------------------------------------------------
-# Standard cases: every public module imports in a fresh interpreter
-# ---------------------------------------------------------------------------
-@pytest.mark.parametrize("module", PUBLIC_MODULES)
-def test_module_source_exists(module: str) -> None:
-    assert _module_path(module).is_file(), (
-        f"{module} has no source file at {_module_path(module)}")
 
 
 _IMPORT_ALL = """
@@ -110,39 +101,89 @@ if failures:
     sys.exit(1)
 """
 
-
-def _import_all(prelude: str = "") -> subprocess.CompletedProcess:
-    """Import every public module in one fresh interpreter, reporting each
-    failing module with its traceback (one process keeps the suite fast)."""
-    return _run_python(_IMPORT_ALL.format(prelude=prelude,
-                                          modules=PUBLIC_MODULES))
+_BLOCK_AUTOMECH = "\n".join(f"sys.modules[{m!r}] = None" for m in AUTOMECH_MODULES)
 
 
-def test_all_public_modules_import_in_fresh_interpreter() -> None:
-    result = _import_all()
+def _help_code(script: str) -> str:
+    module, func = CONSOLE_SCRIPTS[script].split(":")
+    return ("import sys\n"
+            f"from {module} import {func}\n"
+            f"sys.argv = [{script!r}, '--help']\n"
+            f"{func}()\n")
+
+
+# Every fresh-interpreter command of this module, by key.
+FRESH_COMMANDS = {
+    "import_all": _IMPORT_ALL.format(prelude="", modules=PUBLIC_MODULES),
+    # Setting ``sys.modules[name] = None`` makes any ``import name`` raise
+    # ImportError even where the automech packages are really installed.
+    "import_all_no_automech": _IMPORT_ALL.format(prelude=_BLOCK_AUTOMECH,
+                                                 modules=PUBLIC_MODULES),
+    "block_probe": "import sys; sys.modules['mess_io'] = None; import mess_io",
+    "help_kmo": _help_code("kmo"),
+    "help_kmo_start": _help_code("kmo_start"),
+    "import_agentic": "import agentic_pipeline",
+    "verify_command": DOCUMENTED_VERIFY_COMMAND,
+}
+
+
+@pytest.fixture(scope="module")
+def fresh_runs() -> dict[str, subprocess.CompletedProcess]:
+    """Start every command of :data:`FRESH_COMMANDS` concurrently in its own
+    fresh interpreter, then collect each result (timeout 300 s each)."""
+    procs = {key: subprocess.Popen([sys.executable, "-c", code],
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True,
+                                   cwd=str(REPO))
+             for key, code in FRESH_COMMANDS.items()}
+    results: dict[str, subprocess.CompletedProcess] = {}
+    try:
+        for key, proc in procs.items():
+            out, err = proc.communicate(timeout=300)
+            results[key] = subprocess.CompletedProcess(
+                proc.args, proc.returncode, out, err)
+    finally:
+        for proc in procs.values():
+            if proc.poll() is None:
+                proc.kill()
+                proc.communicate()
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Standard cases: every public module imports in a fresh interpreter
+# ---------------------------------------------------------------------------
+def test_all_public_modules_import_in_fresh_interpreter(fresh_runs) -> None:
+    result = fresh_runs["import_all"]
     assert result.returncode == 0, (
         f"public module import failures:\n{result.stderr[-4000:]}")
 
 
-def test_all_public_modules_import_without_automech_extra() -> None:
+def test_all_public_modules_import_without_automech_extra(fresh_runs) -> None:
     """The base install (no ``[automech]``) must import every public module.
 
-    Setting ``sys.modules[name] = None`` makes any ``import name`` raise
-    ImportError even where the automech packages are really installed.
+    Also checks the blocking technique itself: a blocked ``mess_io`` really
+    fails to import.
     """
-    block = "\n".join(f"sys.modules[{m!r}] = None" for m in AUTOMECH_MODULES)
-    result = _import_all(prelude=block)
+    probe = fresh_runs["block_probe"]
+    assert probe.returncode != 0
+    assert "ImportError" in probe.stderr or "ModuleNotFoundError" in probe.stderr
+    result = fresh_runs["import_all_no_automech"]
     assert result.returncode == 0, (
         "a public module requires an automech module at import time:\n"
         f"{result.stderr[-4000:]}")
 
 
-def test_blocking_automech_modules_actually_blocks() -> None:
-    """Sanity check of the blocking technique used above."""
-    result = _run_python(
-        "import sys; sys.modules['mess_io'] = None; import mess_io")
-    assert result.returncode != 0
-    assert "ImportError" in result.stderr or "ModuleNotFoundError" in result.stderr
+def test_documented_verify_command_succeeds_in_fresh_interpreter(
+        fresh_runs) -> None:
+    """``python -c "import mess_io, phydat, kimeco"`` is the verification
+    command documented in README/MANUAL/wiki. It runs in a clean subprocess so
+    an ``IPython`` / ``py3Dmol`` pulled in transitively by ``mess_io`` cannot
+    be masked by modules already in this process' ``sys.modules``."""
+    import_or_skip("automech", "mess_io")
+    proc = fresh_runs["verify_command"]
+    assert proc.returncode == 0, (
+        f"documented verification command failed:\n{proc.stderr[-2000:]}")
 
 
 # ---------------------------------------------------------------------------
@@ -168,20 +209,16 @@ def test_console_entry_points_registered_and_loadable() -> None:
         assert callable(ep.load()), f"{name} entry point is not callable"
 
 
-@pytest.mark.parametrize("script", ["kmo", "kmo_start"])
-def test_console_script_help_exits_zero(script: str) -> None:
-    target = CONSOLE_SCRIPTS[script]
-    module, func = target.split(":")
-    code = (
-        "import sys\n"
-        f"from {module} import {func}\n"
-        f"sys.argv = [{script!r}, '--help']\n"
-        f"{func}()\n"
-    )
-    result = _run_python(code)
-    assert result.returncode == 0, (
-        f"{script} --help exited {result.returncode}:\n{result.stderr[-2000:]}")
-    assert "usage" in (result.stdout + result.stderr).lower()
+def test_console_script_help_exits_zero(fresh_runs) -> None:
+    failures: list[str] = []
+    for script in ("kmo", "kmo_start"):
+        result = fresh_runs[f"help_{script}"]
+        if result.returncode != 0:
+            failures.append(f"{script} --help exited {result.returncode}:\n"
+                            f"{result.stderr[-2000:]}")
+        elif "usage" not in (result.stdout + result.stderr).lower():
+            failures.append(f"{script} --help printed no usage")
+    assert not failures, "\n".join(failures)
 
 
 # ---------------------------------------------------------------------------
@@ -192,10 +229,9 @@ def test_agentic_pipeline_folder_absent() -> None:
     assert not (REPO / "tests" / "unit" / "test_agentic_pipeline_ci.py").exists()
 
 
-def test_agentic_pipeline_not_importable() -> None:
+def test_agentic_pipeline_not_importable(fresh_runs) -> None:
     assert find_spec("agentic_pipeline") is None
-    result = _run_python("import agentic_pipeline")
-    assert result.returncode != 0
+    assert fresh_runs["import_agentic"].returncode != 0
 
 
 def _python_sources() -> list[Path]:

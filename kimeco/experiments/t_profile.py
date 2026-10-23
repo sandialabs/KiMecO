@@ -332,13 +332,17 @@ class TimeProfile(Experiment):
             raise ValueError(
                 f"y_unit must be one of {allowed_y_units}, got {y_unit}"
             )
-        allowed_x_units = ['ms'] + list(ureg.get_compatible_units('[time]'))
         if not isinstance(x_unit, str):
             raise TypeError(f"x_unit must be a string, got {type(x_unit)}")
-        if x_unit.lower() not in allowed_x_units:
+        # Accept exactly the time units convert_time understands
+        # (_unit_to_seconds raises ValueError for any other unit).
+        try:
+            TimeProfile._unit_to_seconds(x_unit)
+        except ValueError as e:
             raise ValueError(
-                f"x_unit must be one of {allowed_x_units}, got {x_unit}"
-            )
+                "x_unit must be a time unit (e.g. 's', 'ms', 'min', 'us'), "
+                f"got {x_unit}"
+            ) from e
         if colors is not None and len(colors) != len(self.species):
             raise ValueError(
                 f"Length of colors {len(colors)} does not match "

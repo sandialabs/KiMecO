@@ -180,7 +180,46 @@ def _capture_update_sop_figure(sec: SOPSection) -> Any:
     return cast(Any, sec.app).captured['update_sop_figure']
 
 
-def test_make_figure_passes_gen_keyed_dict_to_histogram() -> None:
+def test_plot_fetch_path() -> None:
+    """update_sop_figure fetches once per generation (single-column path too);
+    make_figure hands a generation-keyed dict to the histogram; the plot path
+    never calls get_goat_for_gen or fscore."""
+    # -- test_update_sop_figure_fetches_once_per_generation
+    FakeHistogram.instances = []
+    columns = ['__fact', '__pow', 'exp_000__score']
+    per_gen = {
+        0: {c: np.array([1.0, 2.0]) for c in columns},
+        1: {c: np.array([3.0, 4.0]) for c in columns},
+    }
+    goats = SpyGoats(per_gen)
+    sec = _make_section(columns, goats=goats)
+    update_sop_figure = _capture_update_sop_figure(sec)
+
+    style, children = update_sop_figure(1, ['fact'], columns, [0, 1])
+
+    assert style == {'display': 'block'}
+    # One fetch per generation with the full column list (not per column).
+    assert goats.param_calls == [(0, columns), (1, columns)]
+    # One figure produced per requested column.
+    assert len(FakeHistogram.instances) == len(columns)
+    assert len(children) == len(columns)
+
+    # -- test_update_sop_figure_single_column_path
+    FakeHistogram.instances = []
+    columns = ['__fact', '__pow']
+    per_gen = {0: {c: np.array([1.0, 2.0]) for c in columns}}
+    goats = SpyGoats(per_gen)
+    sec = _make_section(columns, goats=goats)
+    update_sop_figure = _capture_update_sop_figure(sec)
+
+    _style, children = update_sop_figure(1, ['fact'], ['__fact'], [0])
+
+    assert goats.param_calls == [(0, ['__fact'])]
+    assert len(FakeHistogram.instances) == 1
+    assert len(children) == 1
+
+    # -- test_make_figure_passes_gen_keyed_dict_to_histogram
+    FakeHistogram.instances = []
     columns = ['__fact', '__pow', 'exp_000__score']
     sec = _make_section(columns, goats=SimpleNamespace())
 
@@ -204,42 +243,8 @@ def test_make_figure_passes_gen_keyed_dict_to_histogram() -> None:
     # make_figure returns the histogram layout list.
     assert children == [hist]
 
-
-def test_update_sop_figure_fetches_once_per_generation() -> None:
-    columns = ['__fact', '__pow', 'exp_000__score']
-    per_gen = {
-        0: {c: np.array([1.0, 2.0]) for c in columns},
-        1: {c: np.array([3.0, 4.0]) for c in columns},
-    }
-    goats = SpyGoats(per_gen)
-    sec = _make_section(columns, goats=goats)
-    update_sop_figure = _capture_update_sop_figure(sec)
-
-    style, children = update_sop_figure(1, ['fact'], columns, [0, 1])
-
-    assert style == {'display': 'block'}
-    # One fetch per generation with the full column list (not per column).
-    assert goats.param_calls == [(0, columns), (1, columns)]
-    # One figure produced per requested column.
-    assert len(FakeHistogram.instances) == len(columns)
-    assert len(children) == len(columns)
-
-
-def test_update_sop_figure_single_column_path() -> None:
-    columns = ['__fact', '__pow']
-    per_gen = {0: {c: np.array([1.0, 2.0]) for c in columns}}
-    goats = SpyGoats(per_gen)
-    sec = _make_section(columns, goats=goats)
-    update_sop_figure = _capture_update_sop_figure(sec)
-
-    _style, children = update_sop_figure(1, ['fact'], ['__fact'], [0])
-
-    assert goats.param_calls == [(0, ['__fact'])]
-    assert len(FakeHistogram.instances) == 1
-    assert len(children) == 1
-
-
-def test_plot_path_does_not_call_get_goat_for_gen_or_fscore() -> None:
+    # -- test_plot_path_does_not_call_get_goat_for_gen_or_fscore
+    FakeHistogram.instances = []
     columns = ['__fact']
     per_gen = {0: {'__fact': np.array([1.0, 2.0])}}
     goats = SpyGoats(per_gen)
@@ -252,7 +257,12 @@ def test_plot_path_does_not_call_get_goat_for_gen_or_fscore() -> None:
     assert goats.fscore_calls == 0
 
 
-def test_histogram_data_keys_are_int_and_values_are_sequences() -> None:
+def test_histogram_data_shape_and_persisted_scores(tmp_path) -> None:
+    """Histogram data keys are ints and values are sequences; score values are
+    byte-identical to the persisted scores."""
+    _tmp_root = tmp_path
+    # -- test_histogram_data_keys_are_int_and_values_are_sequences
+    FakeHistogram.instances = []
     columns = ['__fact']
     per_gen = {
         0: {'__fact': np.array([1.0, 2.0, 3.0])},
@@ -270,10 +280,10 @@ def test_histogram_data_keys_are_int_and_values_are_sequences() -> None:
     for values in hist.data.values():
         assert len(values) >= 1
 
-
-def test_score_values_are_byte_identical_to_persisted_scores(
-    tmp_path: Path,
-) -> None:
+    # -- test_score_values_are_byte_identical_to_persisted_scores
+    tmp_path = _tmp_root / 'test_score_values_are_byte_identical_to_persisted_scores'
+    tmp_path.mkdir(parents=True)
+    FakeHistogram.instances = []
     sop = _build_sop()
     db = _make_db(tmp_path, sop)
     goats = _make_real_goats(tmp_path, db, [GEN1])
@@ -340,7 +350,12 @@ def _make_boundaries_section(columns: list[str],
     return sec
 
 
-def test_get_boundaries_score_returns_degenerate_and_skips_pert() -> None:
+def test_get_boundaries() -> None:
+    """A score column returns degenerate bounds without asking the perturbator
+    (whatever the param); a perturbed column delegates with the full column key
+    as param, so a specific std override shows."""
+    # -- test_get_boundaries_score_returns_degenerate_and_skips_pert
+    FakeHistogram.instances = []
     columns = [WE_COL, SCORE_COL]
     # init_vals is 1-indexed (index 0 is the id column); pick a distinct known
     # score init value so [init_val, init_val] is unambiguous.
@@ -355,8 +370,8 @@ def test_get_boundaries_score_returns_degenerate_and_skips_pert() -> None:
     assert bounds == [0.0, 222.0]
     assert pert.calls == []
 
-
-def test_get_boundaries_perturbed_column_still_delegates() -> None:
+    # -- test_get_boundaries_perturbed_column_still_delegates
+    FakeHistogram.instances = []
     columns = [WE_COL, SCORE_COL]
     init_vals = [999.0, 111.0, 222.0]
     pert = SpyPert(result=(100.0, 122.0))
@@ -372,8 +387,8 @@ def test_get_boundaries_perturbed_column_still_delegates() -> None:
     assert bounds == [100.0, 122.0]
     assert isinstance(bounds, list)
 
-
-def test_get_boundaries_forwards_full_col_key_as_param() -> None:
+    # -- test_get_boundaries_forwards_full_col_key_as_param
+    FakeHistogram.instances = []
     columns = [WE_COL, SCORE_COL]
     init_vals = [999.0, 111.0, 222.0]
     pert = SpyPert(result=(100.0, 122.0))
@@ -387,8 +402,8 @@ def test_get_boundaries_forwards_full_col_key_as_param() -> None:
     assert pert.calls[0]['param'] == WE_COL
     assert pert.calls[0]['param'] != Ptype.WE.value
 
-
-def test_get_boundaries_score_path_unaffected_by_param() -> None:
+    # -- test_get_boundaries_score_path_unaffected_by_param
+    FakeHistogram.instances = []
     columns = [WE_COL, SCORE_COL]
     init_vals = [999.0, 111.0, 222.0]
     pert = SpyPert(raise_not_impl=True)
@@ -401,8 +416,8 @@ def test_get_boundaries_score_path_unaffected_by_param() -> None:
     assert bounds == [0.0, 222.0]
     assert pert.calls == []
 
-
-def test_get_boundaries_reflects_specific_std_override() -> None:
+    # -- test_get_boundaries_reflects_specific_std_override
+    FakeHistogram.instances = []
     # Real Perturbator so the param-specific uncertainty flows end to end.
     from kimeco.Perturbators.perturbator import Perturbator
 
@@ -427,7 +442,11 @@ def test_get_boundaries_reflects_specific_std_override() -> None:
     assert (bounds[1] - bounds[0]) > (global_band[1] - global_band[0])
 
 
-def test_make_figure_over_score_skips_brown_boundary_vlines() -> None:
+def test_boundary_vlines() -> None:
+    """Over a score column no brown boundary vlines are drawn; a non-score
+    column draws them, except with degenerate bounds (black only)."""
+    # -- test_make_figure_over_score_skips_brown_boundary_vlines
+    FakeHistogram.instances = []
     columns = [SCORE_COL]
     init_vals = [0.0, 55.0]
     pert = SpyPert(raise_not_impl=True)
@@ -452,8 +471,8 @@ def test_make_figure_over_score_skips_brown_boundary_vlines() -> None:
     assert colors == ['black']
     assert 'brown' not in colors
 
-
-def test_make_figure_non_score_still_draws_brown_boundary_vlines() -> None:
+    # -- test_make_figure_non_score_still_draws_brown_boundary_vlines
+    FakeHistogram.instances = []
     columns = [WE_COL, SCORE_COL]
     # WE_COL is at columns index 0, so its init value is init_vals[0 + 1].
     init_vals = [999.0, 111.0, 222.0]
@@ -484,8 +503,8 @@ def test_make_figure_non_score_still_draws_brown_boundary_vlines() -> None:
     assert black_x == [111.0]
     assert brown_x == {100.0, 122.0}
 
-
-def test_make_figure_non_score_degenerate_bounds_only_black() -> None:
+    # -- test_make_figure_non_score_degenerate_bounds_only_black
+    FakeHistogram.instances = []
     columns = [WE_COL, SCORE_COL]
     init_vals = [999.0, 111.0, 222.0]
     pert = SpyPert(result=(7.0, 7.0))
@@ -505,3 +524,52 @@ def test_make_figure_non_score_degenerate_bounds_only_black() -> None:
     colors = [vl.get('line_color') for vl in hist.vlines]
     assert colors == ['black']
     assert 'brown' not in colors
+
+
+
+
+# ===========================================================================
+# get_plot_options (titles, formats, units; barrier sides for 'if')
+# ===========================================================================
+def _plot_options_section() -> SOPSection:
+    w1, w2 = Well('W1', [0]), Well('W2', [0])
+    ab = Bimolecular('A+B', [0])
+    ab.set_fragments([Well('A', []), Well('B', [])])
+    unknown = SimpleNamespace(name='X')
+    items = {
+        'W1': w1, 'W2': w2, 'A+B': ab,
+        'TS_WW': Barrier('TS_WW', w1, w2, 0),
+        'TS_WB': Barrier('TS_WB', w1, ab, 0),
+        'TS_BW': Barrier('TS_BW', ab, w1, 0),
+        'TS_UR': Barrier('TS_UR', cast(Any, unknown), w1, 0),
+        'TS_UP': Barrier('TS_UP', w1, cast(Any, unknown), 0),
+    }
+    gapp = SimpleNamespace(settings={}, app=FakeApp(), sop_db=None, kin_db=None,
+                           sim_db=None, init_SOP=SimpleNamespace(items=items),
+                           species=[], pert=None)
+    return SOPSection(gapp=gapp)
+
+
+def test_get_plot_options_titles_formats_and_units() -> None:
+    sec = _plot_options_section()
+    opts = sec.get_plot_options('W1__we', [Ptype.WE.value])
+    assert opts == {'title': 'Energy of W1 (kcal mol<sup>-1</sup>)', 'tickformat': '.2f',
+                    'unit': ' (kcal mol⁻¹)'}
+    assert sec.get_plot_options('__sigma0', [])['title'] == '__sigma0'
+    assert sec.get_plot_options('W1__freq01', [])['title'] == (
+        'Individual freq perturbation of W1__freq01 for W1')
+    opts = sec.get_plot_options('__pow', [])
+    assert (opts['title'], opts['unit']) == ('Energy transfer power', '')
+
+
+def test_get_plot_options_imaginary_frequency_sides() -> None:
+    sec = _plot_options_section()
+    title = 'Imaginary frequency of {} (cm<sup>-1</sup>)'
+    assert sec.get_plot_options('TS_WW__if', [])['title'] == title.format('W1 to W2')
+    assert sec.get_plot_options('TS_WB__if', [])['title'] == title.format('W1 to A + B')
+    assert sec.get_plot_options('TS_BW__if', [])['title'] == title.format('A + B to W1')
+    for col in ('TS_UR__if', 'TS_UP__if'):
+        with pytest.raises(NotImplementedError, match='Unknown reactant object'):
+            sec.get_plot_options(col, [])
+    with pytest.raises(TypeError, match='Expected Barrier'):
+        sec.get_plot_options('W1__if', [])

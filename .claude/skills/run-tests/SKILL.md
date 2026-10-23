@@ -14,7 +14,7 @@ Running the existing suite before commit/push, reproducing a CI failure, install
   ```bash
   pip install -e .[test]            # or .[automech,test] to also run the automech-dependent cases
   ```
-  `test` = `pytest>=9.0.2`. The only extras are `test` and `automech` (see `pyproject.toml`).
+  `test` = `pytest>=9.0.2`, `pytest-cov>=7.1.0`, `radon>=6.0.1`. The only extras are `test` and `automech` (see `pyproject.toml`). Coverage is off in the hooks, in CI and in the pytest configuration: it runs only when you pass `--cov` yourself (step 6).
 - Never validate in Python 3.10 (e.g. the `game` env). `tests/unit/test_installation_metadata_ci.py` skips at module level without `tomllib`, so a broken dependency mirror still looks green.
 - No MESS binary or Slurm needed: unit tests that touch the queue or partition checks patch those calls (e.g. `QueueingSystem.get_all_running`, `sinfo`) instead of running them (the CI workflow comment states MESS-dependent tests are excluded from `tests/unit/`).
 
@@ -47,6 +47,13 @@ Running the existing suite before commit/push, reproducing a CI failure, install
      - `test-automech-extra`: GitHub pre-install of `autoio`/`autochem`/`autofile`/`mechanalyzer`, `pip install -e .[automech,test]`, and `KIMECO_REQUIRE_EXTRAS=automech,test`, which turns skips into failures.
      - `test-mess-binary`: a micromamba env with `mess-static`, plus `KIMECO_REQUIRE_MESS=1`.
    - **GitLab** (`.gitlab-ci.yml`): mamba env with Python 3.11, `mamba install --file requirements.txt setuptools wheel`, `pip install --no-build-isolation --no-deps -e .`; smoke checks (import `kimeco` and deps, `kmo --help`, `kmoui --help`, GUI module imports, `kmopp --help`); then `pytest tests/unit/ -v`; then `pytest tests/examples/ -v`, where exit code 5 (no tests collected) is tolerated.
+6. Measure coverage and code complexity (local only: neither runs in the hooks or CI):
+   ```bash
+   python -m pytest tests/unit/ --cov=kimeco   # line coverage of kimeco/: one row per module, then TOTAL
+   radon cc kimeco -s                          # cyclomatic complexity (CC) of every function, with its score
+   radon cc kimeco -s -n C                     # only functions ranked C or worse, i.e. CC > 10
+   ```
+   Radon ranks a function by its CC (the number of independent paths through it): A 1–5, B 6–10, C 11–20, D 21–30, E 31–40, F 41+. Use it to see which complex branches deserve a test. `--cov` measures only code that runs inside the pytest process (pytest-cov 7 dropped subprocess measurement, and the repo has no coverage config to re-enable it). Tests that run KiMecO in a subprocess (fresh interpreter or venv checks), the automech driver script that KiMecO writes and then runs, and tests that only read source text add no coverage, so a low figure for a module does not by itself mean it is untested.
 
 ## Key files
 
@@ -65,4 +72,4 @@ Running the existing suite before commit/push, reproducing a CI failure, install
 
 ## Lane
 
-Operational: running tests changes no tracked file. Pytest may create `.pytest_cache/` and `__pycache__/`. Both are ignored: `.pytest_cache/` carries its own `.gitignore` written by pytest, and `**.pyc` is in the repo `.gitignore`. A quick `git status --short` afterwards still confirms that nothing else changed.
+Operational: running tests changes no tracked file. Pytest may create `.pytest_cache/` and `__pycache__/`. Both are ignored: `.pytest_cache/` carries its own `.gitignore` written by pytest, and `**.pyc` is in the repo `.gitignore`. A coverage run (step 6) writes `.coverage`, and `htmlcov/` or `coverage.xml` with `--cov-report=html` or `--cov-report=xml`; all three are in the repo `.gitignore` too. A quick `git status --short` afterwards still confirms that nothing else changed.

@@ -11,11 +11,11 @@ Contract exercised here
   ``pyproject.toml`` so a new requirement cannot be added silently.
 * The ``automech`` gate (``KMOInput._check_automech``) passes against the
   *real* ``mess_io`` / ``phydat`` when the extra is installed.
-* ``python -c "import mess_io, phydat, kimeco"`` -- the verification command
-  documented in README / MANUAL / wiki -- succeeds in a fresh interpreter.
-  This is the regression test for the transitive-import closure of
-  ``mess_io`` (``autoio`` pulls ``IPython`` and ``py3Dmol`` at import time,
-  which is why both are pinned in the ``automech`` extra).
+* ``IPython`` and ``py3Dmol`` (pulled by ``autoio`` at import time) are
+  pinned in the ``automech`` extra. The documented verification command
+  ``python -c "import mess_io, phydat, kimeco"`` runs in a fresh interpreter
+  in ``test_installation_imports_ci.py``, which imports
+  :data:`DOCUMENTED_VERIFY_COMMAND` from here.
 
 Skip-vs-fail policy
 -------------------
@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -75,6 +74,8 @@ DIST_TO_MODULES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     "test": {
         "pytest": ("pytest",),
+        "pytest-cov": ("pytest_cov",),
+        "radon": ("radon", "radon.cli"),
     },
     "automech": {
         "autoio": ("mess_io", "mess_io.writer"),
@@ -173,81 +174,63 @@ def _import_cases() -> list[tuple[str, str, str]]:
 # ---------------------------------------------------------------------------
 # Standard cases: every declared dependency imports
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("group,dist,module", _import_cases(),
-                         ids=lambda x: x)
-def test_declared_dependency_imports(group: str, dist: str,
-                                     module: str) -> None:
-    mod = import_or_skip(group, module)
-    assert mod is not None
-    assert sys.modules[module] is mod
+@pytest.mark.parametrize("group", list(DIST_TO_MODULES))
+def test_declared_dependency_imports(group: str) -> None:
+    """Every module of ``group`` imports. All missing modules are listed in
+    one message; a required group fails, an optional one skips (the
+    :func:`import_or_skip` policy)."""
+    missing: list[str] = []
+    for dist, modules in DIST_TO_MODULES[group].items():
+        for module in modules:
+            try:
+                mod = importlib.import_module(module)
+            except ImportError as exc:
+                missing.append(f"{dist}: cannot import {module!r}: {exc}")
+                continue
+            assert sys.modules[module] is mod, module
+    if missing:
+        hint = (f"install it with 'pip install -e .[{group}]'"
+                if group != BASE_GROUP else "install it with 'pip install -e .'")
+        message = f"{group} group: " + "; ".join(missing) + f"; {hint}"
+        if group_is_required(group):
+            pytest.fail(message)
+        pytest.skip(message)
 
 
 def test_dist_to_module_map_covers_pyproject_exactly() -> None:
     """The map must list exactly the distributions declared in pyproject,
     group by group, so adding/removing a requirement forces a map update
-    (and hence an import test)."""
+    (and hence an import test). The extras are exactly the known ones and
+    every mapped module is a valid dotted path."""
     groups = _pyproject_groups()
     assert set(groups) == set(DIST_TO_MODULES), (
         f"pyproject groups {sorted(groups)} vs map groups "
         f"{sorted(DIST_TO_MODULES)}")
+    assert set(groups) - {BASE_GROUP} == set(KNOWN_EXTRAS)
     for group, reqs in groups.items():
         declared = {canonicalize_name(Requirement(r).name) for r in reqs}
         mapped = {canonicalize_name(d) for d in DIST_TO_MODULES[group]}
         assert declared == mapped, (
             f"group {group!r}: pyproject declares {sorted(declared)} but "
             f"DIST_TO_MODULES maps {sorted(mapped)}")
-
-
-def test_known_extras_match_pyproject() -> None:
-    groups = _pyproject_groups()
-    assert set(groups) - {BASE_GROUP} == set(KNOWN_EXTRAS)
-
-
-def test_every_mapped_module_name_is_importable_dotted_path() -> None:
-    for _group, dist, module in _import_cases():
-        assert module and all(part.isidentifier()
-                              for part in module.split(".")), (
-            f"{dist}: {module!r} is not a valid dotted module path")
+    bad = [f"{dist}: {module!r}" for _group, dist, module in _import_cases()
+           if not (module and all(part.isidentifier()
+                                  for part in module.split(".")))]
+    assert not bad, f"not valid dotted module paths: {bad}"
 
 
 # ---------------------------------------------------------------------------
 # Standard cases: the automech gate against the real packages
 # ---------------------------------------------------------------------------
 def test_automech_gate_symbols_importable() -> None:
-    writer = import_or_skip("automech", "mess_io.writer")
-    mess_io = import_or_skip("automech", "mess_io")
-    import_or_skip("automech", "phydat.phycon")
-    missing = [s for s in GATE_WRITER_SYMBOLS if not hasattr(writer, s)]
-    assert not missing, f"mess_io.writer lacks gate symbols {missing}"
-    assert callable(getattr(mess_io, "well_lumped_input_file", None))
-
-
-def test_check_automech_passes_with_real_extra_installed() -> None:
-    """With the extra installed the gate must neither warn nor cancel."""
-    import_or_skip("automech", "mess_io.writer")
-    import_or_skip("automech", "phydat.phycon")
-    from kimeco.user_input import KMOInput
-
-    warnings: list[str] = []
-    obj = KMOInput.__new__(KMOInput)
-    obj.klog = type("Log", (), {"warning": lambda self, m: warnings.append(str(m))})()
-    obj.cancel_run = False
-
-    obj._check_automech()
-
-    assert obj.cancel_run is False
-    assert warnings == []
-
-
-def test_gate_symbol_list_matches_user_input_source() -> None:
-    """Keep GATE_WRITER_SYMBOLS in sync with the names imported in
-    ``KMOInput._check_automech`` (parsed with ast, never executed)."""
+    """GATE_WRITER_SYMBOLS matches the names ``KMOInput._check_automech``
+    imports (parsed with ast), the real ``mess_io.writer`` exposes them, and
+    with the extra installed the real gate neither warns nor cancels."""
     import ast
 
     src = (REPO / "kimeco" / "user_input.py").read_text(encoding="utf-8")
-    tree = ast.parse(src)
     imported: set[str] = set()
-    for node in ast.walk(tree):
+    for node in ast.walk(ast.parse(src)):
         if (isinstance(node, ast.FunctionDef)
                 and node.name == "_check_automech"):
             for sub in ast.walk(node):
@@ -256,62 +239,70 @@ def test_gate_symbol_list_matches_user_input_source() -> None:
                     imported.update(a.name for a in sub.names)
     assert imported == set(GATE_WRITER_SYMBOLS)
 
+    writer = import_or_skip("automech", "mess_io.writer")
+    mess_io = import_or_skip("automech", "mess_io")
+    import_or_skip("automech", "phydat.phycon")
+    missing = [s for s in GATE_WRITER_SYMBOLS if not hasattr(writer, s)]
+    assert not missing, f"mess_io.writer lacks gate symbols {missing}"
+    assert callable(getattr(mess_io, "well_lumped_input_file", None))
 
-# ---------------------------------------------------------------------------
-# Regression: mess_io transitive-import closure in a fresh interpreter
-# ---------------------------------------------------------------------------
-def test_documented_verify_command_succeeds_in_fresh_interpreter() -> None:
-    """``python -c "import mess_io, phydat, kimeco"`` is the verification
-    command documented in README/MANUAL/wiki. Run it in a clean subprocess so
-    an ``IPython`` / ``py3Dmol`` pulled in transitively by ``mess_io`` cannot
-    be masked by modules already in this process' ``sys.modules``."""
-    import_or_skip("automech", "mess_io")
-    proc = subprocess.run(
-        [sys.executable, "-c", DOCUMENTED_VERIFY_COMMAND],
-        capture_output=True, text=True, timeout=300, cwd=str(REPO))
-    assert proc.returncode == 0, (
-        f"documented verification command failed:\n{proc.stderr[-2000:]}")
+    from kimeco.user_input import KMOInput
+
+    warnings: list[str] = []
+    obj = KMOInput.__new__(KMOInput)
+    obj.klog = type("Log", (), {"warning": lambda self, m: warnings.append(str(m))})()
+    obj.cancel_run = False
+    obj._check_automech()
+    assert obj.cancel_run is False
+    assert warnings == []
 
 
-@pytest.mark.parametrize("module", ["IPython", "py3Dmol"])
-def test_mess_io_transitive_dependencies_are_declared(module: str) -> None:
-    """Both packages are imported transitively by ``autoio``; they must be
-    part of the automech extra (regression for the ModuleNotFoundError seen
-    after ``pip install -e .[automech]`` without them)."""
+def test_mess_io_transitive_dependencies_are_declared() -> None:
+    """``IPython`` and ``py3Dmol`` are imported transitively by ``autoio``;
+    they must be part of the automech extra (regression for the
+    ModuleNotFoundError seen after ``pip install -e .[automech]`` without
+    them). The fresh-interpreter check of the documented verify command
+    lives in ``test_installation_imports_ci.py``."""
     automech_modules = {m for mods in DIST_TO_MODULES["automech"].values()
                         for m in mods}
-    assert module in automech_modules
-    import_or_skip("automech", module)
+    undeclared = [m for m in ("IPython", "py3Dmol") if m not in automech_modules]
+    assert not undeclared, f"not in the automech extra: {undeclared}"
+    for module in ("IPython", "py3Dmol"):
+        import_or_skip("automech", module)
 
 
 # ---------------------------------------------------------------------------
 # Edge cases: KIMECO_REQUIRE_EXTRAS parsing
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("raw", [None, "", "   ", ",", " , "])
-def test_parse_required_extras_empty(raw: str | None) -> None:
-    assert parse_required_extras(raw) == frozenset()
-
-
-@pytest.mark.parametrize("raw,expected", [
-    ("automech", {"automech"}),
-    ("test", {"test"}),
-    ("automech,test", {"automech", "test"}),
-    ("test,automech", {"automech", "test"}),
-    (" automech , test ", {"automech", "test"}),
-    ("AUTOMECH", {"automech"}),
-    ("AutoMech,TEST", {"automech", "test"}),
-    ("automech,automech", {"automech"}),
-    ("automech,,test,", {"automech", "test"}),
-])
-def test_parse_required_extras_valid(raw: str, expected: set[str]) -> None:
-    assert parse_required_extras(raw) == frozenset(expected)
-
-
-@pytest.mark.parametrize("raw", ["bogus", "automech,bogus", "agentic",
-                                 "automech test", "[automech]", "base"])
-def test_parse_required_extras_rejects_unknown(raw: str) -> None:
-    with pytest.raises(ValueError, match=REQUIRE_EXTRAS_ENV):
-        parse_required_extras(raw)
+def test_parse_required_extras() -> None:
+    failures: list[str] = []
+    for raw in (None, "", "   ", ",", " , "):
+        got = parse_required_extras(raw)
+        if got != frozenset():
+            failures.append(f"empty {raw!r} -> {sorted(got)}")
+    for raw, expected in (
+            ("automech", {"automech"}),
+            ("test", {"test"}),
+            ("automech,test", {"automech", "test"}),
+            ("test,automech", {"automech", "test"}),
+            (" automech , test ", {"automech", "test"}),
+            ("AUTOMECH", {"automech"}),
+            ("AutoMech,TEST", {"automech", "test"}),
+            ("automech,automech", {"automech"}),
+            ("automech,,test,", {"automech", "test"})):
+        got = parse_required_extras(raw)
+        if got != frozenset(expected):
+            failures.append(f"valid {raw!r} -> {sorted(got)}, expected {sorted(expected)}")
+    for raw in ("bogus", "automech,bogus", "agentic", "automech test",
+                "[automech]", "base"):
+        try:
+            parse_required_extras(raw)
+        except ValueError as exc:
+            if REQUIRE_EXTRAS_ENV not in str(exc):
+                failures.append(f"unknown {raw!r}: message lacks {REQUIRE_EXTRAS_ENV}")
+        else:
+            failures.append(f"unknown {raw!r} accepted")
+    assert not failures, "\n".join(failures)
 
 
 def test_required_extras_reads_environment(monkeypatch) -> None:
@@ -319,10 +310,7 @@ def test_required_extras_reads_environment(monkeypatch) -> None:
     assert required_extras() == frozenset({"automech"})
     monkeypatch.delenv(REQUIRE_EXTRAS_ENV)
     assert required_extras() == frozenset()
-
-
-def test_base_and_test_groups_always_required(monkeypatch) -> None:
-    monkeypatch.delenv(REQUIRE_EXTRAS_ENV, raising=False)
+    # base deps and the test extra are always required, automech is not
     assert group_is_required(BASE_GROUP)
     assert group_is_required("test")
     assert not group_is_required("automech")
@@ -334,47 +322,32 @@ def test_base_and_test_groups_always_required(monkeypatch) -> None:
 _MISSING = "kimeco_definitely_missing_module_for_tests"
 
 
-def test_missing_optional_dependency_skips_when_not_required(
-        monkeypatch) -> None:
+def test_import_or_skip_policy(monkeypatch) -> None:
+    """Optional group skips unless required (case insensitive); requiring
+    another extra does not require automech; base/test always fail; a
+    present module is returned whatever the policy."""
     monkeypatch.delenv(REQUIRE_EXTRAS_ENV, raising=False)
     with pytest.raises(pytest.skip.Exception) as info:
         import_or_skip("automech", _MISSING)
     assert "[automech]" in str(info.value)
+    for group in (BASE_GROUP, "test"):
+        with pytest.raises(pytest.fail.Exception):
+            import_or_skip(group, _MISSING)
+    assert import_or_skip("automech", "json") is importlib.import_module("json")
 
-
-def test_missing_optional_dependency_fails_when_required(monkeypatch) -> None:
     monkeypatch.setenv(REQUIRE_EXTRAS_ENV, "automech")
     with pytest.raises(pytest.fail.Exception) as info:
         import_or_skip("automech", _MISSING)
     assert _MISSING in str(info.value)
+    assert import_or_skip("automech", "json") is importlib.import_module("json")
 
-
-def test_missing_optional_dependency_fails_when_required_case_insensitive(
-        monkeypatch) -> None:
     monkeypatch.setenv(REQUIRE_EXTRAS_ENV, "AUTOMECH , Test")
     with pytest.raises(pytest.fail.Exception):
         import_or_skip("automech", _MISSING)
 
-
-def test_requiring_other_extra_does_not_require_automech(monkeypatch) -> None:
     monkeypatch.setenv(REQUIRE_EXTRAS_ENV, "test")
     with pytest.raises(pytest.skip.Exception):
         import_or_skip("automech", _MISSING)
-
-
-@pytest.mark.parametrize("group", [BASE_GROUP, "test"])
-def test_missing_base_or_test_dependency_always_fails(group: str,
-                                                      monkeypatch) -> None:
-    monkeypatch.delenv(REQUIRE_EXTRAS_ENV, raising=False)
-    with pytest.raises(pytest.fail.Exception):
-        import_or_skip(group, _MISSING)
-
-
-def test_present_module_is_returned_regardless_of_policy(monkeypatch) -> None:
-    monkeypatch.delenv(REQUIRE_EXTRAS_ENV, raising=False)
-    assert import_or_skip("automech", "json") is importlib.import_module("json")
-    monkeypatch.setenv(REQUIRE_EXTRAS_ENV, "automech")
-    assert import_or_skip("automech", "json") is importlib.import_module("json")
 
 
 def test_invalid_require_extras_env_is_an_error_not_a_skip(monkeypatch) -> None:

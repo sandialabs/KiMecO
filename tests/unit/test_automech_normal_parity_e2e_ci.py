@@ -14,9 +14,9 @@ be the ones written by the normal pipeline:
 * every rigid-rotor ``SymmetryFactor`` -> the species / saddle ``sym_factor``;
 * rotor-local ``Geometry[angstrom]`` blocks -> ``rotor_hindered(geo=...)``.
 
-Always-on twin: ``tests/parse_pes/dme/mess_roo_L3.inp`` (tracked). The
-``dev_tests/example`` ethyl-oxidation input is gitignored, so the tests that
-depend on it are skipped when it is absent.
+Inputs: ``tests/parse_pes/dme/mess_roo_L3.inp`` and the shipped
+``example/mess_input_ethyl_oxidation.inp`` (both tracked, so every case runs
+everywhere).
 
 No MESS binary and no real automech install are needed.
 """
@@ -43,7 +43,7 @@ _ROOT = Path(__file__).resolve().parent.parent.parent
 DME_ROOT = _ROOT / 'tests' / 'parse_pes' / 'dme'
 DME_ROO = 'mess_roo_L3.inp'
 DME_OOQOOH = 'mess_ooqooh_L2.inp'
-EXAMPLE_ROOT = _ROOT / 'dev_tests' / 'example'
+EXAMPLE_ROOT = _ROOT / 'example'
 EXAMPLE_INP = 'mess_input_ethyl_oxidation.inp'
 
 _BOHR2ANG = 0.52917721092
@@ -240,7 +240,12 @@ def dme(tmp_path_factory) -> dict[str, Any]:
             'payload': payload, 'tmp': tmp_path}
 
 
-def test_dme_reader_captures_header_keys(dme) -> None:
+def test_dme_reader_and_payload_parity(dme) -> None:
+    """dme roo input: the reader captures the header keys; masses and global
+    keys in the payload equal the rendered normal input; species and saddle
+    symmetry factors match; the phasespace barrier keeps its two rotor
+    geometries (no other rotor has one) and its payload has no rotor key."""
+    # -- test_dme_reader_captures_header_keys
     sop = dme['sop']
     assert sop.masses == [4.0, 77.0]
     assert sop.calculation_method == 'direct'
@@ -249,14 +254,12 @@ def test_dme_reader_captures_header_keys(dme) -> None:
     assert sop.chem_eig_max == 0.2
     assert dme['reader']._trigger_stop is False
 
-
-def test_dme_header_parity_masses(dme) -> None:
+    # -- test_dme_header_parity_masses
     rendered, payload = dme['rendered'], dme['payload']
     normal = [float(t) for t in _header_value(rendered, 'Masses[amu]')]
     assert payload['lj_masses'] == normal == [4.0, 77.0]
 
-
-def test_dme_header_parity_global_keys(dme) -> None:
+    # -- test_dme_header_parity_global_keys
     rendered, payload = dme['rendered'], dme['payload']
     assert payload['calc_method'] == \
         _header_value(rendered, 'CalculationMethod')[0]
@@ -267,45 +270,30 @@ def test_dme_header_parity_global_keys(dme) -> None:
     assert payload['chem_eig_max'] == \
         float(_header_value(rendered, 'ChemicalEigenvalueMax')[0])
 
+    # -- test_dme_species_symmetry_factor_parity
+    _failures = []
+    for kind, name, expected in [
+        ('Well', 'CH3OCH2OO', 1.0),
+        ('Fragment', 'O2', 2.0),
+        ('Fragment', 'C1H2OC(O1)H2', 4.0),
+        ('Fragment', 'CH3OCHO', 1.0),
+    ]:
+        try:
+            rendered, payload = dme['rendered'], dme['payload']
+            normal = _symmetry_factor_after(rendered, _block_start(rendered, kind,
+                                                                    name))
+            species = {w['label']: w for w in payload['wells']}
+            for bim in payload['bimols']:
+                species[bim['frag1']['label']] = bim['frag1']
+                species[bim['frag2']['label']] = bim['frag2']
+            assert species[name]['sym_factor'] == normal == expected
+        except AssertionError as _exc:
+            _failures.append(
+                f"test_dme_species_symmetry_factor_parity"
+                f"[kind={kind!r} name={name!r} expected={expected!r}]: {_exc}")
+    assert not _failures, '\n'.join(_failures)
 
-def test_dme_global_keys_reach_mess_io(dme, tmp_path, monkeypatch) -> None:
-    mod, calls = _driver(tmp_path, monkeypatch, dme['sop'])
-    mod._globkey_str('x.out', None)
-    kwargs = calls.last('global_rates_input_v1')
-    assert kwargs['calculation_method'] == 'direct'
-    assert kwargs['model_ene_limit'] == 400.0
-    assert kwargs['excess_ene_temp'] == 30.0
-    assert kwargs['chem_eig_max'] == 0.2
-
-
-def test_dme_lj_masses_reach_collision_frequency(
-        dme, tmp_path, monkeypatch) -> None:
-    mod, calls = _driver(tmp_path, monkeypatch, dme['sop'])
-    mod._energy_transfer_str()
-    collid = calls.last('collision_frequency')
-    assert collid['mass1'] == 4.0
-    assert collid['mass2'] == 77.0
-
-
-@pytest.mark.parametrize('kind, name, expected', [
-    ('Well', 'CH3OCH2OO', 1.0),
-    ('Fragment', 'O2', 2.0),
-    ('Fragment', 'C1H2OC(O1)H2', 4.0),
-    ('Fragment', 'CH3OCHO', 1.0),
-])
-def test_dme_species_symmetry_factor_parity(
-        dme, kind: str, name: str, expected: float) -> None:
-    rendered, payload = dme['rendered'], dme['payload']
-    normal = _symmetry_factor_after(rendered, _block_start(rendered, kind,
-                                                            name))
-    species = {w['label']: w for w in payload['wells']}
-    for bim in payload['bimols']:
-        species[bim['frag1']['label']] = bim['frag1']
-        species[bim['frag2']['label']] = bim['frag2']
-    assert species[name]['sym_factor'] == normal == expected
-
-
-def test_dme_saddle_symmetry_factor_parity(dme) -> None:
+    # -- test_dme_saddle_symmetry_factor_parity
     rendered, payload = dme['rendered'], dme['payload']
     name = 'CH3OCH2OO=CH3OCHO+OH'
     normal = _symmetry_factor_after(
@@ -314,17 +302,7 @@ def test_dme_saddle_symmetry_factor_parity(dme) -> None:
     assert saddle['kind'] == 'saddle'
     assert saddle['sym_factor'] == normal == 0.5
 
-
-def test_dme_saddle_symfact_reaches_core_rigidrotor(
-        dme, tmp_path, monkeypatch) -> None:
-    mod, calls = _driver(tmp_path, monkeypatch, dme['sop'])
-    saddle = next(b for b in mod.PES_PAYLOAD['barriers']
-                  if b['label'] == 'CH3OCH2OO=CH3OCHO+OH')
-    mod._barrier_str(saddle)
-    assert calls.last('core_rigidrotor')['sym_factor'] == 0.5
-
-
-def test_dme_phasespace_rotor_geometries_captured_on_barrier(dme) -> None:
+    # -- test_dme_phasespace_rotor_geometries_captured_on_barrier
     sop, rendered = dme['sop'], dme['rendered']
     name = 'CH3OCH2OO=CH3OCH2+O2'
     bar = sop.items[name]
@@ -342,22 +320,62 @@ def test_dme_phasespace_rotor_geometries_captured_on_barrier(dme) -> None:
         for hr in getattr(item, 'h_rotors', []):
             assert hr.geo is None, label
 
-
-def test_dme_phasespace_payload_has_no_rotor_key(dme) -> None:
+    # -- test_dme_phasespace_payload_has_no_rotor_key
     pst = next(b for b in dme['payload']['barriers']
                if b['label'] == 'CH3OCH2OO=CH3OCH2+O2')
     assert pst['kind'] == 'phasespace'
     assert 'hind_rotors' not in pst
 
 
-def test_dme_wells_without_rotor_geometry_emit_no_geo(
-        dme, tmp_path, monkeypatch) -> None:
-    mod, calls = _driver(tmp_path, monkeypatch, dme['sop'])
-    for well in mod.PES_PAYLOAD['wells']:
-        assert all('geo' not in hr for hr in well['hind_rotors'])
-    mod._rxn_chan_str()
-    assert calls.calls['rotor_hindered']
-    assert all('geo' not in k for k in calls.calls['rotor_hindered'])
+def test_dme_driver_hands_parsed_values_to_mess_io(dme, tmp_path, monkeypatch) -> None:
+    """dme roo input through the emitted driver: global keys reach
+    global_rates_input_v1, LJ masses reach collision_frequency, the saddle
+    symmetry factor reaches core_rigidrotor, and wells without rotor geometry
+    emit no geo."""
+    _tmp_root = tmp_path
+    _mp_root = monkeypatch
+    # -- test_dme_global_keys_reach_mess_io
+    tmp_path = _tmp_root / 'test_dme_global_keys_reach_mess_io'
+    tmp_path.mkdir(parents=True)
+    with _mp_root.context() as monkeypatch:
+        mod, calls = _driver(tmp_path, monkeypatch, dme['sop'])
+        mod._globkey_str('x.out', None)
+        kwargs = calls.last('global_rates_input_v1')
+        assert kwargs['calculation_method'] == 'direct'
+        assert kwargs['model_ene_limit'] == 400.0
+        assert kwargs['excess_ene_temp'] == 30.0
+        assert kwargs['chem_eig_max'] == 0.2
+
+    # -- test_dme_lj_masses_reach_collision_frequency
+    tmp_path = _tmp_root / 'test_dme_lj_masses_reach_collision_frequency'
+    tmp_path.mkdir(parents=True)
+    with _mp_root.context() as monkeypatch:
+        mod, calls = _driver(tmp_path, monkeypatch, dme['sop'])
+        mod._energy_transfer_str()
+        collid = calls.last('collision_frequency')
+        assert collid['mass1'] == 4.0
+        assert collid['mass2'] == 77.0
+
+    # -- test_dme_saddle_symfact_reaches_core_rigidrotor
+    tmp_path = _tmp_root / 'test_dme_saddle_symfact_reaches_core_rigidrotor'
+    tmp_path.mkdir(parents=True)
+    with _mp_root.context() as monkeypatch:
+        mod, calls = _driver(tmp_path, monkeypatch, dme['sop'])
+        saddle = next(b for b in mod.PES_PAYLOAD['barriers']
+                      if b['label'] == 'CH3OCH2OO=CH3OCHO+OH')
+        mod._barrier_str(saddle)
+        assert calls.last('core_rigidrotor')['sym_factor'] == 0.5
+
+    # -- test_dme_wells_without_rotor_geometry_emit_no_geo
+    tmp_path = _tmp_root / 'test_dme_wells_without_rotor_geometry_emit_no_geo'
+    tmp_path.mkdir(parents=True)
+    with _mp_root.context() as monkeypatch:
+        mod, calls = _driver(tmp_path, monkeypatch, dme['sop'])
+        for well in mod.PES_PAYLOAD['wells']:
+            assert all('geo' not in hr for hr in well['hind_rotors'])
+        mod._rxn_chan_str()
+        assert calls.calls['rotor_hindered']
+        assert all('geo' not in k for k in calls.calls['rotor_hindered'])
 
 
 def test_dme_pair_species_mass_difference_does_not_stop(tmp_path) -> None:
@@ -371,13 +389,8 @@ def test_dme_pair_species_mass_difference_does_not_stop(tmp_path) -> None:
 
 
 # ===========================================================================
-# dev_tests/example (gitignored): skipped when absent
+# Shipped example: example/mess_input_ethyl_oxidation.inp
 # ===========================================================================
-_example_missing = not (EXAMPLE_ROOT / EXAMPLE_INP).is_file()
-example_only = pytest.mark.skipif(
-    _example_missing,
-    reason='dev_tests/example is gitignored and not present here')
-
 
 @pytest.fixture(scope='module')
 def example(tmp_path_factory) -> dict[str, Any]:
@@ -388,8 +401,12 @@ def example(tmp_path_factory) -> dict[str, Any]:
             'payload': payload}
 
 
-@example_only
-def test_example_header_keys_and_masses(example) -> None:
+def test_example_reader_and_payload_parity(example) -> None:
+    """Shipped ethyl-oxidation example: header keys and masses, species and
+    saddle symmetry factors, and the rotd barrier symmetry factor and rotor
+    geometry match between the reader, the payload and the rendered normal
+    input."""
+    # -- test_example_header_keys_and_masses
     sop, payload, rendered = example['sop'], example['payload'], \
         example['rendered']
     assert sop.masses == [4.0, 61.0]
@@ -402,28 +419,30 @@ def test_example_header_keys_and_masses(example) -> None:
     assert payload['chem_eig_max'] == 0.2
     assert example['reader']._trigger_stop is False
 
+    # -- test_example_species_symmetry_factor_parity
+    _failures = []
+    for kind, name, expected in [
+        ('Fragment', 'O2', 2.0),
+        ('Fragment', 'C2H4', 4.0),
+        ('Fragment', 'c-CH2CH2O', 2.0),
+        ('Well', 'CH2CH2OOH', 1.0),
+    ]:
+        try:
+            rendered, payload = example['rendered'], example['payload']
+            normal = _symmetry_factor_after(rendered, _block_start(rendered, kind,
+                                                                    name))
+            species = {w['label']: w for w in payload['wells']}
+            for bim in payload['bimols']:
+                species[bim['frag1']['label']] = bim['frag1']
+                species[bim['frag2']['label']] = bim['frag2']
+            assert species[name]['sym_factor'] == normal == expected
+        except AssertionError as _exc:
+            _failures.append(
+                f"test_example_species_symmetry_factor_parity"
+                f"[kind={kind!r} name={name!r} expected={expected!r}]: {_exc}")
+    assert not _failures, '\n'.join(_failures)
 
-@example_only
-@pytest.mark.parametrize('kind, name, expected', [
-    ('Fragment', 'O2', 2.0),
-    ('Fragment', 'C2H4', 4.0),
-    ('Fragment', 'c-CH2CH2O', 2.0),
-    ('Well', 'CH2CH2OOH', 1.0),
-])
-def test_example_species_symmetry_factor_parity(
-        example, kind: str, name: str, expected: float) -> None:
-    rendered, payload = example['rendered'], example['payload']
-    normal = _symmetry_factor_after(rendered, _block_start(rendered, kind,
-                                                            name))
-    species = {w['label']: w for w in payload['wells']}
-    for bim in payload['bimols']:
-        species[bim['frag1']['label']] = bim['frag1']
-        species[bim['frag2']['label']] = bim['frag2']
-    assert species[name]['sym_factor'] == normal == expected
-
-
-@example_only
-def test_example_saddle_symmetry_factor_parity(example) -> None:
+    # -- test_example_saddle_symmetry_factor_parity
     rendered, payload = example['rendered'], example['payload']
     name = 'CH3CH2OO=CH2CH2OOH'
     normal = _symmetry_factor_after(
@@ -432,9 +451,7 @@ def test_example_saddle_symmetry_factor_parity(example) -> None:
     assert saddle['kind'] == 'saddle'
     assert saddle['sym_factor'] == normal == 0.5
 
-
-@example_only
-def test_example_rotd_barrier_symfact_and_rotor_geo(example) -> None:
+    # -- test_example_rotd_barrier_symfact_and_rotor_geo
     sop, payload, rendered = example['sop'], example['payload'], \
         example['rendered']
     name = 'CH3CH2OO=C2H5+O2'
@@ -451,32 +468,42 @@ def test_example_rotd_barrier_symfact_and_rotor_geo(example) -> None:
     assert sop.items[name].h_rotors[0].geo == geo
 
 
-@example_only
-def test_example_rotd_rotor_geo_reaches_mess_io_in_bohr(
-        example, tmp_path, monkeypatch) -> None:
-    mod, calls = _driver(tmp_path, monkeypatch, example['sop'])
-    rotd = next(b for b in mod.PES_PAYLOAD['barriers']
-                if b['label'] == 'CH3CH2OO=C2H5+O2')
-    mod._barrier_str(rotd)
-    kwargs = calls.last('rotor_hindered')
-    expected = _bohr_rows(rotd['hind_rotors'][0]['geo'])
-    assert [r[0] for r in kwargs['geo']] == [r[0] for r in expected]
-    for got, exp in zip(kwargs['geo'], expected):
-        assert got[1] == pytest.approx(exp[1])
-    assert calls.last('molecule')['hind_rot'] == '<rotor_hindered>'
-    assert calls.last('core_rotd')['sym_factor'] == 2.353
+def test_example_driver_hands_parsed_values_to_mess_io(example, tmp_path, monkeypatch) -> None:
+    """Shipped example through the emitted driver: the rotd rotor geometry
+    reaches rotor_hindered in bohr (with core_rotd symmetry factor), the global
+    keys reach global_rates_input_v1 and no WellReductionThreshold is
+    introduced."""
+    _tmp_root = tmp_path
+    _mp_root = monkeypatch
+    # -- test_example_rotd_rotor_geo_reaches_mess_io_in_bohr
+    tmp_path = _tmp_root / 'test_example_rotd_rotor_geo_reaches_mess_io_in_bohr'
+    tmp_path.mkdir(parents=True)
+    with _mp_root.context() as monkeypatch:
+        mod, calls = _driver(tmp_path, monkeypatch, example['sop'])
+        rotd = next(b for b in mod.PES_PAYLOAD['barriers']
+                    if b['label'] == 'CH3CH2OO=C2H5+O2')
+        mod._barrier_str(rotd)
+        kwargs = calls.last('rotor_hindered')
+        expected = _bohr_rows(rotd['hind_rotors'][0]['geo'])
+        assert [r[0] for r in kwargs['geo']] == [r[0] for r in expected]
+        for got, exp in zip(kwargs['geo'], expected):
+            assert got[1] == pytest.approx(exp[1])
+        assert calls.last('molecule')['hind_rot'] == '<rotor_hindered>'
+        assert calls.last('core_rotd')['sym_factor'] == 2.353
+
+    # -- test_example_global_keys_reach_mess_io
+    tmp_path = _tmp_root / 'test_example_global_keys_reach_mess_io'
+    tmp_path.mkdir(parents=True)
+    with _mp_root.context() as monkeypatch:
+        mod, calls = _driver(tmp_path, monkeypatch, example['sop'])
+        mod._globkey_str('x.out', None)
+        kwargs = calls.last('global_rates_input_v1')
+        assert kwargs['calculation_method'] == 'direct'
+        assert kwargs['model_ene_limit'] == 400.0
+        assert kwargs['excess_ene_temp'] == 40.0
+        assert kwargs['chem_eig_max'] == 0.2
+        # A WellReductionThreshold must not be introduced by the driver itself.
+        block = mod._globkey_str('x.out', None)
+        assert not re.search(r'WellReductionThreshold', block)
 
 
-@example_only
-def test_example_global_keys_reach_mess_io(
-        example, tmp_path, monkeypatch) -> None:
-    mod, calls = _driver(tmp_path, monkeypatch, example['sop'])
-    mod._globkey_str('x.out', None)
-    kwargs = calls.last('global_rates_input_v1')
-    assert kwargs['calculation_method'] == 'direct'
-    assert kwargs['model_ene_limit'] == 400.0
-    assert kwargs['excess_ene_temp'] == 40.0
-    assert kwargs['chem_eig_max'] == 0.2
-    # A WellReductionThreshold must not be introduced by the driver itself.
-    block = mod._globkey_str('x.out', None)
-    assert not re.search(r'WellReductionThreshold', block)

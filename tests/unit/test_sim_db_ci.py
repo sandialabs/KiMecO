@@ -1,3 +1,7 @@
+"""CI-safe tests for ``SIM_DB`` on a real SQLite file under ``tmp_path``:
+feather-blob profiles (round trip, upsert, batch select/upsert, single-row
+decode) and the guard rejecting a legacy table schema.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,9 +10,13 @@ import pyarrow as pa
 import pyarrow.feather as feather
 import pytest
 
+from kimeco.database.kimeco_db import Kimeco_db
 from kimeco.database.sim_db import SIM_DB
 
 
+# ===========================================================================
+# Profile blobs
+# ===========================================================================
 def _blob_from_dict(data: dict[str, list[float]]) -> bytes:
     table = pa.table(data)
     sink = pa.BufferOutputStream()
@@ -16,7 +24,13 @@ def _blob_from_dict(data: dict[str, list[float]]) -> bytes:
     return sink.getvalue().to_pybytes()
 
 
-def test_sim_db_blob_roundtrip_preserves_profile_shape(tmp_path: Path) -> None:
+def test_sim_db_blob_round_trip_and_upsert(tmp_path) -> None:
+    """A profile blob round-trips with its shape; an upsert of the same (model,
+    experiment) replaces the row."""
+    _tmp_root = tmp_path
+    # -- test_sim_db_blob_roundtrip_preserves_profile_shape
+    tmp_path = _tmp_root / 'test_sim_db_blob_roundtrip_preserves_profile_shape'
+    tmp_path.mkdir(parents=True)
     db = SIM_DB(name='TEST_DB_SIM', path=str(tmp_path), threads=1)
     table_name = 'G0000'
     db.create_new_table(name=table_name)
@@ -50,10 +64,9 @@ def test_sim_db_blob_roundtrip_preserves_profile_shape(tmp_path: Path) -> None:
     assert rows[:, 0].tolist() == [7.0, 7.0, 7.0]
     assert rows[:, 1].tolist() == [0.0, 1.0, 2.0]
 
-
-def test_sim_db_blob_upsert_replaces_same_model_experiment(
-    tmp_path: Path,
-) -> None:
+    # -- test_sim_db_blob_upsert_replaces_same_model_experiment
+    tmp_path = _tmp_root / 'test_sim_db_blob_upsert_replaces_same_model_experiment'
+    tmp_path.mkdir(parents=True)
     db = SIM_DB(name='TEST_DB_SIM_UPSERT', path=str(tmp_path), threads=1)
     table_name = 'G0000'
     db.create_new_table(name=table_name)
@@ -81,9 +94,13 @@ def test_sim_db_blob_upsert_replaces_same_model_experiment(
     assert rows[0, 2] == 2.0
 
 
-def test_sim_db_batch_select_groups_rows_by_model_and_experiment(
-    tmp_path: Path,
-) -> None:
+def test_sim_db_batch_select_and_batch_upsert(tmp_path) -> None:
+    """batch_select groups rows by model and experiment (empty requests give an
+    empty result); batch_upsert creates the table on demand."""
+    _tmp_root = tmp_path
+    # -- test_sim_db_batch_select_groups_rows_by_model_and_experiment
+    tmp_path = _tmp_root / 'test_sim_db_batch_select_groups_rows_by_model_and_experiment'
+    tmp_path.mkdir(parents=True)
     db = SIM_DB(name='TEST_DB_SIM_SELECT', path=str(tmp_path), threads=1)
     table_name = 'G0000'
     db.create_new_table(name=table_name)
@@ -120,8 +137,16 @@ def test_sim_db_batch_select_groups_rows_by_model_and_experiment(
     assert out[table_name][2][1][:, 2].tolist() == [0.4, 0.2]
     assert db.sv_species == ['A']
 
+    # -- test_sim_db_batch_select_returns_empty_when_no_requests
+    tmp_path = _tmp_root / 'test_sim_db_batch_select_returns_empty_when_no_requests'
+    tmp_path.mkdir(parents=True)
+    db = SIM_DB(name='TEST_DB_SIM_EMPTY', path=str(tmp_path), threads=1)
 
-def test_sim_db_batch_upsert_creates_table_on_demand(tmp_path: Path) -> None:
+    assert db.batch_select() == {}
+
+    # -- test_sim_db_batch_upsert_creates_table_on_demand
+    tmp_path = _tmp_root / 'test_sim_db_batch_upsert_creates_table_on_demand'
+    tmp_path.mkdir(parents=True)
     db = SIM_DB(name='TEST_DB_SIM_CREATE', path=str(tmp_path), threads=1)
     table_name = 'G0042'
 
@@ -141,22 +166,19 @@ def test_sim_db_batch_upsert_creates_table_on_demand(tmp_path: Path) -> None:
     assert out[table_name][11][3][0, 2] == 9.0
 
 
-def test_sim_db_batch_select_returns_empty_when_no_requests(
-    tmp_path: Path,
-) -> None:
-    db = SIM_DB(name='TEST_DB_SIM_EMPTY', path=str(tmp_path), threads=1)
-
-    assert db.batch_select() == {}
-
-
-def test_decode_result_blob_requires_time_column() -> None:
+def test_decode_and_get_single_result(tmp_path) -> None:
+    """Decoding a blob requires a time column; get_single_result decodes one row
+    and returns None for a missing one."""
+    _tmp_root = tmp_path
+    # -- test_decode_result_blob_requires_time_column
     blob = _blob_from_dict({'A': [1.0, 2.0]})
 
     with pytest.raises(ValueError, match='missing required time column'):
         SIM_DB.decode_result_blob(result=blob, mdl_id=1)
 
-
-def test_get_single_result_decodes_one_row(tmp_path: Path) -> None:
+    # -- test_get_single_result_decodes_one_row
+    tmp_path = _tmp_root / 'test_get_single_result_decodes_one_row'
+    tmp_path.mkdir(parents=True)
     db = SIM_DB(name='TEST_DB_SIM_SINGLE', path=str(tmp_path), threads=1)
     table_name = 'G0000'
     db.create_new_table(name=table_name)
@@ -181,11 +203,28 @@ def test_get_single_result_decodes_one_row(tmp_path: Path) -> None:
     assert decoded[:, 1].tolist() == [0.0, 1.0]
     assert decoded[:, 3].tolist() == [0.0, 0.3]
 
-
-def test_get_single_result_missing_row_returns_none(tmp_path: Path) -> None:
+    # -- test_get_single_result_missing_row_returns_none
+    tmp_path = _tmp_root / 'test_get_single_result_missing_row_returns_none'
+    tmp_path.mkdir(parents=True)
     db = SIM_DB(name='TEST_DB_SIM_SINGLE_MISS', path=str(tmp_path), threads=1)
     table_name = 'G0000'
     db.create_new_table(name=table_name)
 
     assert db.get_single_result(
         table=table_name, mdl_id=99, experiment_id=0) is None
+
+
+# ===========================================================================
+# Legacy schema guard
+# ===========================================================================
+def test_sim_db_rejects_legacy_table_schema(tmp_path: Path) -> None:
+    base = Kimeco_db(name='LEGACY_SIM', path=str(tmp_path), threads=1)
+    base.create_table(
+        name='G0000',
+        columns=['sim_id', 'time', 'A'],
+        types=[int, float, float],
+    )
+
+    with pytest.raises(ValueError, match='Unsupported SIM_DB schema'):
+        SIM_DB(name='LEGACY_SIM', path=str(tmp_path), tbl_name='G0000')
+

@@ -91,51 +91,60 @@ def _mdl(events: list[str], gen: int = 1, mdl_id: int = 3, **extra):
     return mdl
 
 
-def test_extrapolate_inherits_core_run_simulation() -> None:
+def test_extrapolate_uses_core_run_simulation_with_rates_loaded_first(monkeypatch) -> None:
+    """Extrapolate inherits CoreRun.run_simulation, which loads the rates before
+    the simulation is submitted."""
+    _mp_root = monkeypatch
+    # -- test_extrapolate_inherits_core_run_simulation
     # Guard against reintroducing an override that skips load_rates_from_db.
     assert 'run_simulation' not in vars(Extrapolate)
     assert Extrapolate.run_simulation is CoreRun.run_simulation
 
+    # -- test_rates_loaded_before_simulation_is_submitted
+    with _mp_root.context() as monkeypatch:
+        monkeypatch.setattr(core_mod, 'SIM', _SpySIM)
+        events: list[str] = []
+        mdl = _mdl(events, gen=1, mdl_id=3, thread_id=7)
 
-def test_rates_loaded_before_simulation_is_submitted(monkeypatch) -> None:
-    monkeypatch.setattr(core_mod, 'SIM', _SpySIM)
-    events: list[str] = []
-    mdl = _mdl(events, gen=1, mdl_id=3, thread_id=7)
+        _extrapolate().run_simulation(cast(Any, mdl))
 
-    _extrapolate().run_simulation(cast(Any, mdl))
-
-    assert events == ['load:G0001', 'sim_init', 'q_up']
-    sim = _SpySIM.last
-    assert sim.rates_at_q_up is not None and 0 in sim.rates_at_q_up
-    assert sim.rates_at_q_up[0].shape == (1, 1, 2, 2)
-    assert sim.kwargs['gen_name'] == 'G0001'
-    assert sim.kwargs['q_idx'] == 7
-    assert mdl.sim is sim
-    assert mdl.status == ModelStatus.SIM
-
-
-def test_goat_model_loads_from_its_origin_generation_table(monkeypatch) -> None:
-    # GT-n ensembles merge models from many generations: rates must be read
-    # from the model's own G#### table, not from a 'PP' prefixed table.
-    monkeypatch.setattr(core_mod, 'SIM', _SpySIM)
-    events: list[str] = []
-    mdl = _mdl(events, gen=217, mdl_id=42, thread_id=0)
-
-    _extrapolate().run_simulation(cast(Any, mdl))
-
-    assert mdl.rateCoef.loaded_tables == ['G0217']
-    assert _SpySIM.last.kwargs['gen_name'] == 'G0217'
-    assert _SpySIM.last.kwargs['loc'].endswith('/G0217')
+        assert events == ['load:G0001', 'sim_init', 'q_up']
+        sim = _SpySIM.last
+        assert sim.rates_at_q_up is not None and 0 in sim.rates_at_q_up
+        assert sim.rates_at_q_up[0].shape == (1, 1, 2, 2)
+        assert sim.kwargs['gen_name'] == 'G0001'
+        assert sim.kwargs['q_idx'] == 7
+        assert mdl.sim is sim
+        assert mdl.status == ModelStatus.SIM
 
 
-def test_q_idx_falls_back_to_model_id_without_thread_id(monkeypatch) -> None:
-    monkeypatch.setattr(core_mod, 'SIM', _SpySIM)
-    events: list[str] = []
-    mdl = _mdl(events, gen=1, mdl_id=5)
+def test_goat_model_table_and_q_idx_fallback(monkeypatch) -> None:
+    """A GOAT model loads its rates from its origin generation table; q_idx
+    falls back to the model id without a thread id."""
+    _mp_root = monkeypatch
+    # -- test_goat_model_loads_from_its_origin_generation_table
+    with _mp_root.context() as monkeypatch:
+        # GT-n ensembles merge models from many generations: rates must be read
+        # from the model's own G#### table, not from a 'PP' prefixed table.
+        monkeypatch.setattr(core_mod, 'SIM', _SpySIM)
+        events: list[str] = []
+        mdl = _mdl(events, gen=217, mdl_id=42, thread_id=0)
 
-    _extrapolate().run_simulation(cast(Any, mdl))
+        _extrapolate().run_simulation(cast(Any, mdl))
 
-    assert _SpySIM.last.kwargs['q_idx'] == 5
+        assert mdl.rateCoef.loaded_tables == ['G0217']
+        assert _SpySIM.last.kwargs['gen_name'] == 'G0217'
+        assert _SpySIM.last.kwargs['loc'].endswith('/G0217')
+
+    # -- test_q_idx_falls_back_to_model_id_without_thread_id
+    with _mp_root.context() as monkeypatch:
+        monkeypatch.setattr(core_mod, 'SIM', _SpySIM)
+        events: list[str] = []
+        mdl = _mdl(events, gen=1, mdl_id=5)
+
+        _extrapolate().run_simulation(cast(Any, mdl))
+
+        assert _SpySIM.last.kwargs['q_idx'] == 5
 
 
 def test_rendered_script_contains_stored_rates(tmp_path) -> None:

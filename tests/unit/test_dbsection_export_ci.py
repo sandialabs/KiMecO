@@ -39,8 +39,13 @@ def _populate(db: SIM_DB, table: str) -> None:
     db.batch_upsert()
 
 
-def test_export_results_selection_writes_expected_files(
-        tmp_path: Path) -> None:
+def test_export_results_selection_and_all(tmp_path) -> None:
+    """Exporting a selection writes the expected files; exporting all writes
+    every row."""
+    _tmp_root = tmp_path
+    # -- test_export_results_selection_writes_expected_files
+    tmp_path = _tmp_root / 'test_export_results_selection_writes_expected_files'
+    tmp_path.mkdir(parents=True)
     db = SIM_DB(name='KMO_DB_SIM', path=str(tmp_path), threads=1)
     _populate(db, 'G0000')
     section = _make_section(tmp_path, db)
@@ -60,8 +65,9 @@ def test_export_results_selection_writes_expected_files(
     # The unselected row must not be exported.
     assert not (Path(folder) / 'G0000_2_1.csv').exists()
 
-
-def test_export_results_all_writes_every_row(tmp_path: Path) -> None:
+    # -- test_export_results_all_writes_every_row
+    tmp_path = _tmp_root / 'test_export_results_all_writes_every_row'
+    tmp_path.mkdir(parents=True)
     db = SIM_DB(name='KMO_DB_SIM', path=str(tmp_path), threads=1)
     _populate(db, 'G0000')
     section = _make_section(tmp_path, db)
@@ -103,14 +109,16 @@ def _label_section(experiments, pp_experiments, n_run) -> DBSection:
     return section
 
 
-def test_experiment_label_regular_below_n_run() -> None:
+def test_experiment_label() -> None:
+    """Labels: regular below n_run, extrapolated for the band, guarded without
+    pp experiments."""
+    # -- test_experiment_label_regular_below_n_run
     exp = SimpleNamespace(exp_type='Time profile', P=101325.0, T=300.0)
     section = _label_section([exp], [], n_run=1)
 
     assert section._experiment_label('KMO_DB_SIM.db', 0) == 'Time profile #0'
 
-
-def test_experiment_label_extrapolated_band() -> None:
+    # -- test_experiment_label_extrapolated_band
     exp = SimpleNamespace(exp_type='TP', P=101325.0, T=300.0)
     pp = SimpleNamespace(exp_type='PP', P=202650.0, T=500.0)
     section = _label_section([exp], [pp], n_run=1)
@@ -122,10 +130,11 @@ def test_experiment_label_extrapolated_band() -> None:
     assert 'PP' in label
     assert '500 K' in label
 
-
-def test_experiment_label_guard_no_pp_experiments() -> None:
+    # -- test_experiment_label_guard_no_pp_experiments
     exp = SimpleNamespace(exp_type='TP', P=101325.0, T=300.0)
     section = _label_section([exp], [], n_run=1)
 
     # n_pp == 0 -> falls back to the generic descriptor.
     assert section._experiment_label('KMO_DB_SIM.db', 5) == 'Simulation #5'
+
+

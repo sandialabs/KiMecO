@@ -9,3 +9,7 @@ CLAUDE.local.md
 .claude/memory-local/
 .claude/work/
 .claude/settings.local.json
+# pytest-cov / coverage.py output (local coverage runs, see the run-tests skill)
+.coverage
+htmlcov/
+coverage.xml

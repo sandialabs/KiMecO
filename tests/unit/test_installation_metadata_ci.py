@@ -99,7 +99,6 @@ GIT_PREINSTALL_RE = (
     r'"autochem @ git\+https://github\.com/Auto-Mech/autochem@[^"]+"')
 MESS_STATIC_INSTALL = "conda install -c auto-mech mess-static -y"
 MESS_STATIC_INSTALL_RE = re.escape(MESS_STATIC_INSTALL)
-MESS_RECIPE_INDEX = 2
 FRESH_ENV_RECIPE_RES = (
     r"conda create -n kimeco -c conda-forge python=3\.11(?: \S+)* -y",
     r"conda activate kimeco",
@@ -197,6 +196,15 @@ def _recipe_with_lead_sentence(path: Path) -> str:
     raise AssertionError(f"{path.name}: fresh-env recipe block not found")
 
 
+def _collect(failures: list[str], label: str, check, *args) -> None:
+    """Run ``check(*args)``; record its AssertionError under ``label`` so a
+    loop over cases reports every failing case, not only the first."""
+    try:
+        check(*args)
+    except AssertionError as exc:
+        failures.append(f"{label}: {exc}")
+
+
 def _git_pins(text: str) -> dict[str, set[str]]:
     """Map autoio/autochem -> set of git refs pinned via git+...Auto-Mech/."""
     out: dict[str, set[str]] = {"autoio": set(), "autochem": set()}
@@ -220,38 +228,40 @@ def test_pyproject_extras_are_exactly_test_and_automech() -> None:
 def test_pyproject_automech_extra_exact_list() -> None:
     extras = _pyproject()["project"]["optional-dependencies"]
     assert extras["automech"] == EXPECTED_AUTOMECH
+    for label, reqs in (("EXPECTED_AUTOMECH", EXPECTED_AUTOMECH),
+                        ("pyproject automech", extras["automech"])):
+        names = [canonicalize_name(Requirement(r).name) for r in reqs]
+        assert len(names) == len(set(names)), f"duplicates in {label}: {names}"
 
 
 def test_setup_py_extras_mirror_pyproject() -> None:
-    setup_extras = _setup_kwargs()["extras_require"]
-    pyproject_extras = _pyproject()["project"]["optional-dependencies"]
+    kwargs = _setup_kwargs()
+    setup_extras = kwargs["extras_require"]
+    pyproject = _pyproject()["project"]
+    pyproject_extras = pyproject["optional-dependencies"]
     assert set(setup_extras) == set(pyproject_extras)
     for key in pyproject_extras:
         assert setup_extras[key] == pyproject_extras[key], (
             f"extras_require[{key!r}] in setup.py differs from pyproject")
-
-
-def test_setup_py_install_requires_mirrors_pyproject_dependencies() -> None:
-    assert (_setup_kwargs()["install_requires"]
-            == _pyproject()["project"]["dependencies"])
+    assert kwargs["install_requires"] == pyproject["dependencies"], (
+        "install_requires in setup.py differs from pyproject dependencies")
 
 
 # ---------------------------------------------------------------------------
 # Standard cases: python floor everywhere
 # ---------------------------------------------------------------------------
 def test_python_floor_identical_in_pyproject_and_setup_py() -> None:
-    assert _pyproject()["project"]["requires-python"] == EXPECTED_PYTHON_FLOOR
+    """``>=3.11`` in pyproject, setup.py and the conda recipe; classifiers
+    list 3.11 and 3.12 but not 3.10; conda builds for 3.11 only."""
+    project = _pyproject()["project"]
+    assert project["requires-python"] == EXPECTED_PYTHON_FLOOR
     assert _setup_kwargs()["python_requires"] == EXPECTED_PYTHON_FLOOR
 
-
-def test_pyproject_classifiers_list_311_and_312_not_310() -> None:
-    classifiers = _pyproject()["project"]["classifiers"]
+    classifiers = project["classifiers"]
     assert "Programming Language :: Python :: 3.11" in classifiers
     assert "Programming Language :: Python :: 3.12" in classifiers
     assert "Programming Language :: Python :: 3.10" not in classifiers
 
-
-def test_conda_recipe_python_floor_is_311() -> None:
     meta = META_YAML.read_text(encoding="utf-8")
     python_pins = re.findall(r"^\s*-\s*python\s*([^\n#]*)", meta, flags=re.M)
     assert len(python_pins) == 2, (
@@ -268,10 +278,11 @@ def test_conda_recipe_python_floor_is_311() -> None:
 
 def test_ci_python_versions_consistent() -> None:
     tests_yml = TESTS_YML.read_text(encoding="utf-8")
-    match = re.search(r"python-version:\s*\[([^\]]*)\]", tests_yml)
-    assert match, "tests.yml: python-version matrix not found"
-    matrix = [v.strip().strip('"\'') for v in match.group(1).split(",")]
-    assert matrix == ["3.11", "3.12"]
+    matrices = re.findall(r"python-version:\s*\[([^\]]*)\]", tests_yml)
+    assert len(matrices) >= 2, "tests.yml: expected a matrix per job"
+    for raw in matrices:
+        matrix = [v.strip().strip('"\'') for v in raw.split(",")]
+        assert matrix == ["3.11", "3.12"], matrix
 
     for path in (GITLAB_CI, KMO_INSTALL_TEST):
         text = path.read_text(encoding="utf-8")
@@ -285,104 +296,113 @@ def test_ci_python_versions_consistent() -> None:
             f"{path.name} still pins python 3.10")
 
 
-def test_tests_yml_installs_test_extra_without_agentic() -> None:
-    tests_yml = TESTS_YML.read_text(encoding="utf-8")
-    install_lines = [ln for ln in tests_yml.splitlines()
+def test_no_agentic_dependency_tokens_in_packaging_files() -> None:
+    failures = [f"{path.name} still mentions {token!r}"
+                for path in (PYPROJECT, SETUP_PY, REQUIREMENTS_TXT, META_YAML,
+                             TESTS_YML)
+                for token in FORBIDDEN_TOKENS
+                if token in path.read_text(encoding="utf-8").lower()]
+    assert not failures, "\n".join(failures)
+    install_lines = [ln for ln in TESTS_YML.read_text(encoding="utf-8").splitlines()
                      if "pip install" in ln and "-e" in ln]
     assert install_lines, "tests.yml: no editable pip install line"
     assert any("[test]" in ln for ln in install_lines), install_lines
     assert not any("agentic" in ln for ln in install_lines), install_lines
 
 
-@pytest.mark.parametrize("path", [PYPROJECT, SETUP_PY, REQUIREMENTS_TXT,
-                                  META_YAML, TESTS_YML],
-                         ids=lambda p: p.name)
-def test_no_agentic_dependency_tokens_in_packaging_files(path: Path) -> None:
-    text = path.read_text(encoding="utf-8").lower()
-    for token in FORBIDDEN_TOKENS:
-        assert token not in text, f"{path.name} still mentions {token!r}"
-
-
 # ---------------------------------------------------------------------------
 # Standard cases: documented installation procedure
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
-def test_docs_install_procedure_pip_first(doc: Path) -> None:
-    """Each installation document must describe the supported procedure:
-    a python=3.11 conda env, the requirements.txt mamba shortcut, an
-    editable pip install, and the ``[automech]`` extra."""
+def _check_doc_install_procedure(doc: Path, declared: set[str]) -> None:
     code = _fenced_code_blocks(doc)
     for needle in ("python=3.11",
                    "mamba install -c conda-forge --file requirements.txt",
                    "pip install -e .",
                    "[automech]"):
         assert needle in code, (
-            f"{doc.relative_to(REPO)}: fenced install code is missing "
-            f"{needle!r}")
-    assert "python=3.10" not in code, (
-        f"{doc.relative_to(REPO)}: still documents python=3.10")
-
-
-@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
-def test_docs_extras_exist_in_pyproject(doc: Path) -> None:
-    """Every ``pip install ...[extra]`` in the docs must reference a declared
-    extra, and the automech extra must be documented."""
-    declared = set(_pyproject()["project"]["optional-dependencies"])
+            f"fenced install code is missing {needle!r}")
+    assert "python=3.10" not in code, "still documents python=3.10"
+    # Every ``pip install ...[extra]`` references a declared extra.
     referenced = _pip_install_extras(doc.read_text(encoding="utf-8"))
-    assert referenced, (
-        f"{doc.relative_to(REPO)}: no 'pip install ...[extra]' command found")
+    assert referenced, "no 'pip install ...[extra]' command found"
     unknown = referenced - declared
-    assert not unknown, (
-        f"{doc.relative_to(REPO)} references undeclared extras {unknown}")
-    assert "automech" in referenced, (
-        f"{doc.relative_to(REPO)} does not document the [automech] extra")
+    assert not unknown, f"references undeclared extras {unknown}"
+    assert "automech" in referenced, "does not document the [automech] extra"
+    if doc in (MANUAL, WIKI_INSTALL):
+        assert "pip install -e .[automech,test]" in doc.read_text(encoding="utf-8"), (
+            "must document 'pip install -e .[automech,test]' for developers")
+
+
+def test_docs_install_procedure_pip_first() -> None:
+    """Each installation document describes the supported procedure: a
+    python=3.11 conda env, the requirements.txt mamba shortcut, an editable
+    pip install with declared extras only, and the ``[automech]`` extra;
+    MANUAL and wiki also mention ``[automech,test]``."""
+    declared = set(_pyproject()["project"]["optional-dependencies"])
+    failures: list[str] = []
+    for doc in DOC_FILES:
+        _collect(failures, str(doc.relative_to(REPO)),
+                 _check_doc_install_procedure, doc, declared)
+    assert not failures, "\n".join(failures)
 
 
 # ---------------------------------------------------------------------------
 # Standard cases: fresh-environment automech recipe in the docs
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
-def test_docs_fresh_env_recipe_in_one_fenced_block(doc: Path) -> None:
+def _check_fresh_env_recipe(doc: Path) -> None:
+    blocks = _fresh_env_recipe_blocks(doc)
+    assert len(blocks) == 1, (
+        f"expected exactly one fenced block with the fresh-env recipe, "
+        f"found {len(blocks)}")
+    text = doc.read_text(encoding="utf-8")
+    after = text[text.index(blocks[0]) + len(blocks[0]):]
+    assert re.search(r"Run `which mess` afterwards", after), (
+        "no `which mess` follow-up after the recipe")
+    if doc in (MANUAL, WIKI_INSTALL):
+        # The recipe includes the MESS step: the lead sentence says it
+        # replaces steps 2 (install) AND 5 (MESS), and names MESS.
+        lead = _recipe_with_lead_sentence(doc).splitlines()[0]
+        assert "replaces steps 2 and 5" in lead, lead
+        assert "install MESS" in lead, lead
+        assert "steps 2 and 6" not in lead and "step 2 above" not in lead, lead
+
+
+def test_docs_fresh_env_recipe_in_one_fenced_block() -> None:
     """Each installation document carries the complete fresh-env automech
     sequence (create env, activate, mess-static from auto-mech, git+
     pre-install of autoio/autochem, editable install with [automech],
-    verification import) as ONE fenced block, in that order."""
-    blocks = _fresh_env_recipe_blocks(doc)
-    assert len(blocks) == 1, (
-        f"{doc.relative_to(REPO)}: expected exactly one fenced block with "
-        f"the fresh-env recipe, found {len(blocks)}")
-
-
-def test_manual_and_wiki_fresh_env_recipe_identical() -> None:
-    """MANUAL and wiki are maintained in lock-step: the fresh-env fenced
-    block and the sentence introducing it must be line-identical."""
+    verification import) as ONE fenced block, in that order, followed by a
+    ``which mess`` hint. MANUAL and wiki keep block and lead sentence
+    line-identical."""
+    failures: list[str] = []
+    for doc in DOC_FILES:
+        _collect(failures, str(doc.relative_to(REPO)),
+                 _check_fresh_env_recipe, doc)
+    assert not failures, "\n".join(failures)
     assert (_recipe_with_lead_sentence(MANUAL)
             == _recipe_with_lead_sentence(WIKI_INSTALL))
 
 
-@pytest.mark.parametrize("doc", (MANUAL, WIKI_INSTALL), ids=lambda p: p.name)
-def test_docs_mention_combined_automech_test_extra(doc: Path) -> None:
-    text = doc.read_text(encoding="utf-8")
-    assert "pip install -e .[automech,test]" in text, (
-        f"{doc.relative_to(REPO)} must document 'pip install -e "
-        ".[automech,test]' for developers")
-
-
-@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
-def test_docs_preinstall_autoio_autochem_from_auto_mech(doc: Path) -> None:
-    """autoio/autochem are not on PyPI: the automech instructions must
-    pre-install them from GitHub (git+.../Auto-Mech/) and/or the auto-mech
-    conda channel, and the fresh-env block must use the git+ form."""
+def _check_preinstall(doc: Path) -> None:
     code = _fenced_code_blocks(doc)
     pins = _git_pins(code)
     conda_channel = re.search(r"conda install .*autoio .*autochem .*-c auto-mech",
                               code) is not None
     assert (pins["autoio"] and pins["autochem"]) or conda_channel, (
-        f"{doc.relative_to(REPO)}: no git+…Auto-Mech/ or -c auto-mech "
-        "pre-install of autoio/autochem")
-    recipe = _fresh_env_recipe_blocks(doc)[0]
-    recipe_pins = _git_pins(recipe)
-    assert recipe_pins["autoio"] and recipe_pins["autochem"]
+        "no git+…Auto-Mech/ or -c auto-mech pre-install of autoio/autochem")
+    recipe_pins = _git_pins(_fresh_env_recipe_blocks(doc)[0])
+    assert recipe_pins["autoio"] and recipe_pins["autochem"], (
+        "the fresh-env block does not use the git+ form")
+
+
+def test_docs_preinstall_autoio_autochem_from_auto_mech() -> None:
+    """autoio/autochem are not on PyPI: the automech instructions must
+    pre-install them from GitHub (git+.../Auto-Mech/) and/or the auto-mech
+    conda channel, and the fresh-env block must use the git+ form."""
+    failures: list[str] = []
+    for doc in DOC_FILES:
+        _collect(failures, str(doc.relative_to(REPO)), _check_preinstall, doc)
+    assert not failures, "\n".join(failures)
 
 
 def test_docs_and_ci_pin_same_autoio_autochem_refs() -> None:
@@ -412,38 +432,40 @@ def _markdown_section(path: Path, title: str) -> tuple[int, str]:
     return level, body.strip("\n")
 
 
-@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
-def test_docs_document_mess_static_install_and_which_check(doc: Path) -> None:
-    """Every installation document shows the exact mess-static install line
-    as a fenced command, a fenced block whose body is exactly ``which mess``,
-    and says the path must be inside the active environment."""
+def _check_mess_static_doc(doc: Path) -> None:
     blocks = [b.strip("\n") for b in _fenced_block_list(doc)]
     fenced_lines = [ln.rstrip() for b in blocks for ln in b.splitlines()]
     assert fenced_lines.count(MESS_STATIC_INSTALL) >= 1, (
-        f"{doc.relative_to(REPO)}: fenced code lacks {MESS_STATIC_INSTALL!r}")
+        f"fenced code lacks {MESS_STATIC_INSTALL!r}")
     assert MESS_STATIC_INSTALL in blocks, (
-        f"{doc.relative_to(REPO)}: no fenced block consisting only of "
-        f"{MESS_STATIC_INSTALL!r} (the standalone MESS step)")
+        f"no fenced block consisting only of {MESS_STATIC_INSTALL!r} "
+        "(the standalone MESS step)")
     assert blocks.count(WHICH_MESS) == 1, (
-        f"{doc.relative_to(REPO)}: expected exactly one fenced block whose "
-        f"body is exactly {WHICH_MESS!r}; got {blocks.count(WHICH_MESS)}")
+        f"expected exactly one fenced block whose body is exactly "
+        f"{WHICH_MESS!r}; got {blocks.count(WHICH_MESS)}")
     text = doc.read_text(encoding="utf-8")
     assert "inside the active environment" in text, (
-        f"{doc.relative_to(REPO)}: must state that `which mess` prints a "
-        "path inside the active environment")
+        "must state that `which mess` prints a path inside the active "
+        "environment")
     which_idx = text.index("```bash\n" + WHICH_MESS + "\n```")
     assert "inside the active environment" in text[which_idx:], (
-        f"{doc.relative_to(REPO)}: the 'inside the active environment' "
-        "sentence must follow the `which mess` block")
+        "the 'inside the active environment' sentence must follow the "
+        "`which mess` block")
     # No competing MESS install command (pip / other channel) in fenced code.
     for line in fenced_lines:
         if "mess-static" in line:
             assert line == MESS_STATIC_INSTALL, line
 
 
-def test_manual_and_wiki_mess_section_identical() -> None:
-    """MANUAL and wiki are maintained in lock-step: the MESS section body is
-    identical (the heading level differs: ### in MANUAL, ## in the wiki)."""
+def test_docs_document_mess_static_install_and_which_check() -> None:
+    """Every installation document shows the exact mess-static install line
+    as a fenced command, a fenced block whose body is exactly ``which mess``,
+    and says the path must be inside the active environment. MANUAL and wiki
+    keep their MESS section body identical (### in MANUAL, ## in the wiki)."""
+    failures: list[str] = []
+    for doc in DOC_FILES:
+        _collect(failures, str(doc.relative_to(REPO)), _check_mess_static_doc, doc)
+    assert not failures, "\n".join(failures)
     manual_level, manual_body = _markdown_section(MANUAL, MESS_SECTION_TITLE)
     wiki_level, wiki_body = _markdown_section(WIKI_INSTALL, MESS_SECTION_TITLE)
     assert manual_level == 3 and wiki_level == 2, (manual_level, wiki_level)
@@ -451,54 +473,6 @@ def test_manual_and_wiki_mess_section_identical() -> None:
     for needle in (MESS_STATIC_INSTALL, WHICH_MESS, "$CONDA_PREFIX/bin",
                    "inside the active environment"):
         assert needle in manual_body, f"MESS section lacks {needle!r}"
-
-
-@pytest.mark.parametrize("doc", (MANUAL, WIKI_INSTALL), ids=lambda p: p.name)
-def test_manual_wiki_recipe_lead_mentions_steps_2_and_5(doc: Path) -> None:
-    """The fresh-env recipe now includes the MESS step, so its lead sentence
-    must say it replaces steps 2 (install) AND 5 (MESS), and name MESS."""
-    lead = _recipe_with_lead_sentence(doc).splitlines()[0]
-    assert "replaces steps 2 and 5" in lead, lead
-    assert "install MESS" in lead, lead
-    assert "steps 2 and 6" not in lead and "step 2 above" not in lead, lead
-
-
-@pytest.mark.parametrize("doc", DOC_FILES, ids=lambda p: p.name)
-def test_docs_which_mess_follow_up_after_recipe(doc: Path) -> None:
-    """The prose after the fresh-env recipe tells the user to run
-    ``which mess`` and expects it inside the environment."""
-    text = doc.read_text(encoding="utf-8")
-    recipe = _fresh_env_recipe_blocks(doc)[0]
-    after = text[text.index(recipe) + len(recipe):]
-    assert re.search(r"Run `which mess` afterwards", after), (
-        f"{doc.relative_to(REPO)}: no `which mess` follow-up after the recipe")
-
-
-def test_mess_regex_is_recipe_index_2_and_lacks_autoio_tokens() -> None:
-    """Guard the recipe table itself: 6 lines, MESS at index 2 between
-    ``conda activate`` and the git+ pre-install, and the MESS regex matches
-    only the exact mess-static line (never the autoio/autochem conda form
-    that :func:`test_docs_preinstall_autoio_autochem_from_auto_mech`
-    recognises)."""
-    assert len(FRESH_ENV_RECIPE_RES) == 6
-    mess_re = FRESH_ENV_RECIPE_RES[MESS_RECIPE_INDEX]
-    assert re.fullmatch(mess_re, MESS_STATIC_INSTALL)
-    assert re.fullmatch(FRESH_ENV_RECIPE_RES[1], "conda activate kimeco")
-    assert FRESH_ENV_RECIPE_RES[MESS_RECIPE_INDEX + 1] == GIT_PREINSTALL_RE
-    for other in ("conda install autoio autochem -c auto-mech",
-                  "conda install -c auto-mech mess-static",
-                  "conda install -c auto-mech mess -y",
-                  "pip install mess-static",
-                  MESS_STATIC_INSTALL + " --force"):
-        assert not re.fullmatch(mess_re, other), other
-    assert "autoio" not in mess_re and "autochem" not in mess_re
-    # The mess-static line must not be mistaken for the autoio/autochem
-    # conda pre-install form used elsewhere in this module.
-    assert re.search(r"conda install .*autoio .*autochem .*-c auto-mech",
-                     MESS_STATIC_INSTALL) is None
-    for pattern in FRESH_ENV_RECIPE_RES:
-        if pattern is not mess_re:
-            assert not re.fullmatch(pattern, MESS_STATIC_INSTALL), pattern
 
 
 def test_tests_yml_has_mess_binary_job() -> None:
@@ -579,21 +553,9 @@ def test_tests_yml_has_automech_extra_job() -> None:
     git_idx = tests_yml.index("git+https://github.com/Auto-Mech/autoio@")
     extra_idx = tests_yml.index("pip install -e .[automech,test]")
     assert git_idx < extra_idx, "git+ pre-install must precede the extra"
-
-
-def test_tests_yml_base_job_still_installs_test_extra_only() -> None:
-    """The first job keeps proving the base install without automech."""
-    tests_yml = TESTS_YML.read_text(encoding="utf-8")
-    assert re.search(r"pip install -e \.\[test\]\s*$", tests_yml, flags=re.M)
-
-
-def test_tests_yml_every_python_matrix_is_311_and_312() -> None:
-    tests_yml = TESTS_YML.read_text(encoding="utf-8")
-    matrices = re.findall(r"python-version:\s*\[([^\]]*)\]", tests_yml)
-    assert len(matrices) >= 2, "tests.yml: expected a matrix per job"
-    for raw in matrices:
-        matrix = [v.strip().strip('"\'') for v in raw.split(",")]
-        assert matrix == ["3.11", "3.12"], matrix
+    # The first job keeps proving the base install without automech.
+    assert re.search(r"pip install -e \.\[test\]\s*$", tests_yml, flags=re.M), (
+        "tests.yml: the base job no longer installs '.[test]' alone")
 
 
 # ---------------------------------------------------------------------------
@@ -667,31 +629,24 @@ def test_check_automech_warning_points_to_automech_extra(
 # ---------------------------------------------------------------------------
 # Edge cases: requirement hygiene
 # ---------------------------------------------------------------------------
-def test_automech_extra_has_no_duplicate_canonical_names() -> None:
-    names = [canonicalize_name(Requirement(r).name) for r in EXPECTED_AUTOMECH]
-    assert len(names) == len(set(names)), f"duplicates in automech: {names}"
-    extra = _pyproject()["project"]["optional-dependencies"]["automech"]
-    extra_names = [canonicalize_name(Requirement(r).name) for r in extra]
-    assert len(extra_names) == len(set(extra_names))
-
-
-def _all_requirement_strings() -> list[tuple[str, str]]:
+def test_every_requirement_is_valid_pep508() -> None:
     project = _pyproject()["project"]
-    out = [("dependencies", r) for r in project["dependencies"]]
+    cases = [("dependencies", r) for r in project["dependencies"]]
     for key, reqs in project["optional-dependencies"].items():
-        out.extend((key, r) for r in reqs)
-    return out
-
-
-@pytest.mark.parametrize("group,req", _all_requirement_strings(),
-                         ids=lambda x: x)
-def test_every_requirement_is_valid_pep508(group: str, req: str) -> None:
-    parsed = Requirement(req)  # raises InvalidRequirement on bad syntax
-    assert parsed.name
-    if group == "automech":
-        specs = {s.operator for s in parsed.specifier}
-        assert ">=" in specs, f"automech entry {req!r} lacks a >= lower bound"
-        assert str(parsed.specifier), f"automech entry {req!r} has no specifier"
+        cases.extend((key, r) for r in reqs)
+    failures: list[str] = []
+    for group, req in cases:
+        try:
+            parsed = Requirement(req)
+        except Exception as exc:  # InvalidRequirement
+            failures.append(f"{group}: {req!r} is not PEP 508: {exc}")
+            continue
+        if not parsed.name:
+            failures.append(f"{group}: {req!r} has no name")
+        if group == "automech":
+            if ">=" not in {s.operator for s in parsed.specifier}:
+                failures.append(f"automech entry {req!r} lacks a >= lower bound")
+    assert not failures, "\n".join(failures)
 
 
 def test_requirements_txt_is_subset_of_dependencies_and_test_extra() -> None:

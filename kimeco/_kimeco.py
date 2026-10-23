@@ -269,7 +269,9 @@ class KiMecO:
         Resolve an ensemble name to a list of Models.
 
         Supported formats:
-        - 'Gdddd' e.g., 'G0001': GA generation dddd
+        - 'Gdddd' e.g., 'G0001': the initial model (id 0, read from table
+          G0000 and rescored) followed by the models of GA generation dddd;
+          [] if a table or the initial model is missing
         - 'GT-1': last GOATs generation
         - 'GTxxxx': specific GOATs generation
         """
@@ -282,18 +284,29 @@ class KiMecO:
                 # TODO: Add previous mdl in SOP_db to know all mdls
                 #  of a generation, and not only the new ones.
             table: str = f'G{gen:04d}'
-            f_mdl_row = self.sop_db.get_table(table=table)[0]
-            f_mdl = Model(
-                sop=SOP.from_db_row(
-                    sop_tpl=self.init_SOP,
-                    row=f_mdl_row[1:]),
-                id=0,
-                gen=0)
-            self.sf.fscore(mdl=f_mdl)
-            models.append(f_mdl)
-            if self.sop_db.table_exists(table):
-                rows = self.sop_db.get_table(table=table)
-                for row in rows:
+            # Table of generation 0, holding the initial model (row id 0)
+            init_table: str = 'G0000'
+            gen_rows = (list(self.sop_db.get_table(table=table))
+                        if self.sop_db.table_exists(table) else [])
+            # SOP_DB row of the initial model; None when it is missing.
+            init_row = None
+            if gen_rows and self.sop_db.table_exists(init_table):
+                init_row = next(
+                    (row for row in self.sop_db.get_table(table=init_table)
+                     if row[0] == 0),
+                    None)
+            # Any guard miss leaves `models` empty: warning below, [] returned
+            if init_row is not None:
+                # Reference model: the initial model, rescored
+                ref_mdl = Model(
+                    sop=SOP.from_db_row(
+                        sop_tpl=self.init_SOP,
+                        row=init_row[1:]),
+                    id=0,
+                    gen=0)
+                self.sf.fscore(mdl=ref_mdl)
+                models.append(ref_mdl)
+                for row in gen_rows:
                     sop: SOP = SOP.from_db_row(
                         sop_tpl=self.init_SOP,
                         row=row[1:])

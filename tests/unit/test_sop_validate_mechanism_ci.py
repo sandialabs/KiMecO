@@ -54,13 +54,15 @@ def no_mechanism(monkeypatch):
     monkeypatch.setattr(sop_section, "MessInputReader", _ExplodingReader)
 
 
-def test_mechanism_none_does_not_raise(no_mechanism):
+def test_mechanism_none_reports_invalid_without_raising(no_mechanism) -> None:
+    """With no mechanism loaded validate_sop does not raise and reports the SOP
+    as invalid."""
+    # -- test_mechanism_none_does_not_raise
     result = validate_sop(1, "mech.yaml", ["a.inp"], [])
     assert isinstance(result, tuple)
     assert len(result) == 6
 
-
-def test_mechanism_none_reports_invalid(no_mechanism):
+    # -- test_mechanism_none_reports_invalid
     result = validate_sop(1, "mech.yaml", ["a.inp"], [])
     # sop-valid-store data is the 3rd output.
     assert result[2] is False
@@ -68,21 +70,22 @@ def test_mechanism_none_reports_invalid(no_mechanism):
     assert "not loaded" in text
 
 
-def test_mechanism_none_leaves_no_leaked_handler(no_mechanism):
+def test_no_handler_leak_and_logger_level_restored(no_mechanism) -> None:
+    """No handler leaks, the logger level is restored, and repeated calls do not
+    accumulate handlers."""
+    # -- test_mechanism_none_leaves_no_leaked_handler
     logger = logging.getLogger(LOGGER_NAME)
     before = list(logger.handlers)
     validate_sop(1, "mech.yaml", ["a.inp"], [])
     assert logger.handlers == before
 
-
-def test_logger_level_restored(no_mechanism):
+    # -- test_logger_level_restored
     logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(logging.WARNING)
     validate_sop(1, "mech.yaml", ["a.inp"], [])
     assert logger.level == logging.WARNING
 
-
-def test_repeated_calls_do_not_accumulate_handlers(no_mechanism):
+    # -- test_repeated_calls_do_not_accumulate_handlers
     logger = logging.getLogger(LOGGER_NAME)
     baseline = len(logger.handlers)
     for _ in range(5):
@@ -90,23 +93,29 @@ def test_repeated_calls_do_not_accumulate_handlers(no_mechanism):
     assert len(logger.handlers) == baseline
 
 
-def test_empty_ct_yaml_early_guard_adds_no_handler(monkeypatch):
-    """Edge: missing ct_yaml short-circuits before any handler is created."""
-    monkeypatch.setattr(sop_section, "MessInputReader", _ExplodingReader)
-    logger = logging.getLogger(LOGGER_NAME)
-    before = list(logger.handlers)
-    result = validate_sop(1, "", ["a.inp"], [])
-    assert len(result) == 6
-    assert result[2] is False
-    assert logger.handlers == before
+def test_early_guards_add_no_handler(monkeypatch) -> None:
+    """The empty cantera-yaml and empty MESS-files early guards add no handler."""
+    _mp_root = monkeypatch
+    # -- test_empty_ct_yaml_early_guard_adds_no_handler: Edge: missing ct_yaml
+    #    short-circuits before any handler is created.
+    with _mp_root.context() as monkeypatch:
+        monkeypatch.setattr(sop_section, "MessInputReader", _ExplodingReader)
+        logger = logging.getLogger(LOGGER_NAME)
+        before = list(logger.handlers)
+        result = validate_sop(1, "", ["a.inp"], [])
+        assert len(result) == 6
+        assert result[2] is False
+        assert logger.handlers == before
+
+    # -- test_empty_mess_files_early_guard_adds_no_handler: Edge: empty
+    #    mess_files list also short-circuits cleanly.
+    with _mp_root.context() as monkeypatch:
+        monkeypatch.setattr(sop_section, "MessInputReader", _ExplodingReader)
+        logger = logging.getLogger(LOGGER_NAME)
+        before = list(logger.handlers)
+        result = validate_sop(1, "mech.yaml", [], [])
+        assert len(result) == 6
+        assert result[2] is False
+        assert logger.handlers == before
 
 
-def test_empty_mess_files_early_guard_adds_no_handler(monkeypatch):
-    """Edge: empty mess_files list also short-circuits cleanly."""
-    monkeypatch.setattr(sop_section, "MessInputReader", _ExplodingReader)
-    logger = logging.getLogger(LOGGER_NAME)
-    before = list(logger.handlers)
-    result = validate_sop(1, "mech.yaml", [], [])
-    assert len(result) == 6
-    assert result[2] is False
-    assert logger.handlers == before

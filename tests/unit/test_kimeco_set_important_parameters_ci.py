@@ -146,3 +146,90 @@ def test_empty_active_p_runs_linear_sa_and_uses_selection(
     assert _LinearStub.save_calls == 0
     # set_active_p is still called after the branch with the selection.
     assert fs.sf.set_active_p_calls == [["A__we", "B__we"]]
+
+
+# ===========================================================================
+# get_ensemble
+# ===========================================================================
+from kimeco.database.sop_db import SOP_DB  # noqa: E402
+from tests.unit.test_goat_ci import _build_sop, _row_values  # noqa: E402
+
+
+class _EnsLog:
+    def __init__(self) -> None:
+        self.warnings: list[str] = []
+
+    def warning(self, msg: str, *a: Any, **k: Any) -> None:
+        self.warnings.append(msg)
+
+
+def _ens_self(tmp_path, name: str, layout: dict[str, dict[int, float]]):
+    """KiMecO with a re-opened SOP_DB holding ``layout`` ({table: {id: fact}})."""
+    sop = _build_sop()
+    db = SOP_DB(sop=sop, name=name, path=str(tmp_path))
+    for table, rows in layout.items():
+        db.create_new_table(name=table)
+        for row_id, fact in rows.items():
+            db.prepare_batch_upsert(table=table, id=row_id, values=_row_values(
+                sop, {'fact': fact, 'pw': 2.0, 's0': 0.1, 's1': 0.2}))
+    db.batch_upsert()
+    kmo = object.__new__(KiMecO)
+    kmo.sop_db = SOP_DB(sop=sop, name=name, path=str(tmp_path))
+    kmo.init_SOP = sop
+    scored: list[Model] = []
+
+    def _fscore(mdl: Model) -> None:
+        scored.append(mdl)
+        mdl.score = 1.0
+
+    kmo.sf = SimpleNamespace(fscore=_fscore)
+    kmo.klog = _EnsLog()
+    return kmo, scored
+
+
+def test_get_ensemble_g0001_uses_initial_model_from_g0000(tmp_path) -> None:
+    kmo, scored = _ens_self(tmp_path, 'ENS_OK', {
+        'G0000': {0: 1.5, 1: 9.0},
+        'G0001': {1: 1.1, 2: 1.2, 3: 1.3}})
+    models = kmo.get_ensemble(' G0001 ')
+    assert [m.id for m in models] == [0, 1, 2, 3]
+    assert [m.gen for m in models] == [0, 1, 1, 1]
+    assert [m['__fact'] for m in models] == pytest.approx([1.5, 1.1, 1.2, 1.3])
+    assert scored == [models[0]]
+    assert kmo.klog.warnings == []
+    with pytest.raises(NotImplementedError):
+        kmo.get_ensemble('G0002')
+
+
+def test_get_ensemble_g0001_guard_misses_return_empty(tmp_path) -> None:
+    layouts = {
+        'ENS_NO_G1': {'G0000': {0: 1.5}},
+        'ENS_EMPTY_G1': {'G0000': {0: 1.5}, 'G0001': {}},
+        'ENS_NO_G0': {'G0001': {1: 1.1, 2: 1.2}},
+        'ENS_NO_ROW0': {'G0000': {5: 1.5}, 'G0001': {1: 1.1, 2: 1.2}},
+    }
+    for name, layout in layouts.items():
+        kmo, scored = _ens_self(tmp_path, name, layout)
+        assert kmo.get_ensemble('G0001') == [], name
+        assert kmo.klog.warnings == ["Ensemble 'G0001' not found or empty."], name
+        assert scored == [], name
+
+
+def test_get_ensemble_goat_tokens_and_unknown_names() -> None:
+    calls: list[int] = []
+    goats = SimpleNamespace(get_goat_for_gen=lambda gen: calls.append(gen) or [f'm{gen}'])
+    kmo = object.__new__(KiMecO)
+    kmo.klog = _EnsLog()
+    kmo.optimizer = SimpleNamespace(goats=goats)
+    assert kmo.get_ensemble('GT-1') == ['m-1']
+    assert kmo.get_ensemble('GT0003') == ['m3']
+    assert calls == [-1, 3] and kmo.klog.warnings == []
+
+    kmo.optimizer = SimpleNamespace()
+    assert kmo.get_ensemble('GT-1') == []
+    assert kmo.klog.warnings == ["No GOATs object for ensemble 'GT-1'.",
+                                 "Ensemble 'GT-1' not found or empty."]
+
+    kmo.klog = _EnsLog()
+    assert kmo.get_ensemble(' X ') == []
+    assert kmo.klog.warnings == ["Ensemble 'X' not found or empty."]

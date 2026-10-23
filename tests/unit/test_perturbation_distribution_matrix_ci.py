@@ -16,8 +16,6 @@ lightweight fake logger so no real logging side effects occur.
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
-
 from kimeco.enums import Distrib, Pclass, Ptype
 from kimeco.user_input import KMOInput
 
@@ -60,70 +58,29 @@ def _make_input(json_file: dict[str, Any]) -> KMOInput:
 
 # --- Full 12 ptypes x 4 distributions matrix (48 combos) -------------------
 
-@pytest.mark.parametrize("ptype", DISTRIB_PTYPES, ids=lambda p: p.value)
-@pytest.mark.parametrize("distrib", ALL_DISTRIBS, ids=lambda d: d.value)
-def test_backend_distribution_matrix(ptype: Ptype, distrib: Distrib) -> None:
-    """Every (ptype, distrib) combo is accepted iff the Pclass rule allows it."""
-    key = f"distrib_{ptype.value}"
-    ui = _make_input({key: distrib.value})
-    ui.set_default_values()
-
-    allowed = _is_allowed(ptype, distrib)
-    assert ui.cancel_run is (not allowed), (
-        f"{key}={distrib.value} expected "
-        f"{'allowed' if allowed else 'rejected'}"
-    )
-    if allowed:
-        # Accepted values are coerced to the Distrib enum in place.
-        assert ui.json_file[key] == distrib
-
-
-def test_matrix_covers_48_combinations() -> None:
-    """Guard the intended coverage: 12 ptypes x 4 distributions."""
+def test_backend_distribution_matrix() -> None:
+    """Every (ptype, distrib) combo is accepted iff the Pclass rule allows
+    it; accepted values are coerced to the Distrib enum in place. Guards the
+    intended coverage: 12 ptypes x 4 distributions."""
     assert len(DISTRIB_PTYPES) == 12
     assert len(ALL_DISTRIBS) == 4
+    failures: list[str] = []
+    for ptype in DISTRIB_PTYPES:
+        for distrib in ALL_DISTRIBS:
+            key = f"distrib_{ptype.value}"
+            ui = _make_input({key: distrib.value})
+            ui.set_default_values()
+            allowed = _is_allowed(ptype, distrib)
+            if ui.cancel_run is not (not allowed):
+                failures.append(f"{key}={distrib.value} expected "
+                                f"{'allowed' if allowed else 'rejected'}")
+            elif allowed and ui.json_file[key] != distrib:
+                failures.append(f"{key}={distrib.value} not coerced: "
+                                f"{ui.json_file[key]!r}")
+    assert not failures, "\n".join(failures)
 
 
 # --- Standard (happy-path) cases -------------------------------------------
-
-@pytest.mark.parametrize("ptype", [Ptype.WE, Ptype.BE, Ptype.ETP],
-                         ids=lambda p: p.value)
-@pytest.mark.parametrize("distrib", [Distrib.UNIFORM, Distrib.NORMAL],
-                         ids=lambda d: d.value)
-def test_additive_accepts_uniform_and_normal(ptype: Ptype,
-                                              distrib: Distrib) -> None:
-    ui = _make_input({f"distrib_{ptype.value}": distrib.value})
-    ui.set_default_values()
-    assert ui.cancel_run is False
-    assert ui.json_file[f"distrib_{ptype.value}"] == distrib
-
-
-@pytest.mark.parametrize("ptype",
-                         [Ptype.IF, Ptype.IFC, Ptype.BFC, Ptype.SFC,
-                          Ptype.MRC],
-                         ids=lambda p: p.value)
-@pytest.mark.parametrize("distrib", [Distrib.LOGNORMAL, Distrib.LOGUNIFORM],
-                         ids=lambda d: d.value)
-def test_multiplicative_accepts_log_distributions(ptype: Ptype,
-                                                   distrib: Distrib) -> None:
-    ui = _make_input({f"distrib_{ptype.value}": distrib.value})
-    ui.set_default_values()
-    assert ui.cancel_run is False
-    assert ui.json_file[f"distrib_{ptype.value}"] == distrib
-
-
-@pytest.mark.parametrize("ptype",
-                         [Ptype.HRS, Ptype.SIG, Ptype.EPSI, Ptype.ETF],
-                         ids=lambda p: p.value)
-@pytest.mark.parametrize("distrib", [Distrib.UNIFORM, Distrib.NORMAL],
-                         ids=lambda d: d.value)
-def test_percent_accepts_uniform_and_normal(ptype: Ptype,
-                                             distrib: Distrib) -> None:
-    ui = _make_input({f"distrib_{ptype.value}": distrib.value})
-    ui.set_default_values()
-    assert ui.cancel_run is False
-    assert ui.json_file[f"distrib_{ptype.value}"] == distrib
-
 
 def test_defaults_leave_cancel_run_false() -> None:
     """Empty json_file: defaults are filled and nothing is rejected."""
@@ -137,36 +94,33 @@ def test_defaults_leave_cancel_run_false() -> None:
 
 # --- Edge cases ------------------------------------------------------------
 
-@pytest.mark.parametrize("ptype", [Ptype.WE, Ptype.IF, Ptype.HRS],
-                         ids=lambda p: p.value)
-def test_unknown_distribution_cancels_run(ptype: Ptype) -> None:
-    """An unrecognised distribution string cancels the run, one per category."""
-    ui = _make_input({f"distrib_{ptype.value}": "triangular"})
-    ui.set_default_values()
-    assert ui.cancel_run is True
-
-
-@pytest.mark.parametrize("ptype,raw,expected", [
-    (Ptype.WE, "Normal", Distrib.NORMAL),
-    (Ptype.BE, "UNIFORM", Distrib.UNIFORM),
-    (Ptype.IF, "LOG-NORMAL", Distrib.LOGNORMAL),
-    (Ptype.MRC, "Log-Uniform", Distrib.LOGUNIFORM),
-    (Ptype.HRS, "NoRmAl", Distrib.NORMAL),
-])
-def test_case_insensitive_values_are_coerced(ptype: Ptype, raw: str,
-                                             expected: Distrib) -> None:
-    """Mixed-case values are casefolded, validated and coerced consistently."""
-    ui = _make_input({f"distrib_{ptype.value}": raw})
-    ui.set_default_values()
-    assert ui.cancel_run is False
-    assert ui.json_file[f"distrib_{ptype.value}"] == expected
-
-
-def test_case_insensitive_rejected_value_still_rejected() -> None:
-    """A disallowed distribution is rejected regardless of casing."""
+def test_unknown_or_miscased_distribution_values() -> None:
+    """An unrecognised distribution string cancels the run (one per
+    category); mixed-case values are casefolded, validated and coerced; a
+    disallowed distribution is rejected regardless of casing."""
+    failures: list[str] = []
+    for ptype in (Ptype.WE, Ptype.IF, Ptype.HRS):
+        ui = _make_input({f"distrib_{ptype.value}": "triangular"})
+        ui.set_default_values()
+        if ui.cancel_run is not True:
+            failures.append(f"{ptype.value}=triangular not rejected")
+    for ptype, raw, expected in (
+            (Ptype.WE, "Normal", Distrib.NORMAL),
+            (Ptype.BE, "UNIFORM", Distrib.UNIFORM),
+            (Ptype.IF, "LOG-NORMAL", Distrib.LOGNORMAL),
+            (Ptype.MRC, "Log-Uniform", Distrib.LOGUNIFORM),
+            (Ptype.HRS, "NoRmAl", Distrib.NORMAL)):
+        ui = _make_input({f"distrib_{ptype.value}": raw})
+        ui.set_default_values()
+        got = ui.json_file[f"distrib_{ptype.value}"]
+        if ui.cancel_run is not False or got != expected:
+            failures.append(f"{ptype.value}={raw!r}: cancel_run={ui.cancel_run}, "
+                            f"value={got!r}, expected {expected!r}")
     ui = _make_input({f"distrib_{Ptype.WE.value}": "LOG-NORMAL"})
     ui.set_default_values()
-    assert ui.cancel_run is True
+    if ui.cancel_run is not True:
+        failures.append("we='LOG-NORMAL' (disallowed, mis-cased) not rejected")
+    assert not failures, "\n".join(failures)
 
 
 def test_warning_invoked_on_rejected_combo() -> None:
@@ -181,10 +135,3 @@ def test_warning_invoked_on_rejected_combo() -> None:
     ui.set_default_values()
     assert ui.cancel_run is True
     assert calls, "expected klog.warning to be invoked on rejection"
-
-
-def test_multiplicative_uniform_is_rejected() -> None:
-    """Regression lock: multiplicative parameter rejects a non-log distrib."""
-    ui = _make_input({f"distrib_{Ptype.IF.value}": Distrib.UNIFORM.value})
-    ui.set_default_values()
-    assert ui.cancel_run is True

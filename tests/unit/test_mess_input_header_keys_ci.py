@@ -121,69 +121,27 @@ _HEADER = [
 # ---------------------------------------------------------------------------
 # A1-A7: standard capture of each key + verbatim template line
 # ---------------------------------------------------------------------------
-def test_a1_masses_captured_bath_first(tmp_path) -> None:
+def test_header_keys_captured_verbatim(tmp_path) -> None:
+    """A1, A3, A6, A7: each key is captured and its line kept verbatim;
+    A2: masses stop at the first non-numeric token; A7b: keys are case
+    insensitive and indent tolerant."""
     sop, tpls, _ = _read(tmp_path, _HEADER)
-    assert sop.masses == [4.0, 61.0]
+    assert sop.masses == [4.0, 61.0], 'a1 bath first'
     assert all(isinstance(m, float) for m in sop.masses)
-    assert '      Masses[amu]   4.0 61.0\n' in tpls[0]
+    assert sop.calculation_method == 'direct', 'a3'
+    assert sop.excess_ene_temp == 40.0, 'a6'
+    assert sop.chem_eig_max == 0.2, 'a7'
+    for line in ('      Masses[amu]   4.0 61.0\n',
+                 'CalculationMethod             direct\n',
+                 'ExcessEnergyOverTemperature   40\n',
+                 'ChemicalEigenvalueMax         0.2\n'):
+        assert line in tpls[0], line
 
-
-def test_a2_masses_stop_at_first_non_numeric_token(tmp_path) -> None:
-    lines = [
-        '      Masses[amu]   28. 61. ! N2 , CH3CH2OO\n',
-        'Well W1\n', 'End\n']
+    lines = ['      Masses[amu]   28. 61. ! N2 , CH3CH2OO\n', 'Well W1\n', 'End\n']
     sop, tpls, _ = _read(tmp_path, lines)
-    assert sop.masses == [28.0, 61.0]
+    assert sop.masses == [28.0, 61.0], 'a2'
     assert lines[0] in tpls[0]
 
-
-def test_a3_calculation_method_captured(tmp_path) -> None:
-    sop, tpls, _ = _read(tmp_path, _HEADER)
-    assert sop.calculation_method == 'direct'
-    assert 'CalculationMethod             direct\n' in tpls[0]
-
-
-@pytest.mark.parametrize('line, expected', [
-    ('ModelEnergyLimit[kcal/mol] 400\n', 400.0),
-    ('ModelEnergyLimit 400\n', 400.0),
-    ('ModelEnergyLimit[1/cm] 349755\n', 349755.0 / _CM2KCAL),
-    ('ModelEnergyLimit[kJ/mol] 418.4\n', 418.4 / _KJ2KCAL),
-    ('ModelEnergyLimit[KCAL/MOL] 12.5\n', 12.5),
-], ids=['kcal', 'no_unit', 'wavenumber', 'kj', 'upper_case_unit'])
-def test_a4_model_energy_limit_normalised_to_kcal(
-        tmp_path, line: str, expected: float) -> None:
-    sop, tpls, _ = _read(tmp_path, [line, 'Well W1\n', 'End\n'])
-    assert sop.model_ene_limit == pytest.approx(expected)
-    # The template keeps the user's original unit/value untouched.
-    assert line in tpls[0]
-
-
-def test_a5_model_energy_limit_unknown_unit_warns_and_stores_raw(
-        tmp_path) -> None:
-    line = 'ModelEnergyLimit[eV] 17.0\n'
-    sop, tpls, reader = _read(tmp_path, [line, 'Well W1\n', 'End\n'])
-    assert sop.model_ene_limit == 17.0
-    warnings = reader.klog.warnings  # type: ignore[attr-defined]
-    # The unit is reported casefolded (the reader parses it that way).
-    assert any('ModelEnergyLimit' in w and 'ev' in w.casefold()
-               for w in warnings)
-    assert reader._trigger_stop is False
-    assert line in tpls[0]
-
-
-def test_a6_excess_energy_over_temperature_captured(tmp_path) -> None:
-    sop, tpls, _ = _read(tmp_path, _HEADER)
-    assert sop.excess_ene_temp == 40.0
-    assert 'ExcessEnergyOverTemperature   40\n' in tpls[0]
-
-
-def test_a7_chemical_eigenvalue_max_captured(tmp_path) -> None:
-    sop, tpls, _ = _read(tmp_path, _HEADER)
-    assert sop.chem_eig_max == 0.2
-    assert 'ChemicalEigenvalueMax         0.2\n' in tpls[0]
-
-
-def test_a7b_keys_are_case_insensitive_and_indent_tolerant(tmp_path) -> None:
     lines = [
         '   masses[AMU] 4.0 61.0\n',
         '\tCALCULATIONMETHOD low-eigenvalue\n',
@@ -191,18 +149,46 @@ def test_a7b_keys_are_case_insensitive_and_indent_tolerant(tmp_path) -> None:
         '  chemicaleigenvaluemax 0.1\n',
         'Well W1\n', 'End\n']
     sop, tpls, _ = _read(tmp_path, lines)
-    assert sop.masses == [4.0, 61.0]
+    assert sop.masses == [4.0, 61.0], 'a7b'
     assert sop.calculation_method == 'low-eigenvalue'
     assert sop.excess_ene_temp == 30.0
     assert sop.chem_eig_max == 0.1
     for line in lines[:4]:
-        assert line in tpls[0]
+        assert line in tpls[0], line
+
+
+def test_model_energy_limit_normalised_to_kcal(tmp_path) -> None:
+    """A4: 1/cm and kJ/mol converted, kcal/no unit/upper case kept, the
+    template keeps the user's original line; A5: an unknown unit warns
+    (unit casefolded), is stored raw and does not stop."""
+    failures: list[str] = []
+    for label, line, expected in (
+            ('kcal', 'ModelEnergyLimit[kcal/mol] 400\n', 400.0),
+            ('no_unit', 'ModelEnergyLimit 400\n', 400.0),
+            ('wavenumber', 'ModelEnergyLimit[1/cm] 349755\n', 349755.0 / _CM2KCAL),
+            ('kj', 'ModelEnergyLimit[kJ/mol] 418.4\n', 418.4 / _KJ2KCAL),
+            ('upper_case_unit', 'ModelEnergyLimit[KCAL/MOL] 12.5\n', 12.5)):
+        sop, tpls, _ = _read(tmp_path, [line, 'Well W1\n', 'End\n'])
+        if sop.model_ene_limit != pytest.approx(expected):
+            failures.append(f'{label}: {sop.model_ene_limit} != {expected}')
+        if line not in tpls[0]:
+            failures.append(f'{label}: template line altered')
+    assert not failures, '\n'.join(failures)
+
+    line = 'ModelEnergyLimit[eV] 17.0\n'
+    sop, tpls, reader = _read(tmp_path, [line, 'Well W1\n', 'End\n'])
+    assert sop.model_ene_limit == 17.0
+    warnings = reader.klog.warnings  # type: ignore[attr-defined]
+    assert any('ModelEnergyLimit' in w and 'ev' in w.casefold()
+               for w in warnings)
+    assert reader._trigger_stop is False
+    assert line in tpls[0]
 
 
 # ---------------------------------------------------------------------------
 # A8: absent keys keep the SOP defaults; commented lines are ignored
 # ---------------------------------------------------------------------------
-def test_a8_absent_keys_leave_defaults(tmp_path) -> None:
+def test_absent_or_commented_keys_leave_defaults(tmp_path) -> None:
     sop, _, reader = _read(tmp_path, ['Well W1\n', 'End\n'])
     assert sop.masses == []
     assert sop.calculation_method is None
@@ -211,8 +197,6 @@ def test_a8_absent_keys_leave_defaults(tmp_path) -> None:
     assert sop.chem_eig_max is None
     assert reader._trigger_stop is False
 
-
-def test_a8b_commented_header_lines_are_ignored(tmp_path) -> None:
     lines = [
         '!CalculationMethod low-eigenvalue\n',
         '! Masses[amu] 28. 61.\n',
@@ -252,9 +236,12 @@ def _file_b(**overrides: str) -> list[str]:
     return [f'{k} {v}\n' for k, v in base.items()] + ['Well WB\n', 'End\n']
 
 
-def test_a9_identical_headers_across_files_do_not_stop(tmp_path) -> None:
+def test_consistent_files_do_not_stop(tmp_path) -> None:
+    """A9 identical headers; A9b/A10 a different *species* mass is allowed
+    (first file kept, no mass warning); A11b equal ModelEnergyLimit after
+    unit conversion; A11c a key only in the second file is adopted."""
     sop, tpls, reader = _read(tmp_path, _FILE_A, _file_b())
-    assert reader._trigger_stop is False
+    assert reader._trigger_stop is False, 'a9'
     # Only the species-not-in-mechanism notices (force_new_molecules) remain.
     warnings = reader.klog.warnings  # type: ignore[attr-defined]
     assert all('mechanism file' in w for w in warnings)
@@ -263,23 +250,33 @@ def test_a9_identical_headers_across_files_do_not_stop(tmp_path) -> None:
     assert len(tpls) == 2
     assert 'Masses[amu] 4.0 61.0\n' in tpls[1]
 
+    for species_mass in ('77.0', '109.0'):
+        sop, _, reader = _read(
+            tmp_path, _FILE_A, _file_b(**{'Masses[amu]': f'4.0 {species_mass}'}))
+        assert sop.masses == [4.0, 61.0], species_mass
+        assert reader._trigger_stop is False, species_mass
+        assert not any('mass' in w.casefold()
+                       for w in reader.klog.warnings), species_mass  # type: ignore[attr-defined]
 
-def test_a9b_first_file_wins(tmp_path) -> None:
-    # Second file carries a different *species* mass: allowed, first kept.
-    sop, _, _ = _read(tmp_path, _FILE_A, _file_b(**{'Masses[amu]': '4.0 77.0'}))
+    # 400 kcal/mol expressed in kJ/mol in the second file: same value.
+    second = [ln for ln in _file_b() if not ln.startswith('ModelEnergyLimit')]
+    second.insert(1, f'ModelEnergyLimit[kJ/mol] {400 * _KJ2KCAL}\n')
+    sop, _, reader = _read(tmp_path, _FILE_A, second)
+    assert sop.model_ene_limit == pytest.approx(400.0), 'a11b'
+    assert reader._trigger_stop is False, 'a11b'
+
+    sop, _, reader = _read(tmp_path, ['Well WA\n', 'End\n'], _file_b())
+    assert reader._trigger_stop is False, 'a11c'
     assert sop.masses == [4.0, 61.0]
+    assert sop.calculation_method == 'direct'
+    assert sop.model_ene_limit == 400.0
+    assert sop.excess_ene_temp == 40.0
+    assert sop.chem_eig_max == 0.2
 
 
-def test_a10_species_mass_difference_does_not_stop(tmp_path) -> None:
-    _, _, reader = _read(
-        tmp_path, _FILE_A, _file_b(**{'Masses[amu]': '4.0 109.0'}))
-    assert reader._trigger_stop is False
-    assert not any('mass' in w.casefold()
-                   for w in reader.klog.warnings)  # type: ignore[attr-defined]
-
-
-def test_a10b_bath_mass_mismatch_warns_with_filename_and_stops(
-        tmp_path) -> None:
+def test_mismatch_warns_with_filename_and_stops(tmp_path) -> None:
+    """A10b a bath-mass mismatch and A11 any scalar-key mismatch warn once
+    naming the second file and stop; the first file's values are kept."""
     _, _, reader = _read(
         tmp_path, _FILE_A, _file_b(**{'Masses[amu]': '28.0 61.0'}))
     assert reader._trigger_stop is True
@@ -289,46 +286,20 @@ def test_a10b_bath_mass_mismatch_warns_with_filename_and_stops(
     assert reader.filenames[1] in hit[0]
     assert '4.0' in hit[0]
 
-
-@pytest.mark.parametrize('key, value, label', [
-    ('CalculationMethod', 'low-eigenvalue', 'CalculationMethod'),
-    ('ModelEnergyLimit[kcal/mol]', '800', 'ModelEnergyLimit'),
-    ('ExcessEnergyOverTemperature', '30', 'ExcessEnergyOverTemperature'),
-    ('ChemicalEigenvalueMax', '0.1', 'ChemicalEigenvalueMax'),
-])
-def test_a11_scalar_key_mismatch_warns_with_filename_and_stops(
-        tmp_path, key: str, value: str, label: str) -> None:
-    sop, _, reader = _read(tmp_path, _FILE_A, _file_b(**{key: value}))
-    assert reader._trigger_stop is True
-    warnings = reader.klog.warnings  # type: ignore[attr-defined]
-    hit = [w for w in warnings if label in w]
-    assert len(hit) == 1
-    assert reader.filenames[1] in hit[0]
-    # First file value is the one kept on the SOP.
-    assert sop.calculation_method == 'direct'
-    assert sop.model_ene_limit == 400.0
-    assert sop.excess_ene_temp == 40.0
-    assert sop.chem_eig_max == 0.2
-
-
-def test_a11b_model_energy_limit_equal_after_unit_conversion_does_not_stop(
-        tmp_path) -> None:
-    # 400 kcal/mol expressed in kJ/mol in the second file: same value.
-    second = _file_b(**{'ModelEnergyLimit[kcal/mol]': '0'})
-    second = [ln for ln in second if not ln.startswith('ModelEnergyLimit')]
-    second.insert(1, f'ModelEnergyLimit[kJ/mol] {400 * _KJ2KCAL}\n')
-    sop, _, reader = _read(tmp_path, _FILE_A, second)
-    assert sop.model_ene_limit == pytest.approx(400.0)
-    assert reader._trigger_stop is False
-
-
-def test_a11c_key_only_in_second_file_is_adopted_without_stop(
-        tmp_path) -> None:
-    first = ['Well WA\n', 'End\n']
-    sop, _, reader = _read(tmp_path, first, _file_b())
-    assert reader._trigger_stop is False
-    assert sop.masses == [4.0, 61.0]
-    assert sop.calculation_method == 'direct'
-    assert sop.model_ene_limit == 400.0
-    assert sop.excess_ene_temp == 40.0
-    assert sop.chem_eig_max == 0.2
+    failures: list[str] = []
+    for key, value, label in (
+            ('CalculationMethod', 'low-eigenvalue', 'CalculationMethod'),
+            ('ModelEnergyLimit[kcal/mol]', '800', 'ModelEnergyLimit'),
+            ('ExcessEnergyOverTemperature', '30', 'ExcessEnergyOverTemperature'),
+            ('ChemicalEigenvalueMax', '0.1', 'ChemicalEigenvalueMax')):
+        sop, _, reader = _read(tmp_path, _FILE_A, _file_b(**{key: value}))
+        hit = [w for w in reader.klog.warnings if label in w]  # type: ignore[attr-defined]
+        if reader._trigger_stop is not True:
+            failures.append(f'{label}: no stop')
+        if len(hit) != 1 or reader.filenames[1] not in hit[0]:
+            failures.append(f'{label}: warnings {hit}')
+        kept = (sop.calculation_method, sop.model_ene_limit,
+                sop.excess_ene_temp, sop.chem_eig_max)
+        if kept != ('direct', 400.0, 40.0, 0.2):
+            failures.append(f'{label}: first-file values not kept: {kept}')
+    assert not failures, '\n'.join(failures)

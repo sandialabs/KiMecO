@@ -289,7 +289,7 @@ class SOPSection(Section):
                     From += frag
             else:
                 raise NotImplementedError('Unknown reactant object.')
-            if isinstance(bar.connected[0], Well):
+            if isinstance(bar.connected[1], Well):
                 To: str = bar.connected[1].name
             elif isinstance(bar.connected[1], Bimolecular):
                 To = ''

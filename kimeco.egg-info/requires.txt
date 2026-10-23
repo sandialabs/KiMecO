@@ -28,3 +28,5 @@ xarray>=2023.8
 
 [test]
 pytest>=9.0.2
+pytest-cov>=7.1.0
+radon>=6.0.1

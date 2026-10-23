@@ -104,41 +104,33 @@ class _WarningRecorder:
 # ---------------------------------------------------------------------------
 # _check_automech direct behavior
 # ---------------------------------------------------------------------------
-def test_check_automech_cancels_when_import_fails(
-        tmp_path: Path, monkeypatch) -> None:
-    _force_mess_io_import_error(monkeypatch)
-    obj = _bare_input(tmp_path)
+def test_check_automech_gate(tmp_path: Path, monkeypatch) -> None:
+    """mess_io import failure cancels; stub mess_io + phydat pass; mess_io
+    present but phydat missing still cancels with one warning naming
+    phydat."""
+    with monkeypatch.context() as m:
+        _force_mess_io_import_error(m)
+        obj = _bare_input(tmp_path)
+        obj._check_automech()
+        assert obj.cancel_run is True, "mess_io import failure must cancel"
 
-    obj._check_automech()
+    with monkeypatch.context() as m:
+        _inject_stub_mess_io(m)
+        _inject_stub_phydat(m)
+        obj = _bare_input(tmp_path)
+        obj._check_automech()
+        assert obj.cancel_run is False, "stub automech deps must pass"
 
-    assert obj.cancel_run is True
-
-
-def test_check_automech_passes_with_stub_automech_deps(
-        tmp_path: Path, monkeypatch) -> None:
-    _inject_stub_mess_io(monkeypatch)
-    _inject_stub_phydat(monkeypatch)
-    obj = _bare_input(tmp_path)
-
-    obj._check_automech()
-
-    assert obj.cancel_run is False
-
-
-def test_check_automech_cancels_when_phydat_missing(
-        tmp_path: Path, monkeypatch) -> None:
-    """mess_io present but phydat missing must still cancel the run."""
-    _inject_stub_mess_io(monkeypatch)
-    _force_phydat_import_error(monkeypatch)
-    obj = _bare_input(tmp_path)
-    recorder = _WarningRecorder()
-    obj.klog = recorder
-
-    obj._check_automech()
-
-    assert obj.cancel_run is True
-    assert len(recorder.warnings) == 1
-    assert 'phydat' in recorder.warnings[0]
+    with monkeypatch.context() as m:
+        _inject_stub_mess_io(m)
+        _force_phydat_import_error(m)
+        obj = _bare_input(tmp_path)
+        recorder = _WarningRecorder()
+        obj.klog = recorder
+        obj._check_automech()
+        assert obj.cancel_run is True, "missing phydat must cancel"
+        assert len(recorder.warnings) == 1
+        assert 'phydat' in recorder.warnings[0]
 
 
 # ---------------------------------------------------------------------------
@@ -158,38 +150,165 @@ def _stub_heavy_stages(monkeypatch, obj: KMOInput) -> list[str]:
     return called
 
 
-def test_full_run_settings_triggers_guard_when_true(
+def test_full_run_settings_use_automech_guard(
         tmp_path: Path, monkeypatch) -> None:
+    """True triggers the guard; False is a no-op; a missing key is
+    normalised to the bool False (no guard)."""
+    for value, expected_calls in ((True, ['checked']), (False, []),
+                                  ('absent', [])):
+        with monkeypatch.context() as m:
+            obj = _bare_input(tmp_path)
+            if value != 'absent':
+                obj.json_file['use_automech'] = value
+            called = _stub_heavy_stages(m, obj)
+            settings = obj.full_run_settings()
+            assert called == expected_calls, value
+            assert settings['use_automech'] is (value is True), value
+            assert isinstance(settings['use_automech'], bool), value
+
+
+# ===========================================================================
+# basic_checks / _check_pp_experiments / _initial_ratio_from_exp
+# ===========================================================================
+import pytest  # noqa: E402
+
+
+class _Klog:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def info(self, msg: str, *a: Any, **k: Any) -> None:
+        self.messages.append(str(msg))
+
+    warning = debug = error = info
+
+    def has(self, fragment: str) -> bool:
+        return any(fragment in m for m in self.messages)
+
+
+def _checked_input(tmp_path: Path, json_file: dict) -> KMOInput:
     obj = _bare_input(tmp_path)
-    obj.json_file['use_automech'] = True
-    called = _stub_heavy_stages(monkeypatch, obj)
-
-    settings = obj.full_run_settings()
-
-    assert called == ['checked']
-    assert settings['use_automech'] is True
+    obj.klog = _Klog()  # type: ignore[assignment]
+    obj.json_file = json_file
+    return obj
 
 
-def test_full_run_settings_guard_noop_when_false(
-        tmp_path: Path, monkeypatch) -> None:
-    obj = _bare_input(tmp_path)
-    obj.json_file['use_automech'] = False
-    called = _stub_heavy_stages(monkeypatch, obj)
-
-    settings = obj.full_run_settings()
-
-    assert called == []
-    assert settings['use_automech'] is False
+def _valid_exp(**extra: Any) -> dict[str, Any]:
+    exp = {'temp': 300.0, 'pres': 1.0, 'cantera_tpl': 't.tpl',
+           'data_file': 'd.csv', 'error_file': 'e.csv', 'initial_ratio': {'a': 0.1}}
+    exp.update(extra)
+    return exp
 
 
-def test_full_run_settings_normalizes_missing_use_automech_to_false(
-        tmp_path: Path, monkeypatch) -> None:
-    obj = _bare_input(tmp_path)
-    # use_automech absent entirely.
-    called = _stub_heavy_stages(monkeypatch, obj)
+def test_basic_checks_flags_errors_and_canonicalises_units(tmp_path) -> None:
+    bad_exp = {'temp': 300.0, 'pres': 1.0, 'initial_ratio': {},
+               'initial_concentration': {}, 'weight': 'x', 'pres_unit': 3}
+    obj = _checked_input(tmp_path, {
+        'mess_inputs': ['a.inp'], 'q_name': 5,
+        'experiments': ['not a dict', bad_exp, _valid_exp(pres_unit='furlong'),
+                        _valid_exp(pres_unit='TORR')],
+        'pp_experiments': 'nope'})
+    obj.basic_checks()
+    log = obj.klog  # type: ignore[assignment]
+    assert obj.cancel_run
+    for fragment in ('ct_yaml is a mandatory keyword.',
+                     'q_name has incorrect type',
+                     'Experiment 0 should be a dictionary.',
+                     "Experiment 1 missing mandatory key 'cantera_tpl'.",
+                     "Experiment 1 missing mandatory key 'data_file'.",
+                     "Experiment 1 missing mandatory key 'error_file'.",
+                     'Experiment 1 should define exactly one of',
+                     'Experiment 1 weight should be numeric.',
+                     'Experiment 1 pres_unit should be a string.',
+                     'Unknown pressure unit: furlong',
+                     'pp_experiments should be a list.'):
+        assert log.has(fragment), fragment
+    assert not any(m.startswith(('Experiment 2 ', 'Experiment 3 ')) for m in log.messages)
+    assert obj.json_file['experiments'][3]['pres_unit'] == 'torr'
+    assert obj.json_file['pres_unit'] == 'bar'
+    assert log.has('Experiment pressure units detected')
 
-    settings = obj.full_run_settings()
+    # Valid input: no cancel, default unit filled in
+    obj = _checked_input(tmp_path, {
+        'mess_inputs': ['a.inp'], 'ct_yaml': 'm.yaml', 'q_name': 'q',
+        'experiments': [_valid_exp()]})
+    obj.basic_checks()
+    assert not obj.cancel_run, obj.klog.messages  # type: ignore[attr-defined]
+    assert obj.json_file['experiments'][0]['pres_unit'] == 'bar'
 
-    assert called == []
-    assert settings['use_automech'] is False
-    assert isinstance(settings['use_automech'], bool)
+    # Empty experiment list
+    obj = _checked_input(tmp_path, {
+        'mess_inputs': ['a.inp'], 'ct_yaml': 'm.yaml', 'q_name': 'q',
+        'experiments': []})
+    obj.basic_checks()
+    assert obj.cancel_run
+    assert obj.klog.has('experiments should contain at least one item.')  # type: ignore[attr-defined]
+    assert not obj.klog.has('units detected')  # type: ignore[attr-defined]
+
+
+def test_check_pp_experiments_reports_each_rule(tmp_path) -> None:
+    # (a) not a list
+    obj = _checked_input(tmp_path, {'pp_experiments': {'a': 1}})
+    obj._check_pp_experiments()
+    assert obj.cancel_run
+    assert obj.klog.messages == ['pp_experiments should be a list.']  # type: ignore[attr-defined]
+
+    # (b) per-item rules
+    valid = {'temp': 300.0, 'pres': 1.0, 'cantera_tpl': 't', 'times': [1.0],
+             'species': ['A'], 'initial_ratio': {'A': 0.1}}
+    obj = _checked_input(tmp_path, {'pp_experiments': [
+        'x',
+        {'data_file': 'd', 'error_file': 'e', 'pres_unit': 1},
+        {'temp': 1, 'pres': 1, 'cantera_tpl': 't', 'times': [], 'species': 'A',
+         'initial_concentration': {}},
+        valid]})
+    obj._check_pp_experiments()
+    log = obj.klog  # type: ignore[assignment]
+    assert obj.cancel_run
+    for fragment in ('pp_experiment 0 should be a dictionary.',
+                     "pp_experiment 1 missing mandatory key 'temp'.",
+                     "pp_experiment 1 missing mandatory key 'times'.",
+                     "pp_experiment 1 should not define 'data_file'",
+                     "pp_experiment 1 should not define 'error_file'",
+                     'pp_experiment 1 should define exactly one of',
+                     'pp_experiment 1 pres_unit should be a string.',
+                     "pp_experiment 2 'times' should be a non-empty list.",
+                     "pp_experiment 2 'species' should be a non-empty list."):
+        assert log.has(fragment), fragment
+    assert not log.has('pp_experiment 2 missing')
+    assert not log.has('pp_experiment 2 should define exactly')
+    assert not log.has('pp_experiment 3')
+
+    # (c) key absent
+    obj = _checked_input(tmp_path, {})
+    obj._check_pp_experiments()
+    assert not obj.cancel_run and obj.klog.messages == []  # type: ignore[attr-defined]
+
+
+def test_initial_ratio_from_ratio_block(tmp_path) -> None:
+    obj = _checked_input(tmp_path, {})
+    out = obj._initial_ratio_from_exp({'initial_ratio': {'o2': 0.2, 'ch4': 0.1, 'ar': 'base'}})
+    assert out == pytest.approx({'o2': 0.2, 'ch4': 0.1, 'ar': 0.7})
+    out = obj._initial_ratio_from_exp({'initial_ratio': {'o2': 0.2, 'ch4': 0.1}})
+    assert out == pytest.approx({'o2': 0.2, 'ch4': 0.1, 'n2': 0.7})
+    for block, msg in (({'a': 'base', 'b': 'BASE'}, 'Two base species'),
+                       ({'a': 'x'}, 'should be numeric'),
+                       ({'a': 0.6, 'b': 0.5}, 'exceeds 100%')):
+        with pytest.raises(ValueError, match=msg):
+            obj._initial_ratio_from_exp({'initial_ratio': block})
+
+
+def test_initial_ratio_from_concentration_block(tmp_path) -> None:
+    from scipy.constants import k as k_b
+    obj = _checked_input(tmp_path, {})
+    base = {'pres': 760.0, 'pres_unit': 'torr', 'temp': 300.0}
+    out = obj._initial_ratio_from_exp(
+        dict(base, initial_concentration={'o2': 1e17, 'he': 'BASE'}))
+    ntot = 101325.0 * 1e-6 / (k_b * 300.0)
+    assert out['o2'] == pytest.approx(1e17 / ntot, rel=1e-6)
+    assert out['he'] == pytest.approx(1.0 - 1e17 / ntot, rel=1e-9)
+    for block, msg in (({'a': 'base', 'b': 'base'}, 'Two base species'),
+                       ({'a': 'x'}, 'should be numeric'),
+                       ({'a': 1e20}, 'exceeds total pressure')):
+        with pytest.raises(ValueError, match=msg):
+            obj._initial_ratio_from_exp(dict(base, initial_concentration=block))

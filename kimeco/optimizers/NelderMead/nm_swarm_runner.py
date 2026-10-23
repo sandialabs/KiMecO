@@ -75,9 +75,10 @@ class NMSRunner(CoreRun):
         # Lock for table creation
         self.table_creation_lock = threading.Lock()
 
-        # Lock to guard el_locks dict creation
+        # Guards the registration of per-model locks in the inherited
+        # self.mdl_locks dict (keyed by (table name, model id), e.g.
+        # ('NMSG0003', 2)), since models join the pool from several threads.
         self.el_locks_lock = threading.Lock()
-        self.el_locks: dict[tuple[int, int], threading.Lock] = {}
 
         # Model counter for defragmentation
         self.mdl_count: int = 0
@@ -176,9 +177,13 @@ class NMSRunner(CoreRun):
             else:
                 self.add_model(mdl)
 
-        # Ensure lock exists for this model
-        if (mdl.gen, mdl.id) not in self.el_locks:
-            self.el_locks[(mdl.gen, mdl.id)] = threading.Lock()
+        # Register this model's lock under the key used by the base class
+        # (table name, model id), e.g. ('NMSG0003', 2): the base
+        # _process_model_locked releases that same lock in its finally block.
+        lock_key: tuple[str, int] = (self.get_table_name(mdl), mdl.id)
+        with self.el_locks_lock:
+            if lock_key not in self.mdl_locks:
+                self.mdl_locks[lock_key] = threading.Lock()
 
         # Process until done
         while mdl.status != ModelStatus.DONE:
@@ -202,8 +207,9 @@ class NMSRunner(CoreRun):
         if mdl.status == ModelStatus.DONE:
             return
 
-        # Try to acquire lock (non-blocking)
-        if not self.el_locks[(mdl.gen, mdl.id)].acquire(blocking=False):
+        # Try to acquire the model's lock registered in run() (non-blocking)
+        if not self.mdl_locks[
+                (self.get_table_name(mdl), mdl.id)].acquire(blocking=False):
             return
 
         # Process model with lock held
@@ -234,41 +240,49 @@ class NMSRunner(CoreRun):
         mdl.status = ModelStatus.DONE
 
     def collect_sim_profiles(self) -> None:
-        """Override: Map DB profiles back to active models by (gen,id).
+        """Override: map the profiles read from SIM_DB back to pooled models.
 
-        This version scans self.models (thread-indexed) to find
-        the matching model rather than relying on CoreRun.models.
+        Same logic as CoreRun.collect_sim_profiles, except that the pool
+        (self.models, one slot per thread) is scanned under self.pool_lock
+        and its empty slots (None) are skipped. A model matches a DB result
+        when it has the same id and its table name (e.g. 'NMSG0003', from
+        get_table_name) is the table the result was read from.
         """
         if len(self.sim_db._select) == 0:
             return
 
+        # {table name: {model id: {DB experiment id: profile array}}}
         collecting = self.sim_db.batch_select()
-        # Number of simulations is number of experiments
-        nsim: int = len(self.settings['experiments'])
+
         # Process each table's results
         for table_name, model_profiles in collecting.items():
-            gen_id = int(table_name[1:5])  # Extract from G#### or SG####
-
             for mdl_id, exp_profiles in model_profiles.items():
-                # Find model with matching ID and generation
+
+                # Find the pooled model with matching id and table name
                 mdl = None
                 with self.pool_lock:
-                    for e in self.models:
-                        if e is not None and e.id == mdl_id and e.gen == gen_id:
-                            mdl = e
+                    for pooled in self.models:
+                        if (pooled is not None and
+                                pooled.id == mdl_id and
+                                self.get_table_name(pooled) == table_name):
+                            mdl = pooled
                             break
-                if mdl is None:
-                    continue
 
-                for sim_idx, db_data in exp_profiles.items():
+                if mdl is None:
+                    continue  # Model not (or no longer) in the pool
+
+                offset: int = getattr(mdl, '_sim_offset', 0)
+                for db_exp_id, db_data in exp_profiles.items():
+                    # Map the banded DB experiment_id back to the local index.
+                    local: int = db_exp_id - offset
                     # number of timesteps
-                    nsteps: int = len(self.settings['exp_profiles'][sim_idx][0])
+                    nsteps: int = len(self.get_sim_time_grid(local))
 
                     # Validate data completeness
                     if len(db_data) != nsteps:
                         continue
 
-                    mdl.sim.profiles[sim_idx] = db_data.T[1:]
+                    mdl.sim.profiles[local] = db_data.T[1:]
 
                 # Scoring needs all the profiles
                 if all([prof is not None for prof in mdl.sim.profiles]):

@@ -48,7 +48,10 @@ def _header_lines(block: str) -> list[str]:
     ]
 
 
-def test_block_starts_with_empty_line_then_label() -> None:
+def test_block_layout() -> None:
+    """A block starts with an empty line then the label; without experiments
+    only the theory and exp columns remain."""
+    # -- test_block_starts_with_empty_line_then_label
     sf = _scoring([_exp("exp_0")])
     block = sf.format_score_breakdown(
         [_mdl(1.0, 2.0, 5.0, {"exp_0": 4.0})], "GOAT"
@@ -57,8 +60,22 @@ def test_block_starts_with_empty_line_then_label() -> None:
     assert lines[0] == ""
     assert lines[1] == "[GOAT (species weighting only)]"
 
+    # -- test_no_experiments_only_theory_and_exp_columns
+    sf = _scoring([])
+    block = sf.format_score_breakdown(
+        [_mdl(1.0, 2.0, 3.0, {})], "GOAT"
+    )
+    header_lines = _header_lines(block)
+    assert len(header_lines) == 1
+    for header in header_lines:
+        assert header.split() == ["THEORY", "EXP"]
+    assert _value_lines(block)[0].split() == ["1.000", "2.000"]
 
-def test_final_line_is_weighted_average_score() -> None:
+
+def test_weighted_values_and_averaging() -> None:
+    """The final line is the weighted average score, species values are weighted
+    correctly, and values are averaged over several models."""
+    # -- test_final_line_is_weighted_average_score
     sf = _scoring([_exp("exp_0", weight=1.0), _exp("exp_1", weight=3.0)])
     models = [
         _mdl(1.0, 2.0, 4.0, {"exp_0": 4.0, "exp_1": 8.0}),
@@ -70,8 +87,7 @@ def test_final_line_is_weighted_average_score() -> None:
     # Average of the two total scores (4.0, 6.0) -> 5.0
     assert "5.000" in last
 
-
-def test_species_weighted_values_are_correct() -> None:
+    # -- test_species_weighted_values_are_correct
     sf = _scoring([_exp("exp_0", weight=1.0), _exp("exp_1", weight=3.0)])
     # Single model keeps the averages trivial to verify.
     block = sf.format_score_breakdown(
@@ -84,8 +100,7 @@ def test_species_weighted_values_are_correct() -> None:
     # Columns: THEORY, EXP, exp_0, exp_1 (experiment weights are not applied)
     assert values == [1.0, 2.0, 4.0, 8.0]
 
-
-def test_averaging_over_multiple_models() -> None:
+    # -- test_averaging_over_multiple_models
     sf = _scoring([_exp("exp_0", weight=1.0)])
     models = [
         _mdl(1.0, 2.0, 3.0, {"exp_0": 4.0}),
@@ -97,7 +112,10 @@ def test_averaging_over_multiple_models() -> None:
     assert unweighted == [2.0, 3.0, 5.0]
 
 
-def test_columns_wrap_at_seven_per_line() -> None:
+def test_column_wrapping_width_and_notation() -> None:
+    """Columns wrap at seven per line, a long experiment name widens its column,
+    and large values use scientific notation."""
+    # -- test_columns_wrap_at_seven_per_line
     experiments = [_exp(f"exp_{i}") for i in range(7)]  # 7 + THEORY + EXP = 9
     sf = _scoring(experiments)
     scores = {f"exp_{i}": float(i) for i in range(7)}
@@ -114,20 +132,7 @@ def test_columns_wrap_at_seven_per_line() -> None:
     # First wrapped line must carry exactly 7 columns.
     assert len(_value_lines(block)[0].split()) == 7
 
-
-def test_no_experiments_only_theory_and_exp_columns() -> None:
-    sf = _scoring([])
-    block = sf.format_score_breakdown(
-        [_mdl(1.0, 2.0, 3.0, {})], "GOAT"
-    )
-    header_lines = _header_lines(block)
-    assert len(header_lines) == 1
-    for header in header_lines:
-        assert header.split() == ["THEORY", "EXP"]
-    assert _value_lines(block)[0].split() == ["1.000", "2.000"]
-
-
-def test_long_experiment_name_expands_column_width() -> None:
+    # -- test_long_experiment_name_expands_column_width
     long_name = "very_long_experiment_name"
     sf = _scoring([_exp(long_name)])
     block = sf.format_score_breakdown(
@@ -136,8 +141,7 @@ def test_long_experiment_name_expands_column_width() -> None:
     header = _header_lines(block)[0]
     assert long_name in header
 
-
-def test_large_values_use_scientific_notation() -> None:
+    # -- test_large_values_use_scientific_notation
     sf = _scoring([_exp("exp_0", weight=1.0)])
     # Total score >= 1000 -> scientific notation in the final line too.
     block = sf.format_score_breakdown(
@@ -152,7 +156,10 @@ def test_large_values_use_scientific_notation() -> None:
     assert last == "WEIGHTED AVERAGE SCORE: 5.68E+03"
 
 
-def test_all_columns_in_a_block_are_uniformly_aligned() -> None:
+def test_alignment_and_shared_width() -> None:
+    """All columns of a block are aligned; an explicit width forces a shared
+    spacing that never shrinks below the natural width."""
+    # -- test_all_columns_in_a_block_are_uniformly_aligned
     # Enough experiments to force wrapping, with mixed magnitudes and name
     # lengths so a wide uniform column width is required.
     experiments = [_exp(f"exp_{i}") for i in range(8)]
@@ -201,12 +208,7 @@ def test_all_columns_in_a_block_are_uniformly_aligned() -> None:
     assert len(full_row) == 7 * width + 6
     assert len(partial_row) == 3 * width + 2
 
-
-def _header_length(block: str) -> int:
-    return len(_header_lines(block)[0])
-
-
-def test_explicit_width_forces_shared_column_spacing() -> None:
+    # -- test_explicit_width_forces_shared_column_spacing
     sf = _scoring([_exp("exp_0")])
     # A block whose natural width would be small (values ~1 digit).
     narrow = sf.format_score_breakdown(
@@ -230,8 +232,7 @@ def test_explicit_width_forces_shared_column_spacing() -> None:
     )
     assert _header_length(shared) == _header_length(wide)
 
-
-def test_shared_width_never_shrinks_below_natural_width() -> None:
+    # -- test_shared_width_never_shrinks_below_natural_width
     sf = _scoring([_exp("exp_0")])
     # Passing a tiny width must not clip a wide value; the block keeps its
     # own natural width instead.
@@ -244,3 +245,9 @@ def test_shared_width_never_shrinks_below_natural_width() -> None:
         [_mdl(9999.0, 2.0, 3.0, {"exp_0": 4.0})], "GOAT - AVERAGE"
     )
     assert _header_length(block) == _header_length(natural)
+
+
+def _header_length(block: str) -> int:
+    return len(_header_lines(block)[0])
+
+

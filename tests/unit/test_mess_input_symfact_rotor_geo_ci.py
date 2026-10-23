@@ -191,17 +191,19 @@ def _saddle(name: str, lside: str, rside: str, symfact: str | None,
 # ---------------------------------------------------------------------------
 # B1-B6: SymmetryFactor on wells, fragments and saddle points
 # ---------------------------------------------------------------------------
-def test_b1_well_symmetry_factor_captured(tmp_path) -> None:
+def test_symmetry_factor_on_wells_fragments_and_saddles(tmp_path) -> None:
+    """B1-B6b: SymmetryFactor lands on the well, fragment or saddle (default
+    1.0, stored as float), a well after a bimolecular resets the fragment
+    target, and the line is copied verbatim to the template."""
+    # -- test_b1_well_symmetry_factor_captured
     sop, _ = _read(tmp_path, _well('W1', '2.0'))
     assert sop.items['W1'].sym_factor == 2.0
 
-
-def test_b2_well_symmetry_factor_defaults_to_one(tmp_path) -> None:
+    # -- test_b2_well_symmetry_factor_defaults_to_one
     sop, _ = _read(tmp_path, _well('W1', None))
     assert sop.items['W1'].sym_factor == 1.0
 
-
-def test_b3_saddle_symmetry_factor_captured(tmp_path) -> None:
+    # -- test_b3_saddle_symmetry_factor_captured
     lines = _well('WA', '1.0') + _well('WB', '1.0')
     lines += _saddle('TS', 'WA', 'WB', '0.5')
     sop, _ = _read(tmp_path, lines)
@@ -213,15 +215,13 @@ def test_b3_saddle_symmetry_factor_captured(tmp_path) -> None:
     assert sop.items['WA'].sym_factor == 1.0
     assert sop.items['WB'].sym_factor == 1.0
 
-
-def test_b4_saddle_symmetry_factor_defaults_to_one(tmp_path) -> None:
+    # -- test_b4_saddle_symmetry_factor_defaults_to_one
     lines = _well('WA', None) + _well('WB', None)
     lines += _saddle('TS', 'WA', 'WB', None)
     sop, _ = _read(tmp_path, lines)
     assert sop.items['TS'].symFact == 1.0
 
-
-def test_b5_fragment_symmetry_factor_targets_the_fragment(tmp_path) -> None:
+    # -- test_b5_fragment_symmetry_factor_targets_the_fragment
     lines = _bimol('R+P', [_fragment('FA', '4.0'), _fragment('FB', '2.0')])
     sop, _ = _read(tmp_path, lines)
     bim = sop.items['R+P']
@@ -232,9 +232,7 @@ def test_b5_fragment_symmetry_factor_targets_the_fragment(tmp_path) -> None:
     # The Bimolecular container has no rigid-rotor core of its own.
     assert not hasattr(bim, 'sym_factor')
 
-
-def test_b5b_symmetry_factor_after_fragment_goes_to_next_well(
-        tmp_path) -> None:
+    # -- test_b5b_symmetry_factor_after_fragment_goes_to_next_well
     # A well parsed *after* a bimolecular must reset the fragment target.
     lines = _bimol('R+P', [_fragment('FA', '4.0'), _fragment('FB', '1.0')])
     lines += _well('W1', '3.0')
@@ -242,9 +240,7 @@ def test_b5b_symmetry_factor_after_fragment_goes_to_next_well(
     assert sop.items['W1'].sym_factor == 3.0
     assert sop.items['FB'].sym_factor == 1.0
 
-
-def test_b6_symmetry_factor_line_copied_verbatim_to_template(
-        tmp_path) -> None:
+    # -- test_b6_symmetry_factor_line_copied_verbatim_to_template
     lines = _well('W1', '2.0')
     _, tpl = _read(tmp_path, lines)
     sym_line = next(ln for ln in lines if 'SymmetryFactor' in ln)
@@ -252,8 +248,7 @@ def test_b6_symmetry_factor_line_copied_verbatim_to_template(
     # No placeholder was introduced for the keyword.
     assert not any('sym_factor' in ln for ln in tpl)
 
-
-def test_b6b_symmetry_factor_stored_as_float(tmp_path) -> None:
+    # -- test_b6b_symmetry_factor_stored_as_float
     sop, _ = _read(tmp_path, _well('W1', '4'))
     assert sop.items['W1'].sym_factor == 4.0
     assert isinstance(sop.items['W1'].sym_factor, float)
@@ -262,7 +257,11 @@ def test_b6b_symmetry_factor_stored_as_float(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 # B7-B11: rotor-specific geometry
 # ---------------------------------------------------------------------------
-def test_b7_rotor_geometry_captured_as_symbol_xyz_rows(tmp_path) -> None:
+def test_rotor_geometry_captured_per_rotor(tmp_path) -> None:
+    """B7-B11b: a rotor Geometry[angstrom] block becomes HinRotor.geo rows (None
+    without it, no leak across rotors), copied verbatim to the template, on
+    wells, fragments and saddles."""
+    # -- test_b7_rotor_geometry_captured_as_symbol_xyz_rows
     sop, _ = _read(tmp_path, _well('W1', '1.0', [_rotor(with_geo=True)]))
     rotors = sop.items['W1'].h_rotors
     assert len(rotors) == 1
@@ -276,15 +275,12 @@ def test_b7_rotor_geometry_captured_as_symbol_xyz_rows(tmp_path) -> None:
     assert hr.ThermalPowerMax == 50.0
     assert list(hr.scan) == pytest.approx([0.0, 0.20, 0.68, 1.20])
 
-
-def test_b8_rotor_without_geometry_has_geo_none(tmp_path) -> None:
+    # -- test_b8_rotor_without_geometry_has_geo_none
     sop, _ = _read(tmp_path, _well('W1', '1.0', [_rotor(with_geo=False)]))
     hr = sop.items['W1'].h_rotors[0]
     assert hr.geo is None
 
-
-def test_b9_rotor_geometry_rows_copied_verbatim_to_template(
-        tmp_path) -> None:
+    # -- test_b9_rotor_geometry_rows_copied_verbatim_to_template
     lines = _well('W1', '1.0', [_rotor(with_geo=True)])
     _, tpl = _read(tmp_path, lines)
     assert '        Geometry[angstrom]        3\n' in tpl
@@ -293,8 +289,7 @@ def test_b9_rotor_geometry_rows_copied_verbatim_to_template(
     # The potential grid is still replaced by its placeholder.
     assert any('W1.r_scan(0)' in ln for ln in tpl)
 
-
-def test_b10_two_rotors_one_with_geometry_one_without(tmp_path) -> None:
+    # -- test_b10_two_rotors_one_with_geometry_one_without
     rotors = [_rotor(with_geo=True, symmetry=3),
               _rotor(with_geo=False, symmetry=2, group='1', axis='2 3',
                      potential='0.00 0.16 0.22 0.01 0.17 1.01')]
@@ -306,8 +301,7 @@ def test_b10_two_rotors_one_with_geometry_one_without(tmp_path) -> None:
     assert [hr.symmetry for hr in hrs] == [3, 2]
     assert any('W1.r_scan(1)' in ln for ln in tpl)
 
-
-def test_b11_fragment_rotor_geometry_lands_on_the_fragment(tmp_path) -> None:
+    # -- test_b11_fragment_rotor_geometry_lands_on_the_fragment
     lines = _bimol('R+P', [_fragment('FA', '1.0', [_rotor(with_geo=True)]),
                            _fragment('FB', '1.0')])
     sop, _ = _read(tmp_path, lines)
@@ -315,8 +309,7 @@ def test_b11_fragment_rotor_geometry_lands_on_the_fragment(tmp_path) -> None:
     assert sop.items['FA'].h_rotors[0].geo == _GEO_EXPECTED
     assert sop.items['FB'].h_rotors == []
 
-
-def test_b11b_saddle_rotor_geometry_lands_on_the_barrier(tmp_path) -> None:
+    # -- test_b11b_saddle_rotor_geometry_lands_on_the_barrier
     lines = _well('WA', '1.0') + _well('WB', '1.0')
     lines += _saddle('TS', 'WA', 'WB', '0.5', [_rotor(with_geo=True)])
     sop, _ = _read(tmp_path, lines)
@@ -346,7 +339,11 @@ def _add(well: Well, geo: Any) -> None:
     well.add_hrotor(10.0, [2], [1, 2], 1, [0.0, 1.0], [], [], geo=geo)
 
 
-def test_b13_consistency_guard_accepts_identical_rotor_with_same_geo() -> None:
+def test_rotor_consistency_guard_includes_geometry() -> None:
+    """B13-B13d: Well.add_hrotor accepts an identical re-declaration (geometry
+    included) and rejects a different geometry or geo vs no geo; geometry-less
+    rotors keep the old behaviour."""
+    # -- test_b13_consistency_guard_accepts_identical_rotor_with_same_geo
     # Same group/axis + identical parameters (geometry included) is the
     # "consistent re-declaration" path: accepted, no error.
     well = Well(name='W', pes_ids=[0])
@@ -354,8 +351,7 @@ def test_b13_consistency_guard_accepts_identical_rotor_with_same_geo() -> None:
     _add(well, [list(r) for r in _GEO_EXPECTED])
     assert all(hr.geo == _GEO_EXPECTED for hr in well.h_rotors)
 
-
-def test_b13b_consistency_guard_rejects_different_geo() -> None:
+    # -- test_b13b_consistency_guard_rejects_different_geo
     well = Well(name='W', pes_ids=[0])
     _add(well, _GEO_EXPECTED)
     other = [list(r) for r in _GEO_EXPECTED]
@@ -364,8 +360,7 @@ def test_b13b_consistency_guard_rejects_different_geo() -> None:
         _add(well, other)
     assert len(well.h_rotors) == 1
 
-
-def test_b13c_consistency_guard_rejects_geo_vs_no_geo() -> None:
+    # -- test_b13c_consistency_guard_rejects_geo_vs_no_geo
     well = Well(name='W', pes_ids=[0])
     _add(well, None)
     with pytest.raises(ValueError, match='already has a rotor'):
@@ -373,8 +368,7 @@ def test_b13c_consistency_guard_rejects_geo_vs_no_geo() -> None:
     assert len(well.h_rotors) == 1
     assert well.h_rotors[0].geo is None
 
-
-def test_b13d_consistency_guard_without_geo_unchanged() -> None:
+    # -- test_b13d_consistency_guard_without_geo_unchanged
     # Pre-existing behaviour for geometry-less rotors is preserved.
     well = Well(name='W', pes_ids=[0])
     _add(well, None)
@@ -382,3 +376,5 @@ def test_b13d_consistency_guard_without_geo_unchanged() -> None:
     assert all(hr.geo is None for hr in well.h_rotors)
     with pytest.raises(ValueError, match='already has a rotor'):
         well.add_hrotor(10.0, [2], [1, 2], 2, [0.0, 1.0], [], [])
+
+

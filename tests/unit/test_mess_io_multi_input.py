@@ -66,16 +66,12 @@ def _find_line(lines: list[str], blockname: str, after: int = 0) -> int:
     raise ValueError(f"Could not find line starting with '{blockname}'")
 
 
-@pytest.fixture
-def reader(tmp_path: Path) -> MessInputReader:
-    """Provide a clean reader for each test."""
-    return _build_reader(tmp_path=tmp_path)
-
-
-def test_read_duplicate_well_name_across_inputs_marks_multiple_pes(
-    tmp_path: Path,
-) -> None:
-    """Check the pathway of well creation across multiple PES"""
+def test_read_duplicate_well_or_bimolecular_across_inputs(tmp_path) -> None:
+    """A well repeated in another PES input stops the run (kept on PES 0, not
+    multi-PES); a repeated bimolecular is shared across PES (multi-PES, ids [0,
+    1]) without stopping."""
+    # -- test_read_duplicate_well_name_across_inputs_marks_multiple_pes: Check
+    #    the pathway of well creation across multiple PES
     parse_reader = _build_reader(tmp_path=tmp_path)
     # 2 fake files with the same well
     parse_reader.pes_files = [
@@ -98,11 +94,8 @@ def test_read_duplicate_well_name_across_inputs_marks_multiple_pes(
     assert sorted(item.pes_ids) == [0]
     assert parse_reader._trigger_stop is True
 
-
-def test_read_duplicate_bimolecular_name_across_inputs_marks_multiple_pes(
-    tmp_path: Path,
-) -> None:
-    """Check the pathway of Bimolecular creation across multiple PES"""
+    # -- test_read_duplicate_bimolecular_name_across_inputs_marks_multiple_pes:
+    #    Check the pathway of Bimolecular creation across multiple PES
     parse_reader = _build_reader(tmp_path=tmp_path)
     parse_reader.pes_files = [
         [
@@ -179,7 +172,12 @@ def test_read_well_species_matches_mechanism_species_objects(
     assert parse_reader._trigger_stop is False
 
 
-def test_save_energy_parses_and_stores_value(reader: MessInputReader) -> None:
+def test_save_energy_freq_and_rotor(tmp_path: Path) -> None:
+    """save_energy stores the value with an energy placeholder; save_freq reads
+    exactly nfreq frequencies with an r_freq placeholder; save_rotor reads a
+    hindered-rotor block. Each case uses a fresh reader."""
+    # -- test_save_energy_parses_and_stores_value
+    reader = _build_reader(tmp_path=tmp_path)
     file_lines = reader.pes_files[0]
     reader.tpls = [[]]
 
@@ -193,10 +191,8 @@ def test_save_energy_parses_and_stores_value(reader: MessInputReader) -> None:
     assert reader.tpls[-1][-1].startswith("ZeroEnergy")
     assert "{UNIT_WELL.energy}" in reader.tpls[-1][-1]
 
-
-def test_save_freq_reads_exact_number_of_frequencies(
-    reader: MessInputReader,
-) -> None:
+    # -- test_save_freq_reads_exact_number_of_frequencies
+    reader = _build_reader(tmp_path=tmp_path)
     file_lines = reader.pes_files[0]
     reader.tpls = [[]]
 
@@ -213,10 +209,8 @@ def test_save_freq_reads_exact_number_of_frequencies(
     assert len(parsed_well.frequencies) == nfreq
     assert reader.tpls[-1][-1].strip() == "{" + f"{target}.r_freq" + "}"
 
-
-def test_save_rotor_reads_hindered_rotor_block(
-    reader: MessInputReader,
-) -> None:
+    # -- test_save_rotor_reads_hindered_rotor_block
+    reader = _build_reader(tmp_path=tmp_path)
     file_lines = reader.pes_files[0]
     reader.tpls = [[]]
 

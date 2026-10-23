@@ -60,6 +60,26 @@ Rules for every agent:
 - When the code or the facts a note describes change, update or delete the note in the same step.
   Keep only what a later task will need.
 
+### Test suite, CI and packaging: read on demand
+
+- `.claude/memory/test-suite-contracts.md` (`test-suite-contracts`): the CI, packaging and skill
+  contracts the unit tests enforce, the pins nothing enforces, and what breaks when a test file,
+  a `test`-extra dependency or a CI command changes.
+- `.claude/memory/coverage-and-complexity-measurement.md` (`coverage-and-complexity-measurement`):
+  measuring `kimeco/` coverage and Radon complexity, what `--cov` cannot see, per-test and
+  per-function coverage, where the suite's runtime goes.
+- `.claude/memory/unit-test-stand-ins.md` (`unit-test-stand-ins`): testing GA/NM runs, CoreRun,
+  Dash callbacks, plotting and DBs fast and in-process; global state that leaks between tests;
+  proving a fix test fails on the old code.
+
+### Optimizers and units: read on demand
+
+- `.claude/memory/optimizer-tables-and-nm-swarm.md` (`optimizer-tables-and-nm-swarm`): G0000 vs
+  G#### layout and when G0000 is written, how `get_ensemble` seeds the NM swarm (NMSG####),
+  NMSRunner locking and profile collection, known unfixed optimizer defects.
+- `.claude/memory/pint-unit-string-comparison.md` (`pint-unit-string-comparison`): pint `Unit == str`
+  and `get_compatible_units` membership match only canonical names, not aliases like `s`, `min`.
+
 ### Non-thermal / prompt kinetics (C4H8 system): read on demand
 
 For prompt / non-Boltzmann kinetics, AutoMech fake wells and MESS `ped.out`. The system map, run

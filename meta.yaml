@@ -41,6 +41,8 @@ requirements:
 test:
     requires:
         - pytest
+        - pytest-cov
+        - radon
     imports:
         - kimeco
         - kimeco.core

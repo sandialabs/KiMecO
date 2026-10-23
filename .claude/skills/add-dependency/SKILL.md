@@ -75,7 +75,7 @@ description: "Add, remove, or re-pin a KiMecO Python dependency (base dependenci
 | What | When | Checked by |
 | --- | --- | --- |
 | `pyproject.toml` | always | metadata and extras tests |
-| `setup.py` (same strings, same order) | always | `test_setup_py_extras_mirror_pyproject`, `..._install_requires_mirrors_...` |
+| `setup.py` (same strings, same order) | always | `test_setup_py_extras_mirror_pyproject` (extras and `install_requires`) |
 | `requirements.txt` | base, `test` | `test_requirements_txt_is_subset_of_dependencies_and_test_extra` |
 | `meta.yaml` `run:` | base | nothing (review by hand) |
 | `EXPECTED_AUTOMECH` | `automech` | `test_pyproject_automech_extra_exact_list` |
