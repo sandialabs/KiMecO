@@ -11,6 +11,9 @@ Important consistency rules:
 - They should use the same collider (bath gas) as the one used in your experiments.
 - Species names (wells and fragments) in MESS input files should match species names in the chemical mechanism (`ct_yaml`).
 - `mess_inputs` should include all PES files needed for the chemistry targeted by your experiments. The resulting reactions will constitute the kinetic submechanism to be optimized.
+- Several MESS inputs are read into one SOP, one PES per file (in the order of `mess_inputs`). A well, fake well, bimolecular species or barrier with the same name in several files is one item shared by those PESs, so the same name must always designate the same species, and its data (frequencies, rotors, symmetry factor, ...) must be identical in all files, otherwise the read stops. AutoMech fake wells (labels starting with `FW-` or `FakeW-`) are recognised automatically and need no `force_new_molecules`.
+- Energies are aligned through the items shared between files: the first file (in `mess_inputs` order) of each group of linked files is the energy reference, and the energies of the other shared items must agree after alignment (tolerance 0.01 kcal/mol). Each file is still written back in its own energy frame.
+- The header keywords `Factor`, `Power`, `CalculationMethod`, `EnergyStepOverTemperature`, `ExcessEnergyOverTemperature`, `ChemicalEigenvalueMax`, `WellReductionThreshold`, `ExponentCutoff`, `WellCutoff`, `ReductionMethod`, `GroundEnergyShiftMax` and `FloatType` must be identical in all files (a key present in some files and absent from others stops the read). `ModelEnergyLimit`, `AtomDistanceMin` and `WellExtension` may differ: each file keeps its own value. In `Epsilons`, `Sigmas` and `Masses`, the first value is the collider and must be identical in all files; the second values may differ per file.
 
 | Keyword | Default value | Description |
 |---|---|---|

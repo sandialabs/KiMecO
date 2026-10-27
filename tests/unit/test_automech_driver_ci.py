@@ -791,7 +791,8 @@ def test_barrier_str_rotd_passes_rotors_phasespace_does_not(
     """C2.4-C2.4d: the rotd branch passes its rotors to
     ``molecule(hind_rot=...)`` with the flux file and symmetry factor;
     without rotors (or without the key, older payloads) hind_rot is ''; the
-    phasespace branch emits no rotors."""
+    phasespace branch passes its rotors too, and ``tstlvl`` only when the
+    payload has a tst_level."""
     mod, rec = _load_sop(_case_dir(tmp_path, 'rotd'), monkeypatch, _rotd_sop())
     bar = mod.PES_PAYLOAD['barriers'][0]
     assert bar['kind'] == 'rotd'
@@ -826,7 +827,21 @@ def test_barrier_str_rotd_passes_rotors_phasespace_does_not(
         mod, rec = _load_sop(_case_dir(tmp_path, 'phasespace'), mp,
                              _FakeSOP([well], [bim], [bar]))
         mod._barrier_str(mod.PES_PAYLOAD['barriers'][0])
-        assert 'hind_rot' not in rec.last('molecule')
+        assert rec.last('molecule')['hind_rot'] == '<rotor_hindered>'
+        assert 'geo' in rec.last('rotor_hindered')
+        assert 'tstlvl' not in rec.last('core_phasespace')
+
+    with monkeypatch.context() as mp:
+        well = _FakeWell('RO2', ['C', 'C', 'O', 'O'])
+        bim = _FakeBimolecular('R+O2', _FakeWell('R', ['C', 'C', 'H']),
+                               _FakeWell('O2', ['O', 'O']))
+        bar = _FakeBarrier('TSpst', [well, bim], 'phasespace')
+        bar.tst_level = 'EJ'
+        mod, rec = _load_sop(_case_dir(tmp_path, 'phasespace_ej'), mp,
+                             _FakeSOP([well], [bim], [bar]))
+        mod._barrier_str(mod.PES_PAYLOAD['barriers'][0])
+        assert rec.last('core_phasespace')['tstlvl'] == 'ej'
+        assert rec.last('molecule')['hind_rot'] == ''
         assert 'rotor_hindered' not in rec.calls
 
 

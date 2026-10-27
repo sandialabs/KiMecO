@@ -19,8 +19,11 @@ When executed on the compute node the emitted script:
 4. builds the global keyword section via ``global_rates_input_v1`` on the
    embedded (possibly sub-grid) temperature/pressure grid, forwarding the
    header keys read from the parsed MESS input (CalculationMethod,
-   ModelEnergyLimit, ExcessEnergyOverTemperature, ChemicalEigenvalueMax)
-   when they are present in the payload;
+   ModelEnergyLimit, ExcessEnergyOverTemperature, ChemicalEigenvalueMax,
+   EnergyStepOverTemperature, WellReductionThreshold, WellExtension,
+   PEDSpecies, MicroEnerMin/Max/Step) when they are present in the payload,
+   with side-output names of its own (``<name>P<slot>_ped.out``,
+   ``<name>P<slot>_ke.out``);
 5. writes the base input, runs MESS (pass 1), moves the pass-1 output to a
    leading-underscore intermediate, and only if rate coefficients are missing
    (merged wells) derives WellExtension caps via
@@ -34,15 +37,42 @@ barrierless rotd flux files) are read from the run cwd at execution time - they
 are copied there through ``SOP.files2copy`` and are never inlined. The emitted
 script reads no database; it imports only ``MessOutputReader`` from kimeco to
 detect merged wells.
+
+Each PES is written with its own input-file data (``SOP.pes_file_data``):
+energies in the energy zero of its input file, its own Lennard-Jones pair
+(collider + its second value) and masses, and its own per-file keys.
 """
 
 import logging
 from typing import Any
 
-from kimeco.parameters import SOP
+from kimeco.parameters import SOP, PesFileData
 from kimeco.well import Well
 from kimeco.bimolecular import Bimolecular
 from kimeco.barrier import Barrier
+
+
+#: Keys of the warnings already emitted in this process by
+#: ``AutomechKinWriter._hardcode_warnings`` (each is logged once only).
+_warn_once: set[str] = set()
+
+#: ``AtomDistanceMin`` hard-coded by mess_io's global_rates template.
+_MESS_IO_ATOM_DISTANCE_MIN = 0.68793  # angstrom
+#: Bohr radius in angstrom (AtomDistanceMin given in bohr).
+_BOHR2ANG = 0.52917721092
+
+
+def _log_once(key: str, msg: str) -> None:
+    """Log ``msg`` as a warning the first time ``key`` is seen.
+
+    Args:
+        key (str): identity of the warning in ``_warn_once``.
+        msg (str): warning text.
+    """
+    if key in _warn_once:
+        return
+    _warn_once.add(key)
+    logging.getLogger(__name__).warning(msg)
 
 
 # The runtime driver body. Only the top-level placeholders
@@ -99,6 +129,10 @@ def _hind_rot_str(rotors):
             potential=pot,
             therm_pow_max=hr["therm_pow_max"],
             potential_form="fourier")
+        # Rotors read from a spline block keep their angles and are written
+        # back as a spline.
+        if hr.get("potential_form") == "spline":
+            kwargs["potential_form"] = "spline"
         if hr.get("geo"):
             kwargs["geo"] = _geo_bohr(hr["geo"])
         out += rotor_hindered(**kwargs)
@@ -164,14 +198,21 @@ def _barrier_str(bar):
             zero_ene=bar["zero_ene"],
             tunnel=tunnel)
     if kind == "phasespace":
-        core = core_phasespace(
+        core_kwargs = dict(
             geo1=_geo_bohr(bar["geo1"]),
             geo2=_geo_bohr(bar["geo2"]),
             sym_factor=bar["sym_factor"],
             stoich=bar["stoich"],
             pot_prefactor=bar["pot_prefactor"],
             pot_exp=bar["pot_exp"])
-        data = molecule(core=core, elec_levels=elec, freqs=bar["freqs"])
+        if bar.get("tst_level"):
+            core_kwargs["tstlvl"] = bar["tst_level"]
+        core = core_phasespace(**core_kwargs)
+        data = molecule(
+            core=core,
+            elec_levels=elec,
+            freqs=bar["freqs"],
+            hind_rot=_hind_rot_str(bar.get("hind_rotors", [])))
         return ts_sadpt(
             ts_label=bar["label"],
             reac_label=bar["reac"],
@@ -236,13 +277,19 @@ def _rxn_chan_str():
     for b in PES_PAYLOAD["bimols"]:
         f1 = b["frag1"]
         f2 = b["frag2"]
-        blocks.append(bimolecular(
+        bimol_kwargs = dict(
             bimol_label=b["label"],
             spc1_label=f1["label"],
             spc1_data=_species_data(f1),
             spc2_label=f2["label"],
             spc2_data=_species_data(f2),
-            ground_ene=b["ground_ene"]))
+            ground_ene=b["ground_ene"])
+        # Fragment lines carrying the MESS density keyword in the input.
+        if b.get("frag1_density"):
+            bimol_kwargs["calc_spc1_density"] = True
+        if b.get("frag2_density"):
+            bimol_kwargs["calc_spc2_density"] = True
+        blocks.append(bimolecular(**bimol_kwargs))
     for bar in PES_PAYLOAD["barriers"]:
         blocks.append(_barrier_str(bar))
     return "\\n".join(blocks)
@@ -260,10 +307,25 @@ def _globkey_str(out_name, well_extension):
             ("calc_method", "calculation_method"),
             ("model_ene_limit", "model_ene_limit"),
             ("excess_ene_temp", "excess_ene_temp"),
-            ("chem_eig_max", "chem_eig_max")):
+            ("chem_eig_max", "chem_eig_max"),
+            ("ene_stepover_temp", "ene_stepover_temp"),
+            ("well_red_thresh", "well_reduction_thresh")):
         val = PES_PAYLOAD.get(key)
         if val is not None:
             kwargs[arg] = val
+    # PED and microcanonical-rate outputs of this input get names of their
+    # own (several inputs run in the same directory).
+    stem = out_name
+    if stem.endswith(".out"):
+        stem = stem[:-len(".out")]
+    ped_species = PES_PAYLOAD.get("ped_species")
+    if ped_species:
+        kwargs["ped_spc_lst"] = list(ped_species)
+        kwargs["ped_outname"] = stem + "_ped.out"
+    micro_ener = PES_PAYLOAD.get("micro_ener")
+    if micro_ener is not None:
+        kwargs["micro_out_params"] = tuple(float(v) for v in micro_ener)
+        kwargs["ke_outname"] = stem + "_ke.out"
     globkey_str = global_rates_input_v1(**kwargs)
     old = "PressureList[atm]"
     new = "PressureList[" + PRES_UNIT + "]"
@@ -273,6 +335,15 @@ def _globkey_str(out_name, well_extension):
             "automech driver refuses to write a MESS input with the wrong "
             "pressure unit (the pressure grid is in " + PRES_UNIT + ").")
     return globkey_str.replace(old, new)
+
+
+def _keep_well_extension(inp_str):
+    # Pass 2: mess_io inserts a bare WellExtension line before Model. This
+    # PES already carries its own WellExtension value (written in pass 1),
+    # so the bare line is dropped and the value is kept.
+    lines = inp_str.split("\\n")
+    kept = [line for line in lines if line.strip() != "WellExtension"]
+    return "\\n".join(kept)
 
 
 def _run_mess(inp_name):
@@ -302,8 +373,9 @@ def main():
     rxn_chan_str = _rxn_chan_str()
     etrans_str = _energy_transfer_str()
 
-    # Pass 1: no WellExtension line; well_lumped_input_file will add caps.
-    globkey_str = _globkey_str(out_name, None)
+    # Pass 1: the input's own WellExtension value, if any (none otherwise);
+    # well_lumped_input_file will add caps.
+    globkey_str = _globkey_str(out_name, PES_PAYLOAD.get("well_extension"))
     base_inp = messrates_inp_str(
         globkey_str, rxn_chan_str, energy_trans_str=etrans_str)
     handle = open(inp_name, "w")
@@ -330,6 +402,8 @@ def main():
         extended_inp = well_lumped_input_file(
             base_inp, out_str, aux_str, log_str, _lump_pressure_atm(),
             LUMP_TEMP)
+        if PES_PAYLOAD.get("well_extension") is not None:
+            extended_inp = _keep_well_extension(extended_inp)
         handle = open(inp_name, "w")
         handle.write(extended_inp)
         handle.close()
@@ -408,12 +482,20 @@ class AutomechKinWriter:
             npot = len(scan)
             if npot == 0:
                 continue
-            # Angles are ignored by mess_io under potential_form="fourier"
-            # (only the energies are emitted), but rotor_hindered still
-            # requires a dict-typed potential, so the grid is kept.
-            sym = hr.symmetry if hr.symmetry else 1
-            step = (360.0 / sym) / npot
-            potential = [[i * step, scan[i]] for i in range(npot)]
+            spline_angles = getattr(hr, 'spline_angles', None)
+            if spline_angles is not None:
+                # Spline rotor: the angles read from the input are written
+                # back with the (possibly perturbed) energies.
+                potential = [[float(spline_angles[i]), scan[i]]
+                             for i in range(npot)]
+            else:
+                # Angles are ignored by mess_io under
+                # potential_form="fourier" (only the energies are emitted),
+                # but rotor_hindered still requires a dict-typed potential,
+                # so the grid is kept.
+                sym = hr.symmetry if hr.symmetry else 1
+                step = (360.0 / sym) / npot
+                potential = [[i * step, scan[i]] for i in range(npot)]
             tpm = float(hr.ThermalPowerMax)
             rotor: dict[str, Any] = {
                 'group': [g - 1 for g in hr.group],
@@ -422,6 +504,8 @@ class AutomechKinWriter:
                 'potential': potential,
                 'therm_pow_max': tpm if tpm > 0 else None,
             }
+            if spline_angles is not None:
+                rotor['potential_form'] = 'spline'
             geo = getattr(hr, 'geo', None)
             if geo:
                 rotor['geo'] = [
@@ -455,11 +539,16 @@ class AutomechKinWriter:
         return rotors
 
     def _species_payload(self, item: Well) -> dict[str, Any]:
+        # A MESS Atom keeps the Mass[amu] of its input block (mess_io atom).
+        mass = self._mass(item.structure)
+        atom_mass = getattr(item, 'atom_mass', None)
+        if getattr(item, 'is_atom', False) and atom_mass is not None:
+            mass = float(atom_mass)
         return {
             'label': item.name,
             'zero_ene': float(item.energy),
             'geo': self._geo(item.structure),
-            'mass': self._mass(item.structure),
+            'mass': mass,
             'sym_factor': float(getattr(item, 'sym_factor', 1.0)),
             'freqs': [float(f) for f in item.frequencies],
             'elec_levels': self._elec_levels(item),
@@ -468,12 +557,18 @@ class AutomechKinWriter:
         }
 
     def _bimol_payload(self, bim: Bimolecular) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             'label': bim.name,
             'ground_ene': float(bim.energy),
             'frag1': self._species_payload(bim.fragments[0]),
             'frag2': self._species_payload(bim.fragments[1]),
         }
+        # MESS ``density`` keyword of each fragment slot, only when set.
+        flags = getattr(bim, 'fragment_density', None) or []
+        for slot, key in ((0, 'frag1_density'), (1, 'frag2_density')):
+            if slot < len(flags) and flags[slot]:
+                payload[key] = True
+        return payload
 
     def _barrier_payload(self, bar: Barrier) -> dict[str, Any] | None:
         reac = bar.connected[0].name
@@ -526,16 +621,95 @@ class AutomechKinWriter:
         common['geo2'] = self._geo(struct2)
         common['pot_prefactor'] = float(getattr(bar, 'pp', 10.0))
         common['pot_exp'] = float(getattr(bar, 'ppe', 6.0))
+        common['hind_rotors'] = self._hind_rotors(bar)
+        tst_level = getattr(bar, 'tst_level', None)
+        if tst_level:
+            # mess_io.core_phasespace expects 'e', 'ej' or 't'.
+            common['tst_level'] = str(tst_level).casefold()
         return common
 
-    def _lj_masses(self, wells: list[Well]) -> list[float]:
-        """Bath/species collider masses for collision_frequency.
+    def _pes_file_data(self) -> PesFileData | None:
+        """Data of this PES's input file (None for SOPs without it)."""
+        return (getattr(self.sop, 'pes_file_data', None) or {}).get(
+            self.pes_id)
 
-        The two masses are taken from the ``Masses[amu]`` line captured by
-        the reader (``SOP.masses``) when available. Otherwise the species
+    def _collider_pair(self, values: list[float], label: str) -> list[float]:
+        """Lennard-Jones pair written for this PES.
+
+        The SOP list holds the collider value first, then one value per
+        input file (file k at index k+1): this PES gets
+        ``[collider, values[pes_id + 1]]``.
+
+        Args:
+            values (list[float]): ``SOP.epsilons`` or ``SOP.sigmas``.
+            label (str): 'epsilons' or 'sigmas' (error message).
+
+        Returns:
+            list[float]: the pair, or the list unchanged (as floats) when it
+            holds fewer than two values.
+        """
+        floats = [float(v) for v in values]
+        if len(floats) < 2:
+            return floats
+        if len(floats) < self.pes_id + 2:
+            raise ValueError(
+                f'SOP.{label} holds {len(floats)} values: no value for PES '
+                f'{self.pes_id} (expected at index {self.pes_id + 1}).')
+        return [floats[0], floats[self.pes_id + 1]]
+
+    def _hardcode_warnings(self) -> None:
+        """Warn (once per process) when the inputs set a key that mess_io
+        writes with its own hard-coded value in the automech input.
+
+        Checked: this PES's AtomDistanceMin (mess_io: 0.68793 angstrom) and
+        the SOP-wide WellCutoff (10), ReductionMethod (diagonalization),
+        GroundEnergyShiftMax (10 kcal/mol) and FloatType (double).
+        """
+        pes_data = self._pes_file_data()
+        if pes_data is not None and pes_data.atom_distance_min is not None:
+            value, unit = pes_data.atom_distance_min
+            in_angstrom = value * _BOHR2ANG if unit == 'bohr' else value
+            if abs(in_angstrom - _MESS_IO_ATOM_DISTANCE_MIN) > 1e-6:
+                _log_once(
+                    f'AtomDistanceMin:{value}:{unit}',
+                    f'AtomDistanceMin {value} [{unit}] read from the MESS '
+                    'input is not used by the automech driver: mess_io '
+                    f'writes AtomDistanceMin {_MESS_IO_ATOM_DISTANCE_MIN} '
+                    '[angstrom].')
+        for label, attr, mess_io_value in (
+                ('WellCutoff', 'well_cutoff', 10.0),
+                ('GroundEnergyShiftMax', 'ground_ene_shift_max', 10.0)):
+            value = getattr(self.sop, attr, None)
+            if value is not None and float(value) != mess_io_value:
+                _log_once(
+                    f'{label}:{value}',
+                    f'{label} {value} read from the MESS inputs is not used '
+                    f'by the automech driver: mess_io writes {label} '
+                    f'{mess_io_value:g}.')
+        for label, attr, mess_io_value in (
+                ('ReductionMethod', 'reduction_method', 'diagonalization'),
+                ('FloatType', 'float_type', 'double')):
+            value = getattr(self.sop, attr, None)
+            if value is not None and str(value).casefold() != mess_io_value:
+                _log_once(
+                    f'{label}:{value}',
+                    f'{label} {value} read from the MESS inputs is not used '
+                    f'by the automech driver: mess_io writes {label} '
+                    f'{mess_io_value}.')
+
+    def _lj_masses(self, wells: list[Well]) -> list[float]:
+        """Collider/species masses for collision_frequency.
+
+        The two masses are taken from this PES's own ``Masses[amu]`` line
+        (``SOP.pes_file_data[pes_id].masses``) when available, else from the
+        SOP-wide ``SOP.masses`` (first file's line). Otherwise the species
         mass falls back to the heaviest well structure and the bath gas to
         N2 (28.0134 amu), and a warning is logged.
         """
+        pes_data = self._pes_file_data()
+        own = list(pes_data.masses) if pes_data is not None else []
+        if len(own) >= 2:
+            return [float(own[0]), float(own[1])]
         masses = list(getattr(self.sop, 'masses', []) or [])
         if len(masses) >= 2:
             return [float(masses[0]), float(masses[1])]
@@ -566,10 +740,18 @@ class AutomechKinWriter:
             if payload is not None:
                 barrier_payloads.append(payload)
         grid_pres = [float(p) for p in self.pres_bar]
-        model_ene_limit = getattr(self.sop, 'model_ene_limit', None)
+        pes_data = self._pes_file_data()
+        self._hardcode_warnings()
+        # ModelEnergyLimit is PES-specific: this file's own value (None:
+        # mess_io's default), SOP-wide value for SOPs without file data.
+        if pes_data is not None:
+            model_ene_limit = pes_data.model_ene_limit
+        else:
+            model_ene_limit = getattr(self.sop, 'model_ene_limit', None)
         excess_ene_temp = getattr(self.sop, 'excess_ene_temp', None)
         chem_eig_max = getattr(self.sop, 'chem_eig_max', None)
-        return {
+        exp_cutoff = getattr(self.sop, 'exp_cutoff', None)
+        payload: dict[str, Any] = {
             'name': f'{self.pes_id:02d}',
             'calc_method': getattr(self.sop, 'calculation_method', None),
             'model_ene_limit': (
@@ -582,16 +764,69 @@ class AutomechKinWriter:
                 float(chem_eig_max) if chem_eig_max is not None else None),
             'factor': float(getattr(self.sop, 'factor', 0.0)),
             'power': float(getattr(self.sop, 'power', 0.0)),
-            'epsilons': [float(e) for e in self.sop.epsilons],
-            'sigmas': [float(s) for s in self.sop.sigmas],
+            'epsilons': self._collider_pair(self.sop.epsilons, 'epsilons'),
+            'sigmas': self._collider_pair(self.sop.sigmas, 'sigmas'),
             'lj_masses': self._lj_masses(wells),
-            'edown_cutoff': 15.0,
+            'edown_cutoff': (
+                float(exp_cutoff) if exp_cutoff is not None else 15.0),
             'grid_temp': [float(t) for t in self.temp],
             'grid_pres': grid_pres,
             'wells': [self._species_payload(w) for w in wells],
             'bimols': [self._bimol_payload(b) for b in bimols],
             'barriers': barrier_payloads,
         }
+        # Optional keys, only when the inputs carry them (mess_io keeps its
+        # own defaults otherwise).
+        for key, value in (
+                ('ene_stepover_temp',
+                 getattr(self.sop, 'ene_step_over_temp', None)),
+                ('well_red_thresh',
+                 getattr(self.sop, 'well_reduction_threshold', None))):
+            if value is not None:
+                payload[key] = float(value)
+        if pes_data is not None:
+            self._add_file_keys(payload, pes_data)
+        return payload
+
+    def _add_file_keys(self,
+                       payload: dict[str, Any],
+                       pes_data: PesFileData) -> None:
+        """Add this PES's own input-file data to the payload.
+
+        Energies are shifted back to the energy zero of the PES's input file;
+        WellExtension, PEDSpecies and MicroEnerMin/Max/Step are added only
+        when the file carries them.
+
+        Args:
+            payload (dict[str, Any]): payload being built (modified).
+            pes_data (PesFileData): this PES's input-file data.
+        """
+        offset = float(pes_data.energy_offset)
+        if offset != 0.0:
+            # Rounded to 1e-10 kcal/mol to drop float artefacts of the shift
+            for well_payload in payload['wells']:
+                well_payload['zero_ene'] = round(
+                    well_payload['zero_ene'] + offset, 10)
+            for bimol_payload in payload['bimols']:
+                bimol_payload['ground_ene'] = round(
+                    bimol_payload['ground_ene'] + offset, 10)
+            for bar_payload in payload['barriers']:
+                bar_payload['zero_ene'] = round(
+                    bar_payload['zero_ene'] + offset, 10)
+        if pes_data.well_extension is not None:
+            payload['well_extension'] = float(pes_data.well_extension)
+        if pes_data.ped_species is not None:
+            payload['ped_species'] = list(pes_data.ped_species)
+        micro_ener = pes_data.micro_ener
+        if micro_ener is not None:
+            if all(value is not None for value in micro_ener):
+                payload['micro_ener'] = [float(v) for v in micro_ener]
+            else:
+                _log_once(
+                    f'micro_ener:{self.pes_id}',
+                    'MicroEnerMin/MicroEnerMax/MicroEnerStep are not all '
+                    f'set in the MESS input of PES {self.pes_id}: the '
+                    'automech driver writes no microcanonical rate output.')
 
     def write(self,
               loc: str,

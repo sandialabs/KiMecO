@@ -800,7 +800,8 @@ def _bimol_endpoint() -> tuple[_PayloadWell, _PayloadBimol]:
 
 def test_payload_barrier_rotors() -> None:
     """C1.4-C1.5: rotd barriers carry hind_rotors (0-based group/axis, geo;
-    empty list without rotors); phasespace barriers have no hind_rotors key."""
+    empty list without rotors); phasespace barriers carry hind_rotors too,
+    plus tst_level (lower case) only when the core had a TSTLevel line."""
     # -- test_c1_4_rotd_barrier_carries_hind_rotors_with_geo
     well, bim = _bimol_endpoint()
     bar = _PayloadBarrier('TSrotd', [well, bim], 'rotd', sym_fact=2.353,
@@ -823,15 +824,25 @@ def test_payload_barrier_rotors() -> None:
     ts = _payload(_PayloadSOP([well], [bim], [bar]))['barriers'][0]
     assert ts['hind_rotors'] == []
 
-    # -- test_c1_5_phasespace_barrier_has_no_hind_rotors_key
+    # -- test_c1_5_phasespace_barrier_carries_hind_rotors_and_tst_level
     well, bim = _bimol_endpoint()
     bar = _PayloadBarrier('TSpst', [well, bim], 'phasespace',
                        h_rotors=[_PayloadRotor(geo=_GEO)])
     ts = _payload(_PayloadSOP([well], [bim], [bar]))['barriers'][0]
     assert ts['kind'] == 'phasespace'
-    # The driver's phasespace branch does not emit rotors; the payload must
-    # not pretend otherwise.
-    assert 'hind_rotors' not in ts
+    # PST-barrier rotors are restored: same serialization as rotd rotors.
+    assert len(ts['hind_rotors']) == 1
+    assert ts['hind_rotors'][0]['geo'] == _GEO
+    assert ts['hind_rotors'][0]['group'] == [1, 2, 3]
+    # No TSTLevel line read: no tst_level key (mess_io keeps its default).
+    assert 'tst_level' not in ts
+    bar.tst_level = 'EJ'
+    ts = _payload(_PayloadSOP([well], [bim], [bar]))['barriers'][0]
+    assert ts['tst_level'] == 'ej'
+    # A phasespace barrier without rotors still has the key (empty list).
+    bar = _PayloadBarrier('TSpst', [well, bim], 'phasespace')
+    ts = _payload(_PayloadSOP([well], [bim], [bar]))['barriers'][0]
+    assert ts['hind_rotors'] == []
 
 
 def test_payload_rotor_geometry() -> None:

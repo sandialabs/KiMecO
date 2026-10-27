@@ -2,7 +2,7 @@
 name: optimizer-tables-and-nm-swarm
 description: "How the GA's SOP tables are laid out (G0000 vs G####), when G0000 gets written, how get_ensemble seeds the Nelder-Mead swarm (NMSG#### tables), how NMSRunner locks and collects models, and known unfixed optimizer defects. Read before touching the GA, NM or NM-swarm code, NMS_start, or postprocessing of G####/NMSG#### tables."
 type: project
-verified: 2026-10-22 against working tree
+verified: 2026-10-26 against working tree
 ---
 **GA table layout (SOP_DB)**
 - `G0000` holds the initial model under id 0. It is written by `Linear.save_initial_model` only
@@ -38,6 +38,11 @@ verified: 2026-10-22 against working tree
   G0001 is never built and the ensemble is empty.
 - `Exponential.create_next_gen`: a median score of 0 gives NaN probabilities (IndexError or a
   near-endless loop); `n_mdl == 1` raises IndexError.
+
+**Frozen parameters**: the setting is `fixed_params` (`default_settings.py`; MANUAL calls it
+`frozen_params`). Only the linear sensitivity honours it (`sensitivity/linear.py`, two `in
+self.settings['fixed_params']` tests); GA and NM perturb exactly `active_p`. The linear sensitivity
+builds two models (±) per non-fixed parameter, and each model runs every PES slot.
 
 **Why:** these tables and locks are shared by GA, NM, NM swarm, postprocessing and kmoui, and their
 conventions are spread over many files; the swarm path had never run end to end before 2026-10-22.

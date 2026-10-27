@@ -39,6 +39,7 @@ Bimolecular-to-bimolecular product energy distributions:
 - **Not unit-area in the file:** the integral is about 10 at 500 K and 68 at 2500 K. The reader renormalises each block.
 - **Noise:** the low-energy tail has tiny negative values (~1e-9; 40 points at 500 K, 0.03 atm). They are numerical noise.
 - **Other block types:** MESS can also print well-to-bimolecular blocks, and newer versions use "bimolecular PEDs / well PEDs / hot energy". The reader handles both formats; the abstraction inputs here only produce the bimolecular-to-bimolecular type.
+- **Format depends on the MESS build** (checked 2026-10-25): the `mess` of conda package `mess-static` 2026.2.4 writes `maximum energy[kcal/mol]`, then `bimolecular PEDs:` and `E, kcal <R>-><P>`, with unnormalised values (e.g. 3.7e+18 at the top of the grid, `OH_C4H71-4`, 500 K, 0.03 atm). Still 184 blocks with pressure changing fastest. The example above comes from an older build.
 - **Size:** about 1.5 MB here, but several GB for bigger systems (`non_thermal/ooqooh_ped.out` is 5 GB).
 
 ## Typical numbers (`H_C4H71-3`: TS +5.87, products −19.95 → backward barrier Ebw = 25.8 kcal/mol)

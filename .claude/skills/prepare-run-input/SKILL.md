@@ -46,7 +46,7 @@ Setting up a new run directory, adapting `example/`, adding experiments or a PES
    ```bash
    mess <file>.inp     # produces .out, .log, .aux like example/mess_input_ethyl_oxidation.*
    ```
-   Rules enforced by `kimeco/readers/mess_input.py`: species names must exist in `ct_yaml` unless `force_new_molecules: true`; no name may contain `__`; a barrier name may appear in only one file; `Factor`, `Power`, the first `Epsilons` and the first `Sigmas` value must be identical across all files.
+   Rules enforced by `kimeco/readers/mess_input.py`: species names must exist in `ct_yaml` unless `force_new_molecules: true`; no name may contain `__`; a well, fake well, bimolecular or barrier name that appears in several files is one shared item (same species, identical data, energies aligned through shared items; `FW-`/`FakeW-` fake wells need no `force_new_molecules`); `Factor`, `Power`, `CalculationMethod`, `EnergyStepOverTemperature`, `ExcessEnergyOverTemperature`, `ChemicalEigenvalueMax`, `WellReductionThreshold`, `ExponentCutoff`, `WellCutoff`, `ReductionMethod`, `GroundEnergyShiftMax`, `FloatType` (presence included) and the first value of `Epsilons`, `Sigmas` and `Masses` (the collider) must be identical across all files; `ModelEnergyLimit`, `AtomDistanceMin`, `WellExtension` and the second `Epsilons`/`Sigmas`/`Masses` value are per file.
 7. Paths: `data_file`, `error_file`, `cantera_tpl` are joined to the launch directory, so keep them relative and launch `kmo` from `<run_dir>`. `mess_inputs` and `ct_yaml` may be absolute or relative.
 8. Optional: build/edit the JSON in the launcher GUI (Dash, port 8000):
    ```bash

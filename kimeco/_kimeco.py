@@ -106,8 +106,9 @@ class KiMecO:
         (self.init_SOP, self.input_tpls) = mr.read()
         if mr._trigger_stop:
             raise ValueError(
-                "Input file reading failed due to missing species in the "
-                "mechanism file. Check the log for details."
+                "MESS input reading stopped on consistency errors "
+                "(species, SOP-wide keys, shared items or energies). "
+                "Check the log."
             )
 
     def initialize_workdir(self) -> None:

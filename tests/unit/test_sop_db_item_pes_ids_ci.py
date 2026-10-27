@@ -53,14 +53,15 @@ def _build_sop(swapped: bool = False) -> SOP:
 
 
 def test_item_pes_ids_and_table_round_trip(tmp_path) -> None:
-    """item_pes_ids excludes fragments and includes barriers; SOP_DB creates the
+    """item_pes_ids excludes fragments and includes barriers; a well checked
+    in a second PES (``check_well``) carries both PES ids; SOP_DB creates the
     item PES table and loads it back."""
     _tmp_root = tmp_path
     # -- test_item_pes_ids_excludes_fragments_and_includes_barriers
     sop = _build_sop()
 
     assert sop.item_pes_ids == {
-        'LEFT': (0,),
+        'LEFT': (0, 1),
         'RIGHT': (1,),
         'LEFT+H': (0,),
         'TS_LEFT_RIGHT': (1,),

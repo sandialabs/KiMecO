@@ -15,7 +15,7 @@ Checking that a MESS input works, understanding the files KiMecO generates per m
 
 ## Pipeline inside KiMecO
 
-1. `MessInputReader` (`kimeco/readers/mess_input.py`) parses each file in `mess_inputs` into the initial SOP and a template; `KiMecO.copy_necessary_files` writes the templates as `<workdir>/mess_tpl_PES{NN}`.
+1. `MessInputReader` (`kimeco/readers/mess_input.py`) parses each file in `mess_inputs` into the initial SOP and a template; `KiMecO.copy_necessary_files` writes the templates as `<workdir>/mess_tpl_PES{NN}`. Several files give one SOP (shared items carry several `pes_ids`, file index = PES id); each file's side outputs are named after its input (`<stem>.out`, `<stem>_ped.out`, `<stem>_ke.out`) so slots in one job directory do not collide.
 2. For each model, `RateCo.create_input` writes one input per PES slot into `<workdir>/<TABLE>/<id//50:02d>/`:
    - default: `MessWriter` (`kimeco/writers/mess.py`) → `<name>P<NN>.inp`, starting with one `!<param>: <value>` comment line per SOP parameter, then the filled template;
    - `use_automech: true`: `AutomechKinWriter` (`kimeco/writers/automech_kin.py`) → self-contained driver `<name>P<NN>.py`. It writes pass 1 (no WellExtension), runs `mess`, copies the output to `_<name>P<NN>.out`, calls `mess_io.well_lumped_input_file`, rewrites the input, and runs `mess` again for the final `<name>P<NN>.out`.

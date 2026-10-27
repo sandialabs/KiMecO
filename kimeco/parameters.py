@@ -1,5 +1,6 @@
 import numpy as np
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any, Iterator
 from collections.abc import Iterable
 
@@ -12,6 +13,41 @@ from kimeco.database.kimeco_db import dbs
 from kimeco.enums import Ptype
 from kimeco.logger_config import KMOLogger
 from kimeco.experiments.experiment import name_base
+
+
+@dataclass
+class PesFileData:
+    """Data of one MESS input file (one PES) that is not an optimised
+    parameter.
+
+    One instance per input file, keyed by the file index (= PES id) in
+    ``SOP.pes_file_data``. Both MESS writers read it to write each file
+    back with its own values.
+
+    Attributes:
+        energy_offset: kcal/mol added to the aligned SOP energies to get back
+            the energies of this file's own zero (0.0 for the reference
+            file of each group of files sharing items).
+        masses: numbers of this file's ``Masses[amu]`` line (collider first,
+            then the PES-specific mass); empty when absent.
+        model_ene_limit: ``ModelEnergyLimit`` in kcal/mol, None when absent.
+        well_extension: ``WellExtension`` value (0.0 for the bare keyword),
+            None when absent.
+        atom_distance_min: ``AtomDistanceMin`` as (value, unit), None when
+            absent.
+        ped_species: ``PEDSpecies`` entries (e.g. 'A+B=C+D'), None when
+            absent.
+        micro_ener: (``MicroEnerMin``, ``MicroEnerMax``, ``MicroEnerStep``)
+            in kcal/mol, an entry is None when its line is absent; None when
+            all three are absent.
+    """
+    energy_offset: float = 0.0
+    masses: list[float] = field(default_factory=list)
+    model_ene_limit: float | None = None
+    well_extension: float | None = None
+    atom_distance_min: tuple[float, str] | None = None
+    ped_species: list[str] | None = None
+    micro_ener: tuple[float | None, float | None, float | None] | None = None
 
 
 class SOP:
@@ -28,18 +64,35 @@ class SOP:
         self.items: dict[str, Well | Bimolecular | Barrier] = {}
         self.power: float
         self.factor: float
+        # Lennard-Jones Sigmas and Epsilons: index 0 is the collider (bath
+        # gas, same in every input file), index k+1 the second value of the
+        # input file k (PES-specific). One input file: [collider, value].
         self.sigmas: list[float] = []
         self.temp: list[float]
         self.pres: list[float]
         self.pres_unit: str
         self.epsilons: list[float] = []
-        # LennardJones Masses[amu] (bath first, species second)
+        # LennardJones Masses[amu] (collider first, as in the MESS manual;
+        # the second value is PES-specific): the first file's list. Each
+        # file's own list is in pes_file_data[pes_id].masses.
         self.masses: list[float] = []
-        # Global MESS keywords (None when absent from the inputs)
+        # Global MESS keywords (None when absent from the inputs). They hold
+        # the same value in every input file, except model_ene_limit, which
+        # is the first file's value (each file's own value is in
+        # pes_file_data[pes_id].model_ene_limit).
         self.calculation_method: str | None = None
         self.model_ene_limit: float | None = None  # kcal/mol
         self.excess_ene_temp: float | None = None
         self.chem_eig_max: float | None = None
+        self.ene_step_over_temp: float | None = None
+        self.well_cutoff: float | None = None
+        self.reduction_method: str | None = None
+        self.well_reduction_threshold: float | None = None
+        self.float_type: str | None = None
+        self.exp_cutoff: float | None = None
+        self.ground_ene_shift_max: float | None = None  # kcal/mol
+        # Data of each input file that is not a parameter, keyed by PES id
+        self.pes_file_data: dict[int, PesFileData] = {}
         self.files2copy: list[str] = []
         self._default_score = float('inf')
         self.scores: dict[str, float] = {
@@ -51,11 +104,19 @@ class SOP:
                     sop_tpl,
                     row: list[Any]):
         self = deepcopy(sop_tpl)
+        n_params = len(self.parameters_names)
+        # Strict check, before anything is updated: a row shorter or longer
+        # than the template would shift every following value to the wrong
+        # parameter name.
+        if len(row) != n_params:
+            raise ValueError(
+                f"SOP DB row holds {len(row)} values but the SOP read "
+                f"from the MESS inputs has {n_params} parameters. "
+                "Projects whose SOP DB predates per-PES Lennard-Jones "
+                "parameters (several MESS inputs) or the fix of duplicated "
+                "hindered rotors cannot be restarted or postprocessed.")
         pos = 0
         for key, val in self.parameters_names.items():
-            if pos >= len(row):
-                raise ValueError(
-                    "Row length does not match SOP template parameters.")
             if val != row[pos]:
                 self.update(key=key,
                             value=row[pos])
@@ -167,6 +228,54 @@ class SOP:
             sigs += f" {sig: 7.4f}"
         return sigs
 
+    @staticmethod
+    def _collider_pairs(values: list[float]) -> list[str]:
+        """Format one ``collider value`` pair per input file.
+
+        Entry k holds the collider (index 0) and the second value of input
+        file k (index k+1), as written on that file's MESS line.
+
+        Args:
+            values (list[float]): [collider, file 0 value, file 1 value, ...]
+
+        Returns:
+            list[str]: one formatted pair per file, empty when fewer than two
+            values are stored.
+        """
+        if len(values) < 2:
+            return []
+        return [f" {values[0]: 7.4f} {values[k + 1]: 7.4f}"
+                for k in range(len(values) - 1)]
+
+    @property
+    def r_epsilons_pes(self) -> list[str]:
+        """``Epsilons`` pair written into each input file (entry k = file k).
+
+        Template placeholder: ``{SOP.r_epsilons_pes[k]}``. For one input file
+        the only entry equals ``r_epsilons``.
+        """
+        return self._collider_pairs(self.epsilons)
+
+    @property
+    def r_sigmas_pes(self) -> list[str]:
+        """``Sigmas`` pair written into each input file (entry k = file k).
+
+        Template placeholder: ``{SOP.r_sigmas_pes[k]}``. For one input file
+        the only entry equals ``r_sigmas``.
+        """
+        return self._collider_pairs(self.sigmas)
+
+    def file_data(self, pes_id: int) -> PesFileData:
+        """Return the per-file data of one PES, created empty on first use.
+
+        Args:
+            pes_id (int): PES id (= index of the MESS input file).
+
+        Returns:
+            PesFileData: the data of that input file.
+        """
+        return self.pes_file_data.setdefault(pes_id, PesFileData())
+
     @property
     def r_rc_temp(self) -> str:
         temps = ""
@@ -230,19 +339,28 @@ class SOP:
                    pes_id: int) -> bool:
         """Procedure when a well might be in different PESs
 
+        A well read from several input files is one object carrying the id
+        of every file it appears in. A well first read as a bimolecular
+        fragment (no PES id) becomes a PES well of the file declaring it.
+
         Args:
             name (str): Well's name
             pes_id (int): PES ID
+
+        Returns:
+            bool: True (error) when the well is already declared in this
+            PES, False when the PES id was added.
         """
-        error = False
-        if len(self.items[name].pes_ids) == 0:
-            self.items[name].pes_ids.append(pes_id)
-        elif pes_id in self.items[name].pes_ids:
-            error = True
-        else:
-            # A well cannot belong to multiple PESs.
-            error = True
-        return error
+        item = self.items[name]
+        if pes_id in item.pes_ids:
+            return True
+        item.pes_ids.append(pes_id)
+        if len(item.pes_ids) > 1:
+            item.in_multiple_pes = True
+        if isinstance(item, Well) and not isinstance(item, Barrier) \
+                and not any(well is item for well in self.wells):
+            self.wells.append(item)
+        return False
 
     @property
     def bimols_names(self) -> list[str]:
@@ -341,6 +459,29 @@ class SOP:
                 pes_id=pes_id))
         self.items[name] = self.barriers[-1]
 
+    def check_barrier(self,
+                      name: str,
+                      pes_id: int) -> bool:
+        """Add a PES to a barrier already read from another input file.
+
+        A barrier shared by several input files is one object carrying the
+        id of every file it appears in.
+
+        Args:
+            name (str): barrier's name
+            pes_id (int): PES ID of the file declaring it again
+
+        Returns:
+            bool: True (error) when the barrier is already declared in this
+            PES, False when the PES id was added.
+        """
+        item = self.items[name]
+        if pes_id in item.pes_ids:
+            return True
+        item.pes_ids.append(pes_id)
+        item.in_multiple_pes = True
+        return False
+
     def set_freqs(self,
                   name: str,
                   freqs: list[float]) -> None:
@@ -387,7 +528,8 @@ class SOP:
                    scan: list[float],
                    fexp: list[int],
                    fcoef: list[float],
-                   geo=None) -> None:
+                   geo=None,
+                   spline_angles: list[float] | None = None) -> int:
         """Create a new rotor object for a well
 
         Args:
@@ -400,29 +542,32 @@ class SOP:
                                 rotor's rotation
             fexp: (list[int]): list of exponents for fourrier expansion
             fcoef: (list[float]): list of coefficients for fourrier expansion
+            spline_angles (list[float] | None): angles (degrees) of a
+                ``PotentialSpline`` rotor, None for ``Potential[kcal/mol]``.
 
         Returns:
-            int: Index of the last rotor of the well
+            int: Index of the rotor in the item's h_rotors
         """
         item = self.items[name]
         if isinstance(item, Bimolecular):
-            item.fragments[-1].add_hrotor(thermalpowermax,
-                                          group,
-                                          axis,
-                                          symmetry,
-                                          scan,
-                                          fexp,
-                                          fcoef,
-                                          geo=geo)
-        else:
-            item.add_hrotor(thermalpowermax,
-                            group,
-                            axis,
-                            symmetry,
-                            scan,
-                            fexp,
-                            fcoef,
-                            geo=geo)
+            return item.fragments[-1].add_hrotor(thermalpowermax,
+                                                 group,
+                                                 axis,
+                                                 symmetry,
+                                                 scan,
+                                                 fexp,
+                                                 fcoef,
+                                                 geo=geo,
+                                                 spline_angles=spline_angles)
+        return item.add_hrotor(thermalpowermax,
+                               group,
+                               axis,
+                               symmetry,
+                               scan,
+                               fexp,
+                               fcoef,
+                               geo=geo,
+                               spline_angles=spline_angles)
 
     def set_mrotor(self,
                    name: str,

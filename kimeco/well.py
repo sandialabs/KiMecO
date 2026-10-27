@@ -13,6 +13,26 @@ from kimeco.database.kimeco_db import dbs
 from kimeco.enums import FreqMode
 
 
+def _same_multirotor(first: MultiRotor, second: MultiRotor) -> bool:
+    """Tell whether two MultiRotor objects hold the same input data.
+
+    Args:
+        first (MultiRotor): first rotor.
+        second (MultiRotor): second rotor.
+
+    Returns:
+        bool: True when symmetry factor, energies, potential file and
+        internal rotations are identical.
+    """
+    return (first._sf == second._sf
+            and first.iem == second.iem
+            and first.file == second.file
+            and first.qlem == second.qlem
+            and len(first.internal_rot) == len(second.internal_rot)
+            and all(ir_a == ir_b for ir_a, ir_b
+                    in zip(first.internal_rot, second.internal_rot)))
+
+
 class Well:
     """Well object.
     Has a single species name used in MESS and mechanism.
@@ -46,6 +66,11 @@ class Well:
         self.pes_ids: list[int] = pes_ids
         # MESS SymmetryFactor of the rigid-rotor core
         self.sym_factor: float = 1.0
+        # MESS ``Atom`` fragment (a single atom described only by its mass
+        # and electronic levels): set by ``set_atom``.
+        self.is_atom: bool = False
+        # Mass[amu] line of an ``Atom`` block (None for a molecule)
+        self.atom_mass: float | None = None
 
     def __getattr__(self, name: str) -> Any:
         """Modification of the internal __getattr__ method
@@ -125,11 +150,80 @@ class Well:
         Returns:
             str: list of energies describing the rotor's rotation
         """
+        rotor: HinRotor = self.h_rotors[rot_num]
+        # PotentialSpline energies keep the 4 decimals of the AutoMech
+        # inputs; Potential[kcal/mol] grids keep the historical format.
+        fmt = ' 9.4f' if rotor.is_spline else ' 7.3f'
         scan = ''
-        for val in self.h_rotors[rot_num].scan:
-            scan += f'{val: 7.3f}'
+        for val in rotor.scan:
+            scan += f'{val:{fmt}}'
         scan += '\n'
         return scan
+
+    def set_atom(self,
+                 element: str,
+                 mass: float) -> None:
+        """Describe this item as a MESS ``Atom`` (mass and electronic
+        levels only, no geometry block, no frequency).
+
+        A one-atom structure at the origin is stored so that the
+        composition, the PST stoichiometry and the automech serializer keep
+        working.
+
+        Args:
+            element (str): chemical symbol of the atom.
+            mass (float): ``Mass[amu]`` value read from the input.
+        """
+        self.is_atom = True
+        self.atom_mass = float(mass)
+        self.structure = Atoms(symbols=[element], positions=[[0.0, 0.0, 0.0]])
+        self.set_frequencies([])
+
+    def differing_fields(self, other: 'Well') -> list[str]:
+        """List the input data that differ between this item and ``other``.
+
+        Used when the same label is read again (another file, or another
+        bimolecular for a fragment): the two readings must describe the same
+        species. Energies are not compared here (they are aligned between
+        files separately).
+
+        Args:
+            other (Well): item read again under the same label.
+
+        Returns:
+            list[str]: names of the differing fields (empty when identical).
+        """
+        fields: list[str] = []
+        mine = getattr(self, 'structure', None)
+        theirs = getattr(other, 'structure', None)
+        if (mine is None) != (theirs is None) or (
+                mine is not None and mine != theirs):
+            fields.append('geometry')
+        mine_freq = getattr(self, '_freq', None)
+        their_freq = getattr(other, '_freq', None)
+        if (mine_freq is None) != (their_freq is None) or (
+                mine_freq is not None
+                and not np.array_equal(mine_freq, their_freq)):
+            fields.append('frequencies')
+        if (getattr(self, 'elec_levels', None)
+                != getattr(other, 'elec_levels', None)):
+            fields.append('electronic levels')
+        if self.sym_factor != other.sym_factor:
+            fields.append('symmetry factor')
+        if len(self.h_rotors) != len(other.h_rotors) or not all(
+                mine_hr.same_definition(their_hr)
+                for mine_hr, their_hr in zip(self.h_rotors, other.h_rotors)):
+            fields.append('hindered rotors')
+        if len(self.m_rotors) != len(other.m_rotors) or not all(
+                _same_multirotor(mine_mr, their_mr)
+                for mine_mr, their_mr in zip(self.m_rotors, other.m_rotors)):
+            fields.append('multirotors')
+        if self.dummy != other.dummy:
+            fields.append('dummy')
+        if (self.is_atom != other.is_atom
+                or self.atom_mass != other.atom_mass):
+            fields.append('atom')
+        return fields
 
     def set_uncertainties(self,
                           settings: dict[str, Any]) -> None:
@@ -215,7 +309,8 @@ class Well:
                    scan: list[float],
                    fexp: list[int],
                    fcoef: list[float],
-                   geo=None) -> None:
+                   geo=None,
+                   spline_angles: list[float] | None = None) -> int:
         """Add a new rotor object to the well
 
         Args:
@@ -224,25 +319,13 @@ class Well:
             axis (list[int]): axis
             symmetry (int): symmetry
             scan (list[float]): scan
+            spline_angles (list[float] | None): angles (degrees) of a
+                ``PotentialSpline`` rotor, None for ``Potential[kcal/mol]``.
+
+        Returns:
+            int: index of the rotor in ``h_rotors``.
         """
-        for hr in self.h_rotors:
-            if hr.group == group and hr.axis == axis:
-                if (fexp == hr.fexp and
-                    fcoef == hr.fcoef and
-                    hr.symmetry == symmetry and
-                    hr.ThermalPowerMax == thermalpowermax and
-                    hr.geo == geo and
-                    np.array_equal(
-                        hr._scan, np.array(scan, dtype=np.float32))):
-                    break
-                else:
-                    msg = f"Well {self.name} already has a rotor with:"
-                    msg += "\n"
-                    msg += f"Group: {group}, Axis: {axis}."
-                    msg += "\n"
-                    msg += "make the inputs consistents"
-                    raise ValueError(msg)
-        self.h_rotors.append(HinRotor(
+        new_rotor = HinRotor(
             ThermalPowerMax=thermalpowermax,
             group=group,
             axis=axis,
@@ -250,7 +333,22 @@ class Well:
             scan=scan,
             fexp=fexp,
             fcoef=fcoef,
-            geo=geo))
+            geo=geo,
+            spline_angles=spline_angles)
+        for idx, hr in enumerate(self.h_rotors):
+            if hr.group == group and hr.axis == axis:
+                if hr.same_definition(new_rotor):
+                    # Same rotor declared again: keep a single copy.
+                    return idx
+                else:
+                    msg = f"Well {self.name} already has a rotor with:"
+                    msg += "\n"
+                    msg += f"Group: {group}, Axis: {axis}."
+                    msg += "\n"
+                    msg += "make the inputs consistents"
+                    raise ValueError(msg)
+        self.h_rotors.append(new_rotor)
+        return len(self.h_rotors) - 1
 
     def add_mrotor(self,
                    sf: float,

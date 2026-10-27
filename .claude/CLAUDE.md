@@ -76,9 +76,25 @@ Rules for every agent:
 
 - `.claude/memory/optimizer-tables-and-nm-swarm.md` (`optimizer-tables-and-nm-swarm`): G0000 vs
   G#### layout and when G0000 is written, how `get_ensemble` seeds the NM swarm (NMSG####),
-  NMSRunner locking and profile collection, known unfixed optimizer defects.
+  NMSRunner locking and profile collection, `fixed_params` scope, known unfixed optimizer defects.
 - `.claude/memory/pint-unit-string-comparison.md` (`pint-unit-string-comparison`): pint `Unit == str`
   and `get_compatible_units` membership match only canonical names, not aliases like `s`, `min`.
+
+### MESS inputs: reading several files, keys, labels, names: read on demand
+
+- `.claude/memory/multi-pes-mess-reading.md` (`multi-pes-mess-reading`): how `MessInputReader`
+  merges shared items, aligns energies, classifies header keys and lays out per-PES Lennard-Jones
+  parameters across several MESS inputs; how both writers give each file back in its own frame;
+  the invariants and test pins (strict `from_db_row`, warning wording, AKW kwarg set).
+- `.claude/memory/mess-global-keys-and-mess-io.md` (`mess-global-keys-and-mess-io`): what each
+  global MESS key does to the rates and its default when absent; how MESS combines the LJ pair;
+  mess_io writer defaults, hard-codes and pass-2 `WellExtension` quirk.
+- `.claude/memory/mess-label-rules.md` (`mess-label-rules`): what a MESS label may contain and how
+  long it may be for MESS, AutoMech mess_io and KiMecO/Cantera; `UseShortNames` gives k = 0 in
+  KiMecO; fixed-width output headers.
+- `.claude/memory/structure-based-species-names.md` (`structure-based-species-names`): why the
+  `relabel-mess-by-structure` names are built as they are; bond-cutoff, TS, rotor, fake-well and
+  `Atom` pitfalls when deriving connectivity from AutoMech geometries.
 
 ### Non-thermal / prompt kinetics (C4H8 system): read on demand
 

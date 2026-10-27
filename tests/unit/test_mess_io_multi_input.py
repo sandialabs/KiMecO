@@ -67,9 +67,9 @@ def _find_line(lines: list[str], blockname: str, after: int = 0) -> int:
 
 
 def test_read_duplicate_well_or_bimolecular_across_inputs(tmp_path) -> None:
-    """A well repeated in another PES input stops the run (kept on PES 0, not
-    multi-PES); a repeated bimolecular is shared across PES (multi-PES, ids [0,
-    1]) without stopping."""
+    """A well repeated in another PES input is one shared object (multi-PES,
+    ids [0, 1]) without stopping; a repeated bimolecular is shared across PES
+    (multi-PES, ids [0, 1]) without stopping."""
     # -- test_read_duplicate_well_name_across_inputs_marks_multiple_pes: Check
     #    the pathway of well creation across multiple PES
     parse_reader = _build_reader(tmp_path=tmp_path)
@@ -90,9 +90,10 @@ def test_read_duplicate_well_or_bimolecular_across_inputs(tmp_path) -> None:
     assert len(templates) == 2
     assert "DUP" in sop.items
     item = sop.items["DUP"]
-    assert item.in_multiple_pes is False
-    assert sorted(item.pes_ids) == [0]
-    assert parse_reader._trigger_stop is True
+    assert item.in_multiple_pes is True
+    assert sorted(item.pes_ids) == [0, 1]
+    assert [well.name for well in sop.wells] == ["DUP"]
+    assert parse_reader._trigger_stop is False
 
     # -- test_read_duplicate_bimolecular_name_across_inputs_marks_multiple_pes:
     #    Check the pathway of Bimolecular creation across multiple PES
@@ -121,7 +122,10 @@ def test_read_duplicate_well_or_bimolecular_across_inputs(tmp_path) -> None:
 def test_read_duplicate_barrier_name_across_inputs_triggers_stop(
     tmp_path: Path,
 ) -> None:
-    """Check the pathway of Barrier creation across multiple PES"""
+    """A barrier repeated in a file that does not declare its sides stops
+    (the sides are checked before the PES id is added: the barrier keeps PES
+    0 only). The shared-barrier case (sides declared in both files) is in
+    ``test_mess_multi_pes_read_ci.py``."""
 
     parse_reader = _build_reader(tmp_path=tmp_path)
     parse_reader.pes_files = [

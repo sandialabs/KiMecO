@@ -32,6 +32,9 @@ class Barrier(Well):
         self.pp: float  # PotentialPrefactor
         self.ppe: float  # PotentialPowerExponent
         self.file: str  # Rotd filename
+        # TSTLevel of a PhaseSpaceTheory core as written in the input
+        # (e.g. 'EJ'); None when the core has no TSTLevel line.
+        self.tst_level: str | None = None
 
     @property
     def symFact(self) -> float:
@@ -84,6 +87,32 @@ class Barrier(Well):
             )
 
         return db_dict
+
+    def differing_fields(self, other: Well) -> list[str]:
+        """List the input data that differ between this barrier and the
+        same barrier read again from another file.
+
+        Adds the barrier-specific data (barrierless core, symmetry factor,
+        PST potential, TSTLevel, imaginary frequency, rotd file) to the
+        species data compared by ``Well.differing_fields``.
+
+        Args:
+            other (Well): barrier read again under the same label.
+
+        Returns:
+            list[str]: names of the differing fields (empty when identical).
+        """
+        fields: list[str] = super().differing_fields(other)
+        for label, attr in (('barrierless core', 'barrierless'),
+                            ('symmetry factor (core)', '_symFact'),
+                            ('PotentialPrefactor', 'pp'),
+                            ('PotentialPowerExponent', 'ppe'),
+                            ('TSTLevel', 'tst_level'),
+                            ('imaginary frequency', 'ifreq'),
+                            ('rotd file', 'file')):
+            if getattr(self, attr, None) != getattr(other, attr, None):
+                fields.append(label)
+        return fields
 
     def set_uncertainties(self, settings: dict[str, Any]):
         super().set_uncertainties(settings)

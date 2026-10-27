@@ -99,6 +99,7 @@ Add the skill to an agent's `skills:` frontmatter list only if that agent uses i
 | `add-dependency` | Add, remove or re-pin a dependency or extra in lockstep | small-fix lane |
 | `literature-search` | Find and verify published kinetics/combustion literature | operational (needs `WebSearch`/`WebFetch`, which no pipeline agent holds today) |
 | `record-memory-note` | Turn verified facts into tracked or local memory notes and keep the indexes in sync | bounded orchestrator exception (end of chain, "remember" requests) |
+| `relabel-mess-by-structure` | Name species from xyz geometry (condensed formula); relabel AutoMech MESS inputs with structure-based names, maps and report (`relabel_mess.py`) | operational (outputs outside repo); script edits pipeline |
 | `learn-new-skills` | Create a new skill (this one) | bounded orchestrator exception |
 
 ## Backlog candidates

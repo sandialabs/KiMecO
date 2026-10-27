@@ -2,7 +2,7 @@
 name: test-suite-contracts
 description: "Which CI, packaging and skill contracts the unit tests enforce, which pins nothing enforces, and what breaks when a test file, a dependency of the test extra or a CI command changes. Read before editing tests/unit/, tests.yml, the test extra or the add-dependency/run-tests skills."
 type: project
-verified: 2026-10-22 against working tree
+verified: 2026-10-26 against working tree
 ---
 **Contracts encoded in tests (edit them in the same change as the thing they pin)**
 - `tests/unit/test_installation_metadata_ci.py` parses `.github/workflows/tests.yml`: exact job set
@@ -28,9 +28,21 @@ verified: 2026-10-22 against working tree
   concurrently), so `-k editable_install` starts none of them.
 - `test_no_source_references_agentic_pipeline_or_anthropic` (imports test) scans all
   `tests/**/*.py` and skips only its own file via `__file__`: the forbidden literals must stay there.
+- `.claude/**` is outside every check: pytest's default `norecursedirs` skips dot-directories, CI
+  and the hooks run only `tests/unit` (plus `tests/examples` on GitLab), the forbidden-pattern scan
+  covers only `kimeco/` and `tests/`, and setuptools discovery skips directories with a `.` in their
+  name (`setuptools/discovery.py`). A script shipped in a skill (e.g.
+  `relabel-mess-by-structure/relabel_mess.py`) is never tested, linted or packaged.
 - `tests/__init__.py`, `tests/unit/__init__.py`, `tests/examples/__init__.py` are required: two
   `test_mess_io_multi_input.py` share a basename, and
   `from tests.unit.test_installation_extras_ci import import_or_skip` is used by other test files.
+
+**Golden writer outputs** (`tests/unit/data/mess_writer_golden/`): raw bytes written by the code
+before multi-PES parsing (ethyl example, DME pair). `test_mess_multi_pes_write_ci.py::
+test_single_file_and_dme_outputs_match_goldens` applies an explicit delta (`_golden_with_dme_delta`,
+payload pops): a later writer change updates that delta, never regenerates the files.
+`test_golden_folder_hygiene` forbids `.py` files there (pytest collection and the forbidden-literal
+scan of `tests/**/*.py`). `tests/unit/data/s_golden/` is an unrelated empty untracked folder.
 
 **Packaging side effects**
 - `python setup.py -q egg_info` writes only `kimeco.egg-info/`; it also refreshes `PKG-INFO`'s README

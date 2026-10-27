@@ -7,10 +7,290 @@ from kimeco.well import Well
 from kimeco.rotors.internalrotation import InternalRotation
 from kimeco.logger_config import KMOLogger
 from kimeco.database.kimeco_db import dbs
+from kimeco.writers.mess import MessTemplate, OUTPUT_NAME_ROOT
 
+import math
 import os
 import sys
+from collections import deque
+from dataclasses import dataclass
 from typing import Any, cast
+
+from ase.data import atomic_masses, chemical_symbols
+
+
+#: Labels of AutoMech fake wells (``FW-<bimol>`` in older inputs,
+#: ``FakeW-<bimol>`` in newer ones). A fake well is not a mechanism species,
+#: and the same fake well may appear in several input files.
+FAKE_WELL_PREFIXES: tuple[str, ...] = ('FW-', 'FakeW-')
+
+#: kcal/mol conversion factors of the energy units accepted in MESS headers
+_CM2KCAL = 349.755
+_KJ2KCAL = 4.184
+
+
+def is_fake_well_label(name: str) -> bool:
+    """Tell whether a MESS label names an AutoMech fake well.
+
+    Args:
+        name (str): MESS label.
+
+    Returns:
+        bool: True for labels starting with ``FW-`` or ``FakeW-``.
+    """
+    return name.startswith(FAKE_WELL_PREFIXES)
+
+
+def _header_token(line: str) -> str | None:
+    """Keyword of a MESS line, case-folded and cut before its unit.
+
+    ``'  ModelEnergyLimit[kcal/mol]  800'`` gives ``'modelenergylimit'``.
+    Comment lines (``!`` or ``#``) and blank lines give None, so a commented
+    keyword is never read.
+
+    Args:
+        line (str): one line of a MESS input.
+
+    Returns:
+        str | None: the keyword, or None.
+    """
+    tokens = line.split()
+    if not tokens or tokens[0].startswith(('!', '#')):
+        return None
+    return tokens[0].casefold().split('[')[0]
+
+
+def _leading_numbers(tokens: list[str]) -> list[float]:
+    """Read the numbers at the start of a token list (stop at the first
+    non-number, e.g. a comment).
+
+    Args:
+        tokens (list[str]): whitespace-separated tokens.
+
+    Returns:
+        list[float]: the leading numbers.
+    """
+    numbers: list[float] = []
+    for arg in tokens:
+        if arg.replace('.', '').replace('-', '').isnumeric():
+            numbers.append(float(arg))
+        else:
+            break
+    return numbers
+
+
+def _atom_element(label: str, mass: float) -> str | None:
+    """Chemical element of a MESS ``Atom`` fragment.
+
+    The label is used when it is a chemical symbol (``H``, ``O``...);
+    otherwise the element whose standard atomic mass is the closest to the
+    ``Mass[amu]`` value, within 0.1 amu.
+
+    Args:
+        label (str): fragment label.
+        mass (float): ``Mass[amu]`` value.
+
+    Returns:
+        str | None: the chemical symbol, None when none matches.
+    """
+    if label in chemical_symbols[1:]:
+        return label
+    best = min(range(1, len(atomic_masses)),
+               key=lambda number: abs(atomic_masses[number] - mass))
+    if abs(atomic_masses[best] - mass) <= 0.1:
+        return chemical_symbols[best]
+    return None
+
+
+@dataclass(frozen=True)
+class HeaderKey:
+    """A global MESS keyword read from the header of the input files.
+
+    Attributes:
+        label: keyword as written in MESS (e.g. ``'WellCutoff'``).
+        sop_attr: attribute storing the value, on ``SOP`` for keys that must
+            be the same in all files, on ``PesFileData`` for per-PES keys.
+        kind: how the value is read and compared: ``'number'`` (float),
+            ``'energy'`` (float in kcal/mol after unit conversion),
+            ``'word'`` (string, compared case-folded), ``'length'``
+            ((value, unit) pair) or ``'flag_number'`` (float, the bare
+            keyword meaning 0.0).
+    """
+    label: str
+    sop_attr: str
+    kind: str
+
+
+#: Keys that must hold the same value in every input file. A different
+#: value, or the key present in some files and absent from others, stops
+#: the read (absence is a value of its own: MESS defaults are not assumed).
+SAME_IN_ALL_FILES_KEYS: tuple[HeaderKey, ...] = (
+    HeaderKey('CalculationMethod', 'calculation_method', 'word'),
+    HeaderKey('EnergyStepOverTemperature', 'ene_step_over_temp', 'number'),
+    HeaderKey('ExcessEnergyOverTemperature', 'excess_ene_temp', 'number'),
+    HeaderKey('ChemicalEigenvalueMax', 'chem_eig_max', 'number'),
+    HeaderKey('WellReductionThreshold', 'well_reduction_threshold',
+              'number'),
+    HeaderKey('ExponentCutoff', 'exp_cutoff', 'number'),
+    HeaderKey('WellCutoff', 'well_cutoff', 'number'),
+    HeaderKey('ReductionMethod', 'reduction_method', 'word'),
+    HeaderKey('GroundEnergyShiftMax', 'ground_ene_shift_max', 'energy'),
+    HeaderKey('FloatType', 'float_type', 'word'),
+)
+
+#: Keys kept per input file (never compared): each file is written back
+#: with its own value, or without the key.
+PER_PES_KEYS: tuple[HeaderKey, ...] = (
+    HeaderKey('ModelEnergyLimit', 'model_ene_limit', 'energy'),
+    HeaderKey('AtomDistanceMin', 'atom_distance_min', 'length'),
+    HeaderKey('WellExtension', 'well_extension', 'flag_number'),
+)
+
+#: MESS output-file keywords and the ``{__output__.<kind>}`` placeholder
+#: kind the template gets instead of the file name (each written input
+#: names its own side outputs).
+OUTPUT_NAME_KEYS: dict[str, str] = {
+    'rateoutput': 'rate',
+    'pedoutput': 'ped',
+    'microrateoutput': 'micro',
+}
+
+#: Microcanonical output keys (per PES), index in PesFileData.micro_ener
+MICRO_ENER_KEYS: dict[str, int] = {
+    'microenermin': 0,
+    'microenermax': 1,
+    'microenerstep': 2,
+}
+
+
+class ColliderLine:
+    """One Lennard-Jones line (``Epsilons``, ``Sigmas`` or ``Masses``)
+    followed across the input files.
+
+    The first value of the line is the collider (bath gas): it must be the
+    same in every file. The second value is PES-specific.
+
+    Attributes:
+        label: keyword (e.g. ``'Epsilons'``).
+        token: keyword token with its unit, case-folded, of the first file
+            having the line (e.g. ``'epsilons[1/cm]'``).
+        collider: first value of the first file having the line.
+        second_by_file: second value of each file, keyed by file index.
+    """
+
+    def __init__(self, label: str) -> None:
+        self.label: str = label
+        self.token: str | None = None
+        self.collider: float | None = None
+        self.second_by_file: dict[int, float] = {}
+
+
+class PesEnergyAlignment:
+    """Align the energies of MESS input files that share items.
+
+    Each input file has its own energy zero. An item read from several
+    files (same label) fixes the offset between their zeros:
+    ``offset[g] = offset[f] + E_g - E_f``. Files are visited in
+    ``mess_inputs`` order; the first file of each group of linked files is
+    the reference of the group (offset 0); a file sharing nothing keeps
+    offset 0. After alignment every shared energy must agree within
+    ``TOLERANCE``.
+
+    Attributes:
+        n_files: number of input files.
+        energies: raw energy of each item in each file that declares it,
+            ``{label: {file index: kcal/mol}}``.
+        anchors: labels used to link files (wells, bimoleculars, saddle
+            points); the other labels are only checked.
+        offsets: offset of each file (kcal/mol), filled by ``solve``.
+        links: item that linked each non-reference file to its group.
+    """
+
+    #: Largest difference (kcal/mol) allowed between two aligned energies
+    TOLERANCE = 0.01
+
+    def __init__(self,
+                 n_files: int,
+                 energies: dict[str, dict[int, float]],
+                 anchors: set[str]) -> None:
+        self.n_files: int = n_files
+        self.energies: dict[str, dict[int, float]] = energies
+        self.anchors: set[str] = anchors
+        self.offsets: dict[int, float] = {}
+        self.links: dict[int, str] = {}
+
+    def _neighbours(self) -> dict[int, list[tuple[int, str]]]:
+        """Files linked by a shared anchor, for each file."""
+        graph: dict[int, list[tuple[int, str]]] = {
+            fid: [] for fid in range(self.n_files)}
+        for label, per_file in self.energies.items():
+            if label not in self.anchors or len(per_file) < 2:
+                continue
+            files = sorted(per_file)
+            for first in files:
+                for second in files:
+                    if first != second:
+                        graph[first].append((second, label))
+        return graph
+
+    def solve(self) -> dict[int, float]:
+        """Compute the offset of every file (breadth-first over the files
+        linked by shared anchors).
+
+        Returns:
+            dict[int, float]: offset (kcal/mol) of each file index.
+        """
+        graph = self._neighbours()
+        self.offsets = {}
+        for start in range(self.n_files):
+            if start in self.offsets:
+                continue
+            self.offsets[start] = 0.0
+            queue: deque[int] = deque([start])
+            while queue:
+                current = queue.popleft()
+                for other, label in graph[current]:
+                    if other in self.offsets:
+                        continue
+                    per_file = self.energies[label]
+                    self.offsets[other] = (self.offsets[current]
+                                           + per_file[other]
+                                           - per_file[current])
+                    self.links[other] = label
+                    queue.append(other)
+        return self.offsets
+
+    def mismatches(self) -> list[tuple[str, int, int, float]]:
+        """Shared energies that disagree after alignment.
+
+        Returns:
+            list[tuple[str, int, int, float]]: (label, first file, other
+            file, difference in kcal/mol) for every disagreement larger
+            than ``TOLERANCE``.
+        """
+        found: list[tuple[str, int, int, float]] = []
+        for label, per_file in self.energies.items():
+            files = sorted(per_file)
+            first = files[0]
+            reference = per_file[first] - self.offsets[first]
+            for other in files[1:]:
+                diff = per_file[other] - self.offsets[other] - reference
+                if abs(diff) > self.TOLERANCE + 1e-9:
+                    found.append((label, first, other, diff))
+        return found
+
+    def aligned_energy(self, label: str) -> float:
+        """Energy of an item in the aligned frame (from its first file).
+
+        Args:
+            label (str): item label.
+
+        Returns:
+            float: raw energy in its first file minus that file's offset.
+        """
+        per_file = self.energies[label]
+        first = min(per_file)
+        return per_file[first] - self.offsets[first]
 
 
 # TODO: Make the parsing robust to file swap on
@@ -18,7 +298,13 @@ from typing import Any, cast
 
 class MessInputReader:
     """Class that read a mess input file and transforms it into
-     an object with easily extractable data."""
+     an object with easily extractable data.
+
+    Several input files (one PES each) are read into a single SOP: items
+    with the same label in several files are one object carrying the PES
+    id of every file (their data must be identical), energies are aligned
+    between files sharing items, global keys are checked or kept per file.
+    """
     def __init__(self,
                  settings: dict,
                  mechanism_species: list[str],
@@ -60,7 +346,6 @@ class MessInputReader:
         self.force_new_molecules: bool = settings['force_new_molecules']
         self.files2copy: list[str] = []
         self.pes_files: list[list[str]] = []
-        self.dE: dict[tuple[int, int], float] = {}
         for filename in self.filenames:
             if os.path.isfile(path=filename):
                 with open(file=filename, mode='r') as f:
@@ -73,13 +358,44 @@ class MessInputReader:
         self.tpls: list[list[str]] = []
         # Set to true if a species from MESS input is not present
         # in the mechanism file and 'force_new_molecules' is False,
+        # or if the input files are not consistent with each other,
         # to trigger the stop of the program after reading the input file.
         self._trigger_stop = False
+        # Raw energy (kcal/mol) of each item in each file declaring it:
+        # {label: {file index: energy}}, aligned after all files are read.
+        self._file_energies: dict[str, dict[int, float]] = {}
+        # File index where each label was first read (error messages).
+        self._first_file: dict[str, int] = {}
+        # Items read again (another file, another bimolecular, same
+        # bimolecular twice) are parsed into throwaway copies held by this
+        # scratch SOP, then compared with the stored item:
+        # {label: (stored item or None when not compared, copy)}.
+        self._scratch: SOP = SOP(n_exp=1)
+        self._rereads: dict[str, tuple[Any, Any]] = {}
+        # Input files in which each checked global key appears.
+        self._key_files: dict[str, set[int]] = {}
+        # Lennard-Jones lines followed across the files.
+        self._colliders: dict[str, ColliderLine] = {
+            'epsilons': ColliderLine('Epsilons'),
+            'sigmas': ColliderLine('Sigmas'),
+            'masses': ColliderLine('Masses'),
+        }
+
+    def _file_label(self, fid: int) -> str:
+        """Name of an input file in messages (its path when known)."""
+        if 0 <= fid < len(self.filenames):
+            return self.filenames[fid]
+        return f'MESS input file #{fid}'
+
+    def _stop(self, msg: str) -> None:
+        """Log a consistency error and stop the run after the read."""
+        self.klog.error(msg)
+        self._trigger_stop = True
 
     def validate_species(self,
                          species: str,
                          species_type: str) -> None:
-        if species in self.mechanism_species:
+        if species in self.mechanism_species or is_fake_well_label(species):
             return
         msg: str = (
             f"{species_type} '{species}' from MESS input is not present "
@@ -105,6 +421,523 @@ class MessInputReader:
             return True
         return False
 
+    # ------------------------------------------------------------------
+    # Items read again: throwaway copies compared with the stored item
+    # ------------------------------------------------------------------
+    def _target_sop(self, name: str) -> SOP:
+        """SOP receiving the data of item ``name``: the scratch SOP while
+        the item is read again, the real SOP otherwise."""
+        if name in self._rereads:
+            return self._scratch
+        return self.SOP
+
+    def _target_item(self, name: str) -> Any:
+        """Object receiving the data of item ``name`` (see _target_sop)."""
+        return self._target_sop(name).items[name]
+
+    def _lookup(self, name: str) -> Any:
+        """Object receiving the data of item ``name``, None if unknown."""
+        return self._target_sop(name).items.get(name)
+
+    def _open_reread(self,
+                     name: str,
+                     stored: Any,
+                     copy: Any) -> None:
+        """Start reading item ``name`` again into ``copy``.
+
+        Args:
+            name (str): item label.
+            stored: item already in the SOP to compare with, or None to
+                discard the copy without comparison (after an error).
+            copy: fresh object receiving the data read now.
+        """
+        if name in self._rereads:
+            self._close_reread(name, len(self.tpls) - 1)
+        self._scratch.items[name] = copy
+        self._rereads[name] = (stored, copy)
+
+    def _close_reread(self, name: str, fid: int) -> None:
+        """Compare a re-read copy with the stored item and drop it.
+
+        Any difference stops the read (identical labels must describe
+        identical items).
+        """
+        stored, copy = self._rereads.pop(name)
+        self._scratch.items.pop(name, None)
+        if stored is None:
+            return
+        fields = stored.differing_fields(copy)
+        if fields:
+            first = self._first_file.get(name, fid)
+            self._stop(
+                f"{type(stored).__name__} {name} differs between "
+                f"{self._file_label(first)} and {self._file_label(fid)} "
+                f"in: {', '.join(fields)}.")
+
+    def _flush_rereads(self, fid: int) -> None:
+        """Compare and drop every open re-read copy (at each new item block
+        and at the end of each file)."""
+        for name in list(self._rereads):
+            self._close_reread(name, fid)
+
+    # ------------------------------------------------------------------
+    # Global keys of the header
+    # ------------------------------------------------------------------
+    def _energy_in_kcal(self,
+                        value: float,
+                        unit: str,
+                        label: str,
+                        fid: int) -> float:
+        """Convert a header energy to kcal/mol.
+
+        Args:
+            value (float): value read.
+            unit (str): unit between brackets, case-folded ('' if none).
+            label (str): keyword (messages).
+            fid (int): file index (messages).
+
+        Returns:
+            float: the value in kcal/mol, the raw value for an unknown unit
+            (with a warning).
+        """
+        if unit == '1/cm':
+            return value / _CM2KCAL
+        if unit == 'kj/mol':
+            return value / _KJ2KCAL
+        if unit in ('', 'kcal/mol'):
+            return value
+        msg = f"Unknown {label} unit '{unit}'"
+        msg += f" in {self._file_label(fid)};"
+        msg += " raw value stored."
+        self.klog.warning(msg)
+        return value
+
+    @staticmethod
+    def _unit_of(line: str) -> str:
+        """Unit between brackets of the keyword, case-folded ('' if none)."""
+        key = line.split()[0].casefold()
+        if '[' in key and ']' in key:
+            return key.split('[')[1].split(']')[0]
+        return ''
+
+    def _key_value(self,
+                   key: HeaderKey,
+                   line: str,
+                   fid: int) -> Any:
+        """Value of a header key line, in the form of ``key.kind``.
+
+        Returns:
+            The value, or None when the line has no readable value (an
+            error is logged and the read stops).
+        """
+        tokens = line.split()
+        if key.kind == 'flag_number' and (
+                len(tokens) < 2 or tokens[1].startswith(('!', '#'))):
+            return 0.0
+        if len(tokens) < 2:
+            self._stop(f"{key.label} has no value in "
+                       f"{self._file_label(fid)}.")
+            return None
+        if key.kind == 'word':
+            return tokens[1]
+        try:
+            value = float(tokens[1])
+        except ValueError:
+            self._stop(f"{key.label} value '{tokens[1]}' is not a number "
+                       f"in {self._file_label(fid)}.")
+            return None
+        if key.kind == 'energy':
+            return self._energy_in_kcal(
+                value, self._unit_of(line), key.label, fid)
+        if key.kind == 'length':
+            return (value, self._unit_of(line))
+        return value
+
+    @staticmethod
+    def _same_value(key: HeaderKey, first: Any, other: Any) -> bool:
+        """Compare two values of a same-in-all-files key (words
+        case-folded, numbers after unit conversion)."""
+        if key.kind == 'word':
+            return str(first).casefold() == str(other).casefold()
+        return math.isclose(first, other, rel_tol=1e-9, abs_tol=1e-12)
+
+    def _read_header_key(self,
+                         token: str,
+                         line: str,
+                         fid: int,
+                         tpl: list[str]) -> bool:
+        """Handle a global header line identified by its exact keyword.
+
+        Args:
+            token (str): keyword from ``_header_token``.
+            line (str): the line.
+            fid (int): file index.
+            tpl (list[str]): template of the file.
+
+        Returns:
+            bool: True when the line was handled (and added to the
+            template), False when the keyword is not a header key.
+        """
+        for key in SAME_IN_ALL_FILES_KEYS:
+            if token == key.label.casefold():
+                self._key_files.setdefault(key.label, set()).add(fid)
+                value = self._key_value(key, line, fid)
+                saved = getattr(self.SOP, key.sop_attr)
+                if value is None:
+                    pass
+                elif saved is None:
+                    setattr(self.SOP, key.sop_attr, value)
+                elif not self._same_value(key, saved, value):
+                    msg = f"Different {key.label}"
+                    msg += f" in {self._file_label(fid)}."
+                    msg += "\n"
+                    msg += f" Saved value: {saved}."
+                    self.klog.warning(msg)
+                    self._trigger_stop = True
+                tpl.append(line)
+                return True
+        for key in PER_PES_KEYS:
+            if token == key.label.casefold():
+                value = self._key_value(key, line, fid)
+                if value is not None:
+                    setattr(self.SOP.file_data(fid), key.sop_attr, value)
+                    if (key.sop_attr == 'model_ene_limit'
+                            and self.SOP.model_ene_limit is None):
+                        self.SOP.model_ene_limit = value
+                tpl.append(line)
+                return True
+        if token == 'pedspecies':
+            species: list[str] = []
+            for arg in line.split()[1:]:
+                if arg.startswith(('!', '#')):
+                    break
+                species.append(arg)
+            self.SOP.file_data(fid).ped_species = species
+            tpl.append(line)
+            return True
+        if token in MICRO_ENER_KEYS:
+            tokens = line.split()
+            numbers = _leading_numbers(tokens[1:2])
+            tpl.append(line)
+            if not numbers:
+                self._stop(f"{tokens[0]} has no value in "
+                           f"{self._file_label(fid)}.")
+                return True
+            value = self._energy_in_kcal(
+                numbers[0], self._unit_of(line), tokens[0].split('[')[0],
+                fid)
+            data = self.SOP.file_data(fid)
+            micro = list(data.micro_ener or (None, None, None))
+            micro[MICRO_ENER_KEYS[token]] = value
+            data.micro_ener = (micro[0], micro[1], micro[2])
+            return True
+        if token in OUTPUT_NAME_KEYS:
+            tpl.append(line.split()[0] + " {" + OUTPUT_NAME_ROOT + "."
+                       + OUTPUT_NAME_KEYS[token] + "}\n")
+            return True
+        return False
+
+    def _read_collider_line(self,
+                            kind: str,
+                            line: str,
+                            fid: int,
+                            tpl: list[str]) -> None:
+        """Read an ``Epsilons`` or ``Sigmas`` line.
+
+        The first number is the collider value (same in every file), the
+        second one is PES-specific: file ``fid`` stores it at index
+        ``fid + 1`` of ``SOP.epsilons``/``SOP.sigmas`` (assembled after all
+        files are read). Further numbers are a comment (MESS reads two).
+
+        Args:
+            kind (str): 'epsilons' or 'sigmas'.
+            line (str): the line.
+            fid (int): file index.
+            tpl (list[str]): template of the file.
+        """
+        collider = self._colliders[kind]
+        self._key_files.setdefault(collider.label, set()).add(fid)
+        tokens = line.split()
+        token = tokens[0].casefold()
+        numbers = _leading_numbers(tokens[1:])
+        if len(numbers) < 2:
+            self._stop(
+                f"{collider.label} needs two values (collider, then the "
+                f"value of this PES) in {self._file_label(fid)}: "
+                f"{line.strip()}")
+            tpl.append(line)
+            return
+        if collider.token is not None and token != collider.token:
+            self._stop(
+                f"{collider.label} is given as '{tokens[0]}' in "
+                f"{self._file_label(fid)} but as '{collider.token}' in the "
+                "first file: use the same unit in every file.")
+            tpl.append(line)
+            return
+        if collider.collider is None:
+            collider.collider = numbers[0]
+            collider.token = token
+        elif numbers[0] != collider.collider:
+            msg = f"Different {kind[:-1]} 0 (collider)"
+            msg += f" in {self._file_label(fid)}."
+            msg += "\n"
+            msg += f" Saved value: {collider.collider}."
+            self.klog.warning(msg)
+            self._trigger_stop = True
+            tpl.append(line)
+            return
+        collider.second_by_file[fid] = numbers[1]
+        tpl.append(tokens[0] + " {SOP.r_" + kind + "_pes[" + str(fid)
+                   + "]}\n")
+
+    def _read_masses_line(self,
+                          line: str,
+                          fid: int,
+                          tpl: list[str]) -> None:
+        """Read a ``Masses[amu]`` line: the first value (collider) must be
+        the same in every file, the others are kept per PES."""
+        collider = self._colliders['masses']
+        self._key_files.setdefault(collider.label, set()).add(fid)
+        tpl.append(line)
+        masses = _leading_numbers(line.split()[1:])
+        self.SOP.file_data(fid).masses = masses
+        if not masses:
+            return
+        if collider.collider is None:
+            collider.collider = masses[0]
+            self.SOP.masses = masses
+        elif masses[0] != collider.collider:
+            msg = "Different bath mass (collider, first value of"
+            msg += f" Masses[amu]) in {self._file_label(fid)}."
+            msg += "\n"
+            msg += " Saved value:"
+            msg += f" {collider.collider}."
+            self.klog.warning(msg)
+            self._trigger_stop = True
+        elif masses != self.SOP.masses:
+            self.klog.info(
+                f"Masses[amu] {masses} of {self._file_label(fid)} kept for "
+                "this PES (the first value, the collider, is the same in "
+                "every file).")
+
+    def _check_presence(self) -> None:
+        """Stop when a checked global key is in some files only."""
+        n_files = len(self.pes_files)
+        labels = ['Factor', 'Power', 'Epsilons', 'Sigmas', 'Masses']
+        labels += [key.label for key in SAME_IN_ALL_FILES_KEYS]
+        for label in labels:
+            present = self._key_files.get(label, set())
+            if 0 < len(present) < n_files:
+                absent = [self._file_label(fid) for fid in range(n_files)
+                          if fid not in present]
+                found = [self._file_label(fid) for fid in sorted(present)]
+                self._stop(
+                    f"{label} is set in {', '.join(found)} but absent from "
+                    f"{', '.join(absent)}: it must be in every MESS input "
+                    "file or in none.")
+
+    def _assemble_lennard_jones(self) -> None:
+        """Build SOP.epsilons and SOP.sigmas: collider first, then the
+        second value of each file at index file + 1."""
+        n_files = len(self.pes_files)
+        for kind in ('epsilons', 'sigmas'):
+            collider = self._colliders[kind]
+            if collider.collider is None:
+                continue
+            files = sorted(collider.second_by_file)
+            if files == list(range(n_files)):
+                values = [collider.collider]
+                values += [collider.second_by_file[fid]
+                           for fid in range(n_files)]
+            else:
+                # Some file lacks the line (the read already stops).
+                values = [collider.collider]
+                values += [collider.second_by_file[fid] for fid in files]
+            setattr(self.SOP, kind, values)
+
+    # ------------------------------------------------------------------
+    # Item blocks
+    # ------------------------------------------------------------------
+    def _open_well(self, name: str, fid: int) -> None:
+        """Handle a ``Well <name>`` line."""
+        existing = self.SOP.items.get(name)
+        if existing is None:
+            self.validate_species(species=name, species_type='Well')
+            self.SOP.add_new_well(name=name, pes_id=fid)
+            self._first_file[name] = fid
+            return
+        copy = Well(name=name, pes_ids=[fid])
+        if isinstance(existing, (Barrier, Bimolecular)):
+            self._stop(
+                f"Label {name} names a {type(existing).__name__} in "
+                f"{self._file_label(self._first_file.get(name, fid))} and "
+                f"a Well in {self._file_label(fid)}.")
+            self._open_reread(name, None, copy)
+            return
+        if self.SOP.check_well(name=name, pes_id=fid):
+            self._stop(
+                f"Well {name} is declared twice in {self._file_label(fid)}.")
+            self._open_reread(name, None, copy)
+            return
+        self.klog.info(f"Well {name} is shared by several MESS inputs "
+                       f"(PES ids {existing.pes_ids}).")
+        self._open_reread(name, existing, copy)
+
+    def _open_bimolecular(self, name: str, fid: int) -> None:
+        """Handle a ``Bimolecular <name>`` line."""
+        existing = self.SOP.items.get(name)
+        if existing is None:
+            self.SOP.add_new_bimol(name=name, pes_id=fid)
+            self._first_file[name] = fid
+            return
+        copy = Bimolecular(name=name, pes_ids=[fid])
+        if not isinstance(existing, Bimolecular):
+            self._stop(
+                f"Label {name} names a {type(existing).__name__} in "
+                f"{self._file_label(self._first_file.get(name, fid))} and "
+                f"a Bimolecular in {self._file_label(fid)}.")
+            self._open_reread(name, None, copy)
+            return
+        if fid in existing.pes_ids:
+            msg: str = f"Multiple Bimolecular {name} exist"
+            msg += f" in {self._file_label(fid)}."
+            self.klog.warning(msg)
+            self._trigger_stop = True
+            self._open_reread(name, None, copy)
+            return
+        self.SOP.add_new_bimol(name=name, pes_id=fid)
+        self.klog.info(f"Bimolecular {name} is shared by several MESS "
+                       f"inputs (PES ids {existing.pes_ids}).")
+        self._open_reread(name, existing, copy)
+
+    def _barrier_sides_in_file(self,
+                               name: str,
+                               sides: tuple[str, str],
+                               fid: int) -> bool:
+        """Check that both sides of a barrier are declared in its file."""
+        ok = True
+        for side in sides:
+            item = self.SOP.items.get(side)
+            if item is None or fid not in item.pes_ids:
+                self._stop(
+                    f"Barrier {name} connects {side}, which is not a Well or "
+                    f"Bimolecular declared in {self._file_label(fid)}.")
+                ok = False
+        return ok
+
+    def _open_barrier(self,
+                      name: str,
+                      lside: str,
+                      rside: str,
+                      fid: int) -> None:
+        """Handle a ``Barrier <name> <lside> <rside>`` line."""
+        existing = self.SOP.items.get(name)
+        sides_ok = self._barrier_sides_in_file(name, (lside, rside), fid)
+        if existing is None and sides_ok:
+            self.SOP.add_new_barrier(name=name, lside=lside, rside=rside,
+                                     pes_id=fid)
+            self._first_file[name] = fid
+            return
+        if isinstance(existing, Barrier):
+            copy = Barrier(name=name,
+                           lside=existing.connected[0],
+                           rside=existing.connected[1],
+                           pes_id=fid)
+        else:
+            copy = Barrier(name=name,
+                           lside=Well(name=lside, pes_ids=[]),
+                           rside=Well(name=rside, pes_ids=[]),
+                           pes_id=fid)
+        if existing is None or not sides_ok:
+            self._open_reread(name, None, copy)
+            return
+        if not isinstance(existing, Barrier):
+            self._stop(
+                f"Label {name} names a {type(existing).__name__} in "
+                f"{self._file_label(self._first_file.get(name, fid))} and "
+                f"a Barrier in {self._file_label(fid)}.")
+            self._open_reread(name, None, copy)
+            return
+        stored_sides = (existing.connected[0].name,
+                        existing.connected[1].name)
+        if stored_sides != (lside, rside):
+            self._stop(
+                f"Barrier {name} connects {stored_sides[0]} and "
+                f"{stored_sides[1]} in "
+                f"{self._file_label(self._first_file.get(name, fid))} but "
+                f"{lside} and {rside} in {self._file_label(fid)}.")
+            self._open_reread(name, None, copy)
+            return
+        if self.SOP.check_barrier(name=name, pes_id=fid):
+            self._stop(f"Barrier {name} is declared twice in "
+                       f"{self._file_label(fid)}.")
+            self._open_reread(name, None, copy)
+            return
+        self.klog.info(f"Barrier {name} is shared by several MESS inputs "
+                       f"(PES ids {existing.pes_ids}).")
+        self._open_reread(name, existing, copy)
+
+    def _open_fragment(self,
+                       bimol_name: str,
+                       fname: str,
+                       density: bool,
+                       fid: int) -> None:
+        """Handle a ``Fragment <fname> [density]`` line of a bimolecular."""
+        # Fresh object receiving the fragment data when the label was read
+        # before (compared with it) or after an error (discarded).
+        copy = Well(name=fname, pes_ids=[])
+        bim = self._lookup(bimol_name)
+        if not isinstance(bim, Bimolecular):
+            msg = f"Cannot add a fragment to non-bimol {bimol_name}."
+            msg += "\n"
+            msg += f"Error in {self._file_label(fid)}."
+            self.klog.warning(msg=msg)
+            self._trigger_stop = True
+            self._open_reread(fname, None, copy)
+            return
+        if len(bim.fragments) >= 2:
+            self.klog.warning(
+                f"Bimol{bimol_name} already has two fragments. "
+                f"Cannot add fragment {fname}.")
+            self._trigger_stop = True
+            self._open_reread(fname, None, copy)
+            return
+        existing = self.SOP.items.get(fname)
+        if existing is None and bimol_name in self._rereads:
+            # The bimolecular is read again and this fragment is unknown:
+            # the slot difference is reported when the bimolecular copy is
+            # compared with the stored one.
+            bim.attach_fragment(copy, density=density)
+            self._open_reread(fname, None, copy)
+            return
+        if existing is None:
+            self.validate_species(species=fname, species_type='Fragment')
+            # Fragments don't get a pes_id because they are not part of
+            # the same pes as the bimol
+            bim.add_new_frag(fname, density=density)
+            self.SOP.items[fname] = bim.fragments[-1]
+            self._first_file[fname] = fid
+            return
+        if isinstance(existing, Barrier):
+            msg = f"Fragment {fname} points to a barrier object."
+            self.klog.warning(msg)
+            self._trigger_stop = True
+            self._open_reread(fname, None, copy)
+            return
+        if not isinstance(existing, Well):
+            msg = f"Fragment {fname} is not a well object."
+            self.klog.warning(msg)
+            self._trigger_stop = True
+            self._open_reread(fname, None, copy)
+            return
+        if fname not in bim.frag_names and bimol_name not in self._rereads:
+            self.validate_species(species=fname, species_type='Fragment')
+        # The same species object fills the slot (shared fragment, or the
+        # same fragment twice in one bimolecular); its data is read again
+        # and compared.
+        bim.attach_fragment(existing, density=density)
+        self._open_reread(fname, existing, copy)
+
     def read(self) -> tuple[SOP, list[list[str]]]:
         """Reads a mess input file and transforms it into a
         SetOfParameter object and a mess_template file.
@@ -114,16 +947,24 @@ class MessInputReader:
             [SetOfParameters, mess_templates]
         """
         name = ''
+        fname = ''
         last_item = ''
         skip = 0
         for fid, file in enumerate(self.pes_files):
-            self.tpls.append([])
+            self.tpls.append(MessTemplate(pes_id=fid))
             tpl: list[str] = self.tpls[-1]
+            self.SOP.file_data(fid)
             for lnum, line in enumerate(file):
 
                 # Avoid writing data in template
                 if skip:
                     skip -= 1
+                    continue
+
+                # Global keys identified by their exact keyword
+                token = _header_token(line)
+                if token is not None and self._read_header_key(
+                        token, line, fid, tpl):
                     continue
 
                 # General parameters
@@ -138,12 +979,13 @@ class MessInputReader:
                         "PressureList[{SOP.pres_unit}] {SOP.r_rc_pres}\n")
                     continue
                 elif line.lstrip().casefold().startswith('factor'):
+                    self._key_files.setdefault('Factor', set()).add(fid)
                     if not hasattr(self.SOP, "factor"):
                         self.SOP.factor = float(line.split()[1])
                     else:
                         if self.SOP.factor != float(line.split()[1]):
                             self.klog.warning(
-                                f"Different factor in {self.filenames[fid]}.\
+                                f"Different factor in {self._file_label(fid)}.\
                                 Using the first one encountered: "
                                 f"{self.SOP.factor}."
                             )
@@ -151,11 +993,13 @@ class MessInputReader:
                     tpl.append(line.split()[0] + " {SOP.factor}\n")
                     continue
                 elif line.lstrip().casefold().startswith('power'):
+                    self._key_files.setdefault('Power', set()).add(fid)
                     if not hasattr(self.SOP, "power"):
                         self.SOP.power = float(line.split()[1])
                     else:
                         if self.SOP.power != float(line.split()[1]):
-                            msg = f"Different power in {self.filenames[fid]}."
+                            msg = "Different power in "
+                            msg += f"{self._file_label(fid)}."
                             msg += "\n"
                             msg += f" Saved value: {self.SOP.power}."
                             self.klog.warning(msg)
@@ -163,161 +1007,13 @@ class MessInputReader:
                     tpl.append(line.split()[0] + " {SOP.power}\n")
                     continue
                 elif line.lstrip().casefold().startswith('epsilons'):
-                    tpl.append(
-                        line.split()[0] + " {SOP.r_epsilons}\n")
-                    if len(self.SOP.epsilons) == 0:
-                        for arg in line.split()[1:]:
-                            # Avoid reading comments
-                            if arg.replace('.', ''
-                                           ).replace('-', ''
-                                                     ).isnumeric():
-                                self.SOP.epsilons.append(float(arg))
-                            else:
-                                break
-                    else:
-                        for eps_idx, arg in enumerate(line.split()[1:]):
-                            # Avoid reading comments
-                            if arg.replace('.', ''
-                                           ).replace('-', ''
-                                                     ).isnumeric():
-                                if eps_idx == 0 and \
-                                   float(arg) != self.SOP.epsilons[eps_idx]:
-                                    msg = f"Different epsilon {eps_idx}"
-                                    msg += f"in {self.filenames[fid]}."
-                                    msg += "\n"
-                                    msg += " Saved value:"
-                                    msg += f" {self.SOP.epsilons[eps_idx]}."
-                                    self.klog.warning(msg)
-                                    self._trigger_stop = True
-                            else:
-                                break
+                    self._read_collider_line('epsilons', line, fid, tpl)
                     continue
                 elif line.lstrip().casefold().startswith('sigmas'):
-                    tpl.append(line.split()[0] + " {SOP.r_sigmas}\n")
-                    if len(self.SOP.sigmas) == 0:
-                        for arg in line.split()[1:]:
-                            # Avoid reading comments
-                            if arg.replace('.', ''
-                                           ).replace('-', ''
-                                                     ).isnumeric():
-                                self.SOP.sigmas.append(float(arg))
-                            else:
-                                break
-                    else:
-                        for sig_idx, arg in enumerate(line.split()[1:]):
-                            # Avoid reading comments
-                            if arg.replace('.', ''
-                                           ).replace('-', ''
-                                                     ).isnumeric():
-                                if sig_idx == 0 and \
-                                   float(arg) != self.SOP.sigmas[sig_idx]:
-                                    msg = f"Different sigma {sig_idx}"
-                                    msg += f"in {self.filenames[fid]}."
-                                    msg += "\n"
-                                    msg += " Saved value:"
-                                    msg += f" {self.SOP.sigmas[sig_idx]}."
-                                    self.klog.warning(msg)
-                                    self._trigger_stop = True
-                            else:
-                                break
+                    self._read_collider_line('sigmas', line, fid, tpl)
                     continue
                 elif line.lstrip().casefold().startswith('masses'):
-                    tpl.append(line)
-                    masses: list[float] = []
-                    for arg in line.split()[1:]:
-                        # Avoid reading comments
-                        if arg.replace('.', ''
-                                       ).replace('-', ''
-                                                 ).isnumeric():
-                            masses.append(float(arg))
-                        else:
-                            break
-                    if len(self.SOP.masses) == 0:
-                        self.SOP.masses = masses
-                    elif (len(masses) > 0 and
-                          masses[0] != self.SOP.masses[0]):
-                        msg = "Different bath mass"
-                        msg += f" in {self.filenames[fid]}."
-                        msg += "\n"
-                        msg += " Saved value:"
-                        msg += f" {self.SOP.masses[0]}."
-                        self.klog.warning(msg)
-                        self._trigger_stop = True
-                    continue
-                elif line.lstrip().casefold().startswith(
-                        'calculationmethod'):
-                    tpl.append(line)
-                    calc_method = line.split()[1]
-                    if self.SOP.calculation_method is None:
-                        self.SOP.calculation_method = calc_method
-                    elif calc_method != self.SOP.calculation_method:
-                        msg = "Different CalculationMethod"
-                        msg += f" in {self.filenames[fid]}."
-                        msg += "\n"
-                        msg += " Saved value:"
-                        msg += f" {self.SOP.calculation_method}."
-                        self.klog.warning(msg)
-                        self._trigger_stop = True
-                    continue
-                elif line.lstrip().casefold().startswith(
-                        'modelenergylimit'):
-                    tpl.append(line)
-                    mel = float(line.split()[1])
-                    key = line.split()[0].casefold()
-                    unit = ''
-                    if '[' in key and ']' in key:
-                        unit = key.split('[')[1].split(']')[0]
-                    if unit == '1/cm':
-                        mel = mel / 349.755
-                    elif unit == 'kj/mol':
-                        mel = mel / 4.184
-                    elif unit in ('', 'kcal/mol'):
-                        pass
-                    else:
-                        msg = f"Unknown ModelEnergyLimit unit '{unit}'"
-                        msg += f" in {self.filenames[fid]};"
-                        msg += " raw value stored."
-                        self.klog.warning(msg)
-                    if self.SOP.model_ene_limit is None:
-                        self.SOP.model_ene_limit = mel
-                    elif mel != self.SOP.model_ene_limit:
-                        msg = "Different ModelEnergyLimit"
-                        msg += f" in {self.filenames[fid]}."
-                        msg += "\n"
-                        msg += " Saved value:"
-                        msg += f" {self.SOP.model_ene_limit}."
-                        self.klog.warning(msg)
-                        self._trigger_stop = True
-                    continue
-                elif line.lstrip().casefold().startswith(
-                        'excessenergyovertemperature'):
-                    tpl.append(line)
-                    eet = float(line.split()[1])
-                    if self.SOP.excess_ene_temp is None:
-                        self.SOP.excess_ene_temp = eet
-                    elif eet != self.SOP.excess_ene_temp:
-                        msg = "Different ExcessEnergyOverTemperature"
-                        msg += f" in {self.filenames[fid]}."
-                        msg += "\n"
-                        msg += " Saved value:"
-                        msg += f" {self.SOP.excess_ene_temp}."
-                        self.klog.warning(msg)
-                        self._trigger_stop = True
-                    continue
-                elif line.lstrip().casefold().startswith(
-                        'chemicaleigenvaluemax'):
-                    tpl.append(line)
-                    cem = float(line.split()[1])
-                    if self.SOP.chem_eig_max is None:
-                        self.SOP.chem_eig_max = cem
-                    elif cem != self.SOP.chem_eig_max:
-                        msg = "Different ChemicalEigenvalueMax"
-                        msg += f" in {self.filenames[fid]}."
-                        msg += "\n"
-                        msg += " Saved value:"
-                        msg += f" {self.SOP.chem_eig_max}."
-                        self.klog.warning(msg)
-                        self._trigger_stop = True
+                    self._read_masses_line(line, fid, tpl)
                     continue
 
                 # Set the name of the current item
@@ -325,23 +1021,12 @@ class MessInputReader:
                 # WELL
                 elif (line.lstrip().casefold().startswith('well') and
                       line.lstrip().casefold().split()[0] == 'well'):
+                    self._flush_rereads(fid)
                     last_item = 'well'
                     name: str = line.split()[1]
                     if self._reject_dbs_in_name(name, 'Well'):
                         continue
-                    if name not in self.SOP.items:
-                        self.validate_species(species=name,
-                                              species_type='Well')
-                        self.SOP.add_new_well(name=name,
-                                              pes_id=fid)
-                    else:
-                        error: bool = self.SOP.check_well(
-                            name=name,
-                            pes_id=fid)
-                        if error:
-                            msg = f"Well {name} already exists."
-                            self.klog.warning(msg)
-                            self._trigger_stop = True
+                    self._open_well(name, fid)
                     new_line: str = line.split()[0] \
                         + " {" \
                         + f"{name}.name" \
@@ -350,28 +1035,12 @@ class MessInputReader:
                     continue
                 # BIMOLECULAR
                 elif line.lstrip().casefold().startswith('bimolecular'):
+                    self._flush_rereads(fid)
                     last_item = 'bimo'
                     name: str = line.split()[1]
                     if self._reject_dbs_in_name(name, 'Bimolecular'):
                         continue
-                    if name not in self.SOP.items:
-                        self.SOP.add_new_bimol(name=name,
-                                               pes_id=fid)
-                    else:
-                        if fid in self.SOP.items[name].pes_ids:
-                            msg: str = f"Multiple Bimolecular {name} exist"
-                            msg += f" in {self.filenames[fid]}."
-                            self.klog.warning(msg)
-                            self._trigger_stop = True
-                        else:
-                            self.SOP.add_new_bimol(name=name,
-                                                   pes_id=fid)
-                            initial_file: int = self.SOP.items[name].pes_ids[0]
-                            msg: str = f"Bimolecular {name} already exists"
-                            msg += f" in { self.filenames[initial_file]}."
-                            self.klog.warning(msg)
-                            self.dE[(initial_file, fid)] = 0.0
-                        # self._trigger_stop = True
+                    self._open_bimolecular(name, fid)
                     new_line: str = line.split()[0] \
                         + " {" \
                         + f"{name}.name" \
@@ -380,11 +1049,13 @@ class MessInputReader:
                     continue
                 # BARRIER
                 elif line.lstrip().casefold().startswith('barrier'):
+                    self._flush_rereads(fid)
                     last_item = 'barr'
                     tokens = line.split()[1:4]
                     if len(tokens) < 3:
                         err = (
-                            f"Malformed BARRIER directive in {self.filenames[fid]} "
+                            f"Malformed BARRIER directive in "
+                            f"{self._file_label(fid)} "
                             f"at line {lnum + 1}.\n"
                             f"Expected: Barrier <name> <left_side> <right_side>\n"
                             f"Got: {line.rstrip()}\n"
@@ -396,17 +1067,7 @@ class MessInputReader:
                     name, lside, rside = tokens
                     if self._reject_dbs_in_name(name, 'Barrier'):
                         continue
-                    if name not in self.SOP.items:
-                        self.SOP.add_new_barrier(name=name,
-                                                 lside=lside,
-                                                 rside=rside,
-                                                 pes_id=fid)
-                    else:
-                        msg = f"Barrier {name} already exists"
-                        msg += f" in {self.filenames[self.SOP.items[name].pes_ids[0]]}."
-                        msg += " Duplicate barriers across input files are not allowed."
-                        self.klog.warning(msg)
-                        self._trigger_stop = True
+                    self._open_barrier(name, lside, rside, fid)
                     new_line: str = line.split()[0]
                     new_line += " {" + f"{name}.name" + "}"
                     new_line += " {" + f"{lside}.name" + "}"
@@ -418,16 +1079,16 @@ class MessInputReader:
                       and
                       line.lstrip().casefold().split()[1] == 'phasespacetheory'
                       and
-                      isinstance(self.SOP.items[name], Barrier)):
-                    bar = cast(Barrier, self.SOP.items[name])
+                      isinstance(self._lookup(name), Barrier)):
+                    bar = cast(Barrier, self._target_item(name))
                     bar.barrierless = True
                     tpl.append(line)
                     skip += self.save_phasespacetheory(name, lnum)
                     continue
                 elif (line.lstrip().casefold().startswith('core')
                       and line.lstrip().casefold().split()[1] == 'rotd'
-                      and isinstance(self.SOP.items[name], Barrier)):
-                    bar = cast(Barrier, self.SOP.items[name])
+                      and isinstance(self._lookup(name), Barrier)):
+                    bar = cast(Barrier, self._target_item(name))
                     bar.barrierless = True
                     tpl.append(line)
                     skip += self.save_rotd(name, lnum)
@@ -436,62 +1097,47 @@ class MessInputReader:
                 elif line.lstrip().casefold().startswith('fragment')\
                         and 'geom' not in line.casefold():
                     last_item = 'frag'
-                    fname: str = line.split()[1]
+                    frag_tokens = line.split()
+                    fname: str = frag_tokens[1]
                     if self._reject_dbs_in_name(fname, 'Fragment'):
                         continue
-                    if isinstance(self.SOP.items[name], Bimolecular):
-                        if len(self.SOP.items[name].fragments) < 2:
-                            if fname not in self.SOP.items[name].frag_names:
-                                self.validate_species(
-                                    species=fname,
-                                    species_type='Fragment')
-                                if fname not in self.SOP.items:
-                                    # Fragments don't get a pes_id because
-                                    # they are not part of
-                                    # the same pes as the bimol
-                                    self.SOP.items[name].add_new_frag(fname)
-                                    self.SOP.items[fname] = \
-                                        self.SOP.items[name].fragments[-1]
-                                else:
-                                    frag_item = self.SOP.items[fname]
-                                    if isinstance(frag_item, Well) and not isinstance(frag_item, Barrier):
-                                        self.SOP.items[name].fragments.append(
-                                            frag_item)
-                                    elif isinstance(frag_item, Barrier):
-                                        msg = f"Fragment {fname} points to a barrier object."
-                                        self.klog.warning(msg)
-                                        self._trigger_stop = True
-                                    else:
-                                        msg = f"Fragment {fname} is not a well object."
-                                        self.klog.warning(msg)
-                                        self._trigger_stop = True
-                            # if the bimol has twice the same fragment,
-                            # don't recreate the object
-                            else:
-                                self.SOP.items[name].fragments.append(
-                                    self.SOP.items[name].fragments[0])
-                        else:
-                            self.klog.warning(
-                                f"Bimol{name} already has two fragments. "
-                                f"Cannot add fragment {fname}.")
-                            self._trigger_stop = True
-                    else:
-                        msg = f"Cannot add a fragment to non-bimol {name}."
-                        msg += "\n"
-                        msg += f"Error in {self.filenames[fid]}."
-                        self.klog.warning(msg=msg)
-                        self._trigger_stop = True
+                    # MESS 'density' keyword of this fragment slot
+                    density = (len(frag_tokens) > 2 and
+                               frag_tokens[2].casefold() == 'density')
+                    self._open_fragment(name, fname, density, fid)
                     new_line: str = line.split()[0] \
                         + " {" \
                         + f"{fname}.name" \
-                        + "}\n"
+                        + "}" \
+                        + (" density" if density else "") \
+                        + "\n"
                     tpl.append(new_line)
+                    continue
+
+                # ATOM (fragment described by its mass and electronic
+                # levels only)
+                elif token == 'atom' and last_item == 'frag':
+                    self._target_item(fname).is_atom = True
+                    tpl.append(line)
+                    continue
+                elif (token == 'mass' and last_item == 'frag'
+                      and self._target_item(fname).is_atom):
+                    mass = float(line.split()[1])
+                    element = _atom_element(fname, mass)
+                    if element is None:
+                        self._stop(
+                            f"Atom {fname} in {self._file_label(fid)}: no "
+                            f"chemical element matches its label or its "
+                            f"mass {mass} amu.")
+                    else:
+                        self._target_item(fname).set_atom(element, mass)
+                    tpl.append(line)
                     continue
 
                 # Dummy
                 elif line.lstrip().casefold().startswith('dummy'):
                     tpl.append(line)
-                    self.SOP.items[name].dummy = True
+                    self._target_item(name).dummy = True
                     continue
 
                 # Add parameters to items
@@ -560,12 +1206,11 @@ class MessInputReader:
                 # SYMMETRY FACTOR (rigid-rotor core of a well / saddle)
                 elif line.lstrip().casefold().startswith('symmetryfactor'):
                     target = fname if last_item == 'frag' else name
-                    if target in self.SOP.items:
-                        item = self.SOP.items[target]
-                        if isinstance(item, Barrier):
-                            item._symFact = float(line.split()[1])
-                        elif isinstance(item, Well):
-                            item.sym_factor = float(line.split()[1])
+                    item = self._lookup(target)
+                    if isinstance(item, Barrier):
+                        item._symFact = float(line.split()[1])
+                    elif isinstance(item, Well):
+                        item.sym_factor = float(line.split()[1])
                     tpl.append(line)
                     continue
 
@@ -585,25 +1230,6 @@ class MessInputReader:
                 elif line.lstrip().casefold().startswith('groundenergy'):
                     # for bimolec
                     energy = float(line.split()[1])
-                    first_pes_id = self.SOP.items[name].pes_ids[0]
-                    shift_key = (first_pes_id, fid)
-                    if shift_key in self.dE:
-                        shift: float = self.dE[shift_key]
-                        current_shift = self.SOP.items[name].energy - energy
-                        if shift == 0.0:
-                            # Save the shift between PESs
-                            self.dE[shift_key] = current_shift
-                        # If a shift was already saved,
-                        # check that it's consistent with the current one
-                        elif shift != current_shift:
-                            msg = "Inconsistent energy shift for "
-                            msg += f"{name} in {self.filenames[fid]}."
-                            msg += "\n"
-                            msg += f"Previous shift: {self.dE[shift_key]}"
-                            msg += f" Current shift: {current_shift}"
-                            self.klog.warning(msg)
-                            self._trigger_stop = True
-
                     self.save_energy(name=name,
                                      energy=energy,
                                      lnum=lnum)
@@ -636,7 +1262,12 @@ class MessInputReader:
                 # All other lines
                 else:
                     tpl.append(line)
+            # Compare the items read again at the end of the file
+            self._flush_rereads(fid)
 
+        self._check_presence()
+        self._assemble_lennard_jones()
+        self._align_energies()
         for bar in self.SOP.barriers:
             for well_idx in range(len(bar.connected)):
                 # Set the enegy of dummies from tunneling logic
@@ -644,9 +1275,83 @@ class MessInputReader:
                     bar.connected[well_idx]._energy = \
                         bar.energy - bar._well_depth[well_idx]
         self._default_elec_levels()
-        self.shift_PESs()
+        self._check_atoms()
+        self._check_file_items()
         self.SOP.files2copy = self.files2copy
         return (self.SOP, self.tpls)
+
+    def _check_atoms(self) -> None:
+        """Stop when an ``Atom`` fragment has no ``Mass[amu]`` line."""
+        for label, item in self.SOP.items.items():
+            if (isinstance(item, Well) and item.is_atom
+                    and item.atom_mass is None):
+                self._stop(f"Atom {label} has no Mass[amu] line.")
+
+    def _check_file_items(self) -> None:
+        """Check the layout that maps template k to PES id k.
+
+        Every input file must own at least one well or bimolecular (its PES
+        id then exists in ``SOP.pes_ids``), and the Lennard-Jones lists
+        hold the collider plus one value per file.
+        """
+        if self._trigger_stop:
+            return
+        n_files = len(self.pes_files)
+        for fid in range(n_files):
+            if not self.SOP.wells_in(fid) and not self.SOP.bimols_in(fid):
+                self._stop(
+                    f"{self._file_label(fid)} declares no Well and no "
+                    "Bimolecular: every MESS input file must hold at least "
+                    "one of them.")
+        for kind in ('epsilons', 'sigmas'):
+            values = getattr(self.SOP, kind)
+            if len(values) not in (0, n_files + 1):
+                raise ValueError(
+                    f"SOP.{kind} holds {len(values)} values for {n_files} "
+                    "MESS input files (expected the collider plus one value "
+                    "per file).")
+
+    def _align_energies(self) -> None:
+        """Align the energies of the input files sharing items.
+
+        Sets every item's energy in the aligned frame and stores each
+        file's offset in ``SOP.pes_file_data[fid].energy_offset``, so that
+        the writers put each file back in its own energy zero.
+        """
+        anchors: set[str] = set()
+        for label in self._file_energies:
+            item = self.SOP.items.get(label)
+            if isinstance(item, Barrier) and item.barrierless:
+                continue
+            anchors.add(label)
+        alignment = PesEnergyAlignment(
+            n_files=len(self.pes_files),
+            energies=self._file_energies,
+            anchors=anchors)
+        offsets = alignment.solve()
+        for label, first, other, diff in alignment.mismatches():
+            self._stop(
+                f"Energy of {label} is not consistent between "
+                f"{self._file_label(first)} and {self._file_label(other)} "
+                f"after aligning the files ({diff:+.4f} kcal/mol, tolerance "
+                f"{PesEnergyAlignment.TOLERANCE} kcal/mol).")
+        # Aligned energies and offsets are rounded to 1e-10 kcal/mol to drop
+        # the float artefacts of the subtractions (inputs carry far fewer
+        # decimals).
+        for label in self._file_energies:
+            item = self.SOP.items.get(label)
+            if item is not None:
+                item._energy = round(alignment.aligned_energy(label), 10)
+        for fid, offset in offsets.items():
+            offset = round(offset, 10)
+            self.SOP.file_data(fid).energy_offset = offset
+            if offset != 0.0:
+                self.klog.info(
+                    f"Energies of {self._file_label(fid)} are "
+                    f"{offset:+.4f} kcal/mol above the reference file of "
+                    f"its group (through {alignment.links.get(fid)}); they "
+                    "are aligned in the SOP and written back in the file's "
+                    "own energy zero.")
 
     def save_elec_levels(self,
                          name: str,
@@ -689,7 +1394,7 @@ class MessInputReader:
             self.tpls[-1].append(line)
             read += 1
         if levels:
-            item = self.SOP.items.get(name)
+            item = self._lookup(name)
             if isinstance(item, Well):
                 item.elec_levels = levels
         return read
@@ -718,20 +1423,6 @@ class MessInputReader:
                     "defaulting to singlet [[0.0, 1]]."
                 )
 
-    def shift_PESs(self) -> None:
-        """Shift the energies of species in different
-        PESs if needed, to be able
-        to compare them and use them together in the same mechanism.
-        """
-        for (pes1, pes2), shift in self.dE.items():
-            if shift != 0.0:
-                for item in self.SOP.items.values():
-                    if pes2 in item.pes_ids:
-                        item._energy -= shift
-                msg: str = f"Shifted energies of PES {self.filenames[pes2]} by"
-                msg += f" {shift} to match PES {self.filenames[pes1]}."
-                self.klog.info(msg)
-
     def save_phasespacetheory(self,
                               name: str,
                               lnum: int) -> int:
@@ -744,7 +1435,7 @@ class MessInputReader:
         Returns:
             int: number of line to skip to not double read this core
         """
-        item = self.SOP.items[name]
+        item = self._target_item(name)
         if not isinstance(item, Barrier):
             raise TypeError(f'Expected Barrier for {name}')
         bar: Barrier = item
@@ -770,6 +1461,11 @@ class MessInputReader:
                 bar.ppe = float(line.split()[1])
                 skip += 1
                 tpl.append(line)
+            elif line.lstrip().casefold().startswith('tstlevel'):
+                # Level of the PST rate (E, EJ or T), kept as written
+                bar.tst_level = line.split()[1]
+                skip += 1
+                tpl.append(line)
             elif line.lstrip().casefold().startswith('end'):
                 return skip
             else:
@@ -791,7 +1487,7 @@ class MessInputReader:
         Returns:
             int: number of line to skip to not double read this core
         """
-        item = self.SOP.items[name]
+        item = self._target_item(name)
         if not isinstance(item, Barrier):
             raise TypeError(f'Expected Barrier for {name}')
         bar: Barrier = item
@@ -895,7 +1591,7 @@ class MessInputReader:
                 freqs.append(float(args[arg_n]))
                 arg_n += 1
             if len(freqs) == nfreq:
-                self.SOP.set_freqs(name, freqs)
+                self._target_sop(name).set_freqs(name, freqs)
                 new_line: str = " {" + f"{name}" + ".r_freq}\n"
                 self.tpls[-1].append(new_line)
                 return lnum2+1
@@ -906,11 +1602,23 @@ class MessInputReader:
                 raise TypeError(msg)
         return 0
 
+    @staticmethod
+    def _scan_placeholder(name: str, rot_num: int) -> str:
+        """Template line holding the energies of rotor ``rot_num`` of item
+        ``name``."""
+        return " {" + f"{name}" + ".r_scan" + f"({rot_num})" + "}\n"
+
     def save_rotor(self,
                    name: str,
                    lnum: int) -> int:
         """Save the next hindered rotor encountered in Mess in
         the last structure dictionary.
+
+        Reads ``Potential[kcal/mol] N`` (N energies) and
+        ``PotentialSpline[kcal/mol] N [M]`` (N angles, then N energies)
+        rotors. The energies are replaced in the template by an
+        ``{<name>.r_scan(<k>)}`` placeholder (k = index of the rotor in the
+        item); the spline angles are kept verbatim.
 
         Args:
             name (str): Object's (well, bimol, barrier) name
@@ -929,17 +1637,23 @@ class MessInputReader:
         # default
         thermalpowermax = 0.0
         scan: list[float] = []
+        # Angles of a PotentialSpline rotor (degrees)
+        angles: list[float] = []
+        is_spline: bool = False
         fexp: list[int] = []
         fcoef: list[float] = []
         npot: int = 0
         skip: int = 0
         symmetry: int = 0
         local_skip: int = 0
-        item = self.SOP.items[name]
+        item = self._target_item(name)
         if isinstance(item, Bimolecular):
             rot_num = len(item.fragments[-1].h_rotors)
         else:
             rot_num = len(item.h_rotors)
+        # Position of the r_scan placeholder in the template (its rotor
+        # index is fixed once the rotor is stored)
+        scan_line_idx: int | None = None
         saved_f: int = 0
         group: list[int] = []
         axis: list[int] = []
@@ -956,16 +1670,31 @@ class MessInputReader:
                 continue
 
             if line.lstrip().casefold().startswith('potential'):
+                is_spline = line.split()[0].casefold().startswith(
+                    'potentialspline')
                 npot = int(line.split()[1])
                 self.tpls[-1].append(line)
-                new_line: str = " {" \
-                    + f"{name}" \
-                    + ".r_scan" \
-                    + f"({rot_num})" \
-                    + "}\n"
-                self.tpls[-1].append(new_line)
+                if not is_spline:
+                    scan_line_idx = len(self.tpls[-1])
+                    self.tpls[-1].append(
+                        self._scan_placeholder(name, rot_num))
                 skip += 1
                 saved_f = 0
+                continue
+            elif npot != 0 and is_spline and len(angles) < npot:
+                # PotentialSpline: the N angles come first, verbatim
+                numbers = _leading_numbers(line.split())
+                if len(angles) + len(numbers) > npot:
+                    raise TypeError(
+                        f"Error in Messfile: a PotentialSpline line of "
+                        f"{name} mixes angles and energies.")
+                angles.extend(numbers)
+                self.tpls[-1].append(line)
+                if len(angles) == npot:
+                    scan_line_idx = len(self.tpls[-1])
+                    self.tpls[-1].append(
+                        self._scan_placeholder(name, rot_num))
+                skip += 1
                 continue
             elif npot != 0 and saved_f < npot:
                 args: list[str] = line.split()
@@ -1042,10 +1771,10 @@ class MessInputReader:
                 continue
             # END
             elif line.lstrip().casefold().startswith('end'):
-                if saved_f != npot:
+                if saved_f != npot or (is_spline and len(angles) != npot):
                     raise TypeError("Error in Messfile: wrong number of pot\
                                      for hindered rotor")
-                self.SOP.set_hrotor(
+                rot_idx = self._target_sop(name).set_hrotor(
                     name=name,
                     thermalpowermax=thermalpowermax,
                     group=group,
@@ -1054,7 +1783,11 @@ class MessInputReader:
                     scan=scan,
                     fexp=fexp,
                     fcoef=fcoef,
-                    geo=geo if geo else None)
+                    geo=geo if geo else None,
+                    spline_angles=angles if is_spline else None)
+                if scan_line_idx is not None:
+                    self.tpls[-1][scan_line_idx] = \
+                        self._scan_placeholder(name, rot_idx)
                 self.tpls[-1].append(line)
                 skip += 1
                 return skip
@@ -1087,7 +1820,7 @@ class MessInputReader:
         """
 
         skip = 0
-        item = self.SOP.items[name]
+        item = self._target_item(name)
         if isinstance(item, Bimolecular):
             rot_idx = len(item.fragments[-1].m_rotors)
         else:
@@ -1180,7 +1913,7 @@ class MessInputReader:
                 assert iem is not None
                 assert pes is not None
                 assert qlem is not None
-                self.SOP.set_mrotor(
+                self._target_sop(name).set_mrotor(
                     name=name,
                     sf=sf,
                     iem=iem,
@@ -1382,7 +2115,7 @@ class MessInputReader:
                 self._trigger_stop = True
                 break
 
-        self.SOP.set_structure(
+        self._target_sop(name).set_structure(
             name,
             symbols,
             geom,
@@ -1396,6 +2129,9 @@ class MessInputReader:
         """Save the energy of the object 'name'
         in the SOP object.
 
+        The raw value of each file is also recorded: the energies of files
+        sharing items are aligned after all files are read.
+
         Args:
             name (str): Object's (well, bimol, barrier) name
             energy (float): Energy of the object in (kcal/mol)
@@ -1403,21 +2139,31 @@ class MessInputReader:
         """
         fid: int = len(self.tpls)-1
         file: list[str] = self.pes_files[fid]
-        if isinstance(self.SOP.items[name], Barrier):
-            self.SOP.items[name]._energy = energy
+        reread = self._rereads.get(name)
+        if reread is not None and reread[0] is None:
+            # Item read again after an error: the value stays on its
+            # throwaway copy and takes no part in the alignment.
+            item = reread[1]
+            record = False
+        else:
+            item = self.SOP.items[name]
+            record = True
+        if isinstance(item, Barrier):
+            item._energy = energy
         else:
             # Do not change the energy of a specie
             # if it is encountered as a frag
             if not frag:
-                self.SOP.items[name]._energy = energy
+                item._energy = energy
         if not frag:
+            if record:
+                self._file_energies.setdefault(name, {})[fid] = energy
             new_line: str = f"{file[lnum].split()[0]}" \
                             + " {" + f"{name}" \
                             + ".energy}\n"
             self.tpls[-1].append(new_line)
         else:
             self.tpls[-1].append(file[lnum])
-
 
     def save_tunneling(self,
                        name: str,
@@ -1434,7 +2180,7 @@ class MessInputReader:
             int: number of line to skip readinding in the read method.
         """
         well_depth: list[float] = [-1.0, -1.0]
-        item = self.SOP.items[name]
+        item = self._target_item(name)
         if not isinstance(item, Barrier):
             raise TypeError(f'Expected Barrier for {name}')
         bar: Barrier = item

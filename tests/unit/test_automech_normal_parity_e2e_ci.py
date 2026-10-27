@@ -244,7 +244,8 @@ def test_dme_reader_and_payload_parity(dme) -> None:
     """dme roo input: the reader captures the header keys; masses and global
     keys in the payload equal the rendered normal input; species and saddle
     symmetry factors match; the phasespace barrier keeps its two rotor
-    geometries (no other rotor has one) and its payload has no rotor key."""
+    geometries (no other rotor has one) and its payload carries both rotors
+    with their geometry."""
     # -- test_dme_reader_captures_header_keys
     sop = dme['sop']
     assert sop.masses == [4.0, 77.0]
@@ -320,18 +321,21 @@ def test_dme_reader_and_payload_parity(dme) -> None:
         for hr in getattr(item, 'h_rotors', []):
             assert hr.geo is None, label
 
-    # -- test_dme_phasespace_payload_has_no_rotor_key
+    # -- test_dme_phasespace_payload_carries_its_rotors
     pst = next(b for b in dme['payload']['barriers']
                if b['label'] == 'CH3OCH2OO=CH3OCH2+O2')
     assert pst['kind'] == 'phasespace'
-    assert 'hind_rotors' not in pst
+    assert len(pst['hind_rotors']) == 2
+    assert [hr['geo'] for hr in pst['hind_rotors']] == [
+        [[row[0], float(row[1]), float(row[2]), float(row[3])] for row in g]
+        for g in geos]
 
 
 def test_dme_driver_hands_parsed_values_to_mess_io(dme, tmp_path, monkeypatch) -> None:
     """dme roo input through the emitted driver: global keys reach
     global_rates_input_v1, LJ masses reach collision_frequency, the saddle
     symmetry factor reaches core_rigidrotor, and wells without rotor geometry
-    emit no geo."""
+    emit no geo (only the phasespace barrier's two rotors carry one)."""
     _tmp_root = tmp_path
     _mp_root = monkeypatch
     # -- test_dme_global_keys_reach_mess_io
@@ -375,7 +379,15 @@ def test_dme_driver_hands_parsed_values_to_mess_io(dme, tmp_path, monkeypatch) -
             assert all('geo' not in hr for hr in well['hind_rotors'])
         mod._rxn_chan_str()
         assert calls.calls['rotor_hindered']
-        assert all('geo' not in k for k in calls.calls['rotor_hindered'])
+        # The phasespace barrier's rotors (with geometry) reach
+        # rotor_hindered too: exclude them from the well check.
+        pst_rotors = [hr for bar in mod.PES_PAYLOAD['barriers']
+                      if bar['kind'] == 'phasespace'
+                      for hr in bar['hind_rotors']]
+        assert len(pst_rotors) == 2
+        with_geo = [k for k in calls.calls['rotor_hindered'] if 'geo' in k]
+        assert len(with_geo) == len(pst_rotors)
+        assert len(calls.calls['rotor_hindered']) > len(with_geo)
 
 
 def test_dme_pair_species_mass_difference_does_not_stop(tmp_path) -> None:

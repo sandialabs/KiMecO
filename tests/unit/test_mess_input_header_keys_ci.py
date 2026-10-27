@@ -1,23 +1,34 @@
 """CI-safe tests for the MESS global header keys captured by the reader.
 
-``MessInputReader.read`` now records, on the SOP, the header keywords the
+``MessInputReader.read`` records, on the SOP, the header keywords the
 automech driver must forward to ``mess_io``:
 
-* ``Masses[amu]``               -> ``SOP.masses`` (bath first, species second)
+* ``Masses[amu]``               -> ``SOP.masses`` (collider first, as in the
+  MESS manual; the first file's line; each file's own line is kept in
+  ``SOP.pes_file_data[pes_id].masses``)
 * ``CalculationMethod``         -> ``SOP.calculation_method``
-* ``ModelEnergyLimit[<unit>]``  -> ``SOP.model_ene_limit`` (kcal/mol)
+* ``ModelEnergyLimit[<unit>]``  -> ``SOP.model_ene_limit`` (kcal/mol, the
+  first file's value; per PES in ``pes_file_data``)
 * ``ExcessEnergyOverTemperature`` -> ``SOP.excess_ene_temp``
 * ``ChemicalEigenvalueMax``     -> ``SOP.chem_eig_max``
 
 Contract exercised here (black-box, synthetic in-memory MESS files):
 
 * every captured line is appended verbatim to the template;
-* the first file wins; a later file that disagrees logs a warning naming the
-  file and sets ``_trigger_stop`` (only the *bath* mass, index 0, is compared
-  for ``Masses`` - the species mass legitimately differs per PES);
+* keys that must be the same in all files (CalculationMethod,
+  ExcessEnergyOverTemperature, ChemicalEigenvalueMax, ...): a later file
+  that disagrees logs one warning naming the file and sets
+  ``_trigger_stop``; a key present in some files and absent from others
+  stops too (an error naming the key; absence is a value of its own);
+* ``Masses``: only the collider mass (index 0) must be the same in every
+  file; the second value legitimately differs per PES;
+* ``ModelEnergyLimit`` is kept per PES (never compared);
 * absent keys leave the SOP defaults (``[]`` / ``None``) untouched;
 * ``ModelEnergyLimit`` is normalised to kcal/mol (``1/cm`` and ``kJ/mol``
   converted, unknown units warned about and stored raw).
+
+The per-key rules of every header key are covered in
+``test_mess_multi_pes_read_ci.py``.
 
 No MESS binary, database or automech install is needed.
 """
@@ -239,7 +250,7 @@ def _file_b(**overrides: str) -> list[str]:
 def test_consistent_files_do_not_stop(tmp_path) -> None:
     """A9 identical headers; A9b/A10 a different *species* mass is allowed
     (first file kept, no mass warning); A11b equal ModelEnergyLimit after
-    unit conversion; A11c a key only in the second file is adopted."""
+    unit conversion."""
     sop, tpls, reader = _read(tmp_path, _FILE_A, _file_b())
     assert reader._trigger_stop is False, 'a9'
     # Only the species-not-in-mechanism notices (force_new_molecules) remain.
@@ -265,18 +276,36 @@ def test_consistent_files_do_not_stop(tmp_path) -> None:
     assert sop.model_ene_limit == pytest.approx(400.0), 'a11b'
     assert reader._trigger_stop is False, 'a11b'
 
+
+
+def test_key_only_in_a_later_file_stops(tmp_path) -> None:
+    """A11c: a same-in-all-files key (or the Masses line) present in the
+    second file only stops with one error per key naming both files; the
+    per-PES ModelEnergyLimit is never reported."""
     sop, _, reader = _read(tmp_path, ['Well WA\n', 'End\n'], _file_b())
-    assert reader._trigger_stop is False, 'a11c'
-    assert sop.masses == [4.0, 61.0]
+    assert reader._trigger_stop is True, 'a11c'
+    errors = reader.klog.errors  # type: ignore[attr-defined]
+    for label in ('CalculationMethod', 'ExcessEnergyOverTemperature',
+                  'ChemicalEigenvalueMax', 'Masses'):
+        hit = [e for e in errors if e.startswith(f'{label} is set in')]
+        assert len(hit) == 1, (label, errors)
+        assert 'absent from' in hit[0]
+        assert reader.filenames[1] in hit[0].split('absent from')[0]
+        assert reader.filenames[0] in hit[0].split('absent from')[1]
+    assert not any('ModelEnergyLimit' in e for e in errors)
+    # Presence errors are errors, never "Different ..." warnings.
+    assert not any('Different' in w
+                   for w in reader.klog.warnings)  # type: ignore[attr-defined]
+    # Values are still read from the file that carries them.
     assert sop.calculation_method == 'direct'
     assert sop.model_ene_limit == 400.0
-    assert sop.excess_ene_temp == 40.0
-    assert sop.chem_eig_max == 0.2
 
 
 def test_mismatch_warns_with_filename_and_stops(tmp_path) -> None:
-    """A10b a bath-mass mismatch and A11 any scalar-key mismatch warn once
-    naming the second file and stop; the first file's values are kept."""
+    """A10b a bath-mass mismatch and A11 any same-in-all-files key mismatch
+    warn once naming the second file and stop; the first file's values are
+    kept. ModelEnergyLimit is per PES and never stops
+    (``test_mess_multi_pes_read_ci.py``)."""
     _, _, reader = _read(
         tmp_path, _FILE_A, _file_b(**{'Masses[amu]': '28.0 61.0'}))
     assert reader._trigger_stop is True
@@ -289,7 +318,6 @@ def test_mismatch_warns_with_filename_and_stops(tmp_path) -> None:
     failures: list[str] = []
     for key, value, label in (
             ('CalculationMethod', 'low-eigenvalue', 'CalculationMethod'),
-            ('ModelEnergyLimit[kcal/mol]', '800', 'ModelEnergyLimit'),
             ('ExcessEnergyOverTemperature', '30', 'ExcessEnergyOverTemperature'),
             ('ChemicalEigenvalueMax', '0.1', 'ChemicalEigenvalueMax')):
         sop, _, reader = _read(tmp_path, _FILE_A, _file_b(**{key: value}))

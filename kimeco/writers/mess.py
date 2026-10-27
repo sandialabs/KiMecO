@@ -1,4 +1,44 @@
+import os
+
 from kimeco.parameters import SOP
+
+
+#: Root of the template placeholders naming MESS side-output files
+#: (``{__output__.rate}``, ``{__output__.ped}``, ``{__output__.micro}``).
+#: An item name can never start with it (``__`` is the SOP DB separator).
+OUTPUT_NAME_ROOT = '__output__'
+
+#: Suffix appended to the stem of the written input file for each side
+#: output: ``RateOutput`` -> ``<stem>.out``, ``PEDOutput`` ->
+#: ``<stem>_ped.out``, ``MicroRateOutput`` -> ``<stem>_ke.out``. Every input
+#: file of every model thus writes its own side outputs, even when several
+#: inputs run in the same directory.
+OUTPUT_NAME_SUFFIXES: dict[str, str] = {
+    'rate': '.out',
+    'ped': '_ped.out',
+    'micro': '_ke.out',
+}
+
+
+class MessTemplate(list):
+    """MESS input template of one input file (a list of template lines).
+
+    Behaves exactly as the plain list of lines produced by the reader, and
+    also carries the PES id of the input file it was read from, so that the
+    writer can put that file's own data back (energy frame, per-file keys).
+    """
+
+    def __init__(self,
+                 lines=(),
+                 pes_id: int | None = None) -> None:
+        """Create the template.
+
+        Args:
+            lines: initial template lines.
+            pes_id (int | None): PES id (= index of the MESS input file).
+        """
+        super().__init__(lines)
+        self.pes_id: int | None = pes_id
 
 
 class MessWriter:
@@ -16,6 +56,18 @@ class MessWriter:
         # temperature/pressure placeholders (postprocessing).
         self._pres_override = pres
         self._temp_override = temp
+        # Energy offset (kcal/mol) of the template's input file: the SOP
+        # stores energies aligned on a reference file, each file is written
+        # back in its own energy zero. 0.0 for plain-list templates.
+        self._energy_offset: float = 0.0
+        pes_id = getattr(tpl, 'pes_id', None)
+        if pes_id is not None:
+            file_data = getattr(SOP, 'pes_file_data', {}).get(pes_id)
+            if file_data is not None:
+                self._energy_offset = float(file_data.energy_offset)
+        # Stem of the file being written (set by write), used to name the
+        # MESS side outputs.
+        self._stem: str | None = None
 
     @staticmethod
     def _fmt_grid(values: list[float]) -> str:
@@ -29,6 +81,22 @@ class MessWriter:
         out += '\n'
         return out
 
+    def _output_name(self, kind: str) -> str:
+        """Name of one MESS side-output file of the input being written.
+
+        Args:
+            kind (str): 'rate', 'ped' or 'micro'.
+
+        Returns:
+            str: ``<stem><suffix>``.
+        """
+        if kind not in OUTPUT_NAME_SUFFIXES:
+            raise ValueError(f'Unknown MESS output placeholder: {kind}')
+        if self._stem is None:
+            raise ValueError(
+                'MESS output names are only known while writing a file.')
+        return self._stem + OUTPUT_NAME_SUFFIXES[kind]
+
     def _resolve_placeholder(self, placeholder: str):
         if (placeholder == 'SOP.r_rc_temp'
                 and self._temp_override is not None):
@@ -40,6 +108,8 @@ class MessWriter:
             raise ValueError(f'Unsupported placeholder: {placeholder}')
 
         root_name, path = placeholder.split('.', 1)
+        if root_name == OUTPUT_NAME_ROOT:
+            return self._output_name(path)
         if root_name == 'SOP':
             value = self.SOP
         else:
@@ -70,11 +140,18 @@ class MessWriter:
             else:
                 value = getattr(value, token)
 
+        # The energy of an item ({X.energy}) is the only absolute energy of
+        # the templates: write it in the energy zero of the template's file
+        # (rounded to 1e-10 kcal/mol to drop float artefacts of the shift).
+        if (root_name != 'SOP' and path == 'energy'
+                and self._energy_offset != 0.0):
+            value = round(float(value) + self._energy_offset, 10)
         return value
 
     def write(self,
               loc: str,
               filename: str) -> None:
+        self._stem = os.path.splitext(filename)[0]
         lines = []
         for k, v in self.SOP.parameters_names.items():
             lines.append(
