@@ -18,14 +18,14 @@ This section controls perturbation model, uncertainty magnitudes, distributions,
 |---|---|---|
 | std_we | 1.0 | Well and bimolecular fragments energy uncertainty (kcal/mol). |
 | std_be | 1.5 | Barrier energy uncertainty (kcal/mol). |
-| std_ifc | 1.1 | Individual vibrational frequency multiplicative uncertainty. Multiplicative factor. |
+| std_freq | 1.1 | Individual vibrational frequency multiplicative uncertainty. Multiplicative factor. |
 | std_bfc | 1.05 | Batch vibrational frequency multiplicative uncertainty. Multiplicative factor. |
 | std_hrs | 0.1 | Hindered rotor uncertainty. Percentage. |
 | std_if | 1.1 | Imaginary frequency multiplicative uncertainty. Multiplicative factor. |
 | std_fact | 0.25 | Energy transfer factor uncertainty. Percentage. |
 | std_pow | 0.075 | Energy transfer power uncertainty. Percentage. |
 | std_epsilon | 0.1 | Lennard-Jones epsilon uncertainty. Percentage. |
-| std_sig | 0.1 | Lennard-Jones sigma uncertainty. Percentage. |
+| std_sigma | 0.1 | Lennard-Jones sigma uncertainty. Percentage. |
 | std_sfc | 2.0 | Symmetry-factor uncertainty for barrierless reactions. While the symmetry has no uncertainty, this parameter allows to scale the state density. Multiplicative factor. |
 | std_mrc | 1.5 | Multi-dimensional rotor symmetry uncertainty. While the symmetry has no uncertainty, this parameter allows to scale the state density. Multiplicative factor. |
 
@@ -49,14 +49,14 @@ Note: with this log-space reconciliation the multiplicative trust region is wide
 |---|---|---|
 | distrib_we | "normal" | Distribution for well energies. Additive class: no log distributions allowed. |
 | distrib_be | "normal" | Distribution for barrier energies. Additive class: no log distributions allowed. |
-| distrib_ifc | "log-normal" | Distribution for individual frequencies. |
+| distrib_freq | "log-normal" | Distribution for individual frequencies. |
 | distrib_bfc | "log-normal" | Distribution for batch frequencies. |
 | distrib_hrs | "normal" | Distribution for hindered rotors. |
 | distrib_if | "log-normal" | Distribution for imaginary frequencies. |
 | distrib_fact | "normal" | Distribution for energy transfer factor. |
 | distrib_pow | "normal" | Distribution for energy transfer power. Additive class restrictions apply. |
 | distrib_epsilon | "normal" | Distribution for Lennard-Jones epsilon. |
-| distrib_sig | "normal" | Distribution for Lennard-Jones sigma. |
+| distrib_sigma | "normal" | Distribution for Lennard-Jones sigma. |
 | distrib_sfc | "log-normal" | Distribution for barrierless symmetry factor. |
 | distrib_mrc | "log-normal" | Distribution for multi-dimensional rotor symmetry factor. | -->
 

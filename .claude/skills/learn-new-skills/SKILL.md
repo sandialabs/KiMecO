@@ -35,7 +35,7 @@ Do **not** create a skill when the task is a one-off, is generic knowledge (plai
 6. **Decide on `allowed-tools`.** Only for low-risk, read-only or submit-only commands, and only with the user's explicit consent. Never pre-approve `scancel`, `git push`, `git tag`, or `conda`/`anaconda upload`.
 7. **Classify the lane** (see *Lane* below) and state it in the skill.
 8. **Present the draft** (name, description, steps, lane, any `allowed-tools`) to the orchestrator, which presents it to the user. Wait for explicit approval.
-9. **After approval only**, write `.claude/skills/<name>/SKILL.md` and add an `### Added` bullet under `## [Unreleased]` in `CHANGELOG.md` (create the `[Unreleased]` heading above the latest release if it is missing).
+9. **After approval only**, write `.claude/skills/<name>/SKILL.md` and add an `### Added` bullet under `## Unreleased` in `CHANGELOG.md` (create the `## Unreleased` heading above the latest release if it is missing).
 10. **Verify**: re-read both files and confirm the frontmatter parses:
     ```bash
     python -c "import yaml,sys; t=open(sys.argv[1]).read().split('---')[1]; print(yaml.safe_load(t)['name'])" .claude/skills/<name>/SKILL.md
@@ -66,8 +66,8 @@ Add the skill to an agent's `skills:` frontmatter list only if that agent uses i
 - `.claude/skills/*/SKILL.md` — existing skills.
 - `.claude/agents/*.md`, `.github/agents/*.agent.md` — agent prompts and `skills:` preloads.
 - `.github/AGENTS.md` — pipeline overview.
-- `CHANGELOG.md` — `## [Unreleased]` section.
-- `.gitignore` — only ignores `.ipynb_checkpoints/**`, `**.ipynb`, `**.pyc`, `.DS_Store`, `dev_tests/**`, `.vscode/**`.
+- `CHANGELOG.md` — `## Unreleased` section.
+- `.gitignore` — ignores only `.ipynb_checkpoints/**`, `**.ipynb`, `**.pyc`, `.DS_Store`, `dev_tests/**`, `.vscode/**`, the local agent files (`CLAUDE.local.md`, `.claude/memory-local/`, `.claude/work/`, `.claude/settings.local.json`) and the coverage outputs (`.coverage`, `htmlcov/`, `coverage.xml`).
 
 ## Checks & pitfalls
 

@@ -47,8 +47,9 @@ verified: 2026-10-26 against working tree (uncommitted step 1 of multi-pes-mess-
   <Label> in <file>", one "bath mass" warning for Masses index 0); consistent inputs log info only.
 - `tests/unit/test_automech_driver_ci.py:884-885`: with no header keys the `global_rates_input_v1`
   kwargs are exactly temperatures, pressures, well_extension, ktp_outname.
-- Known gap: `KinMec.create_reactions` adds reactions PES by PES without dedup, so a shared item
-  gives duplicate Cantera reactions (`kimeco/kinmec.py`).
+- Known gap: `KiMec.create_reactions` adds reactions PES by PES without dedup, so a pair shared by
+  two PES gives two Cantera reactions; Cantera 3.2 `Solution(species=, reactions=)` accepts them
+  and sums the rates (only a YAML file raises "Undeclared duplicate") (`kimeco/kinmec.py`).
 
 **Why:** the logic spans the reader, SOP, both writers and RateCo; its invariants are implicit.
 **How to apply:** read before changing `MessInputReader`, `SOP` header attributes, LJ parameters,

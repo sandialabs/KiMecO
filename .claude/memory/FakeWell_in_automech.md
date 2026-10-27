@@ -291,14 +291,15 @@ The inputs in this folder, matched against the upstream history:
 
 | folders | labels | depth | dummy freqs | consistent with upstream era |
 |---|---|---|---|---|
-| `H_C4H71-3`, `H_C4H71-4`, `OH_C4H71-3`, `OH_C4H71-4` | `FW-`, `FRB<n>` / `FPB<n>` | 1 kcal/mol | old rule (see below) | Mar–Apr 2022 |
+| `H_C4H71-3`, `H_C4H71-4`, `OH_C4H71-3`, `OH_C4H71-4`, `CH3_C4H71-3`, `CH3_C4H71-4`, `2-CH3_C4H71-3` | `FW-`, `FRB<n>` / `FPB<n>` | 1 kcal/mol | old rule (see below) | Mar–Apr 2022 |
 | `2-H_C4H71-3`, `2-OH_C4H71-3`, `2-O_C4H71-3` (and `test_change_prodEN/*`) | `FakeW-`, `FakeRB3` / `FakePB3` | 1 kcal/mol | old rule (see below) | Apr–Nov 2022 |
+| `O_C4H71-3` | `FakeW-`, `FakeRB1` / `FakePB1` | 1 kcal/mol | old rule (see below) | Apr–Nov 2022 |
 
 Every fake well in these folders follows the pre-June-2024 frequency rule exactly **(verified)**:
 
 - 30/50 cm⁻¹ with an atom partner (`+H`, `+O`);
 - 30/50/70 with a linear partner (`+H2`, `+OH`);
-- 30/50/70/100/200 with `+H2O`.
+- 30/50/70/100/200 with a non-linear partner (`+H2O`, `+CH3`, `+CH4`).
 
 These eras are inferred from the upstream history only. The inputs could also come from a fork that
 mixed these features differently.

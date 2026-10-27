@@ -40,8 +40,9 @@ verified: 2026-10-26 against working tree
   near-endless loop); `n_mdl == 1` raises IndexError.
 
 **Frozen parameters**: the setting is `fixed_params` (`default_settings.py`; MANUAL calls it
-`frozen_params`). Only the linear sensitivity honours it (`sensitivity/linear.py`, two `in
-self.settings['fixed_params']` tests); GA and NM perturb exactly `active_p`. The linear sensitivity
+`frozen_params`). Only the linear sensitivity reads it (`sensitivity/linear.py`, two `in
+self.settings['fixed_params']` tests); GA and NM perturb exactly `active_p`, which `_kimeco.py` sets
+from the sensitivity selection, so fixed parameters stay frozen unless `active_p` is given directly. The linear sensitivity
 builds two models (±) per non-fixed parameter, and each model runs every PES slot.
 
 **Why:** these tables and locks are shared by GA, NM, NM swarm, postprocessing and kmoui, and their

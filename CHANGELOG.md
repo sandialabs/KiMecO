@@ -61,11 +61,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Energy alignment between several MESS inputs used the wrong sign for the shift (`shift_PESs`); it is replaced by an alignment through shared items with the sign fixed and checked.
 - `Well.add_hrotor` no longer stores the same hindered rotor twice when a fragment appears in several bimolecular species or files (this duplicated rotor parameters).
 - A `GroundEnergyShiftMax` line of a MESS input is no longer read as `GroundEnergy`.
-
-
-## Unreleased
-
-### Fixed
 - Postprocessing (`kmopp`) simulations no longer fail with `ValueError: Missing rates or tbl_map for PES 0` when the rate coefficients of the requested ensembles are already stored in `KIN_DB` for every postprocessing (P, T) condition. `Extrapolate` overrode `run_simulation()` without reloading the rates from `KIN_DB` (`RateCo.load_rates_from_db`), so the reuse branch introduced in 1.1.2 wrote every simulation script with empty `rates_by_pes`/`tbl_map_by_pes`, and each simulation was resubmitted indefinitely. The override is removed and `Extrapolate` now uses `CoreRun.run_simulation()`, which loads the stored rates on the postprocessing grid before writing the scripts. New CI test `tests/unit/test_extrapolate_run_simulation_ci.py`.
 
 

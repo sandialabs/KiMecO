@@ -323,16 +323,17 @@ This section controls perturbation model, uncertainty magnitudes, distributions,
 | weight_theory | 1.0 | Raw theory contribution weight; normalized at runtime with weight_experiments. |
 | weight_experiments | 1.0 | Raw experiment contribution weight; normalized at runtime with weight_theory. |
 | specific_std | {} | Per-parameter override map for standard deviations. An entry overrides the global `std_<ptype>` for that parameter and governs the sampling scale, the scoring weight, **and** the perturbation boundaries (trusted range): a larger value widens the accepted bounds, a smaller one tightens them. Parameters without an entry fall back to the global `std_<ptype>`. |
-| frozen_params | [] | List of parameters (strings) that are frozen and will not be perturbed. The parameters names of a system are listed at the top of the logfile after starting a run. |
+| fixed_params | [] | List of parameters (strings) that are frozen: the sensitivity analysis skips them, so they are never selected in `active_p` and the optimizers do not perturb them. A parameter listed directly in `active_p` is still perturbed. The parameters names of a system are listed at the top of the logfile after starting a run. |
 
 In `batch` frequency mode, the set of perturbed batch frequency factors is derived from the batch frequency coefficient (`bfc`) and the number of frequencies (`freq`) as `frequencies = freq * bfc**(100/freq)`. Changing this formula affects numeric results, so runs from before and after such a change are not bit-for-bit comparable.
 
-Parameters names, used in `specific_std` and `frozen_params`, are constructed by concatenating the species name, two underscores, and the parameter type. For example, `C2H5__we` is the well energy of C2H5, and `O2__we` is the well energy of O2.
+Parameters names, used in `specific_std` and `fixed_params`, are constructed by concatenating the species name, two underscores, and the parameter type. For example, `C2H5__we` is the well energy of C2H5, and `O2__we` is the well energy of O2.
 To freeze the energy of a bimolecular specie, one has to freeze the energy of its 2 fragments.
 The parameter types are:
 `we`: well energy
 `be`: barrier energy
 `bfc`: batch frequency coefficient
+`freq`: individual frequency coefficient (`freq_mode` "individual")
 `hrs`: hindered rotor scan
 `if`: imaginary frequency
 `sfc`: symmetry factor coefficient for barrierless reactions
@@ -354,14 +355,14 @@ The same is applicable to `__fact` and `__pow` for the energy transfer parameter
 |---|---|---|
 | std_we | 1.0 | Well and bimolecular fragments energy uncertainty (kcal/mol). |
 | std_be | 1.5 | Barrier energy uncertainty (kcal/mol). |
-| std_ifc | 1.1 | Individual vibrational frequency multiplicative uncertainty. Multiplicative factor. |
+| std_freq | 1.1 | Individual vibrational frequency multiplicative uncertainty. Multiplicative factor. |
 | std_bfc | 1.05 | Batch vibrational frequency multiplicative uncertainty. Multiplicative factor. |
 | std_hrs | 0.1 | Hindered rotor uncertainty. Percentage. |
 | std_if | 1.1 | Imaginary frequency multiplicative uncertainty. Multiplicative factor. |
 | std_fact | 0.25 | Energy transfer factor uncertainty. Percentage. |
 | std_pow | 0.075 | Energy transfer power uncertainty. Percentage. |
 | std_epsilon | 0.1 | Lennard-Jones epsilon uncertainty. Percentage. |
-| std_sig | 0.1 | Lennard-Jones sigma uncertainty. Percentage. |
+| std_sigma | 0.1 | Lennard-Jones sigma uncertainty. Percentage. |
 | std_sfc | 2.0 | Symmetry-factor uncertainty for barrierless reactions. While the symmetry has no uncertainty, this parameter allows to scale the state density. Multiplicative factor. |
 | std_mrc | 1.5 | Multi-dimensional rotor symmetry uncertainty. While the symmetry has no uncertainty, this parameter allows to scale the state density. Multiplicative factor. |
 
@@ -378,14 +379,14 @@ For multiplicative parameters the theory-score distance is measured in log space
 |---|---|---|
 | distrib_we | "normal" | Distribution for well energies. Additive class: no log distributions allowed. |
 | distrib_be | "normal" | Distribution for barrier energies. Additive class: no log distributions allowed. |
-| distrib_ifc | "log-normal" | Distribution for individual frequencies. |
+| distrib_freq | "log-normal" | Distribution for individual frequencies. |
 | distrib_bfc | "log-normal" | Distribution for batch frequencies. |
 | distrib_hrs | "normal" | Distribution for hindered rotors. |
 | distrib_if | "log-normal" | Distribution for imaginary frequencies. |
 | distrib_fact | "normal" | Distribution for energy transfer factor. |
 | distrib_pow | "normal" | Distribution for energy transfer power. Additive class restrictions apply. |
 | distrib_epsilon | "normal" | Distribution for Lennard-Jones epsilon. |
-| distrib_sig | "normal" | Distribution for Lennard-Jones sigma. |
+| distrib_sigma | "normal" | Distribution for Lennard-Jones sigma. |
 | distrib_sfc | "log-normal" | Distribution for barrierless symmetry factor. |
 | distrib_mrc | "log-normal" | Distribution for multi-dimensional rotor symmetry factor. | -->
 
