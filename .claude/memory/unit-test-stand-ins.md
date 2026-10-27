@@ -39,6 +39,10 @@ Copy `kimeco/`, `tests/` and `pyproject.toml` to a scratch directory, replace th
 If the new tests import names HEAD lacks (e.g. `MessTemplate`), every file fails at collection,
 which proves nothing per test: append import-only shims (the names, no behaviour) to the scratch
 HEAD copy to get a per-test verdict (step 1 of multi-pes-mess-parsing: 93/100 new cases failed).
+Copy `example/` too: `test_mess_multi_pes_write_ci.py` reads `REPO / 'example'` for the golden
+test, which otherwise fails with FileNotFoundError (not a verdict).
+Hindered-rotor scans are `np.float32` (`kimeco/rotors/hrotor.py::HinRotor.scan`): compare parsed
+potentials with `pytest.approx`, never with `==`.
 
 **Reusable helpers in other test modules** (`tests/unit/__init__.py` makes them importable as
 `from tests.unit.test_<x> import …`; import only non-`test_*` names, or pytest collects those tests

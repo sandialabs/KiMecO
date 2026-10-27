@@ -40,6 +40,15 @@ class PesFileData:
         micro_ener: (``MicroEnerMin``, ``MicroEnerMax``, ``MicroEnerStep``)
             in kcal/mol, an entry is None when its line is absent; None when
             all three are absent.
+        well_cutoff: ``WellCutoff`` value, None when absent.
+        well_reduction_threshold: ``WellReductionThreshold`` value, None
+            when absent.
+        hot_energies: ``HotEnergies`` block, as read: {well name: energies}
+            in kcal/mol, in the energy zero of this file (no energy offset,
+            no perturbation). The energies of a well are ``(value,)`` for a
+            single energy or ``(start, step, finish)`` for a range. None
+            when the file has no block. The written block is given by
+            ``SOP.shifted_hot_energies``.
     """
     energy_offset: float = 0.0
     masses: list[float] = field(default_factory=list)
@@ -48,6 +57,9 @@ class PesFileData:
     atom_distance_min: tuple[float, str] | None = None
     ped_species: list[str] | None = None
     micro_ener: tuple[float | None, float | None, float | None] | None = None
+    well_cutoff: float | None = None
+    well_reduction_threshold: float | None = None
+    hot_energies: dict[str, tuple[float, ...]] | None = None
 
 
 class SOP:
@@ -76,10 +88,13 @@ class SOP:
         # the second value is PES-specific): the first file's list. Each
         # file's own list is in pes_file_data[pes_id].masses.
         self.masses: list[float] = []
-        # Global MESS keywords (None when absent from the inputs). They hold
-        # the same value in every input file, except model_ene_limit, which
-        # is the first file's value (each file's own value is in
-        # pes_file_data[pes_id].model_ene_limit).
+        # Global MESS keywords (None when absent from the inputs). A global
+        # keyword holds one value for every PES, even when only some input
+        # files carry it (different values stop the read). model_ene_limit,
+        # well_cutoff and well_reduction_threshold are per PES: here the
+        # value of the first file carrying the key (fallback for SOPs
+        # without per-file data), each file's own value is in
+        # pes_file_data[pes_id].
         self.calculation_method: str | None = None
         self.model_ene_limit: float | None = None  # kcal/mol
         self.excess_ene_temp: float | None = None
@@ -275,6 +290,68 @@ class SOP:
             PesFileData: the data of that input file.
         """
         return self.pes_file_data.setdefault(pes_id, PesFileData())
+
+    def shifted_hot_energies(
+            self,
+            pes_id: int) -> dict[str, tuple[float, ...]] | None:
+        """``HotEnergies`` of one PES as written into its MESS input.
+
+        Each energy of a well moves with that well's perturbation (its dE),
+        so every model samples the same energies above the well bottom. For
+        a range, start and finish move and the step is unchanged. The
+        energy offset of the file is not applied: the block is read and
+        written in the file's own energy zero (dE is the same in every
+        frame).
+
+        Args:
+            pes_id (int): PES id (= index of the MESS input file).
+
+        Returns:
+            dict[str, tuple[float, ...]] | None: {well name: ``(value,)``
+            or ``(start, step, finish)``} in kcal/mol, rounded to
+            1e-10 kcal/mol; None when the file has no ``HotEnergies``
+            block.
+        """
+        file_data = self.pes_file_data.get(pes_id)
+        if file_data is None or file_data.hot_energies is None:
+            return None
+        shifted: dict[str, tuple[float, ...]] = {}
+        for name, energies in file_data.hot_energies.items():
+            d_e = float(self.items[name].dE)
+            if len(energies) == 3:
+                start, step, finish = energies
+                shifted[name] = (round(start + d_e, 10), step,
+                                 round(finish + d_e, 10))
+            else:
+                shifted[name] = tuple(round(value + d_e, 10)
+                                      for value in energies)
+        return shifted
+
+    @property
+    def r_hot_energies_pes(self) -> dict[int, str]:
+        """``HotEnergies`` block written into each input file having one.
+
+        Template placeholder: ``{SOP.r_hot_energies_pes[k]}`` (k = PES id),
+        replacing the whole block read from file k. The block holds
+        ``HotEnergies[kcal/mol] N`` and one ``<well> <energies>`` line per
+        well (a range as ``start:step:finish``), with the energies of
+        ``shifted_hot_energies``; no trailing newline.
+
+        Returns:
+            dict[int, str]: {PES id: block}, only for files with a block.
+        """
+        blocks: dict[int, str] = {}
+        for pes_id in self.pes_file_data:
+            hot_energies = self.shifted_hot_energies(pes_id)
+            if hot_energies is None:
+                continue
+            lines = [f"HotEnergies[kcal/mol] {len(hot_energies)}"]
+            for name, energies in hot_energies.items():
+                lines.append(
+                    f"{name} "
+                    + ':'.join(str(round(value, 10)) for value in energies))
+            blocks[pes_id] = '\n'.join(lines)
+        return blocks
 
     @property
     def r_rc_temp(self) -> str:

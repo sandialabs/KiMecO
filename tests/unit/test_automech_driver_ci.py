@@ -902,3 +902,41 @@ def test_globkey_forwards_header_keys_only_when_set(
             if others:
                 failures.append(f'{arg}={value!r}: also forwarded {sorted(others)}')
     assert not failures, '\n'.join(failures)
+
+
+def test_globkey_forwards_hot_energies_as_tuples(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """C2.7: a PES whose input carries HotEnergies gets ``hot_enes_dct``
+    (well name -> tuple of floats: a range as (start, step, finish), a
+    single energy as a 1-tuple), shifted by each well's dE through
+    ``SOP.shifted_hot_energies``; identical in pass 1 and pass 2; the
+    payload holds lists (a Python literal); the emitted ``_globkey_str`` is
+    brace-free (the template is rendered with ``str.format``)."""
+    from kimeco.parameters import SOP, PesFileData
+
+    sop = _FakeSOP([_FakeWell('RO2', ['C', 'O', 'O'])])
+    sop.items = {'RO2': types.SimpleNamespace(dE=0.5),
+                 'QOOH': types.SimpleNamespace(dE=-1.0)}
+    sop.pes_file_data = {0: PesFileData(
+        hot_energies={'RO2': (-5.0, 1.0, 20.0), 'QOOH': (3.0,)})}
+    sop.shifted_hot_energies = types.MethodType(SOP.shifted_hot_energies,
+                                                sop)
+    mod, rec = _load_sop(_case_dir(tmp_path, 'hot'), monkeypatch, sop)
+    assert mod.PES_PAYLOAD['hot_energies'] == {
+        'RO2': [-4.5, 1.0, 20.5], 'QOOH': [2.0]}
+    mod._globkey_str(_OUT, None)
+    mod._globkey_str(_OUT, {'RO2': 12.0})
+    first, second = rec.kwargs('global_rates_input_v1')
+    assert first['hot_enes_dct'] == {'RO2': (-4.5, 1.0, 20.5),
+                                     'QOOH': (2.0,)}
+    for values in first['hot_enes_dct'].values():
+        assert isinstance(values, tuple)
+        assert all(type(v) is float for v in values)
+    assert second['hot_enes_dct'] == first['hot_enes_dct']
+    assert second['well_extension'] == {'RO2': 12.0}
+
+    tpl = automech_kin.automech_kin_tpl
+    body = tpl[tpl.index('def _globkey_str('):]
+    body = body[:body.index('\ndef ', 1)]
+    assert 'hot_enes_dct' in body
+    assert '{' not in body and '}' not in body

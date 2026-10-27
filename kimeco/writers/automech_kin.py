@@ -21,8 +21,8 @@ When executed on the compute node the emitted script:
    header keys read from the parsed MESS input (CalculationMethod,
    ModelEnergyLimit, ExcessEnergyOverTemperature, ChemicalEigenvalueMax,
    EnergyStepOverTemperature, WellReductionThreshold, WellExtension,
-   PEDSpecies, MicroEnerMin/Max/Step) when they are present in the payload,
-   with side-output names of its own (``<name>P<slot>_ped.out``,
+   PEDSpecies, MicroEnerMin/Max/Step, HotEnergies) when they are present in
+   the payload, with side-output names of its own (``<name>P<slot>_ped.out``,
    ``<name>P<slot>_ke.out``);
 5. writes the base input, runs MESS (pass 1), moves the pass-1 output to a
    leading-underscore intermediate, and only if rate coefficients are missing
@@ -40,7 +40,10 @@ detect merged wells.
 
 Each PES is written with its own input-file data (``SOP.pes_file_data``):
 energies in the energy zero of its input file, its own Lennard-Jones pair
-(collider + its second value) and masses, and its own per-file keys.
+(collider + its second value) and masses, and its own per-file keys
+(WellReductionThreshold among them). The HotEnergies of a well move with
+that well's perturbation (``SOP.shifted_hot_energies``), with no energy
+offset: they stay in the energy zero of their input file.
 """
 
 import logging
@@ -58,6 +61,8 @@ _warn_once: set[str] = set()
 
 #: ``AtomDistanceMin`` hard-coded by mess_io's global_rates template.
 _MESS_IO_ATOM_DISTANCE_MIN = 0.68793  # angstrom
+#: ``WellCutoff`` hard-coded by mess_io's global_rates template.
+_MESS_IO_WELL_CUTOFF = 10.0
 #: Bohr radius in angstrom (AtomDistanceMin given in bohr).
 _BOHR2ANG = 0.52917721092
 
@@ -326,6 +331,13 @@ def _globkey_str(out_name, well_extension):
     if micro_ener is not None:
         kwargs["micro_out_params"] = tuple(float(v) for v in micro_ener)
         kwargs["ke_outname"] = stem + "_ke.out"
+    # HotEnergies of this PES (well name: energies in kcal/mol, one value
+    # or start, step, finish), only when its input carries the block.
+    hot_energies = PES_PAYLOAD.get("hot_energies")
+    if hot_energies is not None:
+        kwargs["hot_enes_dct"] = dict(
+            (name, tuple(float(v) for v in values))
+            for name, values in hot_energies.items())
     globkey_str = global_rates_input_v1(**kwargs)
     old = "PressureList[atm]"
     new = "PressureList[" + PRES_UNIT + "]"
@@ -662,7 +674,7 @@ class AutomechKinWriter:
         writes with its own hard-coded value in the automech input.
 
         Checked: this PES's AtomDistanceMin (mess_io: 0.68793 angstrom) and
-        the SOP-wide WellCutoff (10), ReductionMethod (diagonalization),
+        WellCutoff (10), and the SOP-wide ReductionMethod (diagonalization),
         GroundEnergyShiftMax (10 kcal/mol) and FloatType (double).
         """
         pes_data = self._pes_file_data()
@@ -676,16 +688,26 @@ class AutomechKinWriter:
                     'input is not used by the automech driver: mess_io '
                     f'writes AtomDistanceMin {_MESS_IO_ATOM_DISTANCE_MIN} '
                     '[angstrom].')
-        for label, attr, mess_io_value in (
-                ('WellCutoff', 'well_cutoff', 10.0),
-                ('GroundEnergyShiftMax', 'ground_ene_shift_max', 10.0)):
-            value = getattr(self.sop, attr, None)
-            if value is not None and float(value) != mess_io_value:
-                _log_once(
-                    f'{label}:{value}',
-                    f'{label} {value} read from the MESS inputs is not used '
-                    f'by the automech driver: mess_io writes {label} '
-                    f'{mess_io_value:g}.')
+        # WellCutoff is per PES: this file's own value (None: no warning),
+        # SOP-wide value for SOPs without file data.
+        if pes_data is not None:
+            well_cutoff = pes_data.well_cutoff
+        else:
+            well_cutoff = getattr(self.sop, 'well_cutoff', None)
+        if (well_cutoff is not None
+                and float(well_cutoff) != _MESS_IO_WELL_CUTOFF):
+            _log_once(
+                f'WellCutoff:{self.pes_id}:{well_cutoff}',
+                f'WellCutoff {well_cutoff} read from the MESS input of PES '
+                f'{self.pes_id} is not used by the automech driver: mess_io '
+                f'writes WellCutoff {_MESS_IO_WELL_CUTOFF:g}.')
+        value = getattr(self.sop, 'ground_ene_shift_max', None)
+        if value is not None and float(value) != 10.0:
+            _log_once(
+                f'GroundEnergyShiftMax:{value}',
+                f'GroundEnergyShiftMax {value} read from the MESS inputs is '
+                'not used by the automech driver: mess_io writes '
+                'GroundEnergyShiftMax 10.')
         for label, attr, mess_io_value in (
                 ('ReductionMethod', 'reduction_method', 'diagonalization'),
                 ('FloatType', 'float_type', 'double')):
@@ -777,15 +799,18 @@ class AutomechKinWriter:
         }
         # Optional keys, only when the inputs carry them (mess_io keeps its
         # own defaults otherwise).
-        for key, value in (
-                ('ene_stepover_temp',
-                 getattr(self.sop, 'ene_step_over_temp', None)),
-                ('well_red_thresh',
-                 getattr(self.sop, 'well_reduction_threshold', None))):
-            if value is not None:
-                payload[key] = float(value)
+        ene_step_over_temp = getattr(self.sop, 'ene_step_over_temp', None)
+        if ene_step_over_temp is not None:
+            payload['ene_stepover_temp'] = float(ene_step_over_temp)
         if pes_data is not None:
             self._add_file_keys(payload, pes_data)
+        else:
+            # WellReductionThreshold is per PES (_add_file_keys); SOP-wide
+            # value for SOPs without file data.
+            well_red_thresh = getattr(self.sop, 'well_reduction_threshold',
+                                      None)
+            if well_red_thresh is not None:
+                payload['well_red_thresh'] = float(well_red_thresh)
         return payload
 
     def _add_file_keys(self,
@@ -794,8 +819,11 @@ class AutomechKinWriter:
         """Add this PES's own input-file data to the payload.
 
         Energies are shifted back to the energy zero of the PES's input file;
-        WellExtension, PEDSpecies and MicroEnerMin/Max/Step are added only
-        when the file carries them.
+        WellExtension, WellReductionThreshold, PEDSpecies,
+        MicroEnerMin/Max/Step and HotEnergies are added only when the file
+        carries them (the key is then absent from the payload, never None).
+        HotEnergies move with the perturbation of their well
+        (``SOP.shifted_hot_energies``), without the energy offset.
 
         Args:
             payload (dict[str, Any]): payload being built (modified).
@@ -815,6 +843,14 @@ class AutomechKinWriter:
                     bar_payload['zero_ene'] + offset, 10)
         if pes_data.well_extension is not None:
             payload['well_extension'] = float(pes_data.well_extension)
+        if pes_data.well_reduction_threshold is not None:
+            payload['well_red_thresh'] = float(
+                pes_data.well_reduction_threshold)
+        if pes_data.hot_energies is not None:
+            hot_energies = self.sop.shifted_hot_energies(self.pes_id) or {}
+            payload['hot_energies'] = {
+                name: [float(value) for value in energies]
+                for name, energies in hot_energies.items()}
         if pes_data.ped_species is not None:
             payload['ped_species'] = list(pes_data.ped_species)
         micro_ener = pes_data.micro_ener

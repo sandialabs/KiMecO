@@ -52,6 +52,29 @@ class Perturbator:
             ptype: self.settings[f'distrib_{ptype.value}'] for ptype in Ptype
             if f'distrib_{ptype.value}' in self.settings
         }
+        # Wells and fragments already perturbed during the current call of
+        # perturb, keyed by id() (object identity, also for unhashable
+        # stand-ins; the value keeps the object alive so its id is not
+        # reused). One species may be a well of one PES and a fragment of
+        # bimoleculars of others: it is one item, perturbed once per call.
+        self._perturbed_in_cycle: dict[int, Well] = {}
+
+    def already_perturbed(self,
+                          item: Well) -> bool:
+        """Tell whether an item was already perturbed in the current call
+        of ``perturb``, and record it as perturbed.
+
+        Args:
+            item (Well): well or bimolecular fragment about to be perturbed.
+
+        Returns:
+            bool: True when the item was already perturbed in this call (it
+            must be skipped), False the first time (now recorded).
+        """
+        if id(item) in self._perturbed_in_cycle:
+            return True
+        self._perturbed_in_cycle[id(item)] = item
+        return False
 
     def print_pert_parameters(self) -> None:
         msg = 'Perturbation settings:\n'
@@ -89,8 +112,9 @@ class Perturbator:
         mult = self.settings['max_std']
         bounds: tuple[float, float]
         std_p: str = 'std_' + ptype
-        resolved_std = self.i_sop.uncertainties.get(param,
-                                                    self.settings[std_p])
+        resolved_std = self.i_sop.uncertainties.get(
+            param,
+            self.settings[std_p])
         if ptype in self.additive:
             bounds = (i_val - resolved_std * mult,
                       i_val + resolved_std * mult)
@@ -227,6 +251,8 @@ class Perturbator:
         Returns:
             SOP: Perturbed SOP
         """
+        # A new perturbation cycle: every item may be perturbed once again
+        self._perturbed_in_cycle = {}
 
         if dbs+Ptype.ETF.value in self.select:
             try_fact = -1
@@ -306,6 +332,9 @@ class Perturbator:
 
     def perturb_well(self,
                      well: Well) -> None:
+        # Skip a well already perturbed in this call (e.g. listed twice)
+        if self.already_perturbed(well):
+            return
         self.perturb_energy(item=well)
         self.perturb_vibrations(well=well)
         self.perturb_hindered_rotors(well=well)
@@ -325,6 +354,10 @@ class Perturbator:
     def perturb_bimolecular(self,
                             bim: Bimolecular) -> None:
         for well in bim.fragments:
+            # A fragment shared with other bimoleculars, or that is a well
+            # of another PES, is perturbed once per call of perturb
+            if self.already_perturbed(well):
+                continue
             self.perturb_energy(item=well)
             self.perturb_vibrations(well=well)
             self.perturb_hindered_rotors(well=well)

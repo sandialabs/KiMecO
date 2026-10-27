@@ -38,6 +38,10 @@ verified: 2026-10-26 against working tree
   G0001 is never built and the ensemble is empty.
 - `Exponential.create_next_gen`: a median score of 0 gives NaN probabilities (IndexError or a
   near-endless loop); `n_mdl == 1` raises IndexError.
+- (Added 2026-10-27) `SOP.update` raises `KeyError` ("Unexpected IFC parameter for non-barrier
+  item") for an `ifcNN` key of any non-Barrier item, although wells in `FreqMode.INDIVIDUAL` expose
+  `{name}__ifcNN` (`kimeco/well.py::Well.freq_dict`). Every restore goes `from_db_row` → `update`
+  (restart, kmopp, NM seeding), so such a project cannot be restored. No test pins it.
 
 **Frozen parameters**: the setting is `fixed_params` (`default_settings.py`; MANUAL calls it
 `frozen_params`). Only the linear sensitivity reads it (`sensitivity/linear.py`, two `in

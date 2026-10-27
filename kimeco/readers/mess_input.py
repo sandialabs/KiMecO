@@ -11,6 +11,7 @@ from kimeco.writers.mess import MessTemplate, OUTPUT_NAME_ROOT
 
 import math
 import os
+import re
 import sys
 from collections import deque
 from dataclasses import dataclass
@@ -27,6 +28,32 @@ FAKE_WELL_PREFIXES: tuple[str, ...] = ('FW-', 'FakeW-')
 #: kcal/mol conversion factors of the energy units accepted in MESS headers
 _CM2KCAL = 349.755
 _KJ2KCAL = 4.184
+
+#: A plain decimal number, with an optional sign and an optional exponent
+#: (``1``, ``-1.5``, ``.5``, ``4.32982E-05``). ``nan`` and ``inf`` are not
+#: numbers for the reader.
+_NUMBER_RE = re.compile(r'[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?')
+
+#: Units accepted by MESS after ``HotEnergies`` (case-folded); MESS has no
+#: unitless form of the key.
+HOT_ENERGY_UNITS: tuple[str, ...] = ('kcal/mol', '1/cm', 'kj/mol')
+
+#: Characters separating start, step and finish of a ``HotEnergies`` range
+#: (``start<sep>step<sep>finish``), as in MESS.
+_HOT_RANGE_SEPARATORS = ':;,&%$@#'
+
+
+def _is_number(token: str) -> bool:
+    """Tell whether a token is a number of a MESS input.
+
+    Args:
+        token (str): one whitespace-separated token.
+
+    Returns:
+        bool: True for a decimal number, E-notation included; False for any
+        other token, ``nan`` and ``inf`` included.
+    """
+    return _NUMBER_RE.fullmatch(token) is not None
 
 
 def is_fake_well_label(name: str) -> bool:
@@ -72,7 +99,7 @@ def _leading_numbers(tokens: list[str]) -> list[float]:
     """
     numbers: list[float] = []
     for arg in tokens:
-        if arg.replace('.', '').replace('-', '').isnumeric():
+        if _is_number(arg):
             numbers.append(float(arg))
         else:
             break
@@ -108,8 +135,9 @@ class HeaderKey:
 
     Attributes:
         label: keyword as written in MESS (e.g. ``'WellCutoff'``).
-        sop_attr: attribute storing the value, on ``SOP`` for keys that must
-            be the same in all files, on ``PesFileData`` for per-PES keys.
+        sop_attr: attribute storing the value, on ``SOP`` for global keys
+            (one value for every PES), on ``PesFileData`` for per-PES keys
+            (also on ``SOP`` for those in ``_SOP_FALLBACK_ATTRS``).
         kind: how the value is read and compared: ``'number'`` (float),
             ``'energy'`` (float in kcal/mol after unit conversion),
             ``'word'`` (string, compared case-folded), ``'length'``
@@ -121,18 +149,16 @@ class HeaderKey:
     kind: str
 
 
-#: Keys that must hold the same value in every input file. A different
-#: value, or the key present in some files and absent from others, stops
-#: the read (absence is a value of its own: MESS defaults are not assumed).
+#: Global keys: one value for every PES. A different value in two files
+#: stops the read. A key present in some files only does not stop it: its
+#: value holds for every PES, and its line (as written in the first file
+#: carrying it) is added to the templates of the files without it.
 SAME_IN_ALL_FILES_KEYS: tuple[HeaderKey, ...] = (
     HeaderKey('CalculationMethod', 'calculation_method', 'word'),
     HeaderKey('EnergyStepOverTemperature', 'ene_step_over_temp', 'number'),
     HeaderKey('ExcessEnergyOverTemperature', 'excess_ene_temp', 'number'),
     HeaderKey('ChemicalEigenvalueMax', 'chem_eig_max', 'number'),
-    HeaderKey('WellReductionThreshold', 'well_reduction_threshold',
-              'number'),
     HeaderKey('ExponentCutoff', 'exp_cutoff', 'number'),
-    HeaderKey('WellCutoff', 'well_cutoff', 'number'),
     HeaderKey('ReductionMethod', 'reduction_method', 'word'),
     HeaderKey('GroundEnergyShiftMax', 'ground_ene_shift_max', 'energy'),
     HeaderKey('FloatType', 'float_type', 'word'),
@@ -144,7 +170,33 @@ PER_PES_KEYS: tuple[HeaderKey, ...] = (
     HeaderKey('ModelEnergyLimit', 'model_ene_limit', 'energy'),
     HeaderKey('AtomDistanceMin', 'atom_distance_min', 'length'),
     HeaderKey('WellExtension', 'well_extension', 'flag_number'),
+    HeaderKey('WellCutoff', 'well_cutoff', 'number'),
+    HeaderKey('WellReductionThreshold', 'well_reduction_threshold',
+              'number'),
 )
+
+#: Per-PES keys whose value is also stored on the SOP: the value of the
+#: first file carrying the key (fallback for SOPs without per-file data).
+_SOP_FALLBACK_ATTRS: tuple[str, ...] = (
+    'model_ene_limit', 'well_cutoff', 'well_reduction_threshold')
+
+#: Where a missing global line is added into a template (see
+#: ``SAME_IN_ALL_FILES_KEYS``): {key label: (anchor keyword, True to insert
+#: right after the anchor line, False right before it)}. Keys of the global
+#: section go before ``Model`` (at the top of the template when there is no
+#: ``Model`` line); ``GroundEnergyShiftMax`` is a key of the ``Model``
+#: section; MESS reads ``ExponentCutoff`` inside the ``Exponential``
+#: energy-transfer kernel (MESS ``libmess/model.cc``).
+_MISSING_LINE_ANCHORS: dict[str, tuple[str, bool]] = {
+    'CalculationMethod': ('Model', False),
+    'EnergyStepOverTemperature': ('Model', False),
+    'ExcessEnergyOverTemperature': ('Model', False),
+    'ChemicalEigenvalueMax': ('Model', False),
+    'ReductionMethod': ('Model', False),
+    'FloatType': ('Model', False),
+    'GroundEnergyShiftMax': ('Model', True),
+    'ExponentCutoff': ('Exponential', True),
+}
 
 #: MESS output-file keywords and the ``{__output__.<kind>}`` placeholder
 #: kind the template gets instead of the file name (each written input
@@ -374,6 +426,10 @@ class MessInputReader:
         self._rereads: dict[str, tuple[Any, Any]] = {}
         # Input files in which each checked global key appears.
         self._key_files: dict[str, set[int]] = {}
+        # Line of each global key (SAME_IN_ALL_FILES_KEYS label) as written
+        # in the first file carrying it: copied into the templates of the
+        # files without the key.
+        self._key_lines: dict[str, str] = {}
         # Lennard-Jones lines followed across the files.
         self._colliders: dict[str, ColliderLine] = {
             'epsilons': ColliderLine('Epsilons'),
@@ -581,6 +637,7 @@ class MessInputReader:
         for key in SAME_IN_ALL_FILES_KEYS:
             if token == key.label.casefold():
                 self._key_files.setdefault(key.label, set()).add(fid)
+                self._key_lines.setdefault(key.label, line)
                 value = self._key_value(key, line, fid)
                 saved = getattr(self.SOP, key.sop_attr)
                 if value is None:
@@ -601,9 +658,9 @@ class MessInputReader:
                 value = self._key_value(key, line, fid)
                 if value is not None:
                     setattr(self.SOP.file_data(fid), key.sop_attr, value)
-                    if (key.sop_attr == 'model_ene_limit'
-                            and self.SOP.model_ene_limit is None):
-                        self.SOP.model_ene_limit = value
+                    if (key.sop_attr in _SOP_FALLBACK_ATTRS
+                            and getattr(self.SOP, key.sop_attr) is None):
+                        setattr(self.SOP, key.sop_attr, value)
                 tpl.append(line)
                 return True
         if token == 'pedspecies':
@@ -636,6 +693,169 @@ class MessInputReader:
                        + OUTPUT_NAME_KEYS[token] + "}\n")
             return True
         return False
+
+    def _read_hot_energies(self,
+                           line: str,
+                           lnum: int,
+                           fid: int,
+                           tpl: list[str]) -> int:
+        """Read a ``HotEnergies`` block into ``PesFileData.hot_energies``.
+
+        MESS grammar (``mess_driver.cc``): ``HotEnergies[<unit>] N``, unit
+        kcal/mol, 1/cm or kJ/mol, then N species lines ``<well> <token>``,
+        token = one energy or a range ``start<sep>step<sep>finish`` (sep:
+        one of ``:;,&%$@#``). Blank and comment lines are skipped, ``End``
+        ends the block early. The energies are stored in kcal/mol, as read
+        (this file's energy zero), and the whole block is replaced in the
+        template by ``{SOP.r_hot_energies_pes[<fid>]}``.
+
+        Any error stops the read (one message naming HotEnergies and the
+        file); the lines read so far are then kept verbatim in the template
+        and the offending line is left to the main loop.
+
+        Args:
+            line (str): the ``HotEnergies`` key line.
+            lnum (int): its line number in the file.
+            fid (int): file index.
+            tpl (list[str]): template of the file.
+
+        Returns:
+            int: number of lines after the key line consumed by the block
+            (skipped by the main loop).
+        """
+        where = f"HotEnergies of {self._file_label(fid)}"
+        unit = self._unit_of(line)
+        if unit not in HOT_ENERGY_UNITS:
+            self._stop(
+                f"{where}: '{line.split()[0]}' has no accepted unit; MESS "
+                "reads HotEnergies[kcal/mol], HotEnergies[1/cm] or "
+                "HotEnergies[kJ/mol].")
+            tpl.append(line)
+            return 0
+        tokens = line.split()
+        count_token = tokens[1] if len(tokens) > 1 else ''
+        try:
+            count = int(count_token)
+        except ValueError:
+            count = 0
+        if count <= 0:
+            self._stop(f"{where}: the number of species '{count_token}' "
+                       "is not a positive integer.")
+            tpl.append(line)
+            return 0
+        energies: dict[str, tuple[float, ...]] = {}
+        # Lines of the block read so far (kept verbatim on error)
+        block_lines: list[str] = []
+        n_species = 0
+        error: str | None = None
+        for block_line in self.pes_files[fid][lnum + 1:]:
+            if n_species == count:
+                break
+            # Words of the line before any comment
+            words: list[str] = []
+            for word in block_line.split():
+                if word.startswith(('!', '#')):
+                    break
+                words.append(word)
+            if not words:
+                block_lines.append(block_line)
+                continue
+            if words[0].casefold() == 'end':
+                block_lines.append(block_line)
+                break
+            name = words[0]
+            if len(words) == 1:
+                error = (f"{where}: no energy given for {name} (species "
+                         f"line {n_species + 1} of the {count} announced).")
+                break
+            if len(words) > 2:
+                error = (f"{where}: {name} has {len(words) - 1} energy "
+                         "tokens; give one energy or one start:step:finish "
+                         "range per species line.")
+                break
+            if name in energies:
+                error = f"{where}: {name} is given twice."
+                break
+            try:
+                energies[name] = self._hot_energy_values(words[1], unit, fid)
+            except ValueError as exc:
+                error = f"{where}: {name}: {exc}"
+                break
+            block_lines.append(block_line)
+            n_species += 1
+        data = self.SOP.file_data(fid)
+        if error is None and n_species != count:
+            error = (f"{where}: {count} species announced but "
+                     f"{n_species} species lines read.")
+        if error is None and data.hot_energies is not None:
+            error = f"{where}: the file holds two HotEnergies blocks."
+        if error is not None:
+            self._stop(error)
+            tpl.append(line)
+            tpl.extend(block_lines)
+            return len(block_lines)
+        data.hot_energies = energies
+        tpl.append("{SOP.r_hot_energies_pes[" + str(fid) + "]}\n")
+        return len(block_lines)
+
+    def _hot_energy_values(self,
+                           token: str,
+                           unit: str,
+                           fid: int) -> tuple[float, ...]:
+        """Energies of one ``HotEnergies`` species line, in kcal/mol.
+
+        Args:
+            token (str): one energy, or ``start<sep>step<sep>finish``.
+            unit (str): unit of the block (one of ``HOT_ENERGY_UNITS``).
+            fid (int): file index (messages).
+
+        Returns:
+            tuple[float, ...]: ``(value,)`` or ``(start, step, finish)``.
+
+        Raises:
+            ValueError: the token is not an energy or a valid range (the
+                message explains why).
+        """
+        parts = re.split('[' + re.escape(_HOT_RANGE_SEPARATORS) + ']', token)
+        if len(parts) == 2:
+            raise ValueError(
+                f"'{token}' has one separator; a range is "
+                "start<sep>step<sep>finish.")
+        if len(parts) > 3 or not all(_is_number(part) for part in parts):
+            raise ValueError(f"'{token}' is not an energy or a "
+                             "start<sep>step<sep>finish range.")
+        values = tuple(
+            self._energy_in_kcal(float(part), unit, 'HotEnergies', fid)
+            for part in parts)
+        if len(values) == 3:
+            start, step, finish = values
+            if step <= 0.0:
+                raise ValueError(f"the step of '{token}' must be positive.")
+            if finish < start:
+                raise ValueError(f"the range '{token}' holds no energy "
+                                 "(finish below start).")
+        return values
+
+    def _check_hot_species(self, fid: int) -> None:
+        """Stop when a ``HotEnergies`` species of file ``fid`` is not a Well
+        of that file.
+
+        A well of this file that is also a bimolecular fragment in another
+        file (one shared item) is accepted.
+
+        Args:
+            fid (int): file index (called once the file is read).
+        """
+        hot_energies = self.SOP.file_data(fid).hot_energies
+        if not hot_energies:
+            return
+        wells_here = self.SOP.wells_in(fid)
+        for name in hot_energies:
+            item = self.SOP.items.get(name)
+            if not any(well is item for well in wells_here):
+                self._stop(f"HotEnergies species {name} of "
+                           f"{self._file_label(fid)} is not a Well of this "
+                           "file.")
 
     def _read_collider_line(self,
                             kind: str,
@@ -721,10 +941,14 @@ class MessInputReader:
                 "every file).")
 
     def _check_presence(self) -> None:
-        """Stop when a checked global key is in some files only."""
+        """Stop when a collision-model line (``Factor``, ``Power``,
+        ``Epsilons``, ``Sigmas``, ``Masses``) is in some files only.
+
+        The global keys of ``SAME_IN_ALL_FILES_KEYS`` may be in some files
+        only (see ``_add_missing_global_lines``).
+        """
         n_files = len(self.pes_files)
         labels = ['Factor', 'Power', 'Epsilons', 'Sigmas', 'Masses']
-        labels += [key.label for key in SAME_IN_ALL_FILES_KEYS]
         for label in labels:
             present = self._key_files.get(label, set())
             if 0 < len(present) < n_files:
@@ -735,6 +959,71 @@ class MessInputReader:
                     f"{label} is set in {', '.join(found)} but absent from "
                     f"{', '.join(absent)}: it must be in every MESS input "
                     "file or in none.")
+
+    def _add_missing_global_lines(self) -> None:
+        """Use a global key read in some files only for every PES.
+
+        For each key of ``SAME_IN_ALL_FILES_KEYS`` present in some files
+        only, its line as written in the first file carrying it is added to
+        the template of every file without it (see
+        ``_MISSING_LINE_ANCHORS`` for the place), so that the template path
+        computes every PES with the same value as the automech path. One
+        info message per completed file.
+        """
+        n_files = len(self.pes_files)
+        added: dict[int, list[str]] = {}
+        for key in SAME_IN_ALL_FILES_KEYS:
+            present = self._key_files.get(key.label, set())
+            if not present or len(present) == n_files:
+                continue
+            line = self._key_lines[key.label]
+            if not line.endswith('\n'):
+                line += '\n'
+            for fid in range(n_files):
+                if fid in present:
+                    continue
+                if self._insert_global_line(key.label, line, fid):
+                    added.setdefault(fid, []).append(line.strip())
+        for fid, lines in added.items():
+            self.klog.info(
+                f"Global keys absent from {self._file_label(fid)} are "
+                "taken from the other MESS inputs (one value for every "
+                f"PES) and added to its template: {'; '.join(lines)}.")
+
+    def _insert_global_line(self,
+                            label: str,
+                            line: str,
+                            fid: int) -> bool:
+        """Insert the line of a global key into the template of one file.
+
+        Args:
+            label (str): key label (``SAME_IN_ALL_FILES_KEYS``).
+            line (str): line to insert (ends with a newline).
+            fid (int): index of the file lacking the key.
+
+        Returns:
+            bool: True when inserted; False when the template has no line
+            to anchor a key of the ``Model`` section to (the read stops).
+        """
+        anchor, after = _MISSING_LINE_ANCHORS[label]
+        tpl = self.tpls[fid]
+        position = next(
+            (idx for idx, tpl_line in enumerate(tpl)
+             if _header_token(tpl_line) == anchor.casefold()), None)
+        if position is None and after:
+            found = [self._file_label(other) for other in
+                     sorted(self._key_files.get(label, set()))]
+            self._stop(
+                f"{label} is set in {', '.join(found)} but absent from "
+                f"{self._file_label(fid)}, which has no {anchor} line to "
+                "add it to.")
+            return False
+        if position is None:
+            position = 0
+        elif after:
+            position += 1
+        tpl.insert(position, line)
+        return True
 
     def _assemble_lennard_jones(self) -> None:
         """Build SOP.epsilons and SOP.sigmas: collider first, then the
@@ -963,6 +1252,10 @@ class MessInputReader:
 
                 # Global keys identified by their exact keyword
                 token = _header_token(line)
+                # HotEnergies block: the key line and its species lines
+                if token == 'hotenergies':
+                    skip += self._read_hot_energies(line, lnum, fid, tpl)
+                    continue
                 if token is not None and self._read_header_key(
                         token, line, fid, tpl):
                     continue
@@ -1264,8 +1557,11 @@ class MessInputReader:
                     tpl.append(line)
             # Compare the items read again at the end of the file
             self._flush_rereads(fid)
+            # HotEnergies species must be wells of this file (now all read)
+            self._check_hot_species(fid)
 
         self._check_presence()
+        self._add_missing_global_lines()
         self._assemble_lennard_jones()
         self._align_energies()
         for bar in self.SOP.barriers:
@@ -1533,10 +1829,7 @@ class MessInputReader:
             args: list[str] = file[lnum].split()
             temp_list: list = []
             arg_n = 1
-            # There should be no negative numbers in the list
-            while arg_n < len(args) and\
-                    args[arg_n].replace(".", "")\
-                               .isnumeric():
+            while arg_n < len(args) and _is_number(args[arg_n]):
                 temp_list.append(float(args[arg_n]))
                 arg_n += 1
             self.SOP.temp = temp_list
@@ -1554,10 +1847,7 @@ class MessInputReader:
             args: list[str] = file[lnum].split()
             pres_list: list = []
             arg_n = 1
-            # There should be no negative numbers in the list
-            while arg_n < len(args) and\
-                    args[arg_n].replace(".", "")\
-                               .isnumeric():
+            while arg_n < len(args) and _is_number(args[arg_n]):
                 pres_list.append(float(args[arg_n]))
                 arg_n += 1
             self.SOP.pres = pres_list
@@ -1586,8 +1876,7 @@ class MessInputReader:
         for lnum2, line in enumerate(file[lnum+1:]):
             args: list[str] = line.split()
             arg_n = 0
-            while arg_n < len(args) and args[arg_n].replace(".",
-                                                            "").isnumeric():
+            while arg_n < len(args) and _is_number(args[arg_n]):
                 freqs.append(float(args[arg_n]))
                 arg_n += 1
             if len(freqs) == nfreq:
@@ -1697,13 +1986,19 @@ class MessInputReader:
                 skip += 1
                 continue
             elif npot != 0 and saved_f < npot:
-                args: list[str] = line.split()
-                arg_n = 0
-                while (arg_n < len(args) and
-                       args[arg_n].replace(".", "").replace("-", "")
-                                                   .isnumeric()):
-                    scan.append(float(args[arg_n]))
-                    arg_n += 1
+                # Potential energies: numbers up to a comment ('!' or '#');
+                # any other token (e.g. the 'End' of a rotor with too few
+                # energies) is an error instead of being swallowed.
+                for arg in line.split():
+                    if arg.startswith(('!', '#')):
+                        break
+                    if not _is_number(arg):
+                        raise TypeError(
+                            f"Error in {self._file_label(fid)}: hindered "
+                            f"rotor {rot_num + 1} of {name} expects {npot} "
+                            f"potential energies ({saved_f} read) but found "
+                            f"'{arg}' (line {lnum + 2 + lnum2}).")
+                    scan.append(float(arg))
                     saved_f += 1
                 if saved_f > npot:
                     raise TypeError("Error in Messfile: wrong number of pot\

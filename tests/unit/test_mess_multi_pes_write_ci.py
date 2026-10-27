@@ -79,8 +79,10 @@ def _shared_blocks(shift: float = 0.0) -> list[list[str]]:
     ]
 
 
-_SHARED_HEADER = ['EnergyStepOverTemperature .2\n',
-                  'WellReductionThreshold 12\n']
+_SHARED_HEADER = ['EnergyStepOverTemperature .2\n']
+# WellReductionThreshold is per PES: each file its own value.
+_WRT_A = ['WellReductionThreshold 12\n']
+_WRT_B = ['WellReductionThreshold 14\n']
 _RELAX = ['      ExponentCutoff 20\n']
 _HEADER_A = ['ModelEnergyLimit[kcal/mol] 400\n', 'WellExtension 0.5\n',
              'AtomDistanceMin[angstrom] 0.68793\n',
@@ -97,10 +99,10 @@ def _rich_pair() -> tuple[list[str], list[str]]:
     """File A (reference) and file B (+1.61 kcal/mol, own LJ second values
     and masses, its own header keys)."""
     a = mess_file(*_shared_blocks(), well('UA', -3.0),
-                  header=_SHARED_HEADER + _HEADER_A, relax=_RELAX,
+                  header=_SHARED_HEADER + _WRT_A + _HEADER_A, relax=_RELAX,
                   eps='7.95 206.15', sig='2.715 4.71', masses='4.0 77.0')
     b = mess_file(*_shared_blocks(1.61), well('UB', 2.0),
-                  header=_SHARED_HEADER + _HEADER_B, relax=_RELAX,
+                  header=_SHARED_HEADER + _WRT_B + _HEADER_B, relax=_RELAX,
                   eps='7.95 300.0', sig='2.715 5.0', masses='4.0 109.0')
     return a, b
 
@@ -194,9 +196,10 @@ def test_messwriter_each_file_in_own_frame(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 def test_messwriter_per_pes_header_lines(tmp_path) -> None:
     """Slot k writes ``collider x_k`` on Epsilons / Sigmas and its own raw
-    Masses, ModelEnergyLimit, WellExtension, AtomDistanceMin, PEDSpecies
-    and MicroEner lines; every header lists __epsilon0..2; updating
-    __epsilon2 changes only slot 1's Epsilons line."""
+    Masses, ModelEnergyLimit, WellExtension, AtomDistanceMin, PEDSpecies,
+    MicroEner and WellReductionThreshold lines; every header lists
+    __epsilon0..2; updating __epsilon2 changes only slot 1's Epsilons
+    line."""
     sop, tpls, reader = read(tmp_path, *_rich_pair())
     assert_clean(reader)
     p0, p1 = _write_slots(sop, tpls, tmp_path / 'out')
@@ -211,6 +214,8 @@ def test_messwriter_per_pes_header_lines(tmp_path) -> None:
         assert line in text0 and line not in text1, line
     for line in _HEADER_B[:2]:
         assert line in text1 and line not in text0, line
+    assert _line(p0, 'WellReductionThreshold') == 'WellReductionThreshold 12'
+    assert _line(p1, 'WellReductionThreshold') == 'WellReductionThreshold 14'
     for text in (text0, text1):
         assert 'ExponentCutoff 20\n' in text
         assert 'EnergyStepOverTemperature .2\n' in text
@@ -293,9 +298,9 @@ def test_messwriter_spline_atom_density_tstlevel(tmp_path) -> None:
 # W4: AutomechKinWriter payload per PES
 # ---------------------------------------------------------------------------
 def test_akw_payload_per_pes(tmp_path) -> None:
-    """Slot k: own energy frame, LJ pair [collider, x_k], own masses and
-    ModelEnergyLimit, SOP-wide ExponentCutoff / EnergyStepOverTemperature /
-    WellReductionThreshold, per-file keys only where present; density,
+    """Slot k: own energy frame, LJ pair [collider, x_k], own masses,
+    ModelEnergyLimit and WellReductionThreshold, SOP-wide ExponentCutoff /
+    EnergyStepOverTemperature, per-file keys only where present; density,
     Atom, spline and PST rotors restored; the payload is a literal."""
     sop, _, reader = read(tmp_path, *_rich_pair())
     assert_clean(reader)
@@ -312,7 +317,7 @@ def test_akw_payload_per_pes(tmp_path) -> None:
     for pay in (p0, p1):
         assert pay['edown_cutoff'] == 20.0
         assert pay['ene_stepover_temp'] == 0.2
-        assert pay['well_red_thresh'] == 12.0
+    assert p0['well_red_thresh'] == 12.0 and p1['well_red_thresh'] == 14.0
     assert p0['well_extension'] == 0.5 and 'well_extension' not in p1
     assert p0['ped_species'] == ['A+H=FakeW-A+H'] and 'ped_species' not in p1
     assert p0['micro_ener'] == [0.0, 200.0, 1.0] and 'micro_ener' not in p1
@@ -348,9 +353,11 @@ def test_akw_payload_per_pes(tmp_path) -> None:
 
 def test_akw_payload_fallbacks(tmp_path, monkeypatch, caplog) -> None:
     """lj_masses: own pair -> SOP.masses -> N2 + heaviest well; no file
-    data: SOP.model_ene_limit; no ExponentCutoff: 15.0; absent optional
-    keys are omitted; an incomplete MicroEner set is dropped with one
-    warning; a too-short LJ list for the PES raises."""
+    data: SOP.model_ene_limit and SOP.well_reduction_threshold (first
+    file's values); no ExponentCutoff: 15.0; absent optional keys (the
+    PES's own WellReductionThreshold included) are omitted; an incomplete
+    MicroEner set is dropped with one warning; a too-short LJ list for the
+    PES raises."""
     monkeypatch.setattr(automech_kin, '_warn_once', set())
     sop, _, reader = read(tmp_path, *_rich_pair())
     assert_clean(reader)
@@ -362,13 +369,14 @@ def test_akw_payload_fallbacks(tmp_path, monkeypatch, caplog) -> None:
 
     files = sop.pes_file_data
     sop.pes_file_data = {}
-    assert AutomechKinWriter(sop=sop, pes_id=1)._build_payload()[
-        'model_ene_limit'] == 400.0
+    no_file = AutomechKinWriter(sop=sop, pes_id=1)._build_payload()
+    assert no_file['model_ene_limit'] == 400.0
+    assert no_file['well_red_thresh'] == 12.0
     sop.pes_file_data = files
 
     sop.exp_cutoff = None
     sop.ene_step_over_temp = None
-    sop.well_reduction_threshold = None
+    sop.pes_file_data[1].well_reduction_threshold = None
     pay = AutomechKinWriter(sop=sop, pes_id=1)._build_payload()
     assert pay['edown_cutoff'] == 15.0
     assert 'ene_stepover_temp' not in pay and 'well_red_thresh' not in pay
@@ -446,7 +454,7 @@ def test_akw_driver_all_header_keys_absent(tmp_path, monkeypatch) -> None:
     assert_clean(reader)
     mod, rec = _driver(tmp_path, monkeypatch, sop, 0)
     for key in ('ene_stepover_temp', 'well_red_thresh', 'well_extension',
-                'ped_species', 'micro_ener'):
+                'ped_species', 'micro_ener', 'hot_energies'):
         assert key not in mod.PES_PAYLOAD, key
     mod._globkey_str('G0001P00.out', None)
     assert set(rec.last('global_rates_input_v1')) == {
@@ -523,8 +531,10 @@ def _akw_warnings(tmp_path: Path, monkeypatch, caplog,
 def test_akw_warns_on_mess_io_hard_coded_keys(tmp_path, monkeypatch,
                                               caplog) -> None:
     """One warning per key (key, value, mess_io's value), once per process;
-    none when the value equals mess_io's (bohr converted, words
-    case-folded) or the key is absent; never the word 'Different'."""
+    the per-PES WellCutoff warning names its PES; none when the value
+    equals mess_io's (bohr converted, words case-folded) or the key is
+    absent; never the word 'Different'. Two files with WellCutoff 10 and
+    20: one warning, for PES 1 only."""
     msgs = _akw_warnings(_mkdir(tmp_path / 'set'), monkeypatch, caplog,
                          _HARDCODED)
     assert len(msgs) == 5, msgs
@@ -536,11 +546,111 @@ def test_akw_warns_on_mess_io_hard_coded_keys(tmp_path, monkeypatch,
         (hit,) = [m for m in msgs if m.startswith(key)]
         assert value in hit and f'mess_io writes {key} {mess_io_value}' in hit
     assert not any('Different' in m for m in msgs)
+    (cutoff,) = [m for m in msgs if m.startswith('WellCutoff')]
+    assert 'MESS input of PES 0' in cutoff
 
     assert _akw_warnings(_mkdir(tmp_path / 'same'), monkeypatch, caplog,
                          _MESS_IO_SAME) == []
     assert _akw_warnings(_mkdir(tmp_path / 'absent'), monkeypatch, caplog,
                          []) == []
+
+    monkeypatch.setattr(automech_kin, '_warn_once', set())
+    sop, _, reader = read(_mkdir(tmp_path / 'two'),
+                          mess_file(well('WA'), header=['WellCutoff 10\n']),
+                          mess_file(well('WB'), header=['WellCutoff 20\n']))
+    assert_clean(reader)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=automech_kin.__name__):
+        for pes_id in (0, 1, 0, 1):
+            AutomechKinWriter(sop=sop, pes_id=pes_id)._build_payload()
+    msgs = [r.getMessage() for r in caplog.records
+            if r.name == automech_kin.__name__]
+    assert len(msgs) == 1, msgs
+    assert msgs[0].startswith('WellCutoff 20')
+    assert 'MESS input of PES 1' in msgs[0]
+
+
+# ---------------------------------------------------------------------------
+# W5c: HotEnergies move with their well, in the file's own frame
+# ---------------------------------------------------------------------------
+def _hot_pair() -> tuple[list[str], list[str]]:
+    """A: S 0.0, UA -3; B (+1.61): S 1.61, HW -10 and the block
+    ``HW -10:0.5:40`` / ``S 5.0``."""
+    a = mess_file(well('S', 0.0), well('UA', -3.0))
+    b = mess_file(well('S', 1.61), well('HW', -10.0), header=[
+        'HotEnergies[kcal/mol] 2\n', 'HW -10:0.5:40\n', 'S 5.0\n'])
+    return a, b
+
+
+def test_hot_energies_shift_with_well_both_writers(tmp_path,
+                                                   monkeypatch) -> None:
+    """Unperturbed: slot 1 writes the block as read (no energy offset),
+    slot 0 none. After HW dE +2 and S dE -1: slot 1 re-reads HW
+    (-8, 0.5, 42) and S (4,), the AutomechKinWriter payload and the
+    driver's ``hot_enes_dct`` (tuples) hold the same values; in both
+    writers every hot energy minus its written well ZeroEnergy equals the
+    value read minus the well energy of the file."""
+    a, b = _hot_pair()
+    sop, tpls, reader = read(tmp_path, a, b)
+    assert_clean(reader)
+    assert sop.pes_file_data[1].energy_offset == pytest.approx(1.61)
+    read_gap = {'HW': -10.0 - -10.0, 'S': 5.0 - 1.61}
+
+    p0, p1 = _write_slots(sop, tpls, tmp_path / 'raw')
+    assert 'HotEnergies' not in p0.read_text()
+    assert _reread(p1, tmp_path / 'raw1').pes_file_data[0].hot_energies == {
+        'HW': (-10.0, 0.5, 40.0), 'S': (5.0,)}
+    assert 'hot_energies' not in AutomechKinWriter(
+        sop=sop, pes_id=0)._build_payload()
+
+    sop.update('HW__we', sop.items['HW'].energy + 2.0)
+    sop.update('S__we', sop.items['S'].energy - 1.0)
+    expected = {'HW': (-8.0, 0.5, 42.0), 'S': (4.0,)}
+    assert sop.shifted_hot_energies(1) == pytest.approx(expected)
+    assert sop.shifted_hot_energies(0) is None
+
+    p0, p1 = _write_slots(sop, tpls, tmp_path / 'moved')
+    assert 'HotEnergies' not in p0.read_text()
+    again = _reread(p1, tmp_path / 'moved1')
+    hot = again.pes_file_data[0].hot_energies
+    assert set(hot) == set(expected)
+    for name, values in expected.items():
+        assert hot[name] == pytest.approx(values), name
+        assert hot[name][0] - again.items[name].energy == \
+            pytest.approx(read_gap[name]), name
+
+    payload = AutomechKinWriter(sop=sop, pes_id=1)._build_payload()
+    assert payload['hot_energies'] == {'HW': pytest.approx([-8.0, 0.5, 42.0]),
+                                       'S': pytest.approx([4.0])}
+    zero = {w['label']: w['zero_ene'] for w in payload['wells']}
+    for name, values in payload['hot_energies'].items():
+        assert values[0] - zero[name] == pytest.approx(read_gap[name]), name
+    assert ast.literal_eval(repr(payload)) == payload
+
+    mod, rec = _driver(tmp_path, monkeypatch, sop, 1)
+    mod._globkey_str('G0001P01.out', None)
+    hot_kw = rec.last('global_rates_input_v1')['hot_enes_dct']
+    assert all(isinstance(v, tuple) for v in hot_kw.values())
+    assert hot_kw == {'HW': pytest.approx((-8.0, 0.5, 42.0)),
+                      'S': pytest.approx((4.0,))}
+    mod, rec = _driver(tmp_path, monkeypatch, sop, 0)
+    mod._globkey_str('G0001P00.out', None)
+    assert 'hot_enes_dct' not in rec.last('global_rates_input_v1')
+
+
+def test_global_key_from_one_file_reaches_every_pes(tmp_path) -> None:
+    """EnergyStepOverTemperature in file A only: no stop, both payloads
+    carry 0.2 and both MessWriter slots write the line."""
+    a = mess_file(well('WA'), header=['EnergyStepOverTemperature .2\n'])
+    b = mess_file(well('WB'))
+    sop, tpls, reader = read(tmp_path, a, b)
+    assert_clean(reader)
+    for pes_id in (0, 1):
+        assert AutomechKinWriter(sop=sop, pes_id=pes_id)._build_payload()[
+            'ene_stepover_temp'] == 0.2
+    for path in _write_slots(sop, tpls, tmp_path / 'out'):
+        assert _line(path, 'EnergyStepOverTemperature') == \
+            'EnergyStepOverTemperature .2'
 
 
 # ---------------------------------------------------------------------------

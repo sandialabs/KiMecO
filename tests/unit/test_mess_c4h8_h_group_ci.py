@@ -15,21 +15,54 @@ Trim applied to the AutoMech files (same rule for every file, so the blocks
 shared between files stay byte-identical): full-line ``!`` comments removed,
 ``TemperatureList`` / ``PressureList`` cut to their first two values.
 Everything else, rotor geometries included, is as AutoMech wrote it.
-No MESS binary is needed.
+
+``C4H7_hot.inp``: the hot C4H7 PES (wells ``CH2CHCHCH3`` -45.63 and
+``CH2CH2CHCH2`` -28.82, bimoleculars ``CH2CHCHCH2+H`` 0.0 and
+``CH2CH2+CH2CH`` 4.65, four Eckart barriers) with its ``HotEnergies`` block
+(``CH2CHCHCH3 -45:1:250``, ``CH2CH2CHCH2 -28:1:230``). Derived once (scratch
+script, not kept) from the structure-named copy of the C4H7 input of the
+non-thermal C4H8 study (``C4H7_JC_renamed/wellcap_eigmax02/mess.inp``):
+
+* header: same trim rule (``!ChemicalEigenvalueMin`` comment line dropped,
+  grids cut to 500 550 K and 0.03 0.1 atm), every other line as written
+  (``WellCutoff 20``, ``WellReductionThreshold 10.``, ``WellExtension``,
+  ``ExtensionCorrection 0.4``, no ``ReductionMethod``);
+* collision model harmonised with the H group (Factor 609.972, Power 0.521,
+  ``Epsilons`` / ``Sigmas`` / ``Masses`` 173.667 / 4.364 twice, 56.063
+  39.962; the original has an N2 bath);
+* the two wells take the data of the H group's fragments of the same name
+  (``RRHO`` up to the last rotor of ``Fragment CH2CHCHCH3`` in
+  ``H_C4H71-3``, of ``Fragment CH2CH2CHCH2`` in ``H_C4H71-4``, verbatim),
+  keeping their own ``WellExtensionCap`` (53., 40.) and ``ZeroEnergy``;
+* bimoleculars and barriers verbatim, except the H atom mass
+  (1.00782503223 instead of 1). No E-notation number is left.
+
+The well of the hot PES and the fragment of the H group are then one item.
+No MESS binary is needed (one test renders the real mess_io block and skips
+without the ``automech`` extra).
 """
 from __future__ import annotations
 
+import importlib.util
+import logging
+import re
 import shutil
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from kimeco.enums import FreqMode
+from kimeco.parameters import SOP
 from kimeco.readers.mess_input import MessInputReader
+from kimeco.writers import automech_kin
 from kimeco.writers.automech_kin import AutomechKinWriter
 from kimeco.writers.mess import MessWriter
+from tests.unit.test_installation_extras_ci import import_or_skip
 from tests.unit.test_mess_multi_pes_read_ci import SpyLog
+from tests.unit.test_mess_multi_pes_write_ci import _driver
+from tests.unit.test_perturbator_boundary_coverage_ci import _scripted_pert
 
 DATA = Path(__file__).resolve().parent / 'data' / 'c4h8_h_group'
 H3, H4, H2B = 'H_C4H71-3.inp', 'H_C4H71-4.inp', '2-H_C4H71-3.inp'
@@ -52,16 +85,23 @@ PED = {H3: ['CH2CHCH2CH3+H=CH2CHCHCH3+H2'],
        H4: ['CH2CHCH2CH3+H=CH2CH2CHCH2+H2'],
        H2B: ['CH3CHCHCH3+H=CH2CHCHCH3+H2']}
 ORDERS = [(H3, H4, H2B), (H4, H2B, H3), (H2B, H3, H4)]
+C4H7 = 'C4H7_hot.inp'
+HOT_SPECIES = SPECIES + ['CH2CHCHCH2', 'CH2CH2', 'CH2CH']
+HOT_WELLS = ('CH2CHCHCH3', 'CH2CH2CHCH2')
+HOT = {'CH2CHCHCH3': (-45.0, 1.0, 250.0),
+       'CH2CH2CHCH2': (-28.0, 1.0, 230.0)}
+ORDERS4 = [(C4H7, H3, H4, H2B), (H3, H4, H2B, C4H7)]
 
 
-def _read(files: list[str] | tuple[str, ...], root: Path = DATA
+def _read(files: list[str] | tuple[str, ...], root: Path = DATA,
+          species: list[str] = SPECIES
           ) -> tuple[Any, list[Any], MessInputReader]:
     settings = {
         'init_loc': str(root), 'mess_inputs': list(files), 'n_exp': 1,
         'score_sp': [], 'freq_mode': FreqMode.BATCH,
         'rc_temp': [500.0, 550.0], 'rc_pres': [0.03, 0.1],
         'pres_unit': 'atm', 'force_new_molecules': False}
-    reader = MessInputReader(settings=settings, mechanism_species=SPECIES,
+    reader = MessInputReader(settings=settings, mechanism_species=species,
                              klog=SpyLog(),  # type: ignore[arg-type]
                              postprocess=False)
     sop, tpls = reader.read()
@@ -204,3 +244,276 @@ def test_h_group_writers_reproduce_each_file(tmp_path, order) -> None:
     AutomechKinWriter(sop=sop, pes_id=fid).write(loc=str(tmp_path),
                                                  filename='G0001P02.py')
     compile((tmp_path / 'G0001P02.py').read_text(), 'G0001P02.py', 'exec')
+
+
+# ---------------------------------------------------------------------------
+# C1-C6: the hot C4H7 PES loaded with the H group
+# ---------------------------------------------------------------------------
+def _read4(order: tuple[str, ...], root: Path = DATA
+           ) -> tuple[Any, list[Any], MessInputReader]:
+    return _read(order, root=root, species=HOT_SPECIES)
+
+
+def _hot_line(text: str, name: str) -> str:
+    hits = [ln.strip() for ln in text.splitlines()
+            if ln.split()[:1] == [name] and len(ln.split()) == 2]
+    assert len(hits) == 1, (name, hits)
+    return hits[0]
+
+
+def test_c4h7_hot_fixture_reads_alone() -> None:
+    """2 wells, 2 bimoleculars, 4 barriers; 1 and 2 rotors on the wells;
+    the harmonised H mass and collision model; the hot energies as read;
+    WellCutoff 20 and WellReductionThreshold 10 on its PES; no
+    E-notation left in the fixture."""
+    sop, tpls, reader = _read4((C4H7,))
+    _assert_clean(reader)
+    assert [w.name for w in sop.wells] == list(HOT_WELLS)
+    assert [b.name for b in sop.bimolecular] == ['CH2CHCHCH2+H',
+                                                 'CH2CH2+CH2CH']
+    assert len(sop.barriers) == 4
+    assert [len(sop.items[n].h_rotors) for n in HOT_WELLS] == [1, 2]
+    assert sop.items['H'].atom_mass == 1.00782503223
+    assert (sop.factor, sop.power) == (609.972, 0.521)
+    assert sop.epsilons == [173.667] * 2 and sop.sigmas == [4.364] * 2
+    data = sop.pes_file_data[0]
+    assert data.masses == [56.063, 39.962]
+    assert data.hot_energies == HOT
+    assert data.well_cutoff == 20 and data.well_reduction_threshold == 10
+    assert sop.reduction_method is None
+    assert '{SOP.r_hot_energies_pes[0]}\n' in tpls[0]
+    assert not re.search(r'\dE[-+]', (DATA / C4H7).read_text())
+
+
+@pytest.mark.parametrize('order', ORDERS4, ids=['hot_first', 'hot_last'])
+def test_four_files_load_with_shared_items(order) -> None:
+    """No stop; offsets 0 for the hot PES (not linked by energies) and as
+    for the H group; each hot well is one object, also the fragment of an
+    abstraction product, listed once in SOP.wells with the hot PES id
+    only; per-PES WellCutoff / WellReductionThreshold / HotEnergies;
+    ReductionMethod from the H group for every PES; the abstraction
+    energies equal the H group read alone."""
+    sop, tpls, reader = _read4(order)
+    _assert_clean(reader)
+    hot = order.index(C4H7)
+    h2b = order.index(H2B)
+    assert len(tpls) == 4 and sop.pes_ids == [0, 1, 2, 3]
+    offsets = [sop.pes_file_data[k].energy_offset for k in range(4)]
+    assert offsets == pytest.approx(
+        [1.61 if k == h2b else 0.0 for k in range(4)])
+
+    products = {'CH2CHCHCH3': 'CH2CHCHCH3+H2',
+                'CH2CH2CHCH2': 'CH2CH2CHCH2+H2'}
+    for name, product in products.items():
+        item = sop.items[name]
+        assert item is sop.items[product].fragments[0], name
+        assert sum(w is item for w in sop.wells) == 1, name
+        assert item.pes_ids == [hot], name
+    assert sop.items['H'].pes_ids == []
+    assert [w.name for w in sop.wells_in(hot)] == list(HOT_WELLS)
+    assert sop.species_names_in_pes(hot) == sorted(
+        list(HOT_WELLS) + ['CH2CHCHCH2+H', 'CH2CH2+CH2CH'])
+    for fid in range(4):
+        if fid != hot:
+            assert not set(HOT_WELLS) & set(sop.species_names_in_pes(fid))
+
+    for fid in range(4):
+        data = sop.pes_file_data[fid]
+        if fid == hot:
+            assert data.hot_energies == HOT
+            assert (data.well_cutoff, data.well_reduction_threshold) == \
+                (20.0, 10.0)
+        else:
+            assert data.hot_energies is None
+            assert (data.well_cutoff, data.well_reduction_threshold) == \
+                (10.0, None)
+    assert sop.reduction_method == 'diagonalization'
+    assert sop.epsilons == [173.667] * 5
+    assert sop.parameters_names['CH2CHCHCH3__we'] == -45.63
+    assert sop.parameters_names['CH2CH2CHCH2__we'] == -28.82
+
+    group, _, _ = _read(ORDERS[0])
+    for name, energy in _energies(group).items():
+        assert sop.items[name].energy == pytest.approx(energy), name
+
+
+def _write_all(sop: Any, tpls: list[Any], out: Path) -> list[Path]:
+    out.mkdir()
+    paths = []
+    for k, tpl in enumerate(tpls):
+        MessWriter(SOP=sop, tpl=tpl).write(loc=str(out),
+                                           filename=f'G0001P{k:02d}.inp')
+        paths.append(out / f'G0001P{k:02d}.inp')
+    return paths
+
+
+def _reread_as(path: Path, name: str, root: Path) -> Any:
+    root.mkdir()
+    shutil.copy(path, root / name)
+    sop, _, reader = _read4((name,), root=root)
+    _assert_clean(reader)
+    return sop
+
+
+@pytest.mark.parametrize('order', ORDERS4, ids=['hot_first', 'hot_last'])
+def test_four_files_writers_follow_one_item(tmp_path, monkeypatch, caplog,
+                                            order) -> None:
+    """MessWriter: every slot re-read alone equals its file read alone; the
+    hot slot gets one ReductionMethod line (before Model) and keeps its
+    WellCutoff 20 and WellReductionThreshold lines, the H slots keep
+    WellCutoff 10 and get no WellReductionThreshold. Restart with
+    CH2CHCHCH3__we -44.13 (from_db_row): the hot energies of that well move
+    by +1.5, the abstraction product CH2CHCHCH3+H2 by +1.5 with its
+    fragment ZeroEnergy kept verbatim. AutomechKinWriter: only the hot PES
+    gets the shifted hot_enes_dct and WellReductionThreshold 10, and only
+    it warns about WellCutoff."""
+    sop, tpls, reader = _read4(order)
+    _assert_clean(reader)
+    hot = order.index(C4H7)
+    paths = _write_all(sop, tpls, tmp_path / 'out')
+    for k, (name, path) in enumerate(zip(order, paths)):
+        again = _reread_as(path, name, tmp_path / f'again{k}')
+        alone, _, _ = _read4((name,))
+        assert _energies(again) == pytest.approx(_energies(alone)), name
+        assert again.pes_file_data[0].hot_energies == \
+            alone.pes_file_data[0].hot_energies, name
+        text = path.read_text()
+        # Whitespace-normalised lines (the added ReductionMethod line keeps
+        # the H group's column alignment)
+        lines = [' '.join(ln.split()) for ln in text.splitlines()]
+        if k == hot:
+            assert lines.count('ReductionMethod diagonalization') == 1
+            assert lines.index('ReductionMethod diagonalization') < \
+                lines.index('Model')
+            assert 'WellCutoff 20' in lines
+            assert 'WellReductionThreshold 10.' in lines
+            assert _hot_line(text, 'CH2CHCHCH3') == \
+                'CH2CHCHCH3 -45.0:1.0:250.0'
+        else:
+            assert 'WellCutoff 10' in lines
+            assert not any(ln.startswith('WellReductionThreshold')
+                           for ln in lines)
+            assert 'HotEnergies' not in text
+
+    names = list(sop.parameters_names)
+    row = list(sop.parameters_names.values())
+    row[names.index('CH2CHCHCH3__we')] = -44.13
+    restarted = SOP.from_db_row(sop, row)
+    paths = _write_all(restarted, tpls, tmp_path / 'restart')
+    again = _reread_as(paths[hot], C4H7, tmp_path / 'restart_hot')
+    assert again.items['CH2CHCHCH3'].energy == pytest.approx(-44.13)
+    hot_again = again.pes_file_data[0].hot_energies
+    assert hot_again['CH2CHCHCH3'] == pytest.approx((-43.5, 1.0, 251.5))
+    assert hot_again['CH2CH2CHCH2'] == HOT['CH2CH2CHCH2']
+    fid_h3 = order.index(H3)
+    h3_again = _reread_as(paths[fid_h3], H3, tmp_path / 'restart_h3')
+    alone, _, _ = _read((H3,))
+    assert h3_again.items['CH2CHCHCH3+H2'].energy == pytest.approx(
+        alone.items['CH2CHCHCH3+H2'].energy + 1.5)
+    assert h3_again.items['CH2CHCH2CH3+H'].energy == pytest.approx(
+        alone.items['CH2CHCH2CH3+H'].energy)
+    zero = '      ZeroEnergy[kcal/mol]    0.0\n'
+    assert paths[fid_h3].read_text().count(zero) == \
+        (DATA / H3).read_text().count(zero)
+
+    monkeypatch.setattr(automech_kin, '_warn_once', set())
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=automech_kin.__name__):
+        for fid in (0, 1, 2, 3, 0, 1, 2, 3):
+            AutomechKinWriter(sop=restarted, pes_id=fid)._build_payload()
+    msgs = [r.getMessage() for r in caplog.records
+            if r.name == automech_kin.__name__]
+    assert len(msgs) == 1, msgs
+    assert msgs[0].startswith('WellCutoff 20')
+    assert f'MESS input of PES {hot}' in msgs[0]
+
+    for fid in range(4):
+        mod, rec = _driver(tmp_path, monkeypatch, restarted, fid)
+        mod._globkey_str(f'G0001P{fid:02d}.out', None)
+        kwargs = rec.last('global_rates_input_v1')
+        if fid == hot:
+            assert kwargs['hot_enes_dct'] == {
+                'CH2CHCHCH3': pytest.approx((-43.5, 1.0, 251.5)),
+                'CH2CH2CHCH2': HOT['CH2CH2CHCH2']}
+            assert all(isinstance(v, tuple)
+                       for v in kwargs['hot_enes_dct'].values())
+            assert kwargs['well_reduction_thresh'] == 10.0
+        else:
+            assert 'hot_enes_dct' not in kwargs, fid
+            assert 'well_reduction_thresh' not in kwargs, fid
+
+
+def test_four_files_real_mess_io_hot_block(tmp_path) -> None:
+    """With mess_io installed, the emitted driver of the hot PES renders a
+    HotEnergies block with both wells' ranges."""
+    import_or_skip('automech', 'mess_io.writer')
+    sop, _, reader = _read4(ORDERS4[1])
+    _assert_clean(reader)
+    hot = ORDERS4[1].index(C4H7)
+    name = f'G0001P{hot:02d}.py'
+    AutomechKinWriter(sop=sop, pes_id=hot).write(loc=str(tmp_path),
+                                                 filename=name)
+    spec = importlib.util.spec_from_file_location('real_hot_driver',
+                                                  tmp_path / name)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    glob = mod._globkey_str(f'G0001P{hot:02d}.out', None)
+    assert 'HotEnergies[kcal/mol]' in glob
+    assert re.search(r'CH2CHCHCH3\s+-45\.0:1\.0:250\.0', glob), glob
+    assert re.search(r'CH2CH2CHCH2\s+-28\.0:1\.0:230\.0', glob), glob
+
+
+_UNHARMONISED = {
+    'h_mass': (('Mass[amu]     1.00782503223', 'Mass[amu]     1'),
+               ('Well H differs between', 'in: atom.')),
+    'frequency': (('        214     287     505',
+                   '        215     287     505'),
+                  ('Well CH2CHCHCH3 differs between', 'in: frequencies.')),
+    'factor': (('Factor[1/cm]                     609.972',
+                'Factor[1/cm]                     100'),
+               ('Different factor in',)),
+}
+
+
+@pytest.mark.parametrize('case', sorted(_UNHARMONISED))
+def test_unharmonised_c4h7_copy_still_stops(tmp_path, case) -> None:
+    """One harmonised value put back to the original's (H mass 1), one well
+    frequency +1 cm-1, the original Factor: the existing stops, naming the
+    hot file."""
+    (old, new), needles = _UNHARMONISED[case]
+    for name in (H3, H4, H2B):
+        shutil.copy(DATA / name, tmp_path / name)
+    text = (DATA / C4H7).read_text()
+    assert text.count(old) == 1, old
+    (tmp_path / C4H7).write_text(text.replace(old, new))
+    _, _, reader = _read4(ORDERS4[1], root=tmp_path)
+    assert reader._trigger_stop is True
+    log: Any = reader.klog
+    hits = [m for m in log.warnings + log.errors
+            if all(n in m for n in needles)]
+    assert len(hits) == 1, (needles, log.warnings, log.errors)
+    assert str(tmp_path / C4H7) in hits[0]
+
+
+def test_four_files_perturbation_draws_each_species_once() -> None:
+    """A real Perturbator cycle on the four-file SOP (sub-steps spied):
+    every well and fragment object goes through the energy step exactly
+    once, CH2CHCHCH3 (hot well and abstraction fragment) and H (fragment
+    of several bimoleculars) included."""
+    sop, _, reader = _read4(ORDERS4[0])
+    _assert_clean(reader)
+    work = deepcopy(sop)
+    pert, _ = _scripted_pert([], sop)
+    seen: list[str] = []
+    pert.perturb_energy = lambda item: seen.append(item.name)
+    pert.perturb_vibrations = lambda well: None
+    pert.perturb_hindered_rotors = lambda well: None
+    pert.perturb_multi_rotors = lambda well: None
+    pert.perturb_barrier = lambda bar: None
+    pert.perturb(work)
+    objects = {id(w): w.name for w in work.wells}
+    for bim in work.bimolecular:
+        objects.update((id(f), f.name) for f in bim.fragments)
+    assert sorted(seen) == sorted(objects.values())
+    assert seen.count('CH2CHCHCH3') == 1 and seen.count('H') == 1

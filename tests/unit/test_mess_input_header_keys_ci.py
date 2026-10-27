@@ -15,11 +15,11 @@ automech driver must forward to ``mess_io``:
 Contract exercised here (black-box, synthetic in-memory MESS files):
 
 * every captured line is appended verbatim to the template;
-* keys that must be the same in all files (CalculationMethod,
-  ExcessEnergyOverTemperature, ChemicalEigenvalueMax, ...): a later file
-  that disagrees logs one warning naming the file and sets
-  ``_trigger_stop``; a key present in some files and absent from others
-  stops too (an error naming the key; absence is a value of its own);
+* global keys (CalculationMethod, ExcessEnergyOverTemperature,
+  ChemicalEigenvalueMax, ...): a later file that disagrees logs one warning
+  naming the file and sets ``_trigger_stop``; a key present in some files
+  only does not stop, its value holds for every PES (the ``Masses`` line
+  of the collision model, present in some files only, still stops);
 * ``Masses``: only the collider mass (index 0) must be the same in every
   file; the second value legitimately differs per PES;
 * ``ModelEnergyLimit`` is kept per PES (never compared);
@@ -278,27 +278,35 @@ def test_consistent_files_do_not_stop(tmp_path) -> None:
 
 
 
-def test_key_only_in_a_later_file_stops(tmp_path) -> None:
-    """A11c: a same-in-all-files key (or the Masses line) present in the
-    second file only stops with one error per key naming both files; the
-    per-PES ModelEnergyLimit is never reported."""
-    sop, _, reader = _read(tmp_path, ['Well WA\n', 'End\n'], _file_b())
+def test_key_only_in_a_later_file_holds_for_every_pes(tmp_path) -> None:
+    """A11c: global keys present in the second file only do not stop: their
+    values hold for every PES and their lines are added to the first
+    file's template. Only the Masses line (collision model) present in the
+    second file only stops, with one error naming both files; the per-PES
+    ModelEnergyLimit is never reported."""
+    sop, tpls, reader = _read(tmp_path, ['Well WA\n', 'End\n'], _file_b())
     assert reader._trigger_stop is True, 'a11c'
     errors = reader.klog.errors  # type: ignore[attr-defined]
+    assert len(errors) == 1, errors
+    assert errors[0].startswith('Masses is set in')
+    assert reader.filenames[1] in errors[0].split('absent from')[0]
+    assert reader.filenames[0] in errors[0].split('absent from')[1]
     for label in ('CalculationMethod', 'ExcessEnergyOverTemperature',
-                  'ChemicalEigenvalueMax', 'Masses'):
-        hit = [e for e in errors if e.startswith(f'{label} is set in')]
-        assert len(hit) == 1, (label, errors)
-        assert 'absent from' in hit[0]
-        assert reader.filenames[1] in hit[0].split('absent from')[0]
-        assert reader.filenames[0] in hit[0].split('absent from')[1]
-    assert not any('ModelEnergyLimit' in e for e in errors)
-    # Presence errors are errors, never "Different ..." warnings.
+                  'ChemicalEigenvalueMax', 'ModelEnergyLimit'):
+        assert not any(label in e for e in errors), label
     assert not any('Different' in w
                    for w in reader.klog.warnings)  # type: ignore[attr-defined]
-    # Values are still read from the file that carries them.
+    # The second file's values hold for every PES.
     assert sop.calculation_method == 'direct'
+    assert sop.excess_ene_temp == 40.0
+    assert sop.chem_eig_max == 0.2
     assert sop.model_ene_limit == 400.0
+    assert sop.pes_file_data[0].model_ene_limit is None
+    for line in ('CalculationMethod direct\n',
+                 'ExcessEnergyOverTemperature 40\n',
+                 'ChemicalEigenvalueMax 0.2\n'):
+        assert line in tpls[0], line
+    assert not any(t.startswith('ModelEnergyLimit') for t in tpls[0])
 
 
 def test_mismatch_warns_with_filename_and_stops(tmp_path) -> None:

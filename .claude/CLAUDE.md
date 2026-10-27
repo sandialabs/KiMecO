@@ -85,7 +85,8 @@ Rules for every agent:
 - `.claude/memory/multi-pes-mess-reading.md` (`multi-pes-mess-reading`): how `MessInputReader`
   merges shared items, aligns energies, classifies header keys and lays out per-PES Lennard-Jones
   parameters across several MESS inputs; how both writers give each file back in its own frame;
-  the invariants and test pins (strict `from_db_row`, warning wording, AKW kwarg set).
+  `HotEnergies` storage and shift; Perturbator once-per-cycle; the invariants and test pins
+  (strict `from_db_row`, warning wording, AKW kwarg set).
 - `.claude/memory/mess-global-keys-and-mess-io.md` (`mess-global-keys-and-mess-io`): what each
   global MESS key does to the rates and its default when absent; how MESS combines the LJ pair;
   mess_io writer defaults, hard-codes and pass-2 `WellExtension` quirk.

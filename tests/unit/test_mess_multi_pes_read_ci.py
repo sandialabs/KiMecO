@@ -8,14 +8,20 @@ written to ``tmp_path`` (one file per PES, file index = PES id):
 * energies of files sharing items are aligned (offset of each file =
   shared energy difference, reference = first file of each group of linked
   files), every shared energy is checked after alignment (0.01 kcal/mol);
-* header keys: ten keys must be the same in all files (value and presence),
-  ModelEnergyLimit / AtomDistanceMin / WellExtension are kept per PES, the
-  first Epsilons / Sigmas / Masses value (collider) must be the same in all
-  files and the second one is PES-specific (``SOP.epsilons`` =
-  ``[collider, file 0, file 1, ...]``);
+* header keys: eight global keys hold one value for every PES (a different
+  value stops; a key present in some files only does not stop, its line is
+  added to the templates of the other files), ModelEnergyLimit /
+  AtomDistanceMin / WellExtension / WellCutoff / WellReductionThreshold are
+  kept per PES (absent stays absent), the first Epsilons / Sigmas / Masses
+  value (collider) must be the same in all files and the second one is
+  PES-specific (``SOP.epsilons`` = ``[collider, file 0, file 1, ...]``);
+* ``HotEnergies`` blocks are read per file (MESS grammar, every malformed
+  block stops with one message); their species must be wells of the file;
+* a label that is a bimolecular fragment in one file and a well in another
+  is one item (identical data required);
 * AutoMech fake wells (``FW-`` / ``FakeW-``) need no mechanism species;
-  ``Atom`` fragments, ``PotentialSpline`` rotors and the fragment
-  ``density`` keyword are read.
+  ``Atom`` fragments, ``PotentialSpline`` rotors, E-notation numbers and the
+  fragment ``density`` keyword are read.
 
 Stop cases assert ``_trigger_stop`` and exactly one message naming the key
 or item and the file; consistent inputs log no warning and no error.
@@ -38,7 +44,7 @@ from kimeco.enums import FreqMode
 from kimeco.readers.mess_input import (MessInputReader, PesEnergyAlignment,
                                        is_fake_well_label)
 from kimeco.well import Well
-from kimeco.writers.mess import MessTemplate
+from kimeco.writers.mess import MessTemplate, MessWriter
 
 
 # ---------------------------------------------------------------------------
@@ -665,7 +671,7 @@ def test_pes_energy_alignment_unit() -> None:
 
 
 # ---------------------------------------------------------------------------
-# R7a: the ten keys that must be the same in every file
+# R7a: the eight global keys (one value for every PES)
 # ---------------------------------------------------------------------------
 # (label, line in A, different line, equal line after normalisation,
 #  SOP attribute, stored value)
@@ -682,14 +688,9 @@ _SAME_KEYS = [
     ('ChemicalEigenvalueMax', 'ChemicalEigenvalueMax 0.2',
      'ChemicalEigenvalueMax 0.1', 'ChemicalEigenvalueMax .2',
      'chem_eig_max', 0.2),
-    ('WellCutoff', 'WellCutoff 10', 'WellCutoff 15', 'WellCutoff 10.0',
-     'well_cutoff', 10.0),
     ('ReductionMethod', 'ReductionMethod diagonalization',
      'ReductionMethod projection', 'ReductionMethod Diagonalization',
      'reduction_method', 'diagonalization'),
-    ('WellReductionThreshold', 'WellReductionThreshold 10',
-     'WellReductionThreshold 12', 'WellReductionThreshold 10.0',
-     'well_reduction_threshold', 10.0),
     ('GroundEnergyShiftMax', 'GroundEnergyShiftMax[kcal/mol] 10',
      'GroundEnergyShiftMax[kcal/mol] 5', 'GroundEnergyShiftMax[kJ/mol] 41.84',
      'ground_ene_shift_max', 10.0),
@@ -712,12 +713,23 @@ def _key_files(line_a: str | None, line_b: str | None
     return _one(line_a, 'WA'), _one(line_b, 'WB')
 
 
+def _inserted_at(tpl: list[str], line: str) -> tuple[str, str]:
+    """(line before, line after) the single template line equal to
+    ``line`` once stripped."""
+    hits = [idx for idx, t in enumerate(tpl) if t.strip() == line]
+    assert len(hits) == 1, (line, tpl)
+    return tpl[hits[0] - 1], tpl[hits[0] + 1]
+
+
 @pytest.mark.parametrize('key', _SAME_KEYS, ids=[k[0] for k in _SAME_KEYS])
 def test_same_in_all_files_keys(tmp_path, key) -> None:
     """Different value -> one warning 'Different <Label> in <file B>' and a
-    stop; key in one file only (either one) -> one presence error and a
-    stop; equal after normalisation, or absent from both -> no stop. The
-    first file's value is stored; each template keeps its own line."""
+    stop; key in one file only (either one) -> no stop, its value holds for
+    every PES and its line is added once to the other template (before
+    Model; GroundEnergyShiftMax after Model; ExponentCutoff after
+    Exponential) with one info naming that file; equal after
+    normalisation, or absent from both -> no stop. The first file's value
+    is stored; each template keeps its own line."""
     label, line_a, line_diff, line_equal, attr, stored = key
 
     sop, tpls, reader = read(tmp_path, *_key_files(line_a, line_diff))
@@ -732,14 +744,21 @@ def test_same_in_all_files_keys(tmp_path, key) -> None:
                         ('only_b', _key_files(None, line_a))):
         sub = tmp_path / case
         sub.mkdir()
-        sop, _, reader = read(sub, *files)
-        msg = assert_one_stop(reader, f'{label} is set in', 'absent from')
-        assert log_of(reader).warnings == [], case
-        with_key, without = msg.split('absent from')
-        present = 0 if case == 'only_a' else 1
-        assert reader.filenames[present] in with_key
-        assert reader.filenames[1 - present] in without
-        assert getattr(sop, attr) == stored
+        sop, tpls, reader = read(sub, *files)
+        assert_clean(reader)
+        assert getattr(sop, attr) == stored, case
+        absent = 1 if case == 'only_a' else 0
+        before, after = _inserted_at(tpls[absent], line_a)
+        _inserted_at(tpls[1 - absent], line_a)
+        if label == 'ExponentCutoff':
+            assert before == '    Exponential\n', case
+        elif label == 'GroundEnergyShiftMax':
+            assert before == 'Model\n', case
+        else:
+            assert after == 'Model\n', case
+        infos = [m for m in log_of(reader).infos if line_a in m]
+        assert len(infos) == 1, (case, log_of(reader).infos)
+        assert reader.filenames[absent] in infos[0]
 
     sub = tmp_path / 'equal'
     sub.mkdir()
@@ -755,6 +774,23 @@ def test_same_in_all_files_keys(tmp_path, key) -> None:
     assert getattr(sop, attr) is None
 
 
+def test_global_key_differs_after_absent_file(tmp_path) -> None:
+    """File 0 without CalculationMethod, files 1 and 2 with different
+    values: one 'Different CalculationMethod in <file 2>' and a stop, no
+    presence error; the value of file 1 is kept and its line is added to
+    file 0's template."""
+    files = [mess_file(well('W0')),
+             mess_file(well('W1'), header=['CalculationMethod direct\n']),
+             mess_file(well('W2'),
+                       header=['CalculationMethod low-eigenvalue\n'])]
+    sop, tpls, reader = read(tmp_path, *files)
+    msg = assert_one_stop(reader, 'Different CalculationMethod in')
+    assert reader.filenames[2] in msg
+    assert not any('is set in' in m for m in stop_messages(reader))
+    assert sop.calculation_method == 'direct'
+    assert 'CalculationMethod direct\n' in tpls[0]
+
+
 def test_ground_energy_shift_max_is_not_a_ground_energy(tmp_path) -> None:
     """GroundEnergyShiftMax (header) never reaches the GroundEnergy branch
     of bimoleculars: a single file reads cleanly and keeps the line."""
@@ -768,8 +804,8 @@ def test_ground_energy_shift_max_is_not_a_ground_energy(tmp_path) -> None:
 
 
 def test_header_value_errors(tmp_path) -> None:
-    """A same-in-all key without a value or with a non-number stops; an
-    unknown energy unit warns and stores the raw value."""
+    """A header key without a value or with a non-number stops; an unknown
+    energy unit warns and stores the raw value."""
     cases = (('WellCutoff\n', 'WellCutoff has no value'),
              ('WellCutoff ten\n', "WellCutoff value 'ten' is not a number"),
              ('MicroEnerMax[kcal/mol]\n',
@@ -791,18 +827,24 @@ def test_header_value_errors(tmp_path) -> None:
 # R7b: per-PES keys never stop
 # ---------------------------------------------------------------------------
 def test_per_pes_keys_never_stop(tmp_path) -> None:
-    """ModelEnergyLimit, AtomDistanceMin, WellExtension, PEDSpecies and
-    MicroEner* differ (or are absent) between files: no stop, no warning;
-    each file keeps its own value; templates keep the raw lines."""
+    """ModelEnergyLimit, AtomDistanceMin, WellExtension, WellCutoff,
+    WellReductionThreshold, PEDSpecies and MicroEner* differ (or are
+    absent) between files: no stop, no warning; each file keeps its own
+    value (absent stays None, no line added to its template); templates
+    keep the raw lines; the SOP fallback is the first file carrying the
+    key."""
     a_lines = ['ModelEnergyLimit[kcal/mol] 400\n',
                'AtomDistanceMin[bohr] 0.68793\n',
                'WellExtension 0.5\n',
+               'WellCutoff 10\n',
+               'WellReductionThreshold 10.\n',
                'PEDSpecies A+B=WA C+D=WA ! comment\n',
                'MicroEnerMin[kcal/mol] 0.\n',
                'MicroEnerMax[kcal/mol] 200.\n',
                'MicroEnerStep[1/cm] 349.755\n']
     b_lines = ['ModelEnergyLimit[kJ/mol] 3347.2\n',
                'AtomDistanceMin[angstrom] 1.0\n',
+               'WellCutoff 20\n',
                'MicroEnerMax[kcal/mol] 150\n']
     a = mess_file(well('WA'), header=a_lines)
     b = mess_file(well('WB'), header=b_lines)
@@ -820,10 +862,27 @@ def test_per_pes_keys_never_stop(tmp_path) -> None:
     assert second.ped_species is None
     assert first.micro_ener == pytest.approx((0.0, 200.0, 1.0))
     assert second.micro_ener == (None, 150.0, None)
+    assert (first.well_cutoff, second.well_cutoff) == (10.0, 20.0)
+    assert first.well_reduction_threshold == 10.0
+    assert second.well_reduction_threshold is None
+    assert (sop.well_cutoff, sop.well_reduction_threshold) == (10.0, 10.0)
     for line in a_lines:
         assert line in tpls[0], line
     for line in b_lines:
         assert line in tpls[1], line
+    assert not any('WellReductionThreshold' in t for t in tpls[1])
+
+    # Only the second file carries WellReductionThreshold: the SOP fallback
+    # is its value, the first file keeps None.
+    sub = tmp_path / 'second_only'
+    sub.mkdir()
+    sop, tpls, reader = read(sub, mess_file(well('WA')), mess_file(
+        well('WB'), header=['WellReductionThreshold 14\n']))
+    assert_clean(reader)
+    assert sop.pes_file_data[0].well_reduction_threshold is None
+    assert sop.pes_file_data[1].well_reduction_threshold == 14.0
+    assert sop.well_reduction_threshold == 14.0
+    assert not any('WellReductionThreshold' in t for t in tpls[0])
 
     # A bare WellExtension keyword means 0.0.
     sop, _, reader = read(tmp_path, mess_file(
@@ -1175,3 +1234,320 @@ def test_read_keeps_types(tmp_path) -> None:
     assert isinstance(sop.items['A+B=FakeW-A+B'], Barrier)
     assert sop.items['A+B=FakeW-A+B'].tst_level == 'EJ'
     assert np.array_equal(sop.items['A']._freq, np.array([3700.0]))
+
+
+# ---------------------------------------------------------------------------
+# R12: HotEnergies blocks
+# ---------------------------------------------------------------------------
+# Geometry of ``fragment()``: a well with it and the same frequencies holds
+# the same data as that fragment.
+_GEO_OH = ['        O 0.0 0.0 0.0\n', '        H 0.0 0.0 0.97\n']
+
+
+def _hot_file(block: Iterable[str], tail: Iterable[list[str]] = ()
+              ) -> list[str]:
+    """Wells W1 (-10) and W2 (-5), the bimolecular A+B and the saddle
+    W1=W2; ``block`` in the global header."""
+    return mess_file(well('W1', -10.0), well('W2', -5.0),
+                     bimol('A+B', [fragment('A'), fragment('B', '1600.0')]),
+                     saddle('W1=W2', 'W1', 'W2'), *tail, header=list(block))
+
+
+_HOT_OK: dict[str, tuple[list[str], dict[str, Any]]] = {
+    'kcal_range_and_single': (
+        ['HotEnergies[kcal/mol] 2\n', 'W1 -10:1:40\n', 'W2 5\n'],
+        {'W1': (-10.0, 1.0, 40.0), 'W2': (5.0,)}),
+    'wavenumber': (
+        ['HotEnergies[1/cm] 1\n', 'W1 349.755:349.755:3497.55\n'],
+        {'W1': (1.0, 1.0, 10.0)}),
+    'kj': (['HotEnergies[kJ/mol] 1\n', 'W2 4.184\n'], {'W2': (1.0,)}),
+    'blank_comment_lines': (
+        ['HotEnergies[kcal/mol]   2\n', '\n', '! a comment\n',
+         '  W1 -2.5 ! trailing comment\n', 'W2 .5:.5:2.\n'],
+        {'W1': (-2.5,), 'W2': (0.5, 0.5, 2.0)}),
+    'e_notation': (['HotEnergies[kcal/mol] 1\n', 'W1 -1e1:5E-1:4.0E1\n'],
+                   {'W1': (-10.0, 0.5, 40.0)}),
+}
+
+
+@pytest.mark.parametrize('case', sorted(_HOT_OK))
+def test_hot_energies_grammar(tmp_path, case) -> None:
+    """Units kcal/mol, 1/cm, kJ/mol (step converted too), single values and
+    ranges, negative starts, blank / comment lines skipped: no stop, the
+    energies in kcal/mol as read (file frame) on ``PesFileData``, the block
+    replaced in the template by one placeholder that renders it back."""
+    block, expected = _HOT_OK[case]
+    sop, tpls, reader = read(tmp_path, _hot_file(block))
+    assert_clean(reader)
+    hot = sop.pes_file_data[0].hot_energies
+    assert set(hot) == set(expected)
+    for name, values in expected.items():
+        assert isinstance(hot[name], tuple)
+        assert hot[name] == pytest.approx(values), name
+    assert tpls[0].count('{SOP.r_hot_energies_pes[0]}\n') == 1
+    assert not any(t.split()[:1] == ['W1'] for t in tpls[0])
+    rendered = sop.r_hot_energies_pes[0].split('\n')
+    assert rendered[0] == f'HotEnergies[kcal/mol] {len(expected)}'
+    assert len(rendered) == len(expected) + 1
+    assert sop.shifted_hot_energies(0) == hot
+
+
+def test_hot_energies_every_separator(tmp_path) -> None:
+    """Every MESS range separator ``:;,&%$@#`` gives the same range."""
+    for idx, sep in enumerate(':;,&%$@#'):
+        sub = tmp_path / f'sep{idx}'
+        sub.mkdir()
+        sop, _, reader = read(sub, _hot_file(
+            ['HotEnergies[kcal/mol] 1\n', f'W1 -2{sep}1{sep}3\n']))
+        assert_clean(reader)
+        assert sop.pes_file_data[0].hot_energies == {
+            'W1': (-2.0, 1.0, 3.0)}, sep
+
+
+def test_hot_energies_per_file(tmp_path) -> None:
+    """No block -> None and no placeholder; two files keep their own
+    blocks, each placeholder naming its own PES."""
+    sop, tpls, reader = read(tmp_path, _hot_file([]))
+    assert_clean(reader)
+    assert sop.pes_file_data[0].hot_energies is None
+    assert sop.shifted_hot_energies(0) is None
+    assert sop.r_hot_energies_pes == {}
+    assert not any('r_hot_energies_pes' in t for t in tpls[0])
+
+    sub = tmp_path / 'two'
+    sub.mkdir()
+    first = mess_file(well('W1', -10.0), header=[
+        'HotEnergies[kcal/mol] 1\n', 'W1 -10:1:40\n'])
+    second = mess_file(well('W2', -5.0), header=[
+        'HotEnergies[kcal/mol] 1\n', 'W2 1\n'])
+    sop, tpls, reader = read(sub, first, second)
+    assert_clean(reader)
+    assert sop.pes_file_data[0].hot_energies == {'W1': (-10.0, 1.0, 40.0)}
+    assert sop.pes_file_data[1].hot_energies == {'W2': (1.0,)}
+    assert '{SOP.r_hot_energies_pes[0]}\n' in tpls[0]
+    assert '{SOP.r_hot_energies_pes[1]}\n' in tpls[1]
+    assert sop.r_hot_energies_pes == {
+        0: 'HotEnergies[kcal/mol] 1\nW1 -10.0:1.0:40.0',
+        1: 'HotEnergies[kcal/mol] 1\nW2 1.0'}
+
+
+_HOT_STOPS: dict[str, tuple[list[str], str]] = {
+    'no_unit': (['HotEnergies 1\n', 'W1 1\n'], 'has no accepted unit'),
+    'unknown_unit': (['HotEnergies[eV] 1\n', 'W1 1\n'],
+                     'has no accepted unit'),
+    'count_zero': (['HotEnergies[kcal/mol] 0\n'],
+                   "'0' is not a positive integer"),
+    'count_not_integer': (['HotEnergies[kcal/mol] 1.5\n', 'W1 1\n'],
+                          "'1.5' is not a positive integer"),
+    'count_missing': (['HotEnergies[kcal/mol]\n', 'W1 1\n'],
+                      'is not a positive integer'),
+    'count_larger': (['HotEnergies[kcal/mol] 2\n', 'W1 1\n'],
+                     'no energy given for Model (species line 2 of the 2 '
+                     'announced)'),
+    'early_end': (['HotEnergies[kcal/mol] 2\n', 'W1 1\n', 'End\n'],
+                  '2 species announced but 1 species lines read'),
+    'two_tokens': (['HotEnergies[kcal/mol] 1\n', 'W1 1 2\n'],
+                   'W1 has 2 energy tokens'),
+    'one_separator': (['HotEnergies[kcal/mol] 1\n', 'W1 1:2\n'],
+                      "'1:2' has one separator"),
+    'four_parts': (['HotEnergies[kcal/mol] 1\n', 'W1 1:2:3:4\n'],
+                   "'1:2:3:4' is not an energy"),
+    'non_numeric': (['HotEnergies[kcal/mol] 1\n', 'W1 abc\n'],
+                    "'abc' is not an energy"),
+    'nan': (['HotEnergies[kcal/mol] 1\n', 'W1 nan\n'],
+            "'nan' is not an energy"),
+    'step_zero': (['HotEnergies[kcal/mol] 1\n', 'W1 0:0:10\n'],
+                  'must be positive'),
+    'step_negative': (['HotEnergies[kcal/mol] 1\n', 'W1 0:-1:10\n'],
+                      'must be positive'),
+    'finish_below_start': (['HotEnergies[kcal/mol] 1\n', 'W1 10:1:5\n'],
+                           'holds no energy'),
+    'duplicate_species': (['HotEnergies[kcal/mol] 2\n', 'W1 1\n', 'W1 2\n'],
+                          'W1 is given twice'),
+    'two_blocks': (['HotEnergies[kcal/mol] 1\n', 'W1 1\n',
+                    'HotEnergies[kcal/mol] 1\n', 'W2 1\n'],
+                   'two HotEnergies blocks'),
+    'unknown_species': (['HotEnergies[kcal/mol] 1\n', 'Q 1\n'],
+                        'species Q of'),
+    'bimolecular': (['HotEnergies[kcal/mol] 1\n', 'A+B 1\n'],
+                    'species A+B of'),
+    'barrier': (['HotEnergies[kcal/mol] 1\n', 'W1=W2 1\n'],
+                'species W1=W2 of'),
+    'fragment': (['HotEnergies[kcal/mol] 1\n', 'A 1\n'], 'species A of'),
+}
+
+
+@pytest.mark.parametrize('case', sorted(_HOT_STOPS))
+def test_hot_energies_stops(tmp_path, case) -> None:
+    """A malformed block (MESS rejects it) or a species that is not a Well
+    of the file: one error naming HotEnergies and the file, nothing else;
+    the read goes on to the end."""
+    block, needle = _HOT_STOPS[case]
+    _, tpls, reader = read(tmp_path, _hot_file(block))
+    msg = assert_one_stop(reader, 'HotEnergies', needle,
+                          reader.filenames[0])
+    assert log_of(reader).errors == [msg]
+    assert log_of(reader).warnings == []
+    assert len(tpls) == 1
+    if needle.startswith('species '):
+        assert msg.endswith('is not a Well of this file.')
+
+
+def test_hot_species_must_be_a_well_of_its_own_file(tmp_path) -> None:
+    """X is a well of file 0 only: listed in the block of file 1 (where it
+    is absent, or only a bimolecular fragment), the read stops naming
+    file 1."""
+    first = mess_file(well('X', -7.0, freqs='3700.0', geo=_GEO_OH))
+    for case, blocks in (
+            ('absent', [well('V', -3.0)]),
+            ('fragment', [bimol('A+X', [fragment('A', '1000.0'),
+                                        fragment('X', '3700.0')])])):
+        sub = tmp_path / case
+        sub.mkdir()
+        second = mess_file(*blocks, header=['HotEnergies[kcal/mol] 1\n',
+                                            'X -7:1:20\n'])
+        _, _, reader = read(sub, first, second)
+        msg = assert_one_stop(reader, 'HotEnergies species X of',
+                              reader.filenames[1], 'is not a Well')
+        assert log_of(reader).errors == [msg], case
+
+
+# ---------------------------------------------------------------------------
+# R13: one label, a well in one file and a fragment in another
+# ---------------------------------------------------------------------------
+def _frag_file(freq: str = '3700.0') -> list[str]:
+    """A+X, X with the data of ``fragment('X', freq)``."""
+    return mess_file(bimol('A+X', [fragment('A', '1000.0'),
+                                   fragment('X', freq)], 2.0))
+
+
+def _well_file(freq: str = '3700.0', hot: bool = False) -> list[str]:
+    """Well X (fragment data, ZeroEnergy -7) and well V; optional
+    HotEnergies block on X written before the wells."""
+    header = ['HotEnergies[kcal/mol] 1\n', 'X -7:1:20\n'] if hot else []
+    return mess_file(well('X', -7.0, freqs=freq, geo=_GEO_OH),
+                     well('V', -3.0), header=header)
+
+
+@pytest.mark.parametrize('well_first', [False, True])
+def test_well_and_fragment_share_one_item(tmp_path, well_first) -> None:
+    """Identical data: one object (the well and the fragment of A+X), once
+    in SOP.wells, PES ids of the well's file only; the fragment's PES does
+    not list X as a well; one X__we entry, the well energy; the
+    bimolecular energy is not moved by the well ZeroEnergy."""
+    files = [_well_file(), _frag_file()]
+    if not well_first:
+        files.reverse()
+    fid_well = 0 if well_first else 1
+    sop, _, reader = read(tmp_path, *files)
+    assert_clean(reader)
+    x = sop.items['X']
+    assert x is sop.items['A+X'].fragments[1]
+    assert sum(w is x for w in sop.wells) == 1
+    assert x.pes_ids == [fid_well]
+    assert sop.wells_in(1 - fid_well) == []
+    assert sop.species_names_in_pes(1 - fid_well) == ['A+X']
+    assert sop.species_names_in_pes(fid_well) == ['V', 'X']
+    assert sop.parameters_names['X__we'] == -7.0
+    assert sop.items['A+X'].energy == 2.0
+
+
+@pytest.mark.parametrize('well_first', [False, True])
+def test_hot_species_is_well_here_fragment_elsewhere(tmp_path,
+                                                     well_first) -> None:
+    """The block of the well's file (written before its wells) names X, a
+    fragment of the other file: accepted, the energies stay on the well's
+    file only."""
+    files = [_well_file(hot=True), _frag_file()]
+    if not well_first:
+        files.reverse()
+    fid_well = 0 if well_first else 1
+    sop, _, reader = read(tmp_path, *files)
+    assert_clean(reader)
+    assert sop.items['X'] is sop.items['A+X'].fragments[1]
+    assert sop.items['X'].pes_ids == [fid_well]
+    assert sop.pes_file_data[fid_well].hot_energies == {
+        'X': (-7.0, 1.0, 20.0)}
+    assert sop.pes_file_data[1 - fid_well].hot_energies is None
+
+
+@pytest.mark.parametrize('well_first', [False, True])
+def test_well_and_fragment_different_data_stop(tmp_path, well_first) -> None:
+    """One frequency differs: the existing 'differs' stop, naming both
+    files in reading order."""
+    files = [_well_file('3701.0'), _frag_file()]
+    if not well_first:
+        files.reverse()
+    _, _, reader = read(tmp_path, *files)
+    msg = assert_one_stop(reader, 'Well X differs between')
+    assert msg == (f'Well X differs between {reader.filenames[0]} and '
+                   f'{reader.filenames[1]} in: frequencies.')
+
+
+def test_atom_mass_differs_stops(tmp_path) -> None:
+    """Atom H with mass 1.00782503223 in one file and 1 in another: the
+    read stops naming the atom data."""
+    first = mess_file(bimol('A+H', [fragment('A'), atom('H')]))
+    second = mess_file(bimol('B+H', [fragment('B', '1600.0'),
+                                     atom('H', mass='1')]))
+    _, _, reader = read(tmp_path, first, second)
+    msg = assert_one_stop(reader, 'Well H differs between')
+    assert msg.endswith('in: atom.')
+    assert reader.filenames[0] in msg and reader.filenames[1] in msg
+
+
+# ---------------------------------------------------------------------------
+# R14: E-notation numbers, rotor potentials with a non-number
+# ---------------------------------------------------------------------------
+def test_e_notation_numbers(tmp_path) -> None:
+    """E-notation in TemperatureList / PressureList, frequencies and rotor
+    potentials: read as numbers; a potential ending in 4.32982E-05 keeps
+    the next rotor separate (2 rotors, own group / axis); the MessWriter
+    output re-reads to the same item."""
+    lines = mess_file(well('W', -1.0, freqs='1.5E+03 3.7e3', rotors=[
+        rotor(scan='0.0 0.5 1.0 4.32982E-05'),
+        rotor(scan='-1.2e-3 0.3 0.9 0.3', group='1', axis='2 1')]))
+    lines[0] = 'TemperatureList[K]  5.0E+02 6e2\n'
+    lines[1] = 'PressureList[bar]   1.0e-1 1E0\n'
+    sop, tpls, reader = read(tmp_path, lines)
+    assert_clean(reader)
+    assert sop.temp == [500.0, 600.0] and sop.pres == [0.1, 1.0]
+    item = sop.items['W']
+    assert list(item._freq) == [1500.0, 3700.0]
+    first, second = item.h_rotors
+    assert list(first.scan) == pytest.approx([0.0, 0.5, 1.0, 4.32982e-05])
+    assert list(second.scan) == pytest.approx([-1.2e-3, 0.3, 0.9, 0.3])
+    assert (first.group, first.axis) == ([2], [1, 2])
+    assert (second.group, second.axis) == ([1], [2, 1])
+
+    out = tmp_path / 'out'
+    out.mkdir()
+    MessWriter(SOP=sop, tpl=tpls[0]).write(loc=str(out), filename='W.inp')
+    again_dir = tmp_path / 'again'
+    again_dir.mkdir()
+    again, _, again_reader = read(
+        again_dir, (out / 'W.inp').read_text().splitlines(keepends=True))
+    assert_clean(again_reader)
+    rotors = again.items['W'].h_rotors
+    assert len(rotors) == 2
+    # Potential grids are written with 3 decimals.
+    assert list(rotors[0].scan) == pytest.approx(list(first.scan), abs=1e-3)
+    assert list(rotors[1].scan) == pytest.approx(list(second.scan), abs=1e-3)
+    assert list(again.items['W']._freq) == [1500.0, 3700.0]
+
+
+@pytest.mark.parametrize('bad', ['End', 'nan', 'inf'])
+def test_rotor_potential_non_number_raises(tmp_path, bad) -> None:
+    """Fewer energies than announced (the rotor's End is met) or a nan /
+    inf energy: TypeError naming the file, the rotor and the token, instead
+    of silently reading the next lines into the scan."""
+    rot = rotor(scan='0.0 0.5 1.0 0.5')
+    if bad == 'End':
+        rot[4] = '        Potential[kcal/mol]  5\n'
+    else:
+        rot[5] = f'          0.0 0.5 {bad} 0.5\n'
+    lines = mess_file(well('W', rotors=[rot, rotor(group='1', axis='2 1')]))
+    with pytest.raises(TypeError, match=f"hindered rotor 1 of W expects .* "
+                                        f"but found '{bad}'") as info:
+        read(tmp_path, lines)
+    assert 'f0.inp' in str(info.value)

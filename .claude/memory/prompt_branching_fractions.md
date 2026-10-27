@@ -31,6 +31,7 @@ A prompt rate coefficient is k1 split by T- and P-dependent branching fractions 
   - Selection: 84 reactions forming C4H71-3 or C4H71-4 in C3MechV3.3. Keeping ΔH1+ΔH3 ≤ 30 kcal/mol left 17. Twelve were computed: abstraction by H, CH3, OH and O(3P) from C4H8-1 secondary site → C4H71-3, C4H8-1 primary site → C4H71-4, and C4H8-2 → C4H71-3.
   - Abstraction rates: AutoMech, B2PLYP-D3/cc-pVTZ geometries and CCSD(T)-F12 energies, conventional TST with Eckart tunnelling.
   - C4H7 decomposition PES: Li et al., with well extension and α = 100·(T/300)^0.8 cm⁻¹ in N2.
+  - Collision models differ by source (paper §3.2, checked 2026-10-27): the C4H7 α and its N2 Lennard-Jones values (input comment `1MA from AWJ`) come from 2DME simulations with an N2 bath (Cho et al., PCI 39), while the abstraction inputs carry AutoMech's default estimate (Ar bath, Factor 609.972, Power 0.521). This is harmless in the paper: the abstraction rates show no significant pressure dependence and the PED is collision-free, so only the C4H7 collision model matters. The paper expects a higher collisional efficiency than N2 in the Ar-diluted butene flames; a test with α0 = 200 cm⁻¹ gave smaller prompt effects but almost unchanged ρDOS flame results, through compensation with the thermal dissociation rates (SM §S4).
   - Each abstraction is split into 4 products: thermalised C4H71-3, thermalised C4H71-4, C4H6+H and C2H4+C2H3. After summing duplicates this gives **32 reactions**, over 500–2500 K and 0.03–100 atm, fitted as PLOG.
   - Mechanism versions: base, thermal model, ρDOS model = `RATE CONSTANTS/base.txt`, `prompt_thermal.txt`, `prompt_rovib_dos.txt`. Verified: `prompt_rovib_dos.txt` contains exactly these 32 reactions.
 
@@ -83,6 +84,7 @@ With ρDOS, the fraction of energy given to C4H71-3 depends on T and on the part
   - isomerisation fractions by projection onto the chemical eigenspace;
   - dissociation fractions by time integration over the relaxation eigenstates.
 - The reader subtracts the well energy (`hoten.py:145`), so E′ is measured from the well bottom; only E′ > 0 is kept.
+- The `HotEnergies` values are absolute, in the input's own energy zero; the log reports them that way. MESS bins each one on the well's energy grid (`itemp = (energy_reference − E)/energy_step`) and silently drops any energy outside it (above the reference, or below the well bottom); an unknown well name is fatal (MESS source `src/libmess/mess.cc:6214-6240`). KiMecO writes them shifted by the well's perturbation dE: [[multi-pes-mess-reading]].
 - Example rows in the log (500 K, 0.03 atm):
   - C4H71-3 at 79.4 kcal/mol above its well: 0.968 → C4H6+H, 0.032 → C2H4+C2H3.
   - C4H71-4 at 62.6 kcal/mol: 0.70 / 0.30.

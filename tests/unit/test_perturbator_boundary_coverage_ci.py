@@ -626,3 +626,69 @@ def test_perturb_vibrations_batch_individual_and_errors() -> None:
     pert, _ = _setup([], 'other')
     with pytest.raises(TypeError, match='Unknown frequency perturbation mode'):
         pert.perturb_vibrations(cast(Any, well))
+
+
+# ===========================================================================
+# perturb: one species (well of a PES, fragment elsewhere) drawn once per call
+# ===========================================================================
+from kimeco.well import Well  # noqa: E402
+
+
+def _spied_pert() -> tuple[Perturbator, list[tuple[str, str]]]:
+    """Scripted Perturbator whose four item sub-steps only record
+    (sub-step, item name); barriers are not perturbed."""
+    i_sop = SimpleNamespace(factor=1.0, power=0.8, sigmas=[], epsilons=[],
+                            uncertainties={})
+    pert, _ = _scripted_pert([], i_sop)
+    calls: list[tuple[str, str]] = []
+    pert.perturb_energy = lambda item: calls.append(('energy', item.name))
+    pert.perturb_vibrations = lambda well: calls.append(('vib', well.name))
+    pert.perturb_hindered_rotors = \
+        lambda well: calls.append(('hr', well.name))
+    pert.perturb_multi_rotors = lambda well: calls.append(('mr', well.name))
+    pert.perturb_barrier = lambda bar: None
+    return pert, calls
+
+
+def _sop_of(wells: list[Any], *fragment_pairs: list[Any]) -> Any:
+    return SimpleNamespace(
+        factor=1.0, power=0.8, sigmas=[], epsilons=[], wells=wells,
+        bimolecular=[SimpleNamespace(fragments=pair)
+                     for pair in fragment_pairs],
+        barriers=[])
+
+
+def _each_step(*names: str) -> list[tuple[str, str]]:
+    return [(step, name) for name in names
+            for step in ('energy', 'vib', 'hr', 'mr')]
+
+
+def test_perturb_draws_each_item_once_per_call() -> None:
+    """X is a well and a fragment of X+H; H is a fragment of X+H and Y+H:
+    X, H and Y each go through the four sub-steps once per ``perturb``
+    call, in the order met; a second call perturbs them once again."""
+    x, y, h = Well('X', [0]), Well('Y', []), Well('H', [])
+    pert, calls = _spied_pert()
+    sop = _sop_of([x], [x, h], [y, h])
+    assert pert.perturb(cast(Any, sop)) is sop
+    assert calls == _each_step('X', 'H', 'Y')
+    calls.clear()
+    pert.perturb(cast(Any, sop))
+    assert calls == _each_step('X', 'H', 'Y')
+
+
+def test_perturb_well_guard() -> None:
+    """A well listed twice is drawn once; ``already_perturbed`` records the
+    item on its first call only and ``perturb`` resets the record, so
+    ``perturb_well`` called again outside ``perturb`` is skipped."""
+    x = Well('X', [0])
+    pert, calls = _spied_pert()
+    pert.perturb(cast(Any, _sop_of([x, x])))
+    assert calls == _each_step('X')
+
+    calls.clear()
+    pert.perturb_well(x)
+    assert calls == []
+    pert.perturb(cast(Any, _sop_of([])))
+    assert pert.already_perturbed(x) is False
+    assert pert.already_perturbed(x) is True

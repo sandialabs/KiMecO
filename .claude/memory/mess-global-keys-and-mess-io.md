@@ -23,7 +23,7 @@ verified: 2026-10-26 against Auto-Mech/MESS c569e3a, the 2016 MESS manual and au
   bottom; absent → any submerged barrier stops MESS.
 - `FloatType` — solver precision; non-`double` needs an MPACK/MPLAPACK build, else MESS stops.
 - `ExponentCutoff` (EnergyRelaxation) — kernel truncated when ΔE/ΔE_down > x; default 10.
-- `RateOutput` replaces the default `<stem>.out`; `PEDOutput`/`MicroRateOutput` names are used verbatim.
+- `RateOutput` replaces the default `<stem>.out`; `PEDOutput`/`MicroRateOutput` names are used verbatim. Without `MicroRateOutput` no `ke.out` is written at all (mess-static 2026.2.4, a `HotEnergies` input).
 - `PotentialSpline[kcal/mol] N M`: N angles then N energies; M optional (Fourier size, made odd).
 
 **Lennard-Jones pair** (`libmess/model.cc::LennardJonesCollision`): reads exactly two numbers per
