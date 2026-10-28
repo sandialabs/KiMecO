@@ -2,7 +2,7 @@
 name: mess-global-keys-and-mess-io
 description: "What each global MESS key does to the rates and its default when absent (from the MESS source and manual), how MESS combines the Lennard-Jones pair, and the AutoMech mess_io writer defaults, hard-codes and pass-2 quirks that change a written input. Read before classifying, forwarding or checking MESS header keys."
 type: reference
-verified: 2026-10-26 against Auto-Mech/MESS c569e3a, the 2016 MESS manual and autoio (mess_io) source
+verified: 2026-10-27 against Auto-Mech/MESS c569e3a, the 2016 MESS manual, autoio (mess_io) source and mechdriver 0.2026.1
 ---
 **Global keys (MESS `src/mess_driver.cc`, `src/libmess/mess.cc`; manual §5)** — default if absent:
 - `CalculationMethod` direct | low-eigenvalue | well-reduction — default `direct` (manual: "compulsory").
@@ -17,8 +17,10 @@ verified: 2026-10-26 against Auto-Mech/MESS c569e3a, the 2016 MESS manual and au
   (the 2016 manual says projection).
 - `AtomDistanceMin` — geometry sanity check only; default 1.4 bohr.
 - `WellReductionThreshold` — well-reduction method only; default 10.
-- `WellExtension` — extends wells below the WellCutoff bound; bare keyword = 0; default off; MESS
-  keeps the last assignment of a repeated key.
+- `WellExtension` — extends wells below the WellCutoff bound; bare keyword = 0; value must lie in
+  [0, 1); default off; MESS keeps the last assignment of a repeated key.
+- `ExtensionCorrection` — must lie in (0, 1), default 0 (`libmess/mess.cc` `well_ext_corr`).
+  `WellExtensionCap[kcal/mol]` (inside a Well block) must be > 0; `WellCutoff` must be > 0.
 - `GroundEnergyShiftMax` (Model section) — a barrier below its well by ≤ x is raised to the well
   bottom; absent → any submerged barrier stops MESS.
 - `FloatType` — solver precision; non-`double` needs an MPACK/MPLAPACK build, else MESS stops.
@@ -42,10 +44,19 @@ manual lists "buffer gas, complex" (collider first); AutoMech writes the target 
   `ped_spc_lst`/`micro_out_params`.
 - `bimolecular(calc_spc1_density, calc_spc2_density)`: `density` belongs to each bimolecular
   occurrence (OH is `density` as a product, not as a reactant, in AutoMech inputs).
+- `global_rates_input_v1` has no WellCutoff kwarg; given both `hot_enes_dct` and `ped_spc_lst` it
+  forces `calculation_method='well-reduction'`; `format_hot_enes` writes one `a:b:c` token per
+  species, one decimal (`_glob.py`, `_format.py::format_hot_enes`).
 - Pass 2 (`mess_io/_wellextend.py`): `_format_well_extension_inp` un-comments `!WellExtension` or
-  inserts a bare `WellExtension` before `Model` (overrides a valued pass-1 line: bare = 0);
-  `_get_well_reactions` treats only labels without `+` as wells, so `FakeW-A+B` gets no cap or
-  lumping.
+  inserts a bare `WellExtension` before `Model` (overrides a valued pass-1 line: bare = 0),
+  **always** inserts `ExtensionCorrection    0.6` before `Model`, and adds a
+  `WellExtensionCap[kcal/mol]` after a well's line only when that well's k(T) stops below the
+  run's highest T (energy from the pass-1 log; a None there raises TypeError). So a pass 2 on a PES
+  whose wells never merge still changes the input and the rates. `well_lumped_input_file(...,
+  lump=True)` builds a `LumpingScheme`/`WellSeparator` block (after `Model`) only when `lump` and
+  pass 1 has > 1 well; mechdriver calls it with `lump=False` (`mechroutines/ktp/rates.py`), KiMecO
+  with the default `lump=True`. `_get_well_reactions` treats only labels without `+` as wells, so
+  `FakeW-A+B` gets no cap or lumping.
 - `rotor_hindered(potential_form='spline')` writes `PotentialSpline N N-1`.
 
 **Why:** these defaults decide whether a key may differ between PES files, and mess_io silently

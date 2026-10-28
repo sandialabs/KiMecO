@@ -2,7 +2,7 @@
 name: multi-pes-mess-reading
 description: "How MessInputReader reads several MESS inputs into one SOP (shared items, energy alignment, header-key classes, per-PES Lennard-Jones layout) and how both writers give each file back in its own frame; the invariants and test pins to respect when changing the reader, the SOP or the MESS writers."
 type: project
-verified: 2026-10-27 against working tree (uncommitted step 1 of prompt-reactions)
+verified: 2026-10-27 against working tree (uncommitted steps 1-2 of prompt-reactions)
 ---
 **Reading (`kimeco/readers/mess_input.py`)**
 - One input file = one PES; `pes_id` = index in `mess_inputs`. Slot index == `pes_id` only because
@@ -86,6 +86,20 @@ verified: 2026-10-27 against working tree (uncommitted step 1 of prompt-reaction
   <Label> in <file>", one "bath mass" warning for Masses index 0); consistent inputs log info only.
 - `tests/unit/test_automech_driver_ci.py:884-885`: with no header keys the `global_rates_input_v1`
   kwargs are exactly temperatures, pressures, well_extension, ktp_outname.
+- Prompt mode (setting `prompt_reactions`, step 2): `AutomechKinWriter._build_payload` adds the
+  payload key `prompt_reactions` (`True`) only then, so non-prompt payloads stay byte-identical to the
+  goldens. The reader takes the flag with `settings.get('prompt_reactions', False)` (tests build it
+  with partial settings) and, after the per-file loop, `_check_prompt_links` stops (via `_stop`) when
+  no `PEDSpecies` product (`rhs.split('+')`) equals a `HotEnergies` key of another PES, on a
+  malformed pair, or when a linked PED PES has incomplete `MicroEner*`; an unlinked PED PES warns.
+  The check is off in non-prompt reads, so the three-file H-group still reads there.
+- `test_emitted_main_structure` (`test_automech_driver_ci.py`) pins the driver `If`: a `BoolOp(Or)`
+  whose first operand is the Name `prompt_mode` (assigned once from `PES_PAYLOAD.get("prompt_reactions")`)
+  and whose last is the bare `MessOutputReader.well_merging(...)` Call; plus exactly six placeholders
+  and no other brace in the template.
+- `test_installation_mess_ci.py` scans the whole `automech_kin_tpl` source, comments included: every
+  `subprocess.run([...])` argv starting with `mess` must have 2 items, and `/mess` and `CONDA_PREFIX`
+  must not appear anywhere (a comment containing them fails the test).
 - Known gap: `KiMec.create_reactions` adds reactions PES by PES without dedup, so a pair shared by
   two PES gives two Cantera reactions; Cantera 3.2 `Solution(species=, reactions=)` accepts them
   and sums the rates (only a YAML file raises "Undeclared duplicate") (`kimeco/kinmec.py`).

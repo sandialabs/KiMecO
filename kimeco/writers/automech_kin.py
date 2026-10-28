@@ -25,12 +25,17 @@ When executed on the compute node the emitted script:
    the payload, with side-output names of its own (``<name>P<slot>_ped.out``,
    ``<name>P<slot>_ke.out``);
 5. writes the base input, runs MESS (pass 1), moves the pass-1 output to a
-   leading-underscore intermediate, and only if rate coefficients are missing
-   (merged wells) derives WellExtension caps via
+   leading-underscore intermediate (``_<name>P<slot>.out``), and, in prompt
+   mode (payload key ``prompt_reactions``, present only when the
+   ``prompt_reactions`` setting is true) or when rate coefficients are
+   missing (merged wells), derives WellExtension caps via
    ``mess_io.well_lumped_input_file`` (at the lump pressure converted to atm,
    the unit mess_io parses the output in), overwrites the input and runs MESS
    (pass 2); otherwise the pass-1 output is moved back to
-   ``<name>P<slot>.out`` and pass 2 is skipped.
+   ``<name>P<slot>.out`` and pass 2 is skipped. In prompt mode every PES thus
+   ends with the pass-2 input, output and ``.log`` (plus ``_ped.out`` and
+   ``_ke.out`` when the input asks for them) next to the pass-1 copy; the
+   driver deletes no file.
 
 External files referenced by bare relative filename (multirotor PES files,
 barrierless rotd flux files) are read from the run cwd at execution time - they
@@ -402,7 +407,11 @@ def main():
         return
     os.replace(out_name, pass1_copy)
 
-    if MessOutputReader.well_merging(pass1_copy):
+    # Prompt mode: every PES runs pass 2, whether or not wells merged, so
+    # that each one ends with the same set of pass-2 outputs. The or below
+    # short-circuits: the merged-well check is skipped in prompt mode.
+    prompt_mode = bool(PES_PAYLOAD.get("prompt_reactions"))
+    if prompt_mode or MessOutputReader.well_merging(pass1_copy):
         out_str = open(pass1_copy).read()
         aux_str = ""
         if os.path.isfile(aux_name):
@@ -423,7 +432,8 @@ def main():
         # Pass 2: final SOP-consistent output at <name>P<slot>.out.
         _run_mess(inp_name)
     else:
-        # No merged wells: pass 1 is already the final result.
+        # Not prompt mode and no merged wells: pass 1 is already the final
+        # result.
         os.replace(pass1_copy, out_name)
 
 
@@ -811,6 +821,11 @@ class AutomechKinWriter:
                                       None)
             if well_red_thresh is not None:
                 payload['well_red_thresh'] = float(well_red_thresh)
+        # Prompt mode: the driver then always runs pass 2. The key is
+        # added only in prompt mode, so the payload of other runs is
+        # unchanged.
+        if self.settings.get('prompt_reactions'):
+            payload['prompt_reactions'] = True
         return payload
 
     def _add_file_keys(self,

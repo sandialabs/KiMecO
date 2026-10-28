@@ -351,6 +351,26 @@ def test_akw_payload_per_pes(tmp_path) -> None:
         'epsilons'] == [7.95, 333.0]
 
 
+def test_akw_payload_prompt_flag_only_in_prompt_mode(tmp_path) -> None:
+    """Settings None, {} or prompt_reactions False give the same payload,
+    without the key; prompt_reactions True adds exactly
+    ``'prompt_reactions': True``; the payload stays a Python literal."""
+    sop, _, reader = read(tmp_path, *_rich_pair())
+    assert_clean(reader)
+    for pes_id in (0, 1):
+        payloads = [
+            AutomechKinWriter(sop=sop, pes_id=pes_id,
+                              settings=settings)._build_payload()
+            for settings in (None, {}, {'prompt_reactions': False})]
+        off = payloads[0]
+        assert payloads[1] == off and payloads[2] == off
+        assert 'prompt_reactions' not in off
+        on = AutomechKinWriter(sop=sop, pes_id=pes_id, settings={
+            'prompt_reactions': True})._build_payload()
+        assert on == {**off, 'prompt_reactions': True}
+        assert ast.literal_eval(repr(on)) == on
+
+
 def test_akw_payload_fallbacks(tmp_path, monkeypatch, caplog) -> None:
     """lj_masses: own pair -> SOP.masses -> N2 + heaviest well; no file
     data: SOP.model_ene_limit and SOP.well_reduction_threshold (first

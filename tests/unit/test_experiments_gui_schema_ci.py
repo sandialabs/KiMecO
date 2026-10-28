@@ -1,3 +1,5 @@
+import pytest
+
 from kimeco.default_settings import default_settings
 from kimeco.gui.input_sections.experiments_section import (
     _make_empty_experiment,
@@ -60,6 +62,31 @@ def test_use_automech_is_bool_in_defaults_and_gui_metadata() -> None:
     by_category = get_all_parameters_by_category()
     names = {m.name for m in by_category["Rate Coefficients"]}
     assert "use_automech" in names
+
+
+@pytest.mark.parametrize("key, default, param_type", [
+    ("prompt_reactions", False, "bool"),
+    ("prompt_ped_model", "rovib_dos", "str"),
+    ("prompt_bf_threshold", 0.01, "float"),
+])
+def test_prompt_keys_in_defaults_and_gui_metadata(key, default,
+                                                  param_type) -> None:
+    """The three prompt keys: default value and type, GUI type inferred
+    from it, category "Rate Coefficients" with a description, listed under
+    that category."""
+    assert key in default_settings
+    value = default_settings[key]
+    assert value == default and type(value) is type(default)
+
+    meta = get_parameter_metadata(key)
+    assert meta.default == default
+    assert meta.param_type == param_type
+    assert meta.category == "Rate Coefficients"
+    assert meta.description.strip()
+
+    names = {m.name for m in get_all_parameters_by_category()[
+        "Rate Coefficients"]}
+    assert key in names
 
 
 

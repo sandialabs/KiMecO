@@ -53,8 +53,8 @@ jobs:
   # Proves that the automech extra is installable and importable, not just
   # declared: autoio/autochem/autofile/mechanalyzer are not on PyPI so they are
   # pre-installed from GitHub (same pins as README / MANUAL / wiki; mechanalyzer
-  # also ships the recorded prompt-dissociation fixtures used by the NB tests),
-  # then `.[automech,test]` is
+  # is in no extra: KiMecO imports it lazily, only when 'prompt_reactions' is
+  # true), then `.[automech,test]` is
   # installed and KIMECO_REQUIRE_EXTRAS turns every "extra not installed"
   # skip in tests/unit/ into a failure.
   test-automech-extra:

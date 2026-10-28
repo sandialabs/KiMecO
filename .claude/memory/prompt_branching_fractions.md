@@ -126,3 +126,36 @@ BF_{R→Pi+I2}(T,P) = ∫ f(E')·BF_{I1*→Pi}(E') dE'  /  Σ_j ∫ f(E')·BF_{I
 - Prompt effects significant from 1000 K; the thermalised-radical BF falls below 0.5 under 1500 K, giving up to an order of magnitude difference by 2000 K.
 - Main product from C4H71-3* is C4H6 + H. C4H71-4* both dissociates and isomerises to C4H71-3 (up to 10% at 1000 K).
 - The thermal model gives much smaller effects.
+
+## 4. KiMecO side (steps 1-2 of the prompt-reactions work, uncommitted)
+
+- Settings (`kimeco/default_settings.py`): `prompt_reactions` (False), `prompt_ped_model`
+  (`rovib_dos`, one of the 8 mechanalyzer models `equip_simple`, `equip_phi`, `rovib_dos`, `beta_phi1a`,
+  `beta_phi2a`, `beta_phi3a`, `thermal`, `fne`; plain string, no enum) and `prompt_bf_threshold` (0.01,
+  must lie in [0, 1)). Step 2 only validates them; nothing computes BFs yet.
+- Code map: `KMOInput._check_prompt` (`user_input.py`, called from `full_run_settings` only when
+  `prompt_reactions` is true; refuses without `use_automech`, without importable
+  `mechanalyzer.builder.multipes_prompt_dissociation_ktp_dct`, with an unknown model or a threshold
+  outside [0, 1); reports all failures, then `sys.exit(-1)`); `MessInputReader._check_prompt_links`
+  (`readers/mess_input.py`, link between `PEDSpecies` products and `HotEnergies` keys);
+  `automech_kin_tpl.main()` (`writers/automech_kin.py`): in prompt mode pass 2 always runs, with the
+  same `lump=True` `well_lumped_input_file` call, and nothing is deleted (final `.inp/.out/.log/_ped.out/
+  _ke.out` from pass 2 plus the pass-1 copy `_<base>.out`).
+- mechanalyzer is installed by hand (not on PyPI, in no extra); it is imported lazily, only in prompt mode.
+  Its pip metadata declares `dependencies = []`: the runtime deps (pandas, scipy, matplotlib,
+  python-igraph, click, pyyaml, autoio, autochem, autofile) are listed only under pixi
+  (`mechanalyzer/pyproject.toml`), and importing any submodule runs `mechanalyzer/__init__`, which
+  pulls `igraph` and `matplotlib.pyplot` through `plotter.pes` (a heavy import).
+- Every process of a prompt run checks it: SIM array tasks rebuild `KiMecO(sim_job=True)`
+  (`templates/sim_arr_tpl.py`), which runs `full_run_settings` and the MESS read (link check
+  included) at ERROR log level, so prompt warnings never show in SIM logs.
+- **mechanalyzer failures that exit 0** (they satisfy `afterok`, so the collector must check its
+  outputs): an unknown model prints "model not available" and calls `sys.exit()`
+  (`calculator/ene_partition.py::PEDModels.compute_ped`; `models_dct` is built in `__init__`, `fne`
+  is handled before it in `nonboltz.py`/`bf.py`); `rovib_dos` and `thermal` (same method) call
+  `sys.exit()` when `ke.out` gives no DOS for the hot fragment, or for the co-fragment unless it is
+  an atom (`PEDModels.rovib_dos`). An endothermic abstraction switches to `thermal` whatever the
+  model (`nonboltz.py`).
+- **BF threshold** (`calculator/bf.py::bf_tp_df_todct`, default 1e-3; CLI `promptcalc` defaults
+  `rovib_dos`/0.1): a product is kept if its BF ≥ threshold at one (T, P) at least; points with
+  BF < 1e-30 (or ≥ 1−1e-12 when several products) are dropped point by point.

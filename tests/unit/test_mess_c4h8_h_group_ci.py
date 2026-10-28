@@ -94,13 +94,17 @@ ORDERS4 = [(C4H7, H3, H4, H2B), (H3, H4, H2B, C4H7)]
 
 
 def _read(files: list[str] | tuple[str, ...], root: Path = DATA,
-          species: list[str] = SPECIES
+          species: list[str] = SPECIES, prompt: bool = False
           ) -> tuple[Any, list[Any], MessInputReader]:
-    settings = {
+    settings: dict[str, Any] = {
         'init_loc': str(root), 'mess_inputs': list(files), 'n_exp': 1,
         'score_sp': [], 'freq_mode': FreqMode.BATCH,
         'rc_temp': [500.0, 550.0], 'rc_pres': [0.03, 0.1],
         'pres_unit': 'atm', 'force_new_molecules': False}
+    if prompt:
+        # Only in prompt mode: the other reads carry no key at all, which
+        # pins the reader's .get default.
+        settings['prompt_reactions'] = True
     reader = MessInputReader(settings=settings, mechanism_species=species,
                              klog=SpyLog(),  # type: ignore[arg-type]
                              postprocess=False)
@@ -517,3 +521,147 @@ def test_four_files_perturbation_draws_each_species_once() -> None:
         objects.update((id(f), f.name) for f in bim.fragments)
     assert sorted(seen) == sorted(objects.values())
     assert seen.count('CH2CHCHCH3') == 1 and seen.count('H') == 1
+
+
+# ---------------------------------------------------------------------------
+# P1-P7: prompt mode, PEDSpecies products linked to HotEnergies wells
+# ---------------------------------------------------------------------------
+_H3_PED = 'CH2CHCH2CH3+H=CH2CHCHCH3+H2'
+_H2B_PED = 'CH3CHCHCH3+H=CH2CHCHCH3+H2'
+_MICRO = ('MicroEnerMin[kcal/mol]                 0.1\n',
+          'MicroEnerMax[kcal/mol]                 320.0\n',
+          'MicroEnerStep[kcal/mol]                0.1\n')
+
+
+def _prompt_copy(tmp_path: Path, edits: dict[str, list[tuple[str, str]]],
+                 files: tuple[str, ...] = (C4H7, H3, H4, H2B)) -> Path:
+    """Copy ``files`` to ``tmp_path`` and apply text edits ({file: [(old,
+    new)]}, each ``old`` found exactly once); the fixtures stay frozen."""
+    for name in files:
+        text = (DATA / name).read_text()
+        for old, new in edits.get(name, []):
+            assert text.count(old) == 1, (name, old)
+            text = text.replace(old, new)
+        (tmp_path / name).write_text(text)
+    return tmp_path
+
+
+def _messages(reader: MessInputReader) -> tuple[list[str], list[str]]:
+    log: Any = reader.klog
+    return log.warnings, log.errors
+
+
+@pytest.mark.parametrize('order', ORDERS4, ids=['hot_first', 'hot_last'])
+def test_prompt_four_files_link_cleanly(order) -> None:
+    """Prompt mode, the H group with the hot C4H7 PES: every PEDSpecies
+    product CH2CHCHCH3 / CH2CH2CHCH2 is a HotEnergies well of C4H7, every
+    PED file sets MicroEner*: no stop, no warning, in either order."""
+    _, _, reader = _read(order, species=HOT_SPECIES, prompt=True)
+    _assert_clean(reader)
+
+
+@pytest.mark.parametrize('files, counts', [
+    ((H3, H4, H2B), 'PEDSpecies in 3 input(s), HotEnergies in 0 input(s)'),
+    ((C4H7,), 'PEDSpecies in 0 input(s), HotEnergies in 1 input(s)'),
+], ids=['no_hot', 'no_ped'])
+def test_prompt_without_ped_or_hot_stops(files, counts) -> None:
+    """No HotEnergies anywhere (H group alone) or no PEDSpecies anywhere
+    (C4H7 alone): one stop telling which side is missing, no warning."""
+    _, _, reader = _read(files, species=HOT_SPECIES, prompt=True)
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert warnings == []
+    assert len(errors) == 1, errors
+    assert "'prompt_reactions' is true but no PEDSpecies product" in \
+        errors[0]
+    assert counts in errors[0]
+
+
+def test_prompt_self_link_does_not_count(tmp_path) -> None:
+    """C4H7 alone with a PEDSpecies whose product is its own hot well: a
+    product hot in its own file is no link, so the read stops."""
+    root = _prompt_copy(tmp_path, {C4H7: [(
+        'RateOutput                             rate.out\n',
+        'RateOutput                             rate.out\n'
+        'PEDSpecies CH2CHCHCH2+H=CH2CHCHCH3\n')]}, files=(C4H7,))
+    sop, _, reader = _read((C4H7,), root=root, species=HOT_SPECIES,
+                           prompt=True)
+    assert sop.pes_file_data[0].ped_species == ['CH2CHCHCH2+H=CH2CHCHCH3']
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert len(errors) == 1, errors
+    assert 'PEDSpecies in 1 input(s), HotEnergies in 1 input(s)' in errors[0]
+
+
+@pytest.mark.parametrize('pair', ['CH2CHCH2CH3+H', 'A+B=C+D=E', 'A+=B'],
+                         ids=['no_eq', 'two_eq', 'empty_name'])
+def test_prompt_malformed_ped_pair_stops(tmp_path, pair) -> None:
+    """A PEDSpecies entry that is not ``<reactants>=<products>`` stops a
+    prompt read, naming the file and the entry (and nothing else); the
+    same copy read without prompt mode does not stop."""
+    root = _prompt_copy(tmp_path, {H3: [(_H3_PED, pair)]})
+    _, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES,
+                         prompt=True)
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert warnings == []
+    assert len(errors) == 1, errors
+    assert f"PEDSpecies entry '{pair}' of {root / H3}" in errors[0]
+    assert '<reactants>=<products>' in errors[0]
+
+    _, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES)
+    _assert_clean(reader)
+
+
+def test_prompt_unlinked_ped_pes_only_warns(tmp_path) -> None:
+    """A PED file whose products are hot nowhere (2-H_C4H71-3 rewritten to
+    form CH2CHCH2CH3+H) while the others link: no stop, one warning naming
+    that file only."""
+    root = _prompt_copy(tmp_path, {H2B: [(
+        _H2B_PED, 'CH3CHCHCH3+H=CH2CHCH2CH3+H')]})
+    _, _, reader = _read(ORDERS4[1], root=root, species=HOT_SPECIES,
+                         prompt=True)
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is False, errors
+    assert errors == []
+    assert len(warnings) == 1, warnings
+    assert warnings[0].startswith(
+        f'Prompt reactions: no PEDSpecies product of {root / H2B} is a '
+        'HotEnergies species of another MESS input')
+
+
+@pytest.mark.parametrize('removed', [_MICRO[2:], _MICRO],
+                         ids=['one_missing', 'all_missing'])
+def test_prompt_linked_ped_incomplete_micro_ener_stops(tmp_path,
+                                                       removed) -> None:
+    """A linked PED file (H_C4H71-3) without MicroEnerStep, or without all
+    three MicroEner keys: one stop naming the file and its linked product;
+    the other PED files pass."""
+    root = _prompt_copy(tmp_path, {H3: [(line, '') for line in removed]})
+    _, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES,
+                         prompt=True)
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert warnings == []
+    assert len(errors) == 1, errors
+    assert errors[0].startswith(
+        'Prompt reactions: the PEDSpecies products CH2CHCHCH3 of '
+        f'{root / H3} are HotEnergies species of another MESS input')
+    assert 'MicroEnerStep' in errors[0] and '_ke.out' in errors[0]
+
+
+def test_prompt_unlinked_ped_incomplete_micro_ener_only_warns(
+        tmp_path) -> None:
+    """An unlinked PED file needs no MicroEner keys: 2-H_C4H71-3 unlinked
+    and without MicroEner* gets the unlinked warning only, no stop."""
+    root = _prompt_copy(tmp_path, {H2B: [
+        (_H2B_PED, 'CH3CHCHCH3+H=CH2CHCH2CH3+H'),
+        *((line, '') for line in _MICRO)]})
+    sop, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES,
+                           prompt=True)
+    assert sop.pes_file_data[ORDERS4[0].index(H2B)].micro_ener is None
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is False, errors
+    assert errors == []
+    assert len(warnings) == 1, warnings
+    assert f'no PEDSpecies product of {root / H2B}' in warnings[0]

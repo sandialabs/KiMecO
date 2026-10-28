@@ -713,6 +713,29 @@ def _patch_automech(monkeypatch) -> tuple[list[dict], list[str]]:
     return records, writes
 
 
+def test_automech_forwards_settings_to_writer(
+        tmp_path: Path, monkeypatch) -> None:
+    """RateCo hands its own settings to every AutomechKinWriter, so the
+    prompt flag (read by the writer's payload) reaches each PES driver."""
+    received: list[Any] = []
+
+    def _capture(sop, pes_id, sub_p=None, sub_t=None, settings=None):
+        received.append(settings)
+        return SimpleNamespace(
+            write=lambda loc, filename: Path(loc, filename).write_text(''))
+
+    monkeypatch.setattr('kimeco.rate_coef.AutomechKinWriter', _capture)
+    settings = _am_settings(postprocess=False, use_automech=True)
+    settings['prompt_reactions'] = True
+    rc = _am_rateco(tmp_path, settings)
+
+    rc.create_input()
+
+    assert len(received) == 2
+    assert all(s is rc.settings for s in received)
+    assert all(s['prompt_reactions'] is True for s in received)
+
+
 def _forbid_messwriter(monkeypatch) -> None:
     def _boom(*a, **k):
         raise AssertionError('MessWriter must not be used with use_automech')

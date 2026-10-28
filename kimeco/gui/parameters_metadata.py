@@ -58,6 +58,11 @@ PARAMETER_DESCRIPTIONS = {
     "NMS_start": "Default start for NM simplex",
     "rc_software": "Master equation software",
     "use_automech": "Use automech-driven two-pass MESS path",
+    "prompt_reactions": "Compute prompt (non-thermal) reactions "
+                        "(needs use_automech and mechanalyzer)",
+    "prompt_ped_model": "Energy-partition model of the hot products",
+    "prompt_bf_threshold": "Branching-fraction threshold to keep a "
+                           "prompt product, in [0, 1)",
     "rc_temp": "Temperatures (K) for rate coefficients",
     "rc_pres": "Pressures (Torr) for rate coefficients",
     "pp_temp": "Temperatures (K) for postprocessing",
@@ -148,6 +153,9 @@ PARAMETER_CATEGORIES = {
     "NMS_start": "Nelder-Mead",
     "rc_software": "Rate Coefficients",
     "use_automech": "Rate Coefficients",
+    "prompt_reactions": "Rate Coefficients",
+    "prompt_ped_model": "Rate Coefficients",
+    "prompt_bf_threshold": "Rate Coefficients",
     "rc_temp": "Rate Coefficients",
     "rc_pres": "Rate Coefficients",
     "pres_unit": "Rate Coefficients",

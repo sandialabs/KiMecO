@@ -6,14 +6,16 @@ in ``sys.modules`` first, so the behaviour is identical with or without a real
 automech install), and with ``subprocess.run`` patched: no MESS binary is
 needed. Three families of guarantees:
 
-* Merged-well gate and pass-1 guard (``main``). The driver runs MESS
-  (pass 1); if ``<name>P<slot>.out`` is absent it prints a message and returns
-  cleanly, so ``q_sys._pickup_kin``'s ``len(p_outs) != n_pes`` gate leaves the
-  job unpicked for retry; otherwise it ``os.replace``s the output to the
-  leading-underscore pass-1 copy and runs pass 2 (``well_lumped_input_file``
-  + WellExtension caps) *only* when ``MessOutputReader.well_merging`` reports
-  missing T/P coefficients, else it moves the pass-1 copy back. Both the
-  emitted source structure (AST) and the runtime behaviour are checked.
+* Merged-well gate, prompt mode and pass-1 guard (``main``). The driver runs
+  MESS (pass 1); if ``<name>P<slot>.out`` is absent it prints a message and
+  returns cleanly, so ``q_sys._pickup_kin``'s ``len(p_outs) != n_pes`` gate
+  leaves the job unpicked for retry; otherwise it ``os.replace``s the output
+  to the leading-underscore pass-1 copy and runs pass 2
+  (``well_lumped_input_file`` + WellExtension caps) when the payload carries
+  ``prompt_reactions`` (prompt mode: always, keeping every output) or when
+  ``MessOutputReader.well_merging`` reports missing T/P coefficients, else it
+  moves the pass-1 copy back. Both the emitted source structure (AST) and
+  the runtime behaviour are checked.
 * ``_globkey_str`` unit relabel. ``mess_io.writer.global_rates_input_v1``
   hardcodes ``PressureList[atm]`` while the grid is in bar (the grid
   ``MessOutputReader`` indexes against), so the driver relabels the block to
@@ -223,9 +225,12 @@ class _MinimalSOP:
 
 
 def _emit(tmp_path: Path, pres_unit: str | None = None,
-          pres: list[float] | None = None) -> Path:
+          pres: list[float] | None = None, prompt: bool = False) -> Path:
     sop = _MinimalSOP(pres if pres is not None else [1.0, 10.0], pres_unit)
-    writer = AutomechKinWriter(sop=cast(Any, sop), pes_id=0)
+    # Prompt mode reaches the writer through its settings only.
+    settings = {'prompt_reactions': True} if prompt else None
+    writer = AutomechKinWriter(sop=cast(Any, sop), pes_id=0,
+                               settings=settings)
     writer.write(loc=str(tmp_path), filename=_FILENAME)
     return tmp_path / _FILENAME
 
@@ -249,9 +254,10 @@ class _FakeMess:
 def _run_driver(tmp_path: Path,
                 monkeypatch: pytest.MonkeyPatch,
                 outputs: list[str | None],
-                pres_unit: str | None = None
+                pres_unit: str | None = None,
+                prompt: bool = False
                 ) -> tuple[Any, _Recorder, _FakeMess]:
-    script = _emit(tmp_path, pres_unit=pres_unit)
+    script = _emit(tmp_path, pres_unit=pres_unit, prompt=prompt)
     mod, rec = _load_driver(script, monkeypatch)
     fake = _FakeMess(tmp_path, outputs)
     monkeypatch.setattr(mod.subprocess, 'run', fake)
@@ -292,8 +298,11 @@ def _merging_if(main: ast.FunctionDef) -> ast.If:
 
 def test_emitted_main_structure(tmp_path) -> None:
     """AST of ``main``: one ``not os.path.isfile(out_name)`` guard returns
-    (with a message) before the merging branch; the branch calls
-    ``MessOutputReader.well_merging`` and has both arms; pass 2
+    (with a message) before the merging branch; the branch test is
+    ``prompt_mode or MessOutputReader.well_merging(...)``, with
+    ``prompt_mode`` read from the payload key ``prompt_reactions`` first so
+    that the merged-well check is skipped in prompt mode, and the branch
+    has both arms; pass 2
     (``well_lumped_input_file`` + one ``_run_mess``) lives only in the merging
     arm, the other arm only renames back; MESS runs twice in source, the
     second call nested deeper; ``os.replace`` both ways, never shutil. The
@@ -318,11 +327,38 @@ def test_emitted_main_structure(tmp_path) -> None:
     branch = _merging_if(main)
     assert main.body.index(guard) < main.body.index(branch)
 
-    assert isinstance(branch.test, ast.Call)
-    func = branch.test.func
+    # Branch test: `prompt_mode or MessOutputReader.well_merging(...)`, the
+    # prompt flag first (short-circuit), the merged-well call last.
+    assert isinstance(branch.test, ast.BoolOp)
+    assert isinstance(branch.test.op, ast.Or)
+    assert len(branch.test.values) == 2
+    flag, merging = branch.test.values
+    assert isinstance(flag, ast.Name) and flag.id == 'prompt_mode'
+    assert isinstance(merging, ast.Call)
+    func = merging.func
     assert isinstance(func, ast.Attribute) and func.attr == 'well_merging'
     assert isinstance(func.value, ast.Name)
     assert func.value.id == 'MessOutputReader'
+    # prompt_mode is assigned once, before the branch, from
+    # PES_PAYLOAD.get("prompt_reactions").
+    flag_sets = [
+        node for node in main.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == 'prompt_mode'
+                for t in node.targets)
+    ]
+    assert len(flag_sets) == 1
+    assert main.body.index(flag_sets[0]) < main.body.index(branch)
+    payload_gets = [
+        sub for sub in ast.walk(flag_sets[0].value)
+        if isinstance(sub, ast.Call)
+        and isinstance(sub.func, ast.Attribute) and sub.func.attr == 'get'
+        and isinstance(sub.func.value, ast.Name)
+        and sub.func.value.id == 'PES_PAYLOAD'
+    ]
+    assert len(payload_gets) == 1
+    assert [ast.literal_eval(arg) for arg in payload_gets[0].args] == [
+        'prompt_reactions']
     # Both arms exist: pass 2 on merging, plain restore otherwise.
     assert branch.body and branch.orelse
 
@@ -516,6 +552,185 @@ def test_missing_pass1_output_exits_cleanly(
     assert not (tmp_path / _PASS1).exists()
     assert (tmp_path / _AUX).read_text() == 'AUX-DATA'
     assert (tmp_path / _LOG).read_text() == 'LOG-DATA'
+
+
+# ===========================================================================
+# Prompt mode: pass 2 always runs, every output is kept
+# ===========================================================================
+_PED = f'{_BASE}_ped.out'
+_KE = f'{_BASE}_ke.out'
+
+
+class _FakeMessSides(_FakeMess):
+    """``_FakeMess`` that also writes the side outputs of a MESS run (.log,
+    .aux, _ped.out, _ke.out), tagged with the pass number, whenever the run
+    produces its .out (a failed run writes nothing)."""
+
+    def __call__(self, cmd, check=False, **kwargs):
+        writes = bool(self.outputs) and self.outputs[0] is not None
+        result = super().__call__(cmd, check=check, **kwargs)
+        if writes:
+            tag = f'PASS{len(self.calls)}'
+            for name, kind in ((_LOG, 'LOG'), (_AUX, 'AUX'), (_PED, 'PED'),
+                               (_KE, 'KE')):
+                (self.cwd / name).write_text(f'{tag}-{kind}')
+        return result
+
+
+def _run_prompt_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                       outputs: list[str | None],
+                       payload: dict[str, Any] | None = None
+                       ) -> tuple[Any, _Recorder, _FakeMessSides, list[str]]:
+    """Emit the prompt-mode driver, spy ``well_merging`` (always False),
+    run ``main`` with ``_FakeMessSides``; ``payload`` items are set on
+    ``PES_PAYLOAD`` before the run."""
+    script = _emit(tmp_path, prompt=True)
+    mod, rec = _load_driver(script, monkeypatch)
+    for key, value in (payload or {}).items():
+        monkeypatch.setitem(mod.PES_PAYLOAD, key, value)
+    seen: list[str] = []
+
+    def _spy(filename: str) -> bool:
+        seen.append(filename)
+        return False
+
+    monkeypatch.setattr(mod.MessOutputReader, 'well_merging',
+                        staticmethod(_spy))
+    fake = _FakeMessSides(tmp_path, outputs)
+    monkeypatch.setattr(mod.subprocess, 'run', fake)
+    monkeypatch.chdir(tmp_path)
+    assert mod.main() is None
+    return mod, rec, fake, seen
+
+
+def test_prompt_mode_forces_second_pass_on_healthy_output(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prompt mode, healthy pass-1 output and well_merging reporting no
+    merged well: pass 2 still runs (two MESS calls), fed with the base
+    input, the pass-1 output, aux and log of pass 1, the lump pressure in
+    atm and the lump temperature; the input becomes the capped one; the
+    pass-1 copy keeps pass 1, the final output is pass 2."""
+    mod, rec, fake, _seen = _run_prompt_driver(
+        tmp_path, monkeypatch, [_HEALTHY_OUT, 'PASS2-OUTPUT'])
+
+    assert mod.PES_PAYLOAD['prompt_reactions'] is True
+    assert fake.calls == [['mess', _INP], ['mess', _INP]]
+    assert rec.count('well_lumped_input_file') == 1
+    args, _kwargs = rec.calls['well_lumped_input_file'][0]
+    assert args[0] == 'BASE_INP\n'
+    assert args[1] == _HEALTHY_OUT
+    assert args[2] == 'PASS1-AUX'
+    assert args[3] == 'PASS1-LOG'
+    assert args[4] == pytest.approx(mod.LUMP_PRESSURE * _BAR2ATM)
+    assert args[5] == mod.LUMP_TEMP
+    assert (tmp_path / _INP).read_text() == 'EXTENDED_INP\n'
+    assert (tmp_path / _PASS1).read_text() == _HEALTHY_OUT
+    assert (tmp_path / _OUT).read_text() == 'PASS2-OUTPUT'
+
+
+def test_prompt_mode_keeps_every_output(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """After a prompt-mode run the directory holds exactly the driver, the
+    pass-2 input, output, .log, .aux, _ped.out and _ke.out, and the pass-1
+    copy of the output: the driver deletes nothing."""
+    _run_prompt_driver(tmp_path, monkeypatch,
+                       [_HEALTHY_OUT, 'PASS2-OUTPUT'])
+
+    files = {p.name for p in tmp_path.iterdir() if p.is_file()}
+    assert files == {_FILENAME, _INP, _OUT, _LOG, _AUX, _PED, _KE, _PASS1}
+    for name in (_LOG, _AUX, _PED, _KE):
+        assert (tmp_path / name).read_text().startswith('PASS2-'), name
+    assert (tmp_path / _OUT).read_text() == 'PASS2-OUTPUT'
+    assert (tmp_path / _PASS1).read_text() == _HEALTHY_OUT
+
+
+def test_prompt_mode_merging_output_runs_pass2_once(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prompt mode with merged wells: pass 2 runs once, not twice."""
+    _mod, rec, fake = _run_driver(tmp_path, monkeypatch,
+                                  [_MERGING_OUT, 'PASS2-OUTPUT'],
+                                  prompt=True)
+    assert fake.calls == [['mess', _INP], ['mess', _INP]]
+    assert rec.count('well_lumped_input_file') == 1
+    assert (tmp_path / _PASS1).read_text() == _MERGING_OUT
+    assert (tmp_path / _OUT).read_text() == 'PASS2-OUTPUT'
+
+
+def test_prompt_mode_missing_pass1_output_exits_cleanly(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """Prompt mode keeps the pass-1 guard: no output after pass 1 ->
+    message, return, no pass 2, neither the final output nor the pass-1
+    copy exists."""
+    _mod, rec, fake, _seen = _run_prompt_driver(tmp_path, monkeypatch,
+                                                [None])
+    assert f'MESS pass 1 produced no output {_OUT}, aborting.' in \
+        capsys.readouterr().out
+    assert fake.calls == [['mess', _INP]]
+    assert rec.count('well_lumped_input_file') == 0
+    assert not (tmp_path / _OUT).exists()
+    assert not (tmp_path / _PASS1).exists()
+
+
+def test_prompt_mode_pass2_failure_returns_cleanly(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pass 2 writes no output: main returns without an exception, the
+    pass-1 copy is kept and the final output stays absent (the job is not
+    picked up)."""
+    _mod, _rec, fake, _seen = _run_prompt_driver(tmp_path, monkeypatch,
+                                                 [_HEALTHY_OUT, None])
+    assert len(fake.calls) == 2
+    assert (tmp_path / _PASS1).read_text() == _HEALTHY_OUT
+    assert not (tmp_path / _OUT).exists()
+
+
+def test_prompt_mode_forced_pass_keeps_input_well_extension(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A PES with its own WellExtension value: the forced pass 2 drops the
+    bare WellExtension line mess_io inserts, so the value stays."""
+    script = _emit(tmp_path, prompt=True)
+    mod, _rec = _load_driver(script, monkeypatch)
+    monkeypatch.setitem(mod.PES_PAYLOAD, 'well_extension', 0.5)
+    monkeypatch.setattr(
+        mod, 'well_lumped_input_file',
+        lambda *args: 'WellExtension 0.5\nWellExtension\nModel\nEnd\n')
+    monkeypatch.setattr(mod.subprocess, 'run',
+                        _FakeMessSides(tmp_path, [_HEALTHY_OUT, 'PASS2']))
+    monkeypatch.chdir(tmp_path)
+    mod.main()
+    final = (tmp_path / _INP).read_text()
+    assert final == 'WellExtension 0.5\nModel\nEnd\n'
+    assert (tmp_path / _OUT).read_text() == 'PASS2'
+
+
+def test_prompt_flag_reaches_driver_only_through_payload(tmp_path) -> None:
+    """The prompt script differs from the plain one only on the
+    ``PES_PAYLOAD = `` line, whose literal carries ``prompt_reactions:
+    True``; settings None, {} or prompt_reactions False emit byte-identical
+    scripts without the key; the template never mentions mechanalyzer."""
+    sop = cast(Any, _MinimalSOP([1.0, 10.0], None))
+    texts: dict[str, str] = {}
+    for label, settings in (('none', None), ('empty', {}),
+                            ('off', {'prompt_reactions': False}),
+                            ('on', {'prompt_reactions': True})):
+        out = _case_dir(tmp_path, label)
+        AutomechKinWriter(sop=sop, pes_id=0, settings=settings).write(
+            loc=str(out), filename=_FILENAME)
+        texts[label] = (out / _FILENAME).read_text()
+
+    assert texts['none'] == texts['empty'] == texts['off']
+    plain = texts['none'].splitlines()
+    prompt = texts['on'].splitlines()
+    assert len(plain) == len(prompt)
+    changed = [(a, b) for a, b in zip(plain, prompt) if a != b]
+    assert len(changed) == 1
+    before, after = changed[0]
+    assert before.startswith('PES_PAYLOAD = ')
+    assert after.startswith('PES_PAYLOAD = ')
+    off = ast.literal_eval(before.removeprefix('PES_PAYLOAD = '))
+    on = ast.literal_eval(after.removeprefix('PES_PAYLOAD = '))
+    assert 'prompt_reactions' not in off
+    assert on == {**off, 'prompt_reactions': True}
+    assert 'mechanalyzer' not in automech_kin.automech_kin_tpl
 
 
 # ===========================================================================

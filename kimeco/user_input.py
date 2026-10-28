@@ -687,6 +687,64 @@ class KMOInput:
             )
             self.cancel_run = True
 
+    def _check_prompt(self) -> None:
+        """Check the settings of the prompt (non-thermal) reactions before
+        submitting any job.
+
+        Called only when ``prompt_reactions`` is true. Prompt reactions
+        need the automech path (``use_automech``), the AutoMech package
+        mechanalyzer (not on PyPI, imported here only), an energy-partition
+        model known to mechanalyzer (``prompt_ped_model``) and a
+        branching-fraction threshold in [0, 1) (``prompt_bf_threshold``).
+        Every failed check logs a warning and cancels the run, so all the
+        problems are reported at once. Whether the MESS inputs link a PES
+        with ``PEDSpecies`` to a PES with ``HotEnergies`` is checked later,
+        when the MESS inputs are read (``MessInputReader.read``).
+        """
+        # Energy-partition models accepted by mechanalyzer (exact names).
+        ped_models = ('equip_simple', 'equip_phi', 'rovib_dos',
+                      'beta_phi1a', 'beta_phi2a', 'beta_phi3a',
+                      'thermal', 'fne')
+
+        if not self.json_file.get('use_automech'):
+            self.klog.warning(
+                "'prompt_reactions' needs the automech path: set "
+                "'use_automech' to true or 'prompt_reactions' to false.")
+            self.cancel_run = True
+
+        try:
+            from mechanalyzer.builder import (  # noqa: F401
+                multipes_prompt_dissociation_ktp_dct,
+            )
+        except ImportError as exc:
+            self.klog.warning(
+                "'prompt_reactions' is enabled but mechanalyzer could not "
+                f"be imported: {exc}. Install mechanalyzer (AutoMech, not "
+                "on PyPI) or set 'prompt_reactions' to false.")
+            self.cancel_run = True
+
+        model = self.json_file.get(
+            'prompt_ped_model', default_settings['prompt_ped_model'])
+        if model not in ped_models:
+            self.klog.warning(
+                f"'prompt_ped_model' '{model}' is not an energy-partition "
+                "model of mechanalyzer; use one of: "
+                f"{', '.join(ped_models)}.")
+            self.cancel_run = True
+
+        # The type is tested first so that a wrong type (e.g. a string)
+        # is refused instead of failing the comparison; a bool counts as
+        # an int (True = 1 is refused, False = 0 is accepted) and NaN fails
+        # every comparison, hence is refused.
+        threshold = self.json_file.get(
+            'prompt_bf_threshold', default_settings['prompt_bf_threshold'])
+        if (not isinstance(threshold, (int, float))
+                or not 0 <= threshold < 1):
+            self.klog.warning(
+                "'prompt_bf_threshold' must be in [0, 1); "
+                f"got {threshold}.")
+            self.cancel_run = True
+
     def _check_partition(self) -> None:
         """Validate the requested SLURM partition against ``sinfo``.
 
@@ -754,6 +812,8 @@ class KMOInput:
             self.json_file.get('use_automech', False))
         if self.json_file['use_automech']:
             self._check_automech()
+        if self.json_file.get('prompt_reactions'):
+            self._check_prompt()
         self._check_partition()
         if self.cancel_run:
             sys.exit(-1)

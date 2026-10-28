@@ -85,6 +85,19 @@ python -c "import mess_io, phydat, kimeco"
 
 Run `which mess` afterwards to confirm the MESS binary resolves inside the environment.
 
+`prompt_reactions=true` (non-thermal reactions) additionally needs `mechanalyzer`, which is
+not published on PyPI and is in no KiMecO extra. Install it by hand, with `autofile` and its
+runtime dependencies (same pins as the CI):
+
+```bash
+pip install "autofile @ git+https://github.com/Auto-Mech/autofile@0.2025.0" "mechanalyzer @ git+https://github.com/Auto-Mech/mechanalyzer@0.2026.1"
+pip install pandas scipy matplotlib python-igraph click pyyaml
+```
+
+KiMecO imports it only when `prompt_reactions` is true; then `kmo`, `kmopp`, `kmoui`, the
+simulation tasks and the jobs must all run in the environment where it is installed
+(e.g. `automech`).
+
 You can verify the Python-side installation with:
 
 ```bash

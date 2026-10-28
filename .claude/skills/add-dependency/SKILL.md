@@ -91,7 +91,7 @@ description: "Add, remove, or re-pin a KiMecO Python dependency (base dependenci
 - Never edit one file alone. Every row of the checklist that applies changes in the same commit.
 - Never weaken, skip or delete a test to make it pass. Update the expected lists instead.
 - Upstream releases can add imports: `autoio` already pulls in `IPython` and `py3Dmol` (`test_mess_io_transitive_dependencies_are_declared`). After a tag bump, run `python -c "import mess_io, phydat, kimeco"` in a fresh environment.
-- A package only CI fixtures need (for example `mechanalyzer` for future NB tests) is a CI pre-install, not an extra. If it later moves into an extra, follow every step above.
+- A package that KiMecO imports only lazily behind a setting and that is in no extra (for example `mechanalyzer`, not on PyPI, imported by `KMOInput._check_prompt` only when `prompt_reactions` is true) is a CI pre-install plus a documented manual install; list it in `AUTOMECH_MODULES` of `test_installation_imports_ci.py` so the suite checks the import stays lazy. If it later moves into an extra, follow every step above.
 
 ## Key files
 

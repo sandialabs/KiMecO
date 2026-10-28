@@ -101,6 +101,16 @@ python -c "import mess_io, phydat, kimeco"
 
 The last command prints nothing when the automech dependencies are importable. Developers who also want the git hooks / `pytest` can use `pip install -e .[automech,test]` instead. Run `which mess` afterwards to confirm the MESS binary resolves inside the environment.
 
+**Prompt (non-thermal) reactions** (`prompt_reactions=true`) additionally need `mechanalyzer` (AutoMech). It is not published on PyPI and is in no KiMecO extra, so install it by hand, from GitHub, together with `autofile` and its runtime dependencies (same pins as the CI):
+
+```bash
+pip install "autofile @ git+https://github.com/Auto-Mech/autofile@0.2025.0" "mechanalyzer @ git+https://github.com/Auto-Mech/mechanalyzer@0.2026.1"
+pip install pandas scipy matplotlib python-igraph click pyyaml
+```
+
+KiMecO imports `mechanalyzer` only when `prompt_reactions` is true; otherwise it does not need to be installed. When it is true, every KiMecO process of the run must find `mechanalyzer` and `mess_io`: `kmo`, `kmopp`, `kmoui` and the simulation tasks all check the settings and stop with a message if it is missing. Run all of them, and the jobs, in the environment where `mechanalyzer` is installed (e.g. `automech`).
+
 - The minimum Python version is 3.11 with or without the `automech` extra.
 - If you set `use_automech=true`, `mess_io` must be importable in **both** the run environment and the job (compute-node) environment; otherwise KiMecO cancels the run early with a message pointing to `pip install kimeco[automech]`.
 - If you set `use_automech=true`, **KiMecO itself (`kimeco`) must also be importable in the job (compute-node) environment**, not only in the run environment: the emitted per-PES driver imports `kimeco.readers.mess_output.MessOutputReader` to decide whether MESS pass 2 is needed. The import is side-effect-free (no database connection), but the compute node must be able to resolve KiMecO's dependency chain. In practice, install KiMecO (with the `automech` extra) in the same environment the jobs activate.
+- If you set `prompt_reactions=true`, `mechanalyzer` (see above) must be importable in the run environment and in the job environment, and `use_automech` must be true; otherwise KiMecO cancels the run early. Run `kmo`, `kmopp`, `kmoui` and the simulation tasks in that same environment.

@@ -2,7 +2,7 @@
 name: test-suite-contracts
 description: "Which CI, packaging and skill contracts the unit tests enforce, which pins nothing enforces, and what breaks when a test file, a dependency of the test extra or a CI command changes. Read before editing tests/unit/, tests.yml, the test extra or the add-dependency/run-tests skills."
 type: project
-verified: 2026-10-26 against working tree
+verified: 2026-10-27 against working tree
 ---
 **Contracts encoded in tests (edit them in the same change as the thing they pin)**
 - `tests/unit/test_installation_metadata_ci.py` parses `.github/workflows/tests.yml`: exact job set
@@ -19,6 +19,13 @@ verified: 2026-10-26 against working tree
 - Skills quote assertion messages verbatim: "differs from pyproject", "pinned to several refs",
   "outside dependencies+test" (metadata test) and "DIST_TO_MODULES maps" (extras test), quoted in
   `.claude/skills/add-dependency/SKILL.md` (description) and `.claude/skills/run-tests/SKILL.md`.
+
+- `test_installation_imports_ci.py::AUTOMECH_MODULES` includes `mechanalyzer`: no KiMecO module may
+  import it at module level (it is imported lazily in `KMOInput._check_prompt`, prompt mode only;
+  it is in no extra, not on PyPI). CI (`tests.yml`) pre-installs `mechanalyzer@0.2026.1` and
+  `autofile@0.2025.0` from GitHub; `test_installation_extras_ci.py` has a real-guard test: its AST part (the
+  probed `mechanalyzer.builder` symbol) runs everywhere, its import part skips when mechanalyzer is
+  absent and fails under `KIMECO_REQUIRE_EXTRAS=automech`.
 
 **Pins nothing enforces (check by hand)**
 - `.github/workflows/tests.yml` runs `KIMECO_RUN_INSTALL_TEST=1 pytest

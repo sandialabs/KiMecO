@@ -59,7 +59,10 @@ PUBLIC_MODULES = [
     "kimeco.gui.dbsection",
 ]
 
-AUTOMECH_MODULES = ("mess_io", "phydat", "autoio", "autochem")
+# mechanalyzer: imported only by KMOInput._check_prompt (prompt mode),
+# so every public module must import without it too.
+AUTOMECH_MODULES = ("mess_io", "phydat", "autoio", "autochem",
+                    "mechanalyzer")
 
 CONSOLE_SCRIPTS = {
     "kmo": "kimeco.main:main",

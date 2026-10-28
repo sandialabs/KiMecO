@@ -312,3 +312,220 @@ def test_initial_ratio_from_concentration_block(tmp_path) -> None:
                        ({'a': 1e20}, 'exceeds total pressure')):
         with pytest.raises(ValueError, match=msg):
             obj._initial_ratio_from_exp(dict(base, initial_concentration=block))
+
+
+# ===========================================================================
+# _check_prompt: settings of the prompt (non-thermal) reactions
+# ===========================================================================
+_PED_MODELS = ('equip_simple', 'equip_phi', 'rovib_dos', 'beta_phi1a',
+               'beta_phi2a', 'beta_phi3a', 'thermal', 'fne')
+_MECHANALYZER = ('mechanalyzer', 'mechanalyzer.builder')
+
+
+def _inject_stub_mechanalyzer(monkeypatch, with_symbol: bool = True) -> None:
+    """Register a stub ``mechanalyzer.builder`` (with or without the prompt
+    entry point) so the gate's import probe never needs AutoMech."""
+    mechanalyzer = types.ModuleType('mechanalyzer')
+    builder = types.ModuleType('mechanalyzer.builder')
+    if with_symbol:
+        builder.multipes_prompt_dissociation_ktp_dct = (  # type: ignore
+            lambda *a, **k: {})
+    mechanalyzer.builder = builder  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, 'mechanalyzer', mechanalyzer)
+    monkeypatch.setitem(sys.modules, 'mechanalyzer.builder', builder)
+
+
+def _block_mechanalyzer(monkeypatch) -> None:
+    """Make mechanalyzer unimportable, even where it is really installed
+    (a ``None`` entry in sys.modules makes the import raise)."""
+    for name in _MECHANALYZER:
+        monkeypatch.setitem(sys.modules, name, None)
+
+
+def _prompt_input(tmp_path: Path, **json_file: Any
+                  ) -> tuple[KMOInput, _WarningRecorder]:
+    obj = _bare_input(tmp_path)
+    recorder = _WarningRecorder()
+    obj.klog = recorder  # type: ignore[assignment]
+    obj.json_file = {'prompt_reactions': True, **json_file}
+    return obj, recorder
+
+
+@pytest.mark.parametrize('model', _PED_MODELS)
+def test_check_prompt_accepts_every_model(tmp_path, monkeypatch,
+                                          model) -> None:
+    """Each energy-partition model of mechanalyzer passes with
+    use_automech, an importable mechanalyzer and a threshold in range."""
+    _inject_stub_mechanalyzer(monkeypatch)
+    obj, log = _prompt_input(tmp_path, use_automech=True,
+                             prompt_ped_model=model,
+                             prompt_bf_threshold=0.01)
+    obj._check_prompt()
+    assert obj.cancel_run is False, log.warnings
+    assert log.warnings == []
+
+
+def test_check_prompt_uses_defaults_when_keys_absent(tmp_path,
+                                                     monkeypatch) -> None:
+    """Model and threshold absent (read with .get and the defaults
+    rovib_dos / 0.01): accepted."""
+    _inject_stub_mechanalyzer(monkeypatch)
+    obj, log = _prompt_input(tmp_path, use_automech=True)
+    obj._check_prompt()
+    assert obj.cancel_run is False, log.warnings
+    assert log.warnings == []
+
+
+@pytest.mark.parametrize('use_automech', [False, 'absent'])
+def test_check_prompt_refuses_without_use_automech(tmp_path, monkeypatch,
+                                                   use_automech) -> None:
+    """use_automech false or absent: one warning naming use_automech,
+    run cancelled."""
+    _inject_stub_mechanalyzer(monkeypatch)
+    extra = {} if use_automech == 'absent' else {
+        'use_automech': use_automech}
+    obj, log = _prompt_input(tmp_path, **extra)
+    obj._check_prompt()
+    assert obj.cancel_run is True
+    assert len(log.warnings) == 1, log.warnings
+    assert "'use_automech'" in log.warnings[0]
+
+
+@pytest.mark.parametrize('case', ['blocked', 'no_symbol'])
+def test_check_prompt_refuses_when_mechanalyzer_missing(tmp_path,
+                                                        monkeypatch,
+                                                        case) -> None:
+    """mechanalyzer not importable, or its builder lacking the prompt entry
+    point (plain ImportError): one warning naming mechanalyzer, run
+    cancelled."""
+    if case == 'blocked':
+        _block_mechanalyzer(monkeypatch)
+    else:
+        _inject_stub_mechanalyzer(monkeypatch, with_symbol=False)
+    obj, log = _prompt_input(tmp_path, use_automech=True)
+    obj._check_prompt()
+    assert obj.cancel_run is True
+    assert len(log.warnings) == 1, log.warnings
+    assert 'mechanalyzer could not be imported' in log.warnings[0]
+
+
+@pytest.mark.parametrize('model', ['unknown', '', 'ROVIB_DOS'])
+def test_check_prompt_refuses_unknown_model(tmp_path, monkeypatch,
+                                            model) -> None:
+    """A model outside the eight (exact, case-sensitive match): one warning
+    holding the value, run cancelled."""
+    _inject_stub_mechanalyzer(monkeypatch)
+    obj, log = _prompt_input(tmp_path, use_automech=True,
+                             prompt_ped_model=model)
+    obj._check_prompt()
+    assert obj.cancel_run is True
+    assert len(log.warnings) == 1, log.warnings
+    assert f"'prompt_ped_model' '{model}'" in log.warnings[0]
+
+
+@pytest.mark.parametrize('threshold, accepted', [
+    (0, True), (0.0, True), (0.5, True), (0.999999, True), (False, True),
+    (1, False), (1.0, False), (-0.01, False), (True, False), (2, False),
+    (float('nan'), False), ('0.1', False)])
+def test_check_prompt_threshold_range(tmp_path, monkeypatch, threshold,
+                                      accepted) -> None:
+    """The threshold must be a number in [0, 1): 1 excluded, a bool counts
+    as an int (False = 0 passes, True = 1 fails), NaN and a string fail."""
+    _inject_stub_mechanalyzer(monkeypatch)
+    obj, log = _prompt_input(tmp_path, use_automech=True,
+                             prompt_bf_threshold=threshold)
+    obj._check_prompt()
+    assert obj.cancel_run is (not accepted), log.warnings
+    if accepted:
+        assert log.warnings == []
+    else:
+        assert len(log.warnings) == 1, log.warnings
+        assert "'prompt_bf_threshold' must be in [0, 1)" in log.warnings[0]
+
+
+def test_check_prompt_reports_every_failure(tmp_path, monkeypatch) -> None:
+    """All four checks fail at once: four warnings (no early return), one
+    per cause, run cancelled."""
+    _block_mechanalyzer(monkeypatch)
+    obj, log = _prompt_input(tmp_path, use_automech=False,
+                             prompt_ped_model='nope',
+                             prompt_bf_threshold=1.5)
+    obj._check_prompt()
+    assert obj.cancel_run is True
+    assert len(log.warnings) == 4, log.warnings
+    for warning, needle in zip(log.warnings, (
+            "'use_automech'", 'mechanalyzer could not be imported',
+            "'prompt_ped_model' 'nope'", "'prompt_bf_threshold'")):
+        assert needle in warning, (needle, warning)
+
+
+def test_full_run_settings_prompt_gate(tmp_path, monkeypatch) -> None:
+    """With mechanalyzer blocked, prompt mode off or absent leaves
+    full_run_settings untouched (no prompt check, no exit); prompt mode
+    without use_automech exits with -1; prompt mode with use_automech and a
+    stub mechanalyzer returns the settings."""
+    for prompt in (False, 'absent'):
+        with monkeypatch.context() as m:
+            _block_mechanalyzer(m)
+            obj = _bare_input(tmp_path)
+            obj.json_file['use_automech'] = True
+            if prompt != 'absent':
+                obj.json_file['prompt_reactions'] = prompt
+            _stub_heavy_stages(m, obj)
+            settings = obj.full_run_settings()
+            assert obj.cancel_run is False, prompt
+            assert settings['project_name'] == 'PROJ'
+
+    with monkeypatch.context() as m:
+        _inject_stub_mechanalyzer(m)
+        obj = _bare_input(tmp_path)
+        obj.json_file['prompt_reactions'] = True
+        _stub_heavy_stages(m, obj)
+        with pytest.raises(SystemExit) as exc:
+            obj.full_run_settings()
+        assert exc.value.code == -1
+
+    with monkeypatch.context() as m:
+        _inject_stub_mechanalyzer(m)
+        obj = _bare_input(tmp_path)
+        obj.json_file.update(prompt_reactions=True, use_automech=True)
+        _stub_heavy_stages(m, obj)
+        settings = obj.full_run_settings()
+        assert obj.cancel_run is False
+        assert settings['prompt_reactions'] is True
+
+
+def test_prompt_keys_defaults_and_type_check(tmp_path) -> None:
+    """set_default_values fills False / 'rovib_dos' / 0.01 (a float); a
+    wrong type cancels (a string flag, an int model, a string threshold);
+    an int threshold passes the float check; check_unknown_kwords does not
+    flag the three keys."""
+    obj, _ = _prompt_input(tmp_path)
+    obj.json_file = {}
+    obj.klog = _Klog()  # type: ignore[assignment]
+    obj.set_default_values()
+    assert obj.cancel_run is False
+    assert obj.json_file['prompt_reactions'] is False
+    assert obj.json_file['prompt_ped_model'] == 'rovib_dos'
+    assert obj.json_file['prompt_bf_threshold'] == 0.01
+    assert isinstance(obj.json_file['prompt_bf_threshold'], float)
+
+    for key, value in (('prompt_reactions', 'yes'),
+                       ('prompt_reactions', 3),
+                       ('prompt_ped_model', 3),
+                       ('prompt_bf_threshold', 'x')):
+        obj = _checked_input(tmp_path, {key: value})
+        obj.set_default_values()
+        assert obj.cancel_run is True, (key, value)
+        assert obj.klog.has(f'{key} has incorrect type'), (  # type: ignore
+            key, value)
+
+    obj = _checked_input(tmp_path, {'prompt_bf_threshold': 0})
+    obj.set_default_values()
+    assert obj.cancel_run is False, obj.klog.messages  # type: ignore
+
+    obj = _checked_input(tmp_path, {
+        'prompt_reactions': True, 'prompt_ped_model': 'fne',
+        'prompt_bf_threshold': 0.05})
+    obj.check_unknown_kwords()
+    assert not obj.klog.has('unknown keyword')  # type: ignore[attr-defined]

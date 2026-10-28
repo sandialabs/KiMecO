@@ -257,6 +257,40 @@ def test_automech_gate_symbols_importable() -> None:
     assert warnings == []
 
 
+def test_prompt_gate_symbol_importable() -> None:
+    """``KMOInput._check_prompt`` probes exactly
+    ``mechanalyzer.builder.multipes_prompt_dissociation_ktp_dct`` (parsed
+    with ast, so this part runs everywhere); with mechanalyzer installed
+    (a CI pre-install, in no extra) the symbol exists and the real gate,
+    on the default model and threshold, neither warns nor cancels."""
+    import ast
+
+    src = (REPO / "kimeco" / "user_input.py").read_text(encoding="utf-8")
+    probes: list[tuple[str | None, list[str]]] = []
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.FunctionDef) and node.name == "_check_prompt":
+            probes.extend((sub.module, [a.name for a in sub.names])
+                          for sub in ast.walk(node)
+                          if isinstance(sub, (ast.Import, ast.ImportFrom)))
+    assert probes == [("mechanalyzer.builder",
+                       ["multipes_prompt_dissociation_ktp_dct"])]
+
+    builder = import_or_skip("automech", "mechanalyzer.builder")
+    assert callable(getattr(builder, "multipes_prompt_dissociation_ktp_dct",
+                            None))
+
+    from kimeco.user_input import KMOInput
+
+    warnings: list[str] = []
+    obj = KMOInput.__new__(KMOInput)
+    obj.klog = type("Log", (), {"warning": lambda self, m: warnings.append(str(m))})()
+    obj.cancel_run = False
+    obj.json_file = {"use_automech": True, "prompt_reactions": True}
+    obj._check_prompt()
+    assert obj.cancel_run is False, warnings
+    assert warnings == []
+
+
 def test_mess_io_transitive_dependencies_are_declared() -> None:
     """``IPython`` and ``py3Dmol`` are imported transitively by ``autoio``;
     they must be part of the automech extra (regression for the

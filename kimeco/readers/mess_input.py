@@ -396,6 +396,11 @@ class MessInputReader:
         self.klog: KMOLogger = klog
         self.mechanism_species: list[str] = mechanism_species
         self.force_new_molecules: bool = settings['force_new_molecules']
+        # Prompt (non-thermal) reactions requested: the read then checks
+        # that the PEDSpecies products of a file are HotEnergies species of
+        # another file (_check_prompt_links).
+        self.prompt_reactions: bool = bool(
+            settings.get('prompt_reactions', False))
         self.files2copy: list[str] = []
         self.pes_files: list[list[str]] = []
         for filename in self.filenames:
@@ -1573,6 +1578,8 @@ class MessInputReader:
         self._default_elec_levels()
         self._check_atoms()
         self._check_file_items()
+        if self.prompt_reactions:
+            self._check_prompt_links()
         self.SOP.files2copy = self.files2copy
         return (self.SOP, self.tpls)
 
@@ -1606,6 +1613,95 @@ class MessInputReader:
                     f"SOP.{kind} holds {len(values)} values for {n_files} "
                     "MESS input files (expected the collider plus one value "
                     "per file).")
+
+    def _ped_products(self) -> dict[int, set[str]]:
+        """Product fragments of the ``PEDSpecies`` pairs of every file.
+
+        A ``PEDSpecies`` entry is a pair ``<reactants>=<products>`` (e.g.
+        ``A+B=C+D``): MESS writes the energy distribution of the products
+        formed from the reactants (PED output). The products are the names
+        on the right of ``=``, split on ``+``. A malformed entry (not
+        exactly one ``=``, or an empty name) stops the run.
+
+        Returns:
+            dict[int, set[str]]: {file index: product fragment names}, for
+            every file with a ``PEDSpecies`` line.
+        """
+        products: dict[int, set[str]] = {}
+        for fid, data in sorted(self.SOP.pes_file_data.items()):
+            if not data.ped_species:
+                continue
+            products[fid] = set()
+            for pair in data.ped_species:
+                sides = pair.split('=')
+                names = [name for side in sides for name in side.split('+')]
+                if len(sides) != 2 or not all(names):
+                    self._stop(
+                        f"PEDSpecies entry '{pair}' of "
+                        f"{self._file_label(fid)} is not a pair "
+                        "<reactants>=<products> (e.g. A+B=C+D).")
+                    continue
+                products[fid].update(sides[1].split('+'))
+        return products
+
+    def _check_prompt_links(self) -> None:
+        """Check, in prompt mode, that the input files link a PED PES to a
+        hot PES.
+
+        A file is linked when one of its ``PEDSpecies`` products is a
+        ``HotEnergies`` species of another file: the PED output of the
+        first file then gives the initial energy of the hot well of the
+        second one (prompt reaction). A product that is hot in its own file
+        does not count. Stops when no file is linked (no ``PEDSpecies`` or
+        no ``HotEnergies`` anywhere included). A file with ``PEDSpecies``
+        but no link only gets a warning. A linked file must set
+        ``MicroEnerMin``, ``MicroEnerMax`` and ``MicroEnerStep``, else
+        MESS writes no microcanonical rate output (``_ke.out``) for it.
+        """
+        if self._trigger_stop:
+            return
+        ped_products = self._ped_products()
+        if self._trigger_stop:
+            return
+        # {file index: names of its HotEnergies wells}
+        hot_species: dict[int, set[str]] = {
+            fid: set(data.hot_energies)
+            for fid, data in self.SOP.pes_file_data.items()
+            if data.hot_energies
+        }
+        # {file index with PEDSpecies: its products hot in another file}
+        links: dict[int, set[str]] = {}
+        for fid, products in ped_products.items():
+            hot_elsewhere: set[str] = set().union(
+                *(names for other, names in hot_species.items()
+                  if other != fid))
+            links[fid] = products & hot_elsewhere
+        if not any(links.values()):
+            self._stop(
+                "'prompt_reactions' is true but no PEDSpecies product of a "
+                "MESS input is a HotEnergies species of another input "
+                f"(PEDSpecies in {len(ped_products)} input(s), HotEnergies "
+                f"in {len(hot_species)} input(s)). Add the input of the hot "
+                "PES (with its HotEnergies block) to 'mess_inputs', or set "
+                "'prompt_reactions' to false.")
+            return
+        for fid, linked in links.items():
+            file_label = self._file_label(fid)
+            if not linked:
+                self.klog.warning(
+                    "Prompt reactions: no PEDSpecies product of "
+                    f"{file_label} is a HotEnergies species of another MESS "
+                    "input; its PED output gives no prompt reaction.")
+                continue
+            micro_ener = self.SOP.pes_file_data[fid].micro_ener
+            if micro_ener is None or None in micro_ener:
+                self._stop(
+                    "Prompt reactions: the PEDSpecies products "
+                    f"{', '.join(sorted(linked))} of {file_label} are "
+                    "HotEnergies species of another MESS input, but the "
+                    "file does not set all of MicroEnerMin, MicroEnerMax and "
+                    "MicroEnerStep: MESS then writes no microcanonical rate "
+                    "output (_ke.out), which the prompt calculation needs.")
 
     def _align_energies(self) -> None:
         """Align the energies of the input files sharing items.

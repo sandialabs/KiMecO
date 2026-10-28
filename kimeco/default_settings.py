@@ -67,6 +67,20 @@ default_settings: dict[str, Any] = {
     # scripts embedding the SOP, running MESS twice with mess_io-derived
     # WellExtension caps) instead of the plain single-pass MESS input.
     "use_automech": False,
+    # Prompt (non-thermal) reactions: products of a PES formed hot
+    # (PEDSpecies) feed the HotEnergies wells of another PES. Needs
+    # 'use_automech' and mechanalyzer (AutoMech, not on PyPI); every PES
+    # then always runs the second MESS pass and keeps its outputs (PED
+    # _ped.out and microcanonical _ke.out when its input asks for them).
+    "prompt_reactions": False,
+    # Energy-partition model of mechanalyzer used to split the energy of
+    # the hot products: equip_simple, equip_phi, rovib_dos, beta_phi1a,
+    # beta_phi2a, beta_phi3a, thermal or fne.
+    "prompt_ped_model": "rovib_dos",
+    # Branching-fraction threshold, in [0, 1): a prompt product is kept
+    # when its branching fraction reaches the threshold at one (T, P)
+    # point at least.
+    "prompt_bf_threshold": 0.01,
     # MESS rate-coefficient grid for postprocessing. Derived at runtime
     # from the unique temperatures/pressures of pp_experiments
     # (not user-facing).
