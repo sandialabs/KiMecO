@@ -127,12 +127,16 @@ BF_{R→Pi+I2}(T,P) = ∫ f(E')·BF_{I1*→Pi}(E') dE'  /  Σ_j ∫ f(E')·BF_{I
 - Main product from C4H71-3* is C4H6 + H. C4H71-4* both dissociates and isomerises to C4H71-3 (up to 10% at 1000 K).
 - The thermal model gives much smaller effects.
 
-## 4. KiMecO side (steps 1-2 of the prompt-reactions work, uncommitted)
+## 4. KiMecO side (steps 1-4 of the prompt-reactions work; steps 3-4 uncommitted)
 
 - Settings (`kimeco/default_settings.py`): `prompt_reactions` (False), `prompt_ped_model`
   (`rovib_dos`, one of the 8 mechanalyzer models `equip_simple`, `equip_phi`, `rovib_dos`, `beta_phi1a`,
   `beta_phi2a`, `beta_phi3a`, `thermal`, `fne`; plain string, no enum) and `prompt_bf_threshold` (0.01,
-  must lie in [0, 1)). Step 2 only validates them; nothing computes BFs yet.
+  must lie in [0, 1)). `prompt_ped_model` and `prompt_bf_threshold` reach the collector through its
+  payload (`PromptCollectorWriter.payload`); in prompt mode `RateCo.recover_rslts` stores them as KIN rows (step 4, uncommitted): `to_name` =
+  `PromptChannel.kin_row_to_name` (products joined with `+`, then `__prompt`), `pes_id` = PED PES,
+  `from_name` = `ped_reactant`, ids and `is_in_db` rules in [[kin-units-and-row-ids]]. The simulation
+  does not use them yet (`load_rates_from_db` skips them).
 - Code map: `KMOInput._check_prompt` (`user_input.py`, called from `full_run_settings` only when
   `prompt_reactions` is true; refuses without `use_automech`, without importable
   `mechanalyzer.builder.multipes_prompt_dissociation_ktp_dct`, with an unknown model or a threshold
@@ -141,6 +145,36 @@ BF_{R→Pi+I2}(T,P) = ∫ f(E')·BF_{I1*→Pi}(E') dE'  /  Σ_j ∫ f(E')·BF_{I
   `automech_kin_tpl.main()` (`writers/automech_kin.py`): in prompt mode pass 2 always runs, with the
   same `lump=True` `well_lumped_input_file` call, and nothing is deleted (final `.inp/.out/.log/_ped.out/
   _ke.out` from pass 2 plus the pass-1 copy `_<base>.out`).
+- **Collector (step 3, uncommitted)**, `kimeco/writers/prompt_collector.py`: per model, one job
+  `prompt_<kin name>.py/.slurm`, submitted by `QueueingSystem._submit_collector` with
+  `--dependency=afterok:<array id> --kill-on-invalid-dep=yes`; it writes `prompt_<kin name>.json`
+  (`PromptRatesFile`, atomic via `.json.tmp`, only on success). `PromptCollectorWriter` builds the
+  script (embedded `PAYLOAD`), `PromptCollector.run` returns 0/1 and turns any failure, including
+  mechanalyzer's `sys.exit()` with status 0, into `PROMPT COLLECTOR FAILED ...` on stderr and no file;
+  `RateCo._check_prompt_rates` (`rate_coef.py`, from `recover_rslts`) waits up to 60 s for the file,
+  validates it (`PromptRatesFile.load_checked`) and raises `PromptRatesError`, which stops kmo.
+  Only the module-level stdlib/numpy imports are used by `rate_coef`/`q_sys`/`user_input`; pandas,
+  mess_io, mechanalyzer and `MessOutputReader` are imported when the collector runs.
+- **BF-only path**: mechanalyzer computes only the BFs (`bf.bf_tp_df_full` on the PED and hot tables,
+  not `bf_tp_df_todct`); k1 is read from the `.out` of each PED PES with KiMecO's `MessOutputReader`
+  (same value and units as its KIN row, so pressures in bar, no bar/atm mismatch), and k = BF*k1
+  with the k1 on the exact grid. T lookup in `ped.out`/`.log` uses `mess_written_temperature` =
+  `floor(T+0.5)` (not `round()`: `round(298.5)` is 298); P lookup in `ped.out` uses
+  `ped_written_pressure` = 3 significant digits (MESS `PedPrecision` default). Two grid values that
+  collide under these rules stop kmo at input checking (`KMOInput._check_prompt_grid`, per grid:
+  `rc_*` and `pp_*` separately).
+- **Fixed channel set** (`PromptChannel.fixed_set`): one record per (PED PES, hot PES, channel), the
+  channels being the non-dummy, non-`FakeW` wells and bimolecular of the hot PES, whatever the
+  threshold; a species whose BF never reaches `prompt_bf_threshold` is written as 0.0 everywhere, a
+  point with BF < 1e-30 as 0.0, no upper cut (the thermalised channel, BF near 1, is kept). Nothing
+  is summed across PED PESs. Units in the JSON: P bar, T K, k s-1 or cm3 molecule-1 s-1.
+- Read-time refusals (`MessInputReader._refuse_unsupported_ped_pairs`, prompt mode): a file with both
+  `PEDSpecies` and `HotEnergies`; a `PEDSpecies` side that is not an exact bimolecular label; a pair
+  with two hot product fragments.
+- Cleanup (`QueueingSystem.clean_files`): in prompt mode nothing of a kin job is deleted until it is
+  PICKED_UP (after the collector ended); then also `_ped.out`, `_ke.out`, collector script and
+  `.slurm` go; the JSON and `logs/` stay. `_pickup_kin` (all modes) ignores `_ped.out`/`_ke.out`
+  (`QueueingSystem._rate_outputs`).
 - mechanalyzer is installed by hand (not on PyPI, in no extra); it is imported lazily, only in prompt mode.
   Its pip metadata declares `dependencies = []`: the runtime deps (pandas, scipy, matplotlib,
   python-igraph, click, pyyaml, autoio, autochem, autofile) are listed only under pixi

@@ -48,6 +48,7 @@ PUBLIC_MODULES = [
     "kimeco.simulation",
     "kimeco.writers.mess",
     "kimeco.writers.automech_kin",
+    "kimeco.writers.prompt_collector",
     "kimeco.database.kimeco_db",
     "kimeco.postprocessing.postprocess",
     "kimeco.gui.kimecoapp",

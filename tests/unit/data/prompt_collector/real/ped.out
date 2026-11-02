@@ -1,0 +1,342 @@
+Wells (G - ground energy, D - dissociation limit, kcal/mol):
+                        W         G         D
+      FakeW-CH2CHCH2CH3+H        -1         0
+      FakeW-CH2CHCHCH3+H2     -20.9     -19.9
+
+Bimolecular Products (G - ground energy, kcal/mol):
+                  P         G
+      CH2CHCH2CH3+H         0
+      CH2CHCHCH3+H2     -19.9
+
+Well-to-Bimolecular Barriers (H/G - barrier height/well depth, kcal/mol)
+                                      B         H                   W         G             P
+      CH2CHCH2CH3+H=FakeW-CH2CHCH2CH3+H         0 FakeW-CH2CHCH2CH3+H        -1 CH2CHCH2CH3+H
+      CH2CHCHCH3+H2=FakeW-CH2CHCHCH3+H2     -19.9 FakeW-CH2CHCHCH3+H2     -20.9 CH2CHCHCH3+H2
+
+Well-to-Well Barriers (H/G - barrier height/well depth, kcal/mol):
+                                            B         H                  W1        G1                  W2        G2
+      FakeW-CH2CHCH2CH3+H=FakeW-CH2CHCHCH3+H2      5.87 FakeW-CH2CHCH2CH3+H        -1 FakeW-CH2CHCHCH3+H2     -20.9
+
+Bound Groups: dissociation barrier (name/ground energy, kcal/mol): wells (name/ground energy, kcal/mol):
+     CH2CHCHCH3+H2=FakeW-CH2CHCHCH3+H2/-19.9:  FakeW-CH2CHCHCH3+H2/-20.9
+
+     CH2CHCH2CH3+H=FakeW-CH2CHCH2CH3+H/0:  FakeW-CH2CHCH2CH3+H/-1
+
+________________________________________________________________________________________
+
+Unimolecular Rate Units: 1/sec;  Bimolecular Rate Units: cm^3/sec
+
+______________________________________________________________________________________
+
+Species-Species Rate Tables:
+
+Temperature = 500 K
+
+High Pressure Rate Coefficients:
+
+From\To             FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+FakeW-CH2CHCH2CH3+H                 ***            6.13e+08      5.12e+12           ***
+FakeW-CH2CHCHCH3+H2                1.01                 ***           ***      6.87e+12
+CH2CHCH2CH3+H                  9.07e-10                 ***           ***           ***
+CH2CHCHCH3+H2                       ***            6.47e-10           ***           ***
+
+Temperature = 500 K    Pressure = 0.03 bar
+
+From\To             FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+FakeW-CH2CHCH2CH3+H                 ***                 ***           ***           ***
+FakeW-CH2CHCHCH3+H2                 ***                 ***           ***           ***
+CH2CHCH2CH3+H                       ***                 ***      1.08e-13      1.08e-13
+CH2CHCHCH3+H2                       ***                 ***      9.47e-23      9.47e-23
+
+Temperature = 500 K    Pressure = 0.1 bar
+
+From\To             FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+FakeW-CH2CHCH2CH3+H                 ***                 ***           ***           ***
+FakeW-CH2CHCHCH3+H2                 ***                 ***           ***           ***
+CH2CHCH2CH3+H                       ***                 ***      1.08e-13      1.08e-13
+CH2CHCHCH3+H2                       ***                 ***      9.47e-23      9.46e-23
+
+Temperature = 550 K
+
+High Pressure Rate Coefficients:
+
+From\To             FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+FakeW-CH2CHCH2CH3+H                 ***             1.1e+09       5.5e+12           ***
+FakeW-CH2CHCHCH3+H2                10.8                 ***           ***      7.43e+12
+CH2CHCH2CH3+H                  9.22e-10                 ***           ***           ***
+CH2CHCHCH3+H2                       ***            6.58e-10           ***           ***
+
+Temperature = 550 K    Pressure = 0.03 bar
+
+From\To             FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+FakeW-CH2CHCH2CH3+H                 ***                 ***           ***           ***
+FakeW-CH2CHCHCH3+H2                 ***                 ***           ***           ***
+CH2CHCH2CH3+H                       ***                 ***      1.83e-13      1.83e-13
+CH2CHCHCH3+H2                       ***                 ***      9.52e-22      9.52e-22
+
+Temperature = 550 K    Pressure = 0.1 bar
+
+From\To             FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+FakeW-CH2CHCH2CH3+H                 ***                 ***           ***           ***
+FakeW-CH2CHCHCH3+H2                 ***                 ***           ***           ***
+CH2CHCH2CH3+H                       ***                 ***      1.83e-13      1.83e-13
+CH2CHCHCH3+H2                       ***                 ***      9.52e-22      9.53e-22
+
+______________________________________________________________________________________
+
+High Pressure Rate Coefficients (Temperature-Species Rate Tables):
+
+Reactant = FakeW-CH2CHCH2CH3+H
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+    500                 ***            6.13e+08      5.12e+12           ***
+    550                 ***             1.1e+09       5.5e+12           ***
+
+Reactant = FakeW-CH2CHCHCH3+H2
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+    500                1.01                 ***           ***      6.87e+12
+    550                10.8                 ***           ***      7.43e+12
+
+Reactant = CH2CHCH2CH3+H
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+    500            9.07e-10                 ***           ***           ***
+    550            9.22e-10                 ***           ***           ***
+
+Reactant = CH2CHCHCH3+H2
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+    500                 ***            6.47e-10           ***           ***
+    550                 ***            6.58e-10           ***           ***
+
+Capture/Escape Rate Coefficients:
+
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2
+    500            5.12e+12            6.87e+12      9.07e-10      6.47e-10
+    550             5.5e+12            7.43e+12      9.22e-10      6.58e-10
+
+______________________________________________________________________________________
+
+Pressure-Species Rate Tables:
+
+Reactant = FakeW-CH2CHCH2CH3+H   Temperature = 500 K
+
+   P(bar) FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2      Loss
+     0.03                 ***           ***           ***       ***
+      0.1                 ***           ***           ***       ***
+      O-O            6.13e+08      5.12e+12           ***  5.12e+12
+
+Reactant = FakeW-CH2CHCH2CH3+H   Temperature = 550 K
+
+   P(bar) FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2      Loss
+     0.03                 ***           ***           ***       ***
+      0.1                 ***           ***           ***       ***
+      O-O             1.1e+09       5.5e+12           ***   5.5e+12
+
+Reactant = FakeW-CH2CHCHCH3+H2   Temperature = 500 K
+
+   P(bar) FakeW-CH2CHCH2CH3+H CH2CHCH2CH3+H CH2CHCHCH3+H2      Loss
+     0.03                 ***           ***           ***       ***
+      0.1                 ***           ***           ***       ***
+      O-O                1.01           ***      6.87e+12  6.87e+12
+
+Reactant = FakeW-CH2CHCHCH3+H2   Temperature = 550 K
+
+   P(bar) FakeW-CH2CHCH2CH3+H CH2CHCH2CH3+H CH2CHCHCH3+H2      Loss
+     0.03                 ***           ***           ***       ***
+      0.1                 ***           ***           ***       ***
+      O-O                10.8           ***      7.43e+12  7.43e+12
+
+Reactant = CH2CHCH2CH3+H   Temperature = 500 K
+
+   P(bar) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCHCH3+H2      Loss
+     0.03                 ***                 ***      1.08e-13  1.08e-13
+      0.1                 ***                 ***      1.08e-13  1.08e-13
+      O-O            9.07e-10                 ***           ***  9.07e-10
+
+Reactant = CH2CHCH2CH3+H   Temperature = 550 K
+
+   P(bar) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCHCH3+H2      Loss
+     0.03                 ***                 ***      1.83e-13  1.83e-13
+      0.1                 ***                 ***      1.83e-13  1.83e-13
+      O-O            9.22e-10                 ***           ***  9.22e-10
+
+Reactant = CH2CHCHCH3+H2   Temperature = 500 K
+
+   P(bar) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H      Loss
+     0.03                 ***                 ***      9.47e-23  9.47e-23
+      0.1                 ***                 ***      9.47e-23  9.46e-23
+      O-O                 ***            6.47e-10           ***  6.47e-10
+
+Reactant = CH2CHCHCH3+H2   Temperature = 550 K
+
+   P(bar) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H      Loss
+     0.03                 ***                 ***      9.52e-22  9.52e-22
+      0.1                 ***                 ***      9.52e-22  9.53e-22
+      O-O                 ***            6.58e-10           ***  6.58e-10
+
+______________________________________________________________________________________
+
+Temperature-Species Rate Tables:
+
+Reactant = FakeW-CH2CHCH2CH3+H   Pressure = 0.03 bar
+
+   T(K) FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2      Loss   Capture
+    500                 ***           ***           ***       ***  5.12e+12
+    550                 ***           ***           ***       ***   5.5e+12
+
+Reactant = FakeW-CH2CHCH2CH3+H   Pressure = 0.1 bar
+
+   T(K) FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H CH2CHCHCH3+H2      Loss   Capture
+    500                 ***           ***           ***       ***  5.12e+12
+    550                 ***           ***           ***       ***   5.5e+12
+
+Reactant = FakeW-CH2CHCHCH3+H2   Pressure = 0.03 bar
+
+   T(K) FakeW-CH2CHCH2CH3+H CH2CHCH2CH3+H CH2CHCHCH3+H2      Loss   Capture
+    500                 ***           ***           ***       ***  6.87e+12
+    550                 ***           ***           ***       ***  7.43e+12
+
+Reactant = FakeW-CH2CHCHCH3+H2   Pressure = 0.1 bar
+
+   T(K) FakeW-CH2CHCH2CH3+H CH2CHCH2CH3+H CH2CHCHCH3+H2      Loss   Capture
+    500                 ***           ***           ***       ***  6.87e+12
+    550                 ***           ***           ***       ***  7.43e+12
+
+Reactant = CH2CHCH2CH3+H   Pressure = 0.03 bar
+
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCHCH3+H2      Loss   Capture
+    500                 ***                 ***      1.08e-13  1.08e-13  9.07e-10
+    550                 ***                 ***      1.83e-13  1.83e-13  9.22e-10
+
+Reactant = CH2CHCH2CH3+H   Pressure = 0.1 bar
+
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCHCH3+H2      Loss   Capture
+    500                 ***                 ***      1.08e-13  1.08e-13  9.07e-10
+    550                 ***                 ***      1.83e-13  1.83e-13  9.22e-10
+
+Reactant = CH2CHCHCH3+H2   Pressure = 0.03 bar
+
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H      Loss   Capture
+    500                 ***                 ***      9.47e-23  9.47e-23  6.47e-10
+    550                 ***                 ***      9.52e-22  9.52e-22  6.58e-10
+
+Reactant = CH2CHCHCH3+H2   Pressure = 0.1 bar
+
+   T(K) FakeW-CH2CHCH2CH3+H FakeW-CH2CHCHCH3+H2 CH2CHCH2CH3+H      Loss   Capture
+    500                 ***                 ***      9.47e-23  9.46e-23  6.47e-10
+    550                 ***                 ***      9.52e-22  9.53e-22  6.58e-10
+
+______________________________________________________________________________________
+
+Temperature-Pressure Rate Tables:
+
+FakeW-CH2CHCH2CH3+H->FakeW-CH2CHCHCH3+H2
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O      6.13e+08   1.1e+09
+
+FakeW-CH2CHCH2CH3+H->CH2CHCH2CH3+H
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O      5.12e+12   5.5e+12
+
+FakeW-CH2CHCH2CH3+H->CH2CHCHCH3+H2
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O           ***       ***
+
+FakeW-CH2CHCHCH3+H2->FakeW-CH2CHCH2CH3+H
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O          1.01      10.8
+
+FakeW-CH2CHCHCH3+H2->CH2CHCH2CH3+H
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O           ***       ***
+
+FakeW-CH2CHCHCH3+H2->CH2CHCHCH3+H2
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O      6.87e+12  7.43e+12
+
+CH2CHCH2CH3+H->FakeW-CH2CHCH2CH3+H
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O      9.07e-10  9.22e-10
+
+CH2CHCH2CH3+H->FakeW-CH2CHCHCH3+H2
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O           ***       ***
+
+CH2CHCH2CH3+H->CH2CHCHCH3+H2
+
+P\T           500       550
+0.03     1.08e-13  1.83e-13
+0.1      1.08e-13  1.83e-13
+O-O           ***       ***
+
+CH2CHCHCH3+H2->FakeW-CH2CHCH2CH3+H
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O           ***       ***
+
+CH2CHCHCH3+H2->FakeW-CH2CHCHCH3+H2
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O      6.47e-10  6.58e-10
+
+CH2CHCHCH3+H2->CH2CHCH2CH3+H
+
+P\T           500       550
+0.03     9.47e-23  9.52e-22
+0.1      9.47e-23  9.52e-22
+O-O           ***       ***
+
+FakeW-CH2CHCH2CH3+H-> 
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O      5.12e+12   5.5e+12
+
+FakeW-CH2CHCHCH3+H2-> 
+
+P\T           500       550
+0.03          ***       ***
+0.1           ***       ***
+O-O      6.87e+12  7.43e+12
+
+CH2CHCH2CH3+H-> 
+
+P\T           500       550
+0.03     1.08e-13  1.83e-13
+0.1      1.08e-13  1.83e-13
+O-O      9.07e-10  9.22e-10
+
+CH2CHCHCH3+H2-> 
+
+P\T           500       550
+0.03     9.47e-23  9.52e-22
+0.1      9.46e-23  9.53e-22
+O-O      6.47e-10  6.58e-10
+

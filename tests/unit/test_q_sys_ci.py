@@ -382,9 +382,20 @@ def _kin_job_array(tmp_path: Path, name: str, status: str):
     dtype = np.dtype([
         ('sub_id', np.int32), ('name', np.str_, 20), ('loc', np.str_, 150),
         ('status', np.str_, 10), ('cpu', np.int16), ('mem', np.int32),
-        ('type', np.str_, 3), ('n_pes', np.int16)])
+        ('type', np.str_, 3), ('n_pes', np.int16),
+        ('collector_id', np.int32)])
     return np.array(
-        [(0, name, str(tmp_path), status, 2, 500, 'kin', 1)], dtype=dtype)[0]
+        [(0, name, str(tmp_path), status, 2, 500, 'kin', 1, 0)],
+        dtype=dtype)[0]
+
+
+def test_kin_job_array_dtype_matches_queue_jobdata(tmp_path) -> None:
+    """The hand-built job record of the clean_files tests stays in lockstep
+    with QueueingSystem.jobdata (collector_id appended last, int32)."""
+    qs = _am_qs(tmp_path, use_automech=True)
+    assert _kin_job_array(tmp_path, 'G0000E0001', 'ready').dtype == qs.jobdata
+    assert qs.jobdata.names[-1] == 'collector_id'
+    assert qs.jobdata['collector_id'] == np.int32
 
 
 def test_clean_files_success(tmp_path) -> None:
@@ -833,3 +844,476 @@ def test_max_cpu_and_max_mem_block_submission(tmp_path, monkeypatch) -> None:
         assert qs.kin_q[1]["status"] == JobStatus.READY.value
 
 
+
+
+# ===========================================================================
+# Prompt mode (use_automech + prompt_reactions): the collector job, submitted
+# with afterok on the array, tracked next to it, its files and logs kept out
+# of the kin globs. _pickup_kin ignores the PED / microcanonical outputs in
+# every mode.
+# ===========================================================================
+import fnmatch  # noqa: E402
+from subprocess import PIPE  # noqa: E402
+
+from kimeco.q_sys import (COLLECTOR_SUBMIT_FAILED,  # noqa: E402
+                          SIDE_OUTPUT_SUFFIXES)
+from kimeco.templates.kin_arr_py_tpl import kin_arr_py_tpl  # noqa: E402
+from kimeco.templates.slurm_arr import slurmarrtpl  # noqa: E402
+
+PNAME = 'G0001E0007'
+_POPEN_KWARGS = {'shell': False, 'stdout': PIPE, 'stdin': PIPE,
+                 'stderr': PIPE}
+
+
+def _prompt_qs(tmp_path: Path, prompt: bool = True, use_automech: bool = True,
+               **extra: Any) -> QueueingSystem:
+    settings = _am_settings(tmp_path, use_automech)
+    settings['prompt_reactions'] = prompt
+    settings.update(extra)
+    klog = KMOLogger(filename=str(tmp_path / 'q_sys_prompt.log'))
+    return QueueingSystem(settings=settings, nel=4, klog=klog)
+
+
+def _ready_job(qs: QueueingSystem, loc: Path, n_pes: int = 2,
+               name: str = PNAME, ext: str = 'py', collector: bool = True):
+    """Kin job in slot 0 with its drivers (and collector script) written."""
+    qs.add_to_q(name=name, idx=0, location=str(loc), jtype='kin',
+                ressources=(2, 500), n_pes=n_pes)
+    for slot in range(n_pes):
+        (loc / f'{name}P{slot:02d}.{ext}').write_text('driver')
+    if collector:
+        (loc / f'prompt_{name}.py').write_text('collector')
+    return qs.kin_q[0]
+
+
+class _FakePopen:
+    """Popen stand-in: one scripted (returncode, stdout, stderr) per call,
+    or an exception to raise."""
+
+    def __init__(self, replies: list) -> None:
+        self.replies = list(replies)
+        self.calls: list[tuple[list[str], dict]] = []
+
+    def __call__(self, args, **kwargs):
+        self.calls.append((list(args), kwargs))
+        reply = self.replies.pop(0)
+        if isinstance(reply, BaseException):
+            raise reply
+        code, out, err = reply
+        return SimpleNamespace(returncode=code,
+                               communicate=lambda: (out.encode(),
+                                                    err.encode()))
+
+
+def _submitting(monkeypatch, tmp_path: Path, replies: list) -> _FakePopen:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr('kimeco.q_sys.time.sleep', lambda _: None)
+    popen = _FakePopen(replies)
+    monkeypatch.setattr('kimeco.q_sys.Popen', popen)
+    return popen
+
+
+@pytest.mark.parametrize('array_id, collector_id', [(4242, 4243),
+                                                    (777, 90001)])
+def test_submit_prompt_chains_collector_on_array_id(
+        tmp_path, monkeypatch, array_id, collector_id) -> None:
+    """Two sbatch calls: the array, then the collector with
+    --dependency=afterok:<captured array id> --kill-on-invalid-dep=yes and
+    its own .slurm (written by add_to_q); both ids recorded, RUNNING."""
+    popen = _submitting(monkeypatch, tmp_path, [
+        (0, f'Submitted batch job {array_id}\n', ''),
+        (0, f'Submitted batch job {collector_id}\n', '')])
+    qs = _prompt_qs(tmp_path)
+    job = _ready_job(qs, tmp_path)
+    qs.submit(job)
+    assert [c[0] for c in popen.calls] == [
+        ['sbatch', f'{PNAME}.slurm'],
+        ['sbatch', f'--dependency=afterok:{array_id}',
+         '--kill-on-invalid-dep=yes', f'prompt_{PNAME}.slurm']]
+    assert all(c[1] == _POPEN_KWARGS for c in popen.calls)
+    assert (tmp_path / popen.calls[1][0][-1]).is_file()
+    rec = qs.kin_q[0]
+    assert (int(rec['sub_id']), int(rec['collector_id'])) == (array_id,
+                                                              collector_id)
+    assert rec['status'] == JobStatus.RUNNING.value
+    assert qs.collector_submit_failed(0) is False
+
+
+@pytest.mark.parametrize('prompt, use_automech', [(False, True), (True, False)],
+                         ids=['prompt_off', 'no_automech'])
+def test_submit_non_prompt_single_sbatch_unchanged(tmp_path, monkeypatch,
+                                                   prompt,
+                                                   use_automech) -> None:
+    """Outside prompt mode (prompt off, or prompt without use_automech): one
+    sbatch call, argv and Popen kwargs as before, collector field 0, no
+    collector .slurm."""
+    popen = _submitting(monkeypatch, tmp_path,
+                        [(0, 'Submitted batch job 31\n', '')])
+    qs = _prompt_qs(tmp_path, prompt=prompt, use_automech=use_automech)
+    job = _ready_job(qs, tmp_path, ext='py' if use_automech else 'inp',
+                     collector=False)
+    qs.submit(job)
+    assert popen.calls == [(['sbatch', f'{PNAME}.slurm'], _POPEN_KWARGS)]
+    assert int(qs.kin_q[0]['sub_id']) == 31
+    assert int(qs.kin_q[0]['collector_id']) == 0
+    assert qs.kin_q[0]['status'] == JobStatus.RUNNING.value
+    assert not (tmp_path / f'prompt_{PNAME}.slurm').exists()
+
+
+def test_submit_prompt_array_failure_submits_no_collector(
+        tmp_path, monkeypatch) -> None:
+    popen = _submitting(monkeypatch, tmp_path,
+                        [(1, '', 'sbatch: error: invalid partition')])
+    qs = _prompt_qs(tmp_path)
+    qs.submit(_ready_job(qs, tmp_path))
+    assert len(popen.calls) == 1
+    assert qs.kin_q[0]['status'] == JobStatus.READY.value
+    assert int(qs.kin_q[0]['collector_id']) == 0
+    assert qs.collector_submit_failed(0) is False
+
+
+@pytest.mark.parametrize('reply, needle', [
+    ((1, '', 'sbatch: error: Job dependency problem'),
+     'Job dependency problem'),
+    ((0, 'unexpected', ''), 'unexpected'),
+    (OSError('sbatch not found'), 'sbatch not found'),
+], ids=['rc1', 'unparsable', 'oserror'])
+def test_submit_prompt_collector_failure_records_sentinel(
+        tmp_path, monkeypatch, reply, needle) -> None:
+    """A failed collector sbatch never raises: the array id is kept, status
+    RUNNING, the collector field holds COLLECTOR_SUBMIT_FAILED (-1) and an
+    error naming the job and the array is logged."""
+    _submitting(monkeypatch, tmp_path,
+                [(0, 'Submitted batch job 4242\n', ''), reply])
+    qs = _prompt_qs(tmp_path)
+    errors: list[str] = []
+    monkeypatch.setattr(qs.klog, 'error', lambda msg, *a, **k:
+                        errors.append(str(msg)))
+    qs.submit(_ready_job(qs, tmp_path))
+    rec = qs.kin_q[0]
+    assert COLLECTOR_SUBMIT_FAILED == -1
+    assert int(rec['sub_id']) == 4242
+    assert int(rec['collector_id']) == COLLECTOR_SUBMIT_FAILED
+    assert rec['status'] == JobStatus.RUNNING.value
+    assert qs.collector_submit_failed(0) is True
+    assert len(errors) == 1, errors
+    assert f'prompt collector of {PNAME} (array 4242)' in errors[0]
+    assert needle in errors[0]
+
+
+def test_collector_submit_failed_only_for_submitted_jobs(tmp_path) -> None:
+    """True only for a RUNNING or FINISHED job holding the sentinel (the
+    fields of unused or waiting slots mean nothing)."""
+    qs = _prompt_qs(tmp_path)
+    _ready_job(qs, tmp_path)
+    for status, collector_id, expected in (
+            (JobStatus.RUNNING, -1, True), (JobStatus.FINISHED, -1, True),
+            (JobStatus.READY, -1, False), (JobStatus.PICKED_UP, -1, False),
+            (JobStatus.NOT_IN_QUEUE, -1, False),
+            (JobStatus.RUNNING, 4243, False), (JobStatus.RUNNING, 0, False)):
+        qs.kin_q[0]['status'] = status.value
+        qs.kin_q[0]['collector_id'] = collector_id
+        assert qs.collector_submit_failed(0) is expected, (status,
+                                                           collector_id)
+
+
+def test_factually_ready_prompt_needs_collector_files(tmp_path) -> None:
+    """Prompt mode: the drivers are not enough, the collector script and
+    .slurm must exist and be non-empty (so the array never goes without
+    its collector); the collector script is not counted as a driver."""
+    qs = _prompt_qs(tmp_path)
+    job = _ready_job(qs, tmp_path, collector=False)
+    script = tmp_path / f'prompt_{PNAME}.py'
+    slurm = tmp_path / f'prompt_{PNAME}.slurm'
+    assert slurm.stat().st_size > 0
+    assert not qs.factually_ready(job)
+    script.write_text('')
+    assert not qs.factually_ready(job)
+    script.write_text('collector')
+    assert qs.factually_ready(job)
+    slurm.write_text('')
+    assert not qs.factually_ready(job)
+    slurm.unlink()
+    assert not qs.factually_ready(job)
+
+    plain = tmp_path / 'plain'
+    plain.mkdir()
+    qs = _prompt_qs(plain, prompt=False)
+    job = _ready_job(qs, plain, collector=False)
+    assert qs.factually_ready(job)
+
+
+def test_create_sub_file_prompt_keeps_array_and_adds_collector(
+        tmp_path) -> None:
+    """The array .slurm is byte-identical to the non-prompt one (template
+    computed here); prompt mode adds prompt_<name>.slurm: one job, 1 CPU,
+    the kin memory, the queue, logs/prompt_<name>.* (not matching the
+    logs/<name>_* glob), MPLBACKEND=Agg, then python prompt_<name>.py; no
+    --exclude line when exclude_nodes is empty."""
+    array = tmp_path / f'{PNAME}.slurm'
+    expected = slurmarrtpl.format(
+        n_exp=1, exclude_nodes='', nprocs=2, filename=PNAME,
+        sub_queue='day-long-cpu', mem_mb=500, scratchdir=str(tmp_path)) + \
+        kin_arr_py_tpl.format(filename=PNAME)
+    _prompt_qs(tmp_path, prompt=False).add_to_q(
+        name=PNAME, idx=0, location=str(tmp_path), jtype='kin',
+        ressources=(2, 500), n_pes=2)
+    assert array.read_text() == expected
+    assert sorted(p.name for p in tmp_path.iterdir()
+                  if p.suffix == '.slurm') == [array.name]
+    array.unlink()
+
+    qs = _prompt_qs(tmp_path)
+    qs.add_to_q(name=PNAME, idx=0, location=str(tmp_path), jtype='kin',
+                ressources=(2, 500), n_pes=2)
+    assert array.read_text() == expected
+    lines = (tmp_path / f'prompt_{PNAME}.slurm').read_text().splitlines()
+    for line in ('#SBATCH -c 1', '#SBATCH --mem=500',
+                 '#SBATCH -p day-long-cpu',
+                 f'#SBATCH -o logs/prompt_{PNAME}.stdout',
+                 f'#SBATCH -e logs/prompt_{PNAME}.err',
+                 'export MPLBACKEND=Agg', f'python prompt_{PNAME}.py'):
+        assert line in lines, (line, lines)
+    assert lines.index('export MPLBACKEND=Agg') < lines.index(
+        f'python prompt_{PNAME}.py')
+    assert not any('--exclude' in ln or '--array' in ln for ln in lines)
+    for log in (f'logs/prompt_{PNAME}.stdout', f'logs/prompt_{PNAME}.err'):
+        assert not fnmatch.fnmatch(log, f'logs/{PNAME}_*')
+    assert int(qs.kin_q[0]['collector_id']) == 0
+
+    other = tmp_path / 'excl'
+    other.mkdir()
+    _prompt_qs(other, exclude_nodes='n1,n2').add_to_q(
+        name=PNAME, idx=0, location=str(other), jtype='kin',
+        ressources=(2, 500), n_pes=1)
+    assert '#SBATCH --exclude=n1,n2' in (
+        other / f'prompt_{PNAME}.slurm').read_text().splitlines()
+
+
+def test_sim_job_in_prompt_mode_has_no_collector(tmp_path) -> None:
+    qs = _prompt_qs(tmp_path, experiments=[_sim_exp(0, True)], n_exp=1)
+    qs.add_to_q(name=f'{PNAME}S', idx=0, location=str(tmp_path),
+                jtype='sim', ressources=(1, 500))
+    assert int(qs.sim_q[0]['collector_id']) == 0
+    assert not list(tmp_path.glob('prompt_*'))
+
+
+def _running(qs: QueueingSystem, idx: int, sub_id: int, collector_id: int,
+             jtype: str = 'kin') -> None:
+    q = qs.kin_q if jtype == 'kin' else qs.sim_q
+    q[idx]['sub_id'] = sub_id
+    q[idx]['collector_id'] = collector_id
+    q[idx]['status'] = JobStatus.RUNNING.value
+
+
+@pytest.mark.parametrize('squeue, status', [
+    ([100, 101], JobStatus.RUNNING), ([101], JobStatus.RUNNING),
+    ([100], JobStatus.RUNNING), ([], JobStatus.FINISHED),
+    ([999], JobStatus.FINISHED)],
+    ids=['both', 'collector_only', 'array_only', 'none', 'other_job'])
+def test_actualize_finishes_only_when_array_and_collector_left(
+        tmp_path, monkeypatch, squeue, status) -> None:
+    qs = _prompt_qs(tmp_path)
+    _ready_job(qs, tmp_path)
+    _running(qs, 0, 100, 101)
+    monkeypatch.setattr(qs, 'get_all_running',
+                        lambda: np.array(squeue, dtype=np.int32))
+    qs.actualize()
+    assert JobStatus(qs.kin_q[0]['status']) == status
+
+
+def test_actualize_without_collector_and_mixed_queue(tmp_path,
+                                                     monkeypatch) -> None:
+    """Collector 0 (non-prompt kin, sim) or the sentinel: FINISHED as soon
+    as the array left (as before). Mixed queue: only the job whose
+    collector is gone finishes; PICKED_UP / FAILED -> NOT_IN_QUEUE."""
+    qs = _prompt_qs(tmp_path, experiments=[_sim_exp(0, True)], n_exp=1)
+    for idx in range(4):
+        qs.add_to_q(name=f'G0001E000{idx}', idx=idx, location=str(tmp_path),
+                    jtype='kin', ressources=(1, 100), n_pes=1)
+    qs.add_to_q(name='G0001E0000S', idx=0, location=str(tmp_path),
+                jtype='sim', ressources=(1, 100))
+    _running(qs, 0, 100, 101)                       # collector listed
+    _running(qs, 1, 200, 0)                         # no collector
+    _running(qs, 2, 300, COLLECTOR_SUBMIT_FAILED)   # sbatch failed
+    qs.kin_q[3]['status'] = JobStatus.PICKED_UP.value
+    _running(qs, 0, 400, 0, jtype='sim')
+    monkeypatch.setattr(qs, 'get_all_running',
+                        lambda: np.array([101], dtype=np.int32))
+    qs.actualize()
+    assert [JobStatus(s) for s in qs.kin_q['status']] == [
+        JobStatus.RUNNING, JobStatus.FINISHED, JobStatus.FINISHED,
+        JobStatus.NOT_IN_QUEUE]
+    assert JobStatus(qs.sim_q[0]['status']) == JobStatus.FINISHED
+
+
+def test_prompt_status_flow_waits_for_collector(tmp_path,
+                                                monkeypatch) -> None:
+    """Through run(): READY -> both submitted -> RUNNING; array leaves the
+    queue -> still RUNNING; collector leaves -> FINISHED; nothing
+    resubmitted."""
+    popen = _submitting(monkeypatch, tmp_path, [
+        (0, 'Submitted batch job 500\n', ''),
+        (0, 'Submitted batch job 501\n', '')])
+    qs = _prompt_qs(tmp_path)
+    _ready_job(qs, tmp_path)
+    squeue = {500, 501}
+    monkeypatch.setattr(qs, 'get_all_running', lambda: np.array(
+        sorted(squeue), dtype=np.int32))
+    assert JobStatus(qs.kin_q[0]['status']) == JobStatus.READY
+    qs.run()
+    assert JobStatus(qs.kin_q[0]['status']) == JobStatus.RUNNING
+    assert len(popen.calls) == 2
+    squeue.discard(500)
+    qs.run()
+    assert JobStatus(qs.kin_q[0]['status']) == JobStatus.RUNNING
+    squeue.discard(501)
+    qs.run()
+    assert JobStatus(qs.kin_q[0]['status']) == JobStatus.FINISHED
+    assert len(popen.calls) == 2
+
+
+def _outputs(loc: Path, name: str, side: bool = True) -> list[Path]:
+    paths = [loc / f'{name}P00.out', loc / f'{name}P01.out']
+    if side:
+        paths += [loc / f'{name}P{s:02d}{suffix}' for s in (0, 1)
+                  for suffix in SIDE_OUTPUT_SUFFIXES]
+    for path in paths:
+        path.write_text('data')
+    return paths
+
+
+@pytest.mark.parametrize('use_automech', [True, False])
+def test_pickup_kin_ignores_ped_and_ke_outputs_in_every_mode(
+        tmp_path, monkeypatch, use_automech) -> None:
+    """Regression (all modes): P*_ped.out / P*_ke.out next to the rate
+    outputs no longer break the n_pes count (6 != 2 kept the job from ever
+    being picked up)."""
+    monkeypatch.setattr('kimeco.q_sys.time.sleep', lambda _: None)
+    qs = _prompt_qs(tmp_path, prompt=False, use_automech=use_automech)
+    job = _kin_job(qs, tmp_path, PNAME, n_pes=2)
+    job['status'] = JobStatus.RUNNING.value
+    (tmp_path / 'logs').mkdir()
+    for slot in (0, 1):
+        (tmp_path / 'logs' / f'{PNAME}_{slot}.err').write_text('')
+    _outputs(tmp_path, PNAME)
+    assert qs._pickup_kin(job) is True
+    assert JobStatus(job['status']) == JobStatus.PICKED_UP
+
+
+def test_rate_outputs_excludes_side_and_pass1_outputs(tmp_path) -> None:
+    rates = _outputs(tmp_path, PNAME)[:2]
+    (tmp_path / f'_{PNAME}P00.out').write_text('pass1')
+    assert SIDE_OUTPUT_SUFFIXES == ('_ped.out', '_ke.out')
+    assert QueueingSystem._rate_outputs(f'{tmp_path}/{PNAME}') == [
+        str(p) for p in rates]
+
+
+def test_pickup_kin_failure_branches_with_side_outputs(tmp_path,
+                                                       monkeypatch) -> None:
+    """A non-empty logs/<name>_*.err still removes every non-underscore
+    P*.out, side outputs included (unchanged); a non-empty P*.err removes
+    the rate outputs only."""
+    monkeypatch.setattr('kimeco.q_sys.time.sleep', lambda _: None)
+    for case in ('log_err', 'p_err'):
+        loc = tmp_path / case
+        (loc / 'logs').mkdir(parents=True)
+        qs = _prompt_qs(loc, prompt=False)
+        job = _kin_job(qs, loc, PNAME, n_pes=2)
+        job['status'] = JobStatus.RUNNING.value
+        (loc / 'logs' / f'{PNAME}_0.err').write_text(
+            'boom' if case == 'log_err' else '')
+        (loc / 'logs' / f'{PNAME}_1.err').write_text('')
+        if case == 'p_err':
+            (loc / f'{PNAME}P00.err').write_text('boom')
+        outs = _outputs(loc, PNAME)
+        pass1 = loc / f'_{PNAME}P00.out'
+        pass1.write_text('pass1')
+        assert qs._pickup_kin(job) is False
+        assert JobStatus(job['status']) == JobStatus.FAILED
+        assert pass1.exists()
+        removed = outs if case == 'log_err' else outs[:2]
+        assert [p for p in outs if not p.exists()] == removed, case
+
+
+def test_pickup_kin_prompt_ignores_collector_err(tmp_path,
+                                                 monkeypatch) -> None:
+    """A non-empty collector log (logs/prompt_<name>.err) is not one of
+    the array's logs/<name>_*.err: the job is picked up."""
+    monkeypatch.setattr('kimeco.q_sys.time.sleep', lambda _: None)
+    qs = _prompt_qs(tmp_path)
+    job = _kin_job(qs, tmp_path, PNAME, n_pes=2)
+    job['status'] = JobStatus.FINISHED.value
+    (tmp_path / 'logs').mkdir()
+    for slot in (0, 1):
+        (tmp_path / 'logs' / f'{PNAME}_{slot}.err').write_text('')
+    (tmp_path / 'logs' / f'prompt_{PNAME}.err').write_text('Traceback\n')
+    _outputs(tmp_path, PNAME)
+    assert qs._pickup_kin(job) is True
+    assert JobStatus(job['status']) == JobStatus.PICKED_UP
+
+
+def _artifacts(loc: Path, name: str) -> dict[str, Path]:
+    (loc / 'logs').mkdir(exist_ok=True)
+    names = {
+        'slurm': f'{name}.slurm', 'log': f'{name}.log', 'aux': f'{name}.aux',
+        'p_log': f'{name}P00.log', 'p_inp': f'{name}P00.inp',
+        'p_aux': f'{name}P00.aux', 'p_py': f'{name}P00.py',
+        'pass1': f'_{name}P00.out', 'ped': f'{name}P00_ped.out',
+        'ke': f'{name}P00_ke.out', 'rate': f'{name}P00.out',
+        'c_py': f'prompt_{name}.py', 'c_slurm': f'prompt_{name}.slurm',
+        'c_json': f'prompt_{name}.json', 'arr_err': f'logs/{name}_0.err',
+        'c_err': f'logs/prompt_{name}.err',
+        'c_out': f'logs/prompt_{name}.stdout'}
+    paths = {key: loc / rel for key, rel in names.items()}
+    for path in paths.values():
+        path.write_text('x')
+    return paths
+
+
+def test_clean_files_prompt_picked_up_and_failed(tmp_path) -> None:
+    """Prompt PICKED_UP: also removes the PED / microcanonical outputs and
+    the collector script and .slurm; keeps the rate .out, the prompt JSON
+    and logs/. Prompt FAILED: removes nothing (diagnosis)."""
+    loc = tmp_path / 'picked'
+    loc.mkdir()
+    paths = _artifacts(loc, PNAME)
+    _prompt_qs(loc).clean_files(
+        _kin_job_array(loc, PNAME, JobStatus.PICKED_UP.value),
+        clear_err=True)
+    kept = {k for k, p in paths.items() if p.exists()}
+    assert kept == {'rate', 'c_json', 'arr_err', 'c_err', 'c_out'}
+
+    loc = tmp_path / 'failed'
+    loc.mkdir()
+    paths = _artifacts(loc, PNAME)
+    _prompt_qs(loc).clean_files(
+        _kin_job_array(loc, PNAME, JobStatus.FAILED.value), clear_err=False)
+    assert all(p.exists() for p in paths.values())
+
+
+@pytest.mark.parametrize('prompt, use_automech', [(False, True), (True, False)],
+                         ids=['prompt_off', 'no_automech'])
+def test_clean_files_non_prompt_unchanged(tmp_path, prompt,
+                                          use_automech) -> None:
+    """Outside prompt mode: PICKED_UP keeps the side outputs (never deleted
+    before) and anything named prompt_*; FAILED still removes P*.log and
+    keeps the drivers."""
+    loc = tmp_path / 'picked'
+    loc.mkdir()
+    paths = _artifacts(loc, PNAME)
+    qs = _prompt_qs(loc, prompt=prompt, use_automech=use_automech)
+    qs.clean_files(_kin_job_array(loc, PNAME, JobStatus.PICKED_UP.value),
+                   clear_err=True)
+    kept = {k for k, p in paths.items() if p.exists()}
+    assert kept == {'rate', 'ped', 'ke', 'c_py', 'c_slurm', 'c_json',
+                    'arr_err', 'c_err', 'c_out'}
+
+    loc = tmp_path / 'failed'
+    loc.mkdir()
+    paths = _artifacts(loc, PNAME)
+    qs = _prompt_qs(loc, prompt=prompt, use_automech=use_automech)
+    qs.clean_files(_kin_job_array(loc, PNAME, JobStatus.FAILED.value),
+                   clear_err=False)
+    gone = {k for k, p in paths.items() if not p.exists()}
+    assert gone == {'slurm', 'log', 'aux', 'p_log', 'p_aux'}

@@ -20,7 +20,7 @@ Checking that a MESS input works, understanding the files KiMecO generates per m
    - default: `MessWriter` (`kimeco/writers/mess.py`) → `<name>P<NN>.inp`, starting with one `!<param>: <value>` comment line per SOP parameter, then the filled template;
    - `use_automech: true`: `AutomechKinWriter` (`kimeco/writers/automech_kin.py`) → self-contained driver `<name>P<NN>.py`. It writes pass 1 (no WellExtension), runs `mess`, copies the output to `_<name>P<NN>.out`, calls `mess_io.well_lumped_input_file`, rewrites the input, and runs `mess` again for the final `<name>P<NN>.out`.
 3. The Slurm array task runs `mess <name>P${ID}.inp` (`kimeco/templates/kin_arr_tpl.py`) or `python <name>P${ID}.py` (`kin_arr_py_tpl.py`); see `submit-hpc-job`.
-4. `RateCo.recover_rslts` reads each `.out` with `MessOutputReader` (`kimeco/readers/mess_output.py`), sets negative rates to 0, marks the job `FAILED` if any rate is NaN, and builds `KMO_DB_KIN` rows `(P, T, kin_id, pes_id, from_name, to_name, k)`.
+4. `RateCo.recover_rslts` reads each `.out` with `MessOutputReader` (`kimeco/readers/mess_output.py`), sets negative rates to 0, marks the job `FAILED` if any rate is NaN, and builds `KMO_DB_KIN` rows `(P, T, kin_id, pes_id, from_name, to_name, k)`. In prompt mode (`prompt_reactions`) it first checks the prompt-rates file and appends the prompt rows (`RateCo._prompt_rows`: `to_name` ends with `__prompt`, ids from `PROMPT_KIN_ROWID_BASE`, or from `pp_row_ids` in postprocessing) after the thermal rows.
 5. Rotor/rotd side files listed in `SOP.files2copy` are copied to `<workdir>` and symlinked into each job subfolder.
 
 ## Steps — check an input standalone

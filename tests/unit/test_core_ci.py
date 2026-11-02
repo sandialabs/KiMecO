@@ -778,3 +778,181 @@ def test_nms_run_registers_and_releases_table_id_lock(
     runner._process_single_model(cast(Any, held))
     assert calls == [] and held.status == ModelStatus.SCORING
     runner.mdl_locks[('NMSG0002', 5)].release()
+
+
+# ===========================================================================
+# Prompt-rates failure (PromptRatesError) stops CoreRun and the NM swarm
+# ===========================================================================
+import concurrent.futures  # noqa: E402
+import time  # noqa: E402
+
+import pytest  # noqa: E402
+
+from kimeco.optimizers.NelderMead.nelder_mead_swarm import (  # noqa: E402
+    NelderMeadSwarm)
+from kimeco.writers.prompt_collector import PromptRatesError  # noqa: E402
+
+
+class _ErrLog:
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+
+    def debug(self, *a: Any, **k: Any) -> None:
+        return None
+
+    info = warning = debug
+
+    def error(self, msg: Any, *a: Any, **k: Any) -> None:
+        self.errors.append(str(msg))
+
+
+def test_core_run_exits_on_prompt_rates_error() -> None:
+    """C1: CoreRun.run treats PromptRatesError like any model error: the
+    message is logged and the run exits with -1 (core.py unchanged; the
+    class is an Exception subclass)."""
+    assert issubclass(PromptRatesError, Exception)
+    core = CoreRun.__new__(CoreRun)
+    log = _ErrLog()
+    core.klog = cast(Any, log)
+    core.settings = {'threads': 1}
+    mdl = SimpleNamespace(id=3, gen=1, status=ModelStatus.KIN)
+    core.models = cast(Any, [mdl])
+    core.get_table_name = lambda m: 'G0001'  # type: ignore[method-assign]
+    core.mdl_locks = {('G0001', 3): Lock()}
+
+    def _fail(m: Any) -> None:
+        raise PromptRatesError('No prompt-rates file for G0001E0003')
+
+    core._process_model_locked = _fail  # type: ignore[method-assign]
+    with pytest.raises(SystemExit) as exc:
+        core.run()
+    assert exc.value.code == -1
+    assert any('No prompt-rates file for G0001E0003' in e
+               for e in log.errors), log.errors
+
+
+def _swarm(n: int, log: _ErrLog, behaviour) -> NelderMeadSwarm:
+    swarm = NelderMeadSwarm.__new__(NelderMeadSwarm)
+    swarm.klog = cast(Any, log)
+    swarm.models = cast(Any, [SimpleNamespace(id=i) for i in range(n)])
+    swarm.max_workers = 1
+    swarm.dimensions = []
+    swarm.results = []
+    swarm.sf = cast(Any, SimpleNamespace(
+        format_score_breakdown=lambda *a, **k: ''))
+    swarm._run_single_nm = behaviour  # type: ignore[method-assign]
+    return swarm
+
+
+def test_nm_swarm_reraises_prompt_rates_error(monkeypatch) -> None:
+    """N1: an NM instance failing with PromptRatesError stops the swarm:
+    logged, the queued instances cancelled (shutdown(wait=False,
+    cancel_futures=True)), the same exception raised by run()."""
+    calls: list[tuple[bool, bool]] = []
+    original = concurrent.futures.ThreadPoolExecutor.shutdown
+
+    def _spy(self, wait=True, *, cancel_futures=False):
+        calls.append((wait, cancel_futures))
+        return original(self, wait=wait, cancel_futures=cancel_futures)
+
+    monkeypatch.setattr(concurrent.futures.ThreadPoolExecutor, 'shutdown',
+                        _spy)
+    error = PromptRatesError('collector of NMSG0000E0000 failed')
+
+    def _nm(nm_id: int, el: Any) -> dict:
+        if nm_id == 0:
+            raise error
+        return {'nm_id': nm_id, 'success': True, 'best_model': el}
+
+    log = _ErrLog()
+    swarm = _swarm(3, log, _nm)
+    with pytest.raises(PromptRatesError) as exc:
+        swarm.run()
+    assert exc.value is error
+    assert (False, True) in calls
+    assert any('NelderMead 0000 stopped the swarm' in e for e in log.errors)
+    assert not any(r['nm_id'] == 0 for r in swarm.results)
+
+
+def test_nm_swarm_other_errors_still_recorded() -> None:
+    """N2: any other NM failure is logged and recorded as success False;
+    run() returns the best models of the others (unchanged)."""
+    def _nm(nm_id: int, el: Any) -> dict:
+        if nm_id == 0:
+            raise RuntimeError('boom')
+        return {'nm_id': nm_id, 'success': True, 'best_model': el}
+
+    log = _ErrLog()
+    swarm = _swarm(2, log, _nm)
+    best = swarm.run()
+    assert best == [swarm.models[1]]
+    assert {'nm_id': 0, 'success': False, 'error': 'boom',
+            'best_model': None} in swarm.results
+    assert any('failed with exception: boom' in e for e in log.errors)
+
+
+def _pool_mdl(gen: int, id: int) -> Any:
+    return SimpleNamespace(id=id, gen=gen, status=ModelStatus.SCORING,
+                           origin_prefix=None,
+                           sop=SimpleNamespace(files2copy=[]))
+
+
+def _thread_run(runner: NMSRunner, mdl: Any, box: dict) -> threading.Thread:
+    def _target() -> None:
+        try:
+            box['result'] = runner.run(cast(Any, mdl))
+        except BaseException as exc:  # noqa: BLE001 - reported to the test
+            box['error'] = exc
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    return thread
+
+
+@pytest.mark.parametrize('error_type', [PromptRatesError, RuntimeError])
+def test_nms_runner_prompt_error_stops_other_threads(tmp_path, monkeypatch,
+                                                     error_type) -> None:
+    """N3 / N4: thread A's model fails. PromptRatesError: it is recorded
+    (sticky stop_error), thread B, looping on a model that never reaches
+    DONE, raises PromptRatesError within 5 s and leaves the pool, and a
+    later run() raises at once without processing. RuntimeError: B is not
+    stopped (unchanged)."""
+    runner = _nms_runner(tmp_path, monkeypatch, _TableDB())
+    a, b = _pool_mdl(0, 1), _pool_mdl(1, 2)
+    b_started = threading.Event()
+    processed: list[int] = []
+
+    def _process(mdl: Any) -> None:
+        processed.append(mdl.id)
+        if mdl is a:
+            raise error_type('collector of NMSG0000E0001 failed')
+        b_started.set()
+        time.sleep(0.005)
+
+    runner._process_single_model = _process  # type: ignore[method-assign]
+    box: dict = {}
+    thread = _thread_run(runner, b, box)
+    assert b_started.wait(timeout=5)
+    with pytest.raises(error_type):
+        runner.run(cast(Any, a))
+    try:
+        if error_type is PromptRatesError:
+            thread.join(timeout=5)
+            assert not thread.is_alive(), 'NM thread B was not stopped'
+            assert isinstance(box.get('error'), PromptRatesError), box
+            assert 'collector of NMSG0000E0001 failed' in str(box['error'])
+            assert isinstance(runner.stop_error, PromptRatesError)
+            assert runner.models == [None, None, None]
+            processed.clear()
+            with pytest.raises(PromptRatesError, match='swarm stopped'):
+                runner.run(cast(Any, _pool_mdl(2, 3)))
+            assert processed == []
+            assert runner.models == [None, None, None]
+        else:
+            time.sleep(0.05)
+            assert thread.is_alive()
+            assert runner.stop_error is None
+    finally:
+        b.status = ModelStatus.DONE
+        thread.join(timeout=5)
+    assert not thread.is_alive()

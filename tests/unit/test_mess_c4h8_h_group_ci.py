@@ -528,6 +528,8 @@ def test_four_files_perturbation_draws_each_species_once() -> None:
 # ---------------------------------------------------------------------------
 _H3_PED = 'CH2CHCH2CH3+H=CH2CHCHCH3+H2'
 _H2B_PED = 'CH3CHCHCH3+H=CH2CHCHCH3+H2'
+# Both sides exact bimolecular labels of 2-H_C4H71-3, products hot nowhere
+_H2B_REVERSED = 'CH2CHCHCH3+H2=CH3CHCHCH3+H'
 _MICRO = ('MicroEnerMin[kcal/mol]                 0.1\n',
           'MicroEnerMax[kcal/mol]                 320.0\n',
           'MicroEnerStep[kcal/mol]                0.1\n')
@@ -577,9 +579,12 @@ def test_prompt_without_ped_or_hot_stops(files, counts) -> None:
     assert counts in errors[0]
 
 
-def test_prompt_self_link_does_not_count(tmp_path) -> None:
-    """C4H7 alone with a PEDSpecies whose product is its own hot well: a
-    product hot in its own file is no link, so the read stops."""
+def test_prompt_self_link_is_refused(tmp_path) -> None:
+    """C4H7 alone with a PEDSpecies whose product is its own hot well
+    (step 2: "no link"; step 3: refused). The file holds both PEDSpecies
+    and HotEnergies, and the product CH2CHCHCH3 is not a bimolecular label:
+    two errors naming the file, and the link check returns right after the
+    refusals (no "no PEDSpecies product" error)."""
     root = _prompt_copy(tmp_path, {C4H7: [(
         'RateOutput                             rate.out\n',
         'RateOutput                             rate.out\n'
@@ -589,8 +594,92 @@ def test_prompt_self_link_does_not_count(tmp_path) -> None:
     assert sop.pes_file_data[0].ped_species == ['CH2CHCHCH2+H=CH2CHCHCH3']
     warnings, errors = _messages(reader)
     assert reader._trigger_stop is True
+    assert warnings == []
+    assert len(errors) == 2, errors
+    assert errors[0].startswith(
+        f'Prompt reactions: {root / C4H7} has both PEDSpecies and '
+        'HotEnergies')
+    assert ("the product 'CH2CHCHCH3' of the PEDSpecies entry "
+            f"'CH2CHCHCH2+H=CH2CHCHCH3' of {root / C4H7}") in errors[1]
+    assert not any('no PEDSpecies product' in e for e in errors)
+
+
+def test_prompt_file_with_ped_and_hot_is_refused(tmp_path) -> None:
+    """L1: the hot C4H7 file gets a PEDSpecies pair whose sides are exact
+    bimolecular labels of that file, read with the H group (which links):
+    one error naming C4H7_hot.inp, PEDSpecies and HotEnergies; the same
+    copy read without prompt mode does not stop."""
+    root = _prompt_copy(tmp_path, {C4H7: [(
+        'RateOutput                             rate.out\n',
+        'RateOutput                             rate.out\n'
+        'PEDSpecies CH2CHCHCH2+H=CH2CH2+CH2CH\n')]})
+    _, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES,
+                         prompt=True)
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert warnings == []
     assert len(errors) == 1, errors
-    assert 'PEDSpecies in 1 input(s), HotEnergies in 1 input(s)' in errors[0]
+    assert f'{root / C4H7} has both PEDSpecies and HotEnergies' in errors[0]
+    assert 'prompt chains through one PES are not supported' in errors[0]
+
+    _, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES)
+    _assert_clean(reader)
+
+
+@pytest.mark.parametrize('pair, side, label', [
+    ('H+CH2CHCH2CH3=CH2CHCHCH3+H2', 'reactant', 'H+CH2CHCH2CH3'),
+    ('CH2CHCH2CH3+H=H2+CH2CHCHCH3', 'product', 'H2+CH2CHCHCH3'),
+    ('CH2CHCH2CH3+H=CH2CHCHCH3', 'product', 'CH2CHCHCH3'),
+    ('FakeW-CH2CHCH2CH3+H=CH2CHCHCH3+H2', 'reactant',
+     'FakeW-CH2CHCH2CH3+H'),
+], ids=['reactants_reordered', 'products_reordered', 'fragment_product',
+        'well_reactant'])
+def test_prompt_ped_side_not_a_bimolecular_label_is_refused(
+        tmp_path, pair, side, label) -> None:
+    """L2: a PEDSpecies side that is not exactly a bimolecular label of its
+    own file (fragments reordered, a lone fragment, a well): one error
+    naming the side, the label, the entry and the file; the same copy read
+    without prompt mode does not stop."""
+    root = _prompt_copy(tmp_path, {H3: [(_H3_PED, pair)]})
+    _, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES,
+                         prompt=True)
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert warnings == []
+    assert len(errors) == 1, errors
+    assert (f"Prompt reactions: the {side} '{label}' of the PEDSpecies "
+            f"entry '{pair}' of {root / H3} is not the label of a "
+            'Bimolecular of that file') in errors[0]
+
+    _, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES)
+    _assert_clean(reader)
+
+
+def test_prompt_pair_with_two_hot_fragments_is_refused() -> None:
+    """L3: no fixture pair has two hot product fragments, so after a clean
+    four-file prompt read H2 is made a HotEnergies well of C4H7 too and the
+    link check runs again: one error per PED pair (each forms H2 and a hot
+    C4H7 well); the fixed channel set refuses the same SOP."""
+    from kimeco.writers.prompt_collector import (PromptChannel,
+                                                 PromptRatesError)
+    sop, _, reader = _read(ORDERS4[0], species=HOT_SPECIES, prompt=True)
+    _assert_clean(reader)
+    hot = ORDERS4[0].index(C4H7)
+    sop.pes_file_data[hot].hot_energies['H2'] = (0.0, 1.0, 10.0)
+    reader._trigger_stop = False
+    reader.klog = SpyLog()  # type: ignore[assignment]
+    reader._check_prompt_links()
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert warnings == []
+    assert len(errors) == 3, errors
+    for name, pair in ((H3, _H3_PED), (H4, 'CH2CHCH2CH3+H=CH2CH2CHCH2+H2'),
+                       (H2B, _H2B_PED)):
+        hits = [e for e in errors if f"PEDSpecies entry '{pair}' of "
+                f'{DATA / name} has 2 product fragments' in e]
+        assert len(hits) == 1, (pair, errors)
+    with pytest.raises(PromptRatesError, match='two product fragments'):
+        PromptChannel.fixed_set(sop)
 
 
 @pytest.mark.parametrize('pair', ['CH2CHCH2CH3+H', 'A+B=C+D=E', 'A+=B'],
@@ -614,11 +703,12 @@ def test_prompt_malformed_ped_pair_stops(tmp_path, pair) -> None:
 
 
 def test_prompt_unlinked_ped_pes_only_warns(tmp_path) -> None:
-    """A PED file whose products are hot nowhere (2-H_C4H71-3 rewritten to
-    form CH2CHCH2CH3+H) while the others link: no stop, one warning naming
-    that file only."""
-    root = _prompt_copy(tmp_path, {H2B: [(
-        _H2B_PED, 'CH3CHCHCH3+H=CH2CHCH2CH3+H')]})
+    """A PED file whose products are hot nowhere (2-H_C4H71-3 with the
+    exact reversed pair, forming CH3CHCHCH3+H) while the others link: no
+    stop, one warning naming that file only. (Step 3: the former edit
+    CH3CHCHCH3+H=CH2CHCH2CH3+H names a product that is not a bimolecular
+    of that file and is now refused.)"""
+    root = _prompt_copy(tmp_path, {H2B: [(_H2B_PED, _H2B_REVERSED)]})
     _, _, reader = _read(ORDERS4[1], root=root, species=HOT_SPECIES,
                          prompt=True)
     warnings, errors = _messages(reader)
@@ -653,9 +743,10 @@ def test_prompt_linked_ped_incomplete_micro_ener_stops(tmp_path,
 def test_prompt_unlinked_ped_incomplete_micro_ener_only_warns(
         tmp_path) -> None:
     """An unlinked PED file needs no MicroEner keys: 2-H_C4H71-3 unlinked
-    and without MicroEner* gets the unlinked warning only, no stop."""
+    (exact reversed pair) and without MicroEner* gets the unlinked warning
+    only, no stop."""
     root = _prompt_copy(tmp_path, {H2B: [
-        (_H2B_PED, 'CH3CHCHCH3+H=CH2CHCH2CH3+H'),
+        (_H2B_PED, _H2B_REVERSED),
         *((line, '') for line in _MICRO)]})
     sop, _, reader = _read(ORDERS4[0], root=root, species=HOT_SPECIES,
                            prompt=True)

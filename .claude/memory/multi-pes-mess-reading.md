@@ -93,6 +93,11 @@ verified: 2026-10-27 against working tree (uncommitted steps 1-2 of prompt-react
   no `PEDSpecies` product (`rhs.split('+')`) equals a `HotEnergies` key of another PES, on a
   malformed pair, or when a linked PED PES has incomplete `MicroEner*`; an unlinked PED PES warns.
   The check is off in non-prompt reads, so the three-file H-group still reads there.
+  Step 3 (uncommitted): `_refuse_unsupported_ped_pairs` runs first and stops, all reported, on a file
+  with both `PEDSpecies` and `HotEnergies`, a `PEDSpecies` side that is not the exact label of a
+  non-dummy bimolecular of its file (a well reactant is refused too), and a pair with two product
+  fragments that are hot wells of other files; `_check_prompt_links` returns right after a refusal.
+  A PED PES linked to itself is therefore refused (it has `HotEnergies`) rather than not counted.
 - `test_emitted_main_structure` (`test_automech_driver_ci.py`) pins the driver `If`: a `BoolOp(Or)`
   whose first operand is the Name `prompt_mode` (assigned once from `PES_PAYLOAD.get("prompt_reactions")`)
   and whose last is the bare `MessOutputReader.well_merging(...)` Call; plus exactly six placeholders

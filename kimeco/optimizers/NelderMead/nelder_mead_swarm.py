@@ -14,6 +14,7 @@ from kimeco.sensitivity.linear import Linear
 from kimeco.optimizers.NelderMead.nm_swarm_instance import NelderMeadInstance
 from kimeco.optimizers.NelderMead.nm_swarm_runner import NMSRunner
 from kimeco.logger_config import KMOLogger
+from kimeco.writers.prompt_collector import PromptRatesError
 
 
 class NelderMeadSwarm:
@@ -152,8 +153,18 @@ class NelderMeadSwarm:
     def run(self) -> list[Model]:
         """Run all Nelder-Mead optimizations in parallel.
 
+        A failure of the prompt rate coefficients (PromptRatesError) stops
+        the whole swarm: the NM instances not started yet are cancelled, the
+        running ones stop at their next evaluation, and the error is raised
+        again. Any other failure of one NM instance is logged and recorded
+        (``success: False``), the others go on.
+
         Returns:
             List of best models (one per NM instance)
+
+        Raises:
+            PromptRatesError: the prompt rates of a model could not be
+                produced.
         """
         self.klog.info(f"Optimizing dimensions: {self.dimensions}")
 
@@ -179,6 +190,14 @@ class NelderMeadSwarm:
                     self.results.append(result)
                     self.klog.info(
                         f"NelderMead {nm_id:04d} completed successfully")
+                except PromptRatesError as exc:
+                    self.klog.error(
+                        f"NelderMead {nm_id:04d} stopped the swarm: {exc}",
+                        exc_info=True)
+                    # Queued NM instances never start; the running ones
+                    # stop through NMSRunner.stop_error.
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    raise
                 except Exception as exc:
                     self.klog.error(
                         f"NelderMead {nm_id:04d} failed with exception: {exc}",

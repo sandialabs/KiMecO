@@ -24,7 +24,7 @@ A run stopped (walltime, crash, `scancel`) and should continue, or existing mode
 
 ## Steps — plain restart (`"restart": "default"`)
 
-1. Make sure no job of the old run is still running (`squeue -u $USER`). Cancelling leftovers with `scancel` needs explicit user approval.
+1. Make sure no job of the old run is still running (`squeue -u $USER`). Cancelling leftovers with `scancel` needs explicit user approval. In prompt mode (`prompt_reactions=true`) kmo stops on a collector failure without cancelling anything, so an orphan collector or PES job may remain; and a model counts as finished only if its `prompt_<name>.json` exists and its KIN_DB cells hold the `__prompt` rows as well as the thermal ones (otherwise it is resubmitted), so do not delete these files.
 2. Re-launch **from the same directory** with the **same `project_name`** (via `submit-hpc-job`):
    ```bash
    sbatch submit_kmo.slurm      # which runs: kmo input.json

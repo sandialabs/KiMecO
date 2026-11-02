@@ -1,0 +1,343 @@
+Wells (G - ground energy, D - dissociation limit, kcal/mol):
+                W         G         D
+       CH2CHCHCH3     -45.6      1.49
+      CH2CH2CHCH2     -28.8      3.55
+
+Bimolecular Products (G - ground energy, kcal/mol):
+                 P         G
+      CH2CHCHCH2+H         0
+      CH2CH2+CH2CH      4.65
+
+Well-to-Bimolecular Barriers (H/G - barrier height/well depth, kcal/mol)
+                             B         H           W         G            P
+       CH2CHCHCH2+H=CH2CHCHCH3      1.49  CH2CHCHCH3     -45.6 CH2CHCHCH2+H
+      CH2CHCHCH2+H=CH2CH2CHCH2       4.9 CH2CH2CHCH2     -28.8 CH2CHCHCH2+H
+      CH2CH2CHCH2=CH2CH2+CH2CH      9.08 CH2CH2CHCH2     -28.8 CH2CH2+CH2CH
+
+Well-to-Well Barriers (H/G - barrier height/well depth, kcal/mol):
+                           B         H          W1        G1          W2        G2
+      CH2CHCHCH3=CH2CH2CHCH2      3.55  CH2CHCHCH3     -45.6 CH2CH2CHCH2     -28.8
+
+Bound Groups: dissociation barrier (name/ground energy, kcal/mol): wells (name/ground energy, kcal/mol):
+     CH2CHCHCH2+H=CH2CHCHCH3/1.49:  CH2CHCHCH3/-45.6
+
+     CH2CHCHCH3=CH2CH2CHCH2/3.55:  CH2CH2CHCH2/-28.8
+
+________________________________________________________________________________________
+
+Unimolecular Rate Units: 1/sec;  Bimolecular Rate Units: cm^3/sec
+
+______________________________________________________________________________________
+
+Species-Species Rate Tables:
+
+Temperature = 500 K
+
+High Pressure Rate Coefficients:
+
+From\To      CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+CH2CHCHCH3          ***    2.31e-08     1.06e-07          ***
+CH2CH2CHCH2      0.0606         ***      0.00747     0.000615
+CH2CHCHCH2+H   2.35e-11    6.33e-13          ***          ***
+CH2CH2+CH2CH        ***    5.68e-15          ***          ***
+
+Temperature = 500 K    Pressure = 0.03 bar
+
+From\To      CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+CH2CHCHCH3     1.11e-07    2.25e-08     1.04e-07      2.1e-11
+CH2CH2CHCH2       0.059      0.0668       0.0073     0.000484
+CH2CHCHCH2+H   2.32e-11    6.18e-13     2.38e-11     4.93e-15
+CH2CH2+CH2CH   5.09e-16    4.47e-15     5.37e-16     5.51e-15
+
+Temperature = 500 K    Pressure = 0.1 bar
+
+From\To      CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+CH2CHCHCH3     1.69e-07    2.28e-08     1.05e-07     9.93e-12
+CH2CH2CHCH2        0.06      0.0679      0.00739     0.000556
+CH2CHCHCH2+H   2.34e-11    6.26e-13      2.4e-11     1.92e-15
+CH2CH2+CH2CH   2.41e-16    5.13e-15     2.09e-16     5.58e-15
+
+Temperature = 550 K
+
+High Pressure Rate Coefficients:
+
+From\To      CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+CH2CHCHCH3          ***     1.7e-06     9.37e-06          ***
+CH2CH2CHCH2       0.926         ***        0.179       0.0223
+CH2CHCHCH2+H   2.89e-11    1.01e-12          ***          ***
+CH2CH2+CH2CH        ***    9.97e-15          ***          ***
+
+Temperature = 550 K    Pressure = 0.03 bar
+
+From\To      CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+CH2CHCHCH3     1.06e-05    1.59e-06     9.06e-06     4.55e-09
+CH2CH2CHCH2        0.87        1.05        0.169       0.0154
+CH2CHCHCH2+H    2.8e-11    9.56e-13     2.89e-11     1.93e-14
+CH2CH2+CH2CH   1.11e-15    6.89e-15     1.52e-15     9.52e-15
+
+Temperature = 550 K    Pressure = 0.1 bar
+
+From\To      CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+CH2CHCHCH3     1.08e-05    1.65e-06     9.24e-06     2.51e-09
+CH2CH2CHCH2       0.902         1.1        0.175       0.0189
+CH2CHCHCH2+H   2.85e-11    9.88e-13     2.95e-11      8.4e-15
+CH2CH2+CH2CH    6.1e-16    8.43e-15     6.63e-16     9.71e-15
+
+______________________________________________________________________________________
+
+High Pressure Rate Coefficients (Temperature-Species Rate Tables):
+
+Reactant = CH2CHCHCH3
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+    500        ***    2.31e-08     1.06e-07          ***
+    550        ***     1.7e-06     9.37e-06          ***
+
+Reactant = CH2CH2CHCH2
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+    500     0.0606         ***      0.00747     0.000615
+    550      0.926         ***        0.179       0.0223
+
+Reactant = CH2CHCHCH2+H
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+    500   2.35e-11    6.33e-13          ***          ***
+    550   2.89e-11    1.01e-12          ***          ***
+
+Reactant = CH2CH2+CH2CH
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+    500        ***    5.68e-15          ***          ***
+    550        ***    9.97e-15          ***          ***
+
+Capture/Escape Rate Coefficients:
+
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH
+    500   1.29e-07      0.0687     2.41e-11     5.68e-15
+    550   1.11e-05        1.13     2.99e-11     9.97e-15
+
+______________________________________________________________________________________
+
+Pressure-Species Rate Tables:
+
+Reactant = CH2CHCHCH3   Temperature = 500 K
+
+   P(bar) CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH      Loss
+     0.03    2.25e-08     1.04e-07      2.1e-11  1.11e-07
+      0.1    2.28e-08     1.05e-07     9.93e-12  1.69e-07
+      O-O    2.31e-08     1.06e-07          ***  1.29e-07
+
+Reactant = CH2CHCHCH3   Temperature = 550 K
+
+   P(bar) CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH      Loss
+     0.03    1.59e-06     9.06e-06     4.55e-09  1.06e-05
+      0.1    1.65e-06     9.24e-06     2.51e-09  1.08e-05
+      O-O     1.7e-06     9.37e-06          ***  1.11e-05
+
+Reactant = CH2CH2CHCH2   Temperature = 500 K
+
+   P(bar) CH2CHCHCH3 CH2CHCHCH2+H CH2CH2+CH2CH      Loss
+     0.03      0.059       0.0073     0.000484    0.0668
+      0.1       0.06      0.00739     0.000556    0.0679
+      O-O     0.0606      0.00747     0.000615    0.0687
+
+Reactant = CH2CH2CHCH2   Temperature = 550 K
+
+   P(bar) CH2CHCHCH3 CH2CHCHCH2+H CH2CH2+CH2CH      Loss
+     0.03       0.87        0.169       0.0154      1.05
+      0.1      0.902        0.175       0.0189       1.1
+      O-O      0.926        0.179       0.0223      1.13
+
+Reactant = CH2CHCHCH2+H   Temperature = 500 K
+
+   P(bar) CH2CHCHCH3 CH2CH2CHCH2 CH2CH2+CH2CH      Loss
+     0.03   2.32e-11    6.18e-13     4.93e-15  2.38e-11
+      0.1   2.34e-11    6.26e-13     1.92e-15   2.4e-11
+      O-O   2.35e-11    6.33e-13          ***  2.41e-11
+
+Reactant = CH2CHCHCH2+H   Temperature = 550 K
+
+   P(bar) CH2CHCHCH3 CH2CH2CHCH2 CH2CH2+CH2CH      Loss
+     0.03    2.8e-11    9.56e-13     1.93e-14  2.89e-11
+      0.1   2.85e-11    9.88e-13      8.4e-15  2.95e-11
+      O-O   2.89e-11    1.01e-12          ***  2.99e-11
+
+Reactant = CH2CH2+CH2CH   Temperature = 500 K
+
+   P(bar) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H      Loss
+     0.03   5.09e-16    4.47e-15     5.37e-16  5.51e-15
+      0.1   2.41e-16    5.13e-15     2.09e-16  5.58e-15
+      O-O        ***    5.68e-15          ***  5.68e-15
+
+Reactant = CH2CH2+CH2CH   Temperature = 550 K
+
+   P(bar) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H      Loss
+     0.03   1.11e-15    6.89e-15     1.52e-15  9.52e-15
+      0.1    6.1e-16    8.43e-15     6.63e-16  9.71e-15
+      O-O        ***    9.97e-15          ***  9.97e-15
+
+______________________________________________________________________________________
+
+Temperature-Species Rate Tables:
+
+Reactant = CH2CHCHCH3   Pressure = 0.03 bar
+
+   T(K) CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH      Loss   Capture
+    500    2.25e-08     1.04e-07      2.1e-11  1.11e-07  1.29e-07
+    550    1.59e-06     9.06e-06     4.55e-09  1.06e-05  1.11e-05
+
+Reactant = CH2CHCHCH3   Pressure = 0.1 bar
+
+   T(K) CH2CH2CHCH2 CH2CHCHCH2+H CH2CH2+CH2CH      Loss   Capture
+    500    2.28e-08     1.05e-07     9.93e-12  1.69e-07  1.29e-07
+    550    1.65e-06     9.24e-06     2.51e-09  1.08e-05  1.11e-05
+
+Reactant = CH2CH2CHCH2   Pressure = 0.03 bar
+
+   T(K) CH2CHCHCH3 CH2CHCHCH2+H CH2CH2+CH2CH      Loss   Capture
+    500      0.059       0.0073     0.000484    0.0668    0.0687
+    550       0.87        0.169       0.0154      1.05      1.13
+
+Reactant = CH2CH2CHCH2   Pressure = 0.1 bar
+
+   T(K) CH2CHCHCH3 CH2CHCHCH2+H CH2CH2+CH2CH      Loss   Capture
+    500       0.06      0.00739     0.000556    0.0679    0.0687
+    550      0.902        0.175       0.0189       1.1      1.13
+
+Reactant = CH2CHCHCH2+H   Pressure = 0.03 bar
+
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CH2+CH2CH      Loss   Capture
+    500   2.32e-11    6.18e-13     4.93e-15  2.38e-11  2.41e-11
+    550    2.8e-11    9.56e-13     1.93e-14  2.89e-11  2.99e-11
+
+Reactant = CH2CHCHCH2+H   Pressure = 0.1 bar
+
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CH2+CH2CH      Loss   Capture
+    500   2.34e-11    6.26e-13     1.92e-15   2.4e-11  2.41e-11
+    550   2.85e-11    9.88e-13      8.4e-15  2.95e-11  2.99e-11
+
+Reactant = CH2CH2+CH2CH   Pressure = 0.03 bar
+
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H      Loss   Capture
+    500   5.09e-16    4.47e-15     5.37e-16  5.51e-15  5.68e-15
+    550   1.11e-15    6.89e-15     1.52e-15  9.52e-15  9.97e-15
+
+Reactant = CH2CH2+CH2CH   Pressure = 0.1 bar
+
+   T(K) CH2CHCHCH3 CH2CH2CHCH2 CH2CHCHCH2+H      Loss   Capture
+    500   2.41e-16    5.13e-15     2.09e-16  5.58e-15  5.68e-15
+    550    6.1e-16    8.43e-15     6.63e-16  9.71e-15  9.97e-15
+
+______________________________________________________________________________________
+
+Temperature-Pressure Rate Tables:
+
+CH2CHCHCH3->CH2CH2CHCH2
+
+P\T           500       550
+0.03     2.25e-08  1.59e-06
+0.1      2.28e-08  1.65e-06
+O-O      2.31e-08   1.7e-06
+
+CH2CHCHCH3->CH2CHCHCH2+H
+
+P\T           500       550
+0.03     1.04e-07  9.06e-06
+0.1      1.05e-07  9.24e-06
+O-O      1.06e-07  9.37e-06
+
+CH2CHCHCH3->CH2CH2+CH2CH
+
+P\T           500       550
+0.03      2.1e-11  4.55e-09
+0.1      9.93e-12  2.51e-09
+O-O           ***       ***
+
+CH2CH2CHCH2->CH2CHCHCH3
+
+P\T           500       550
+0.03        0.059      0.87
+0.1          0.06     0.902
+O-O        0.0606     0.926
+
+CH2CH2CHCH2->CH2CHCHCH2+H
+
+P\T           500       550
+0.03       0.0073     0.169
+0.1       0.00739     0.175
+O-O       0.00747     0.179
+
+CH2CH2CHCH2->CH2CH2+CH2CH
+
+P\T           500       550
+0.03     0.000484    0.0154
+0.1      0.000556    0.0189
+O-O      0.000615    0.0223
+
+CH2CHCHCH2+H->CH2CHCHCH3
+
+P\T           500       550
+0.03     2.32e-11   2.8e-11
+0.1      2.34e-11  2.85e-11
+O-O      2.35e-11  2.89e-11
+
+CH2CHCHCH2+H->CH2CH2CHCH2
+
+P\T           500       550
+0.03     6.18e-13  9.56e-13
+0.1      6.26e-13  9.88e-13
+O-O      6.33e-13  1.01e-12
+
+CH2CHCHCH2+H->CH2CH2+CH2CH
+
+P\T           500       550
+0.03     4.93e-15  1.93e-14
+0.1      1.92e-15   8.4e-15
+O-O           ***       ***
+
+CH2CH2+CH2CH->CH2CHCHCH3
+
+P\T           500       550
+0.03     5.09e-16  1.11e-15
+0.1      2.41e-16   6.1e-16
+O-O           ***       ***
+
+CH2CH2+CH2CH->CH2CH2CHCH2
+
+P\T           500       550
+0.03     4.47e-15  6.89e-15
+0.1      5.13e-15  8.43e-15
+O-O      5.68e-15  9.97e-15
+
+CH2CH2+CH2CH->CH2CHCHCH2+H
+
+P\T           500       550
+0.03     5.37e-16  1.52e-15
+0.1      2.09e-16  6.63e-16
+O-O           ***       ***
+
+CH2CHCHCH3-> 
+
+P\T           500       550
+0.03     1.11e-07  1.06e-05
+0.1      1.69e-07  1.08e-05
+O-O      1.29e-07  1.11e-05
+
+CH2CH2CHCH2-> 
+
+P\T           500       550
+0.03       0.0668      1.05
+0.1        0.0679       1.1
+O-O        0.0687      1.13
+
+CH2CHCHCH2+H-> 
+
+P\T           500       550
+0.03     2.38e-11  2.89e-11
+0.1       2.4e-11  2.95e-11
+O-O      2.41e-11  2.99e-11
+
+CH2CH2+CH2CH-> 
+
+P\T           500       550
+0.03     5.51e-15  9.52e-15
+0.1      5.58e-15  9.71e-15
+O-O      5.68e-15  9.97e-15
+

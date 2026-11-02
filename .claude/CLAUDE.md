@@ -80,6 +80,18 @@ Rules for every agent:
 - `.claude/memory/pint-unit-string-comparison.md` (`pint-unit-string-comparison`): pint `Unit == str`
   and `get_compatible_units` membership match only canonical names, not aliases like `s`, `min`.
 
+### Kin jobs and KIN rows: read on demand
+
+- `.claude/memory/kin-units-and-row-ids.md` (`kin-units-and-row-ids`): KIN rows store P in bar and
+  k exactly as MESS prints it; exact P/T float matching; stale "Torr" labels; row ids assume a fixed
+  pair count per model; the `__prompt` rows, their id band and `is_in_db` counting.
+- `.claude/memory/kin-db-readers-and-writers.md` (`kin-db-readers-and-writers`): who reads and
+  writes KIN rows (only path to Cantera, GA report, kmoui KIN and DB tabs), ids per optimisation
+  table and in kmopp, what extra or colliding rows do.
+- `.claude/memory/kin-job-lifecycle.md` (`kin-job-lifecycle`): a kin job from submit to
+  `clean_files`, how errors stop kmo, the stuck-in-SOP defect, Slurm `afterok` semantics, the
+  log-name globs extra jobs must avoid.
+
 ### MESS inputs: reading several files, keys, labels, names: read on demand
 
 - `.claude/memory/multi-pes-mess-reading.md` (`multi-pes-mess-reading`): how `MessInputReader`
@@ -106,6 +118,9 @@ procedure, file locations and PESViewer notes are local (see `CLAUDE.local.md`).
   branching fractions and k = BF·k1 are computed (data per PES, models, Eq. 9), with a code map.
 - `.claude/memory/ped_output_file.md` (`ped-output-file`): MESS `PEDOutput` (`ped.out`) block
   layout, energy zero, typical α(E), P-independence, how `mess_io` `get_ped` reads it.
+- `.claude/memory/mechanalyzer-prompt-pitfalls.md` (`mechanalyzer-prompt-pitfalls`): mess_io and
+  mechanalyzer pitfalls in BF/prompt calculations: bar/atm mix, NAVO rule, PED precision and
+  T rounding, silent NaN/`sys.exit()` sites, `bf_tp_df_todct` cuts, label quirks.
 - `.claude/memory/prompt-paper-reference.md` (`prompt-paper-reference`): the source paper
   (Pratali Maffei et al., CNF 2023) and where to read its full text.
 - `.claude/memory/FakeWell_in_automech.md`: detailed write-up of how AutoMech builds, reads and

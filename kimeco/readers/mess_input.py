@@ -1651,12 +1651,18 @@ class MessInputReader:
         A file is linked when one of its ``PEDSpecies`` products is a
         ``HotEnergies`` species of another file: the PED output of the
         first file then gives the initial energy of the hot well of the
-        second one (prompt reaction). A product that is hot in its own file
-        does not count. Stops when no file is linked (no ``PEDSpecies`` or
-        no ``HotEnergies`` anywhere included). A file with ``PEDSpecies``
-        but no link only gets a warning. A linked file must set
-        ``MicroEnerMin``, ``MicroEnerMax`` and ``MicroEnerStep``, else
+        second one (prompt reaction). Stops when no file is linked (no
+        ``PEDSpecies`` or no ``HotEnergies`` anywhere included). A file with
+        ``PEDSpecies`` but no link only gets a warning. A linked file must
+        set ``MicroEnerMin``, ``MicroEnerMax`` and ``MicroEnerStep``, else
         MESS writes no microcanonical rate output (``_ke.out``) for it.
+
+        Before the links, three cases that the prompt calculation does not
+        support are refused (all reported, then the run stops; see
+        ``_refuse_unsupported_ped_pairs``): a file with both ``PEDSpecies``
+        and ``HotEnergies``, a ``PEDSpecies`` side that is not exactly the
+        label of a bimolecular of its file, and a ``PEDSpecies`` pair with
+        two product fragments that are ``HotEnergies`` wells of other files.
         """
         if self._trigger_stop:
             return
@@ -1669,6 +1675,9 @@ class MessInputReader:
             for fid, data in self.SOP.pes_file_data.items()
             if data.hot_energies
         }
+        self._refuse_unsupported_ped_pairs(hot_species)
+        if self._trigger_stop:
+            return
         # {file index with PEDSpecies: its products hot in another file}
         links: dict[int, set[str]] = {}
         for fid, products in ped_products.items():
@@ -1702,6 +1711,62 @@ class MessInputReader:
                     "file does not set all of MicroEnerMin, MicroEnerMax and "
                     "MicroEnerStep: MESS then writes no microcanonical rate "
                     "output (_ke.out), which the prompt calculation needs.")
+
+    def _refuse_unsupported_ped_pairs(
+            self,
+            hot_species: dict[int, set[str]]) -> None:
+        """Stop on the ``PEDSpecies`` cases the prompt calculation does not
+        support (prompt mode only; every case is reported).
+
+        1. A file with both ``PEDSpecies`` and ``HotEnergies``: prompt
+           chains through one PES are not supported.
+        2. A ``PEDSpecies`` side (reactant or product) that is not exactly
+           the label of a non-dummy ``Bimolecular`` of the same file:
+           mechanalyzer finds the energies and degrees of freedom of a pair
+           by these labels (a well reactant is refused too).
+        3. A ``PEDSpecies`` pair with two product fragments (``X+X``
+           counts twice) that are ``HotEnergies`` wells of other files:
+           the hot fragment of the pair would be ambiguous.
+
+        Args:
+            hot_species (dict[int, set[str]]): {file index: names of its
+                ``HotEnergies`` wells}.
+        """
+        for fid, data in sorted(self.SOP.pes_file_data.items()):
+            if not data.ped_species:
+                continue
+            file_label = self._file_label(fid)
+            if fid in hot_species:
+                self._stop(
+                    f"Prompt reactions: {file_label} has both PEDSpecies "
+                    "and HotEnergies; prompt chains through one PES are not "
+                    "supported. Keep PEDSpecies (abstraction PES) and "
+                    "HotEnergies (hot PES) in different MESS inputs.")
+            bimol_labels = {bimol.name for bimol in self.SOP.bimols_in(fid)
+                            if not bimol.dummy}
+            hot_elsewhere: set[str] = set().union(
+                *(names for other, names in hot_species.items()
+                  if other != fid))
+            for pair in data.ped_species:
+                reactant, product = pair.split('=')
+                for side, label in (('reactant', reactant),
+                                    ('product', product)):
+                    if label not in bimol_labels:
+                        self._stop(
+                            f"Prompt reactions: the {side} '{label}' of the "
+                            f"PEDSpecies entry '{pair}' of {file_label} is "
+                            "not the label of a Bimolecular of that file "
+                            "(exact label expected, fragments in the same "
+                            "order).")
+                hot_frags = [frag for frag in product.split('+')
+                             if frag in hot_elsewhere]
+                if len(hot_frags) > 1:
+                    self._stop(
+                        f"Prompt reactions: the PEDSpecies entry '{pair}' "
+                        f"of {file_label} has {len(hot_frags)} product "
+                        f"fragments ({', '.join(hot_frags)}) that are "
+                        "HotEnergies wells of other MESS inputs; only one "
+                        "hot product fragment per pair is supported.")
 
     def _align_energies(self) -> None:
         """Align the energies of the input files sharing items.

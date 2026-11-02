@@ -529,3 +529,76 @@ def test_prompt_keys_defaults_and_type_check(tmp_path) -> None:
         'prompt_bf_threshold': 0.05})
     obj.check_unknown_kwords()
     assert not obj.klog.has('unknown keyword')  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# _check_prompt: grid values MESS writes alike (floor(T + 0.5) in ped.out and
+# the .log, PED pressures with 3 significant digits), each grid on its own
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize('grids, key, values', [
+    ({'rc_temp': [298.15, 298.4]}, 'rc_temp', '298.15, 298.4'),
+    ({'rc_temp': [298.5, 299.2]}, 'rc_temp', '298.5, 299.2'),
+    ({'pp_temp': [500.2, 499.6]}, 'pp_temp', '500.2, 499.6'),
+    ({'rc_temp': [300.0, 298.15, 298.4]}, 'rc_temp', '298.15, 298.4'),
+    ({'rc_pres': [1.01325, 1.013]}, 'rc_pres', '1.01325, 1.013'),
+    ({'rc_pres': [0.1, 0.1004]}, 'rc_pres', '0.1, 0.1004'),
+    ({'rc_pres': [100.0, 100.4]}, 'rc_pres', '100.0, 100.4'),
+    ({'pp_pres': [10.0, 10.04]}, 'pp_pres', '10.0, 10.04'),
+], ids=['T1_298', 'T2_floor_299', 'T4_pp_temp', 'T6_pair_only',
+        'P1_1p01', 'P2_0p1', 'P3_100', 'P6_pp_pres'])
+def test_check_prompt_stops_on_grid_collision(tmp_path, monkeypatch, grids,
+                                              key, values) -> None:
+    """Two values of one grid written alike: one warning naming the grid
+    key and the colliding values only, run cancelled. T2: 298.5 and 299.2
+    both give floor(T + 0.5) = 299 (Python's round would give 298, 299)."""
+    _inject_stub_mechanalyzer(monkeypatch)
+    obj, log = _prompt_input(tmp_path, use_automech=True, **grids)
+    obj._check_prompt()
+    assert obj.cancel_run is True
+    assert len(log.warnings) == 1, log.warnings
+    assert f"the {'temperature' if 'temp' in key else 'pressure'}s " \
+        f"{values} " in log.warnings[0]
+    assert f"of '{key}' are all written as" in log.warnings[0]
+    if key == 'rc_temp' and values.startswith('298.5'):
+        assert 'written as 299 K' in log.warnings[0]
+
+
+@pytest.mark.parametrize('grids', [
+    {'rc_temp': [298.0, 298.5]},
+    {'rc_temp': [298.15], 'pp_temp': [298.4]},
+    {'rc_pres': [1.0, 1.01]},
+    {'rc_pres': [0.001, 0.00101]},
+    {'rc_pres': [1.0], 'pp_pres': [1.004]},
+    {},
+    {'rc_temp': [298.15, 550.0]},
+    {'pp_pres': [0.03, 1.01325]},
+], ids=['T3_floor_298_299', 'T5_across_grids', 'P4_1_vs_1p01',
+        'P5_small', 'P7_across_grids', 'G1_no_grids', 'G1_rc_temp_only',
+        'G1_pp_pres_only'])
+def test_check_prompt_accepts_distinct_grid_values(tmp_path, monkeypatch,
+                                                   grids) -> None:
+    """Distinct written values, values close only across rc / pp grids,
+    absent grids: accepted, no warning (T3: 298.0 and 298.5 give 298 and
+    299, where Python's round would give 298 twice)."""
+    _inject_stub_mechanalyzer(monkeypatch)
+    obj, log = _prompt_input(tmp_path, use_automech=True, **grids)
+    obj._check_prompt()
+    assert obj.cancel_run is False, log.warnings
+    assert log.warnings == []
+
+
+def test_check_prompt_reports_grid_and_model_problems_together(
+        tmp_path, monkeypatch) -> None:
+    """G2: a T collision, a P collision and an unknown model in one call:
+    three warnings, run cancelled."""
+    _inject_stub_mechanalyzer(monkeypatch)
+    obj, log = _prompt_input(tmp_path, use_automech=True,
+                             prompt_ped_model='nope',
+                             rc_temp=[298.15, 298.4],
+                             pp_pres=[1.01325, 1.013])
+    obj._check_prompt()
+    assert obj.cancel_run is True
+    assert len(log.warnings) == 3, log.warnings
+    for warning, needle in zip(log.warnings, (
+            "'prompt_ped_model' 'nope'", "'rc_temp'", "'pp_pres'")):
+        assert needle in warning, (needle, warning)

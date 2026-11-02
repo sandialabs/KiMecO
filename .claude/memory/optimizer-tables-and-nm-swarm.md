@@ -30,6 +30,13 @@ verified: 2026-10-26 against working tree
 - `_process_single_model` calls `collect_sim_profiles()` once per thread after each step, so one
   thread can move another thread's pooled model to SCORING. Models are matched by
   `get_table_name(model) == table` and id, with the `_sim_offset` banding as in `CoreRun`.
+- Prompt-rates stop (step 3, uncommitted): `NelderMeadSwarm.run` normally logs and swallows an
+  instance's exception (`success: False`). `PromptRatesError` (`writers/prompt_collector.py`) is the
+  exception: `NMSRunner.run` sets the sticky `stop_error` (under `pool_lock`) and re-raises, every other
+  thread raises `PromptRatesError` from `_raise_if_stopped` at its next loop pass or evaluation, and
+  `NelderMeadSwarm.run` catches it before `except Exception`, calls
+  `executor.shutdown(wait=False, cancel_futures=True)` and re-raises, so `core.py`/`_kimeco.py` are
+  unchanged. A new `NMSRunner` is needed per swarm: the flag is never reset.
 
 **Known unfixed defects (2026-10-22)**
 - `NelderMead.get_options` final stage gates `maxfev` on `nm_maxfev` instead of `nm_final_maxfev`,

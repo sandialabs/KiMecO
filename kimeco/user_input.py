@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import subprocess
-from typing import Any
+from typing import Any, Callable
 from kimeco.default_settings import default_settings, mandatory_keys
 import numpy as np
 from numpy import float64
@@ -13,6 +13,9 @@ from kimeco.logger_config import KMOLogger
 from kimeco.enums import Distrib, Optimizers, Pclass, Ptype
 from kimeco.enums import FreqMode, RestartType
 from kimeco.experiments.t_profile import TimeProfile
+# How MESS writes T and P in its PED output and log (prompt reactions)
+from kimeco.writers.prompt_collector import (mess_written_temperature,
+                                             ped_written_pressure)
 
 
 ureg: ctu.UnitRegistry = ctu.cantera_units_registry
@@ -700,6 +703,16 @@ class KMOInput:
         problems are reported at once. Whether the MESS inputs link a PES
         with ``PEDSpecies`` to a PES with ``HotEnergies`` is checked later,
         when the MESS inputs are read (``MessInputReader.read``).
+
+        The prompt collector finds each grid point in the MESS PED output
+        and log by the values MESS writes there: temperatures rounded to the
+        kelvin as ``floor(T + 0.5)``, PED pressures with 3 significant
+        digits. Two values of one grid written alike could not be told
+        apart, so the run is cancelled when they occur. Each grid is checked
+        on its own: ``rc_temp``, ``pp_temp``, ``rc_pres`` and ``pp_pres``
+        (a value of ``rc_temp`` close to one of ``pp_temp`` is allowed). The
+        check also runs in kmopp, kmoui and the SIM tasks, which re-read the
+        settings: kmopp thus also stops on an ``rc_*`` collision.
         """
         # Energy-partition models accepted by mechanalyzer (exact names).
         ped_models = ('equip_simple', 'equip_phi', 'rovib_dos',
@@ -743,6 +756,56 @@ class KMOInput:
             self.klog.warning(
                 "'prompt_bf_threshold' must be in [0, 1); "
                 f"got {threshold}.")
+            self.cancel_run = True
+
+        temp_source = ("MESS writes temperatures rounded to the kelvin, "
+                       "floor(T + 0.5), in the PED output and the log")
+        pres_source = ("MESS writes pressures with 3 significant digits in "
+                       "the PED output")
+        self._check_prompt_grid('rc_temp', mess_written_temperature,
+                                'temperature', 'K', temp_source)
+        self._check_prompt_grid('pp_temp', mess_written_temperature,
+                                'temperature', 'K', temp_source)
+        self._check_prompt_grid('rc_pres', ped_written_pressure,
+                                'pressure', 'bar', pres_source)
+        self._check_prompt_grid('pp_pres', ped_written_pressure,
+                                'pressure', 'bar', pres_source)
+
+    def _check_prompt_grid(self,
+                           grid_key: str,
+                           written_value: Callable[[float], float],
+                           quantity: str,
+                           unit: str,
+                           source: str) -> None:
+        """Cancel the run when two values of one grid are written alike by
+        MESS (prompt reactions only).
+
+        Values are grouped by the value MESS writes; every group of two or
+        more values logs one warning (all groups are reported).
+
+        Args:
+            grid_key (str): settings key of the grid, e.g. ``'rc_temp'``
+                (absent grid: nothing to check).
+            written_value (Callable[[float], float]): grid value -> value
+                written by MESS.
+            quantity (str): ``'temperature'`` or ``'pressure'``.
+            unit (str): unit of the grid values.
+            source (str): how and where MESS writes the values (message).
+        """
+        # {value written by MESS: grid values written as it}
+        groups: dict[float, list[float]] = {}
+        for value in self.json_file.get(grid_key, []):
+            groups.setdefault(written_value(value), []).append(value)
+        for written, values in groups.items():
+            if len(values) < 2:
+                continue
+            listed = ', '.join(repr(float(value)) for value in values)
+            self.klog.warning(
+                f"'prompt_reactions': the {quantity}s {listed} {unit} of "
+                f"'{grid_key}' are all written as {written:g} {unit} ("
+                f"{source}); the prompt calculation cannot tell them apart. "
+                f"Change the {quantity}s of the experiments so that they "
+                "differ there.")
             self.cancel_run = True
 
     def _check_partition(self) -> None:

@@ -11,6 +11,7 @@ from kimeco.Perturbators.perturbator import Perturbator
 from kimeco.enums import ModelStatus
 from kimeco.logger_config import KMOLogger
 from kimeco.q_sys import QueueingSystem
+from kimeco.writers.prompt_collector import PromptRatesError
 
 
 class NMSRunner(CoreRun):
@@ -82,6 +83,11 @@ class NMSRunner(CoreRun):
 
         # Model counter for defragmentation
         self.mdl_count: int = 0
+
+        # First prompt-rates failure of any NM thread (guarded by
+        # pool_lock). Once set, every thread stops at its next loop pass or
+        # next evaluation (sticky: the swarm cannot continue).
+        self.stop_error: PromptRatesError | None = None
 
     def add_model(self, mdl: Model) -> None:
         """Add an model to the first available pool slot.
@@ -169,7 +175,13 @@ class NMSRunner(CoreRun):
 
         Returns:
             The processed model (status == DONE)
+
+        Raises:
+            PromptRatesError: the prompt rates of this model, or of a model
+                of another NM thread, could not be produced: the swarm
+                stops.
         """
+        self._raise_if_stopped()
         # Add model to pool with safeguard
         with self.pool_lock:
             if self.models.count(None) == 0:
@@ -188,7 +200,14 @@ class NMSRunner(CoreRun):
         # Process until done
         while mdl.status != ModelStatus.DONE:
             try:
+                self._raise_if_stopped()
                 self._process_single_model(mdl)
+            except PromptRatesError as e:
+                self.remove_model(mdl)
+                with self.pool_lock:
+                    if self.stop_error is None:
+                        self.stop_error = e
+                raise
             except Exception as e:
                 self.remove_model(mdl)
                 self.klog.error(f'Status of model {mdl.id}: {mdl.status}', exc_info=True)
@@ -197,6 +216,18 @@ class NMSRunner(CoreRun):
         # Remove and return
         self.remove_model(mdl)
         return mdl
+
+    def _raise_if_stopped(self) -> None:
+        """Stop this NM thread when another one hit a prompt-rates failure.
+
+        Raises:
+            PromptRatesError: ``stop_error`` is set.
+        """
+        with self.pool_lock:
+            stop_error = self.stop_error
+        if stop_error is not None:
+            raise PromptRatesError(
+                f"Nelder-Mead swarm stopped: {stop_error}")
 
     def _process_single_model(self, mdl: Model) -> None:
         """Process one iteration of a single model.

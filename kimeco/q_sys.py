@@ -5,6 +5,8 @@ from kimeco.templates.kin_arr_tpl import kin_arr_tpl
 from kimeco.templates.kin_arr_py_tpl import kin_arr_py_tpl
 from kimeco.templates.slurm import slurmtpl
 from kimeco.templates.slurm_arr import slurmarrtpl
+from kimeco.templates.pyjob import pytpl
+from kimeco.writers.prompt_collector import PromptCollectorFiles, is_prompt_run
 from subprocess import Popen, PIPE
 import numpy as np
 from numpy.typing import NDArray
@@ -15,6 +17,16 @@ import glob
 import os
 from kimeco.logger_config import KMOLogger
 import time
+
+
+#: Value of the ``collector_id`` field of a kin job when the sbatch of its
+#: prompt collector failed (a Slurm job id is always positive; 0 means "no
+#: collector").
+COLLECTOR_SUBMIT_FAILED: int = -1
+
+#: Outputs of a MESS run that share the ``<kin name>P<slot>`` stem with the
+#: rate output but are not rate outputs (PED and microcanonical outputs).
+SIDE_OUTPUT_SUFFIXES: tuple[str, ...] = ('_ped.out', '_ke.out')
 
 
 class JobStatus(Enum):
@@ -87,6 +99,10 @@ class QueueingSystem:
         self.messtpl = kin_arr_tpl
 
         # Define a dtype object to create a structured numpy array.
+        # collector_id: Slurm id of the prompt collector of a kin job
+        # (prompt mode, submitted after the array with afterok); 0 = no
+        # collector (non-prompt kin job, every sim job);
+        # COLLECTOR_SUBMIT_FAILED = its sbatch failed.
         self.jobdata = np.dtype(dtype=[
             ('sub_id', int32),
             ('name', str_, (20)),
@@ -95,7 +111,8 @@ class QueueingSystem:
             ('cpu', int16),
             ('mem', int32),
             ('type', str_, (3)),
-            ('n_pes', int16)])
+            ('n_pes', int16),
+            ('collector_id', int32)])
 
         self.kin_q: NDArray[Any] = np.empty(shape=(nel), dtype=self.jobdata)
         self.sim_q: NDArray[Any] = np.empty(shape=(nel), dtype=self.jobdata)
@@ -165,7 +182,8 @@ class QueueingSystem:
                  n_pes: int = 1) -> None:
         """Create the submission file when job is added to queue.
            Job file itself must have already been created by the submitting
-           instance.
+           instance. In prompt mode a kin job also gets the submission file
+           of its prompt collector.
 
         Args:
             location (str): Absolute path to the folder
@@ -178,7 +196,7 @@ class QueueingSystem:
         cpu, mem = ressources
         job: NDArray[Any] = np.array([
             (0, name, location, JobStatus.READY.value,
-             cpu, mem, jtype, n_pes)],
+             cpu, mem, jtype, n_pes, 0)],
             dtype=self.jobdata)
         self.create_sub_file(job=job, n_pes=n_pes)
 
@@ -241,6 +259,36 @@ class QueueingSystem:
         with open(f"{job['loc'][0]}/{job['name'][0]}.{self.ext}", 'w') as f:
             f.write(sub_file)
 
+        if job['type'][0] == 'kin' and is_prompt_run(self.settings):
+            self._write_collector_sub_file(job=job)
+
+    def _write_collector_sub_file(self,
+                                  job: NDArray[Any]) -> None:
+        """Write the Slurm submission file of a kin job's prompt collector.
+
+        One single job (not an array): 1 CPU, the memory of the kin job,
+        logs ``logs/prompt_<kin name>.stdout|.err`` (they do not match the
+        ``logs/<kin name>_*`` glob of the array tasks), no display
+        (``MPLBACKEND=Agg``), then ``python prompt_<kin name>.py`` with the
+        ``python`` of the submitting environment.
+
+        Args:
+            job (NDArray[Any]): one-element array of the kin job (dtype
+                jobdata).
+        """
+        files = PromptCollectorFiles(loc=str(job['loc'][0]),
+                                     kin_name=str(job['name'][0]))
+        sub_cmd: str = self.subtpl.format(
+            nprocs=1,
+            exclude_nodes=self.settings['exclude_nodes'],
+            filename=files.stem,
+            sub_queue=self.q_name,
+            mem_mb=job['mem'][0])
+        content: str = (sub_cmd + "\nexport MPLBACKEND=Agg"
+                        + pytpl.format(filename=files.stem))
+        with open(files.slurm, 'w') as f:
+            f.write(content)
+
     def pickUp(self, id: int, jtype: str) -> None:
         """Tag a job as ready to be removed from the queue.
 
@@ -295,10 +343,7 @@ class QueueingSystem:
                 os.remove(p_out)
             return clear_err
 
-        p_outs: list[str] = [
-            f for f in sorted(glob.glob(f"{base}P*.out"))
-            if not os.path.basename(f).startswith('_')
-        ]
+        p_outs: list[str] = self._rate_outputs(base)
         if len(p_outs) != n_pes:
             return clear_err
 
@@ -316,6 +361,26 @@ class QueueingSystem:
         else:
             job['status'] = JobStatus.PICKED_UP.value
         return clear_err
+
+    @staticmethod
+    def _rate_outputs(base: str) -> list[str]:
+        """Rate outputs of a kin job, one per PES: ``<base>P<slot>.out``.
+
+        Leading-underscore pass-1 copies and the PED and microcanonical
+        outputs (``_ped.out``, ``_ke.out``, written in every mode when an
+        input asks for them) are not rate outputs.
+
+        Args:
+            base (str): ``<loc>/<kin name>``.
+
+        Returns:
+            list[str]: sorted paths of the rate outputs.
+        """
+        return [
+            f for f in sorted(glob.glob(f"{base}P*.out"))
+            if not os.path.basename(f).startswith('_')
+            and not f.endswith(SIDE_OUTPUT_SUFFIXES)
+        ]
 
     def _pickup_sim(self,
                     job) -> bool:
@@ -344,11 +409,21 @@ class QueueingSystem:
         """Erase all files except the output
         if the job finished without error.
 
+        In prompt mode a kin job keeps every file when it failed (inputs,
+        ``.log``, PED outputs, collector files, for diagnosis). When it was
+        picked up (after its collector ended and its prompt-rates file was
+        checked) the PED outputs and the collector script and submission
+        file are removed too. The prompt-rates file and ``logs/`` are kept.
+
         Args:
             job (NDArray[Any]): Array of the job with custom datatype.
         """
         # Don't delete files for jobs that need to be resubmitted
         if job['status'] == JobStatus.READY.value:
+            return
+        prompt_kin: bool = (job['type'] == 'kin'
+                            and is_prompt_run(self.settings))
+        if prompt_kin and job['status'] != JobStatus.PICKED_UP.value:
             return
         for ext in ['log', 'aux', 'slurm']:
             if ext == 'err' and not clear_err:
@@ -374,6 +449,15 @@ class QueueingSystem:
                 underscore_base: str = f"{job['loc']}/_{job['name']}"
                 for p_pass1 in glob.glob(f"{underscore_base}P*.out"):
                     os.remove(p_pass1)
+                if prompt_kin:
+                    for suffix in SIDE_OUTPUT_SUFFIXES:
+                        for p_side in glob.glob(f"{base}P*{suffix}"):
+                            os.remove(p_side)
+                    files = PromptCollectorFiles(loc=str(job['loc']),
+                                                 kin_name=str(job['name']))
+                    for path in (files.script, files.slurm):
+                        if os.path.exists(path):
+                            os.remove(path)
 
     def submit(self, job) -> None:
         """Submit the job, and return the slurm's job id.
@@ -423,6 +507,75 @@ class QueueingSystem:
         slurm_id: int = int(outstr.split()[-1])
         job['sub_id'] = np.int32(slurm_id)
         job['status'] = JobStatus.RUNNING.value
+        if job['type'] == 'kin' and is_prompt_run(self.settings):
+            job['collector_id'] = np.int32(
+                self._submit_collector(job=job, array_id=slurm_id))
+
+    def _submit_collector(self,
+                          job,
+                          array_id: int) -> int:
+        """Submit the prompt collector of a kin job after its array.
+
+        ``--dependency=afterok:<array id>``: the collector starts only when
+        every task of the array ended with exit code 0.
+        ``--kill-on-invalid-dep=yes``: Slurm cancels it when a task failed,
+        instead of keeping it pending forever. Never raises: a failed
+        sbatch is logged and recorded as ``COLLECTOR_SUBMIT_FAILED``, the
+        array keeps running and RateCo stops the run at its next pass.
+        Runs in the job folder (``submit`` changed to it).
+
+        Args:
+            job: Numpy structured array of the kin job. dtype = jobdata
+            array_id (int): Slurm id of the job's array.
+
+        Returns:
+            int: Slurm id of the collector, or COLLECTOR_SUBMIT_FAILED.
+        """
+        files = PromptCollectorFiles(loc=str(job['loc']),
+                                     kin_name=str(job['name']))
+        command: list[str] = [
+            'sbatch',
+            f'--dependency=afterok:{array_id}',
+            '--kill-on-invalid-dep=yes',
+            f'{files.stem}.{self.ext}']
+        try:
+            process = Popen(args=command,
+                            shell=False,
+                            stdout=PIPE,
+                            stdin=PIPE,
+                            stderr=PIPE)
+            out, err = process.communicate()
+            if process.returncode != 0:
+                raise RuntimeError(err.decode().strip())
+            collector_id: int = int(out.decode().split()[-1])
+        except (OSError, RuntimeError, ValueError, IndexError) as exc:
+            self.klog.error(
+                f"Failed to submit the prompt collector of {job['name']} "
+                f"(array {array_id}): {exc}")
+            return COLLECTOR_SUBMIT_FAILED
+        self.klog.info(
+            f"Prompt collector of {job['name']} submitted as job "
+            f"{collector_id} (afterok:{array_id}).")
+        return collector_id
+
+    def collector_submit_failed(self,
+                                idx: int) -> bool:
+        """Tell whether the prompt collector of a kin job could not be
+        submitted.
+
+        Only jobs submitted by this process (status RUNNING or FINISHED)
+        are considered: the fields of an unused queue slot are undefined.
+
+        Args:
+            idx (int): position of the job in the kin queue.
+
+        Returns:
+            bool: True when the collector sbatch failed.
+        """
+        job = self.kin_q[idx]
+        return (job['status'] in (JobStatus.RUNNING.value,
+                                  JobStatus.FINISHED.value)
+                and int(job['collector_id']) == COLLECTOR_SUBMIT_FAILED)
 
     def run(self) -> None:
         """Run all jobs of the workflow in parallel
@@ -461,6 +614,10 @@ class QueueingSystem:
     def actualize(self) -> None:
         """Remove picked up jobs from queuing system.
         Change status of newly finished jobs.
+
+        A job with a prompt collector is finished only when neither its
+        array nor its collector is in the Slurm queue (a collector id of 0
+        or COLLECTOR_SUBMIT_FAILED is never a Slurm id).
         """
         slurm_ids: NDArray[int32] = self.get_all_running()
         for q in self.queues:
@@ -472,8 +629,13 @@ class QueueingSystem:
                         assume_unique=True,
                         invert=True)
                 )
+            # collector ids that are not in the slurm_ids (the column holds
+            # many 0: not unique)
+            collector_gone: ndarray = np.isin(element=q['collector_id'],
+                                              test_elements=slurm_ids,
+                                              invert=True)
             mask = np.logical_and(
-                was_running, not_in_q
+                np.logical_and(was_running, not_in_q), collector_gone
                 )
             # Jobs that just finished, may have failed
             q['status'][mask] = JobStatus.FINISHED.value
@@ -540,8 +702,17 @@ class QueueingSystem:
                 ]
             else:
                 p_files = sorted(glob.glob(base + 'P*.inp'))
-            return (len(p_files) == n_pes and
-                    all(os.stat(p_file).st_size > 0 for p_file in p_files))
+            drivers_ready: bool = (
+                len(p_files) == n_pes and
+                all(os.stat(p_file).st_size > 0 for p_file in p_files))
+            if drivers_ready and is_prompt_run(self.settings):
+                # The array is never submitted without its collector.
+                files = PromptCollectorFiles(loc=str(job['loc']),
+                                             kin_name=str(job['name']))
+                return all(os.path.isfile(path)
+                           and os.stat(path).st_size > 0
+                           for path in (files.script, files.slurm))
+            return drivers_ready
         elif job['type'] == 'sim':
             n_unique_scripts: int = len(set(
                 exp.tpl_idx for exp in self.settings['experiments']

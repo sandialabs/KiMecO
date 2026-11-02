@@ -26,6 +26,17 @@ verified: 2026-10-27 against working tree
   `autofile@0.2025.0` from GitHub; `test_installation_extras_ci.py` has a real-guard test: its AST part (the
   probed `mechanalyzer.builder` symbol) runs everywhere, its import part skips when mechanalyzer is
   absent and fails under `KIMECO_REQUIRE_EXTRAS=automech`.
+- Prompt collector pins (step 3, uncommitted): `test_installation_imports_ci.py::PUBLIC_MODULES` lists
+  `kimeco.writers.prompt_collector`, which must stay importable with only stdlib/numpy at module level
+  (`rate_coef`, `q_sys`, `user_input` import it; mess_io, pandas, mechanalyzer load when the collector runs).
+  `test_installation_extras_ci.py::test_prompt_gate_symbol_importable` AST-compares every import inside
+  `KMOInput._check_prompt` with the one mechanalyzer probe, so the grid-collision helpers are
+  module-level imports and `_check_prompt_grid` is a separate method (an `import math` in `_check_prompt`
+  fails it). `test_q_sys_ci.py::test_kin_job_array_dtype_matches_queue_jobdata` pins the `jobdata` dtype
+  (`collector_id` int32 last) against `QueueingSystem.jobdata`: add a field in both.
+  `test_rate_coef_ci.py` pins `PROMPT_TO_NAME_SUFFIX == kimeco.database.kimeco_db.dbs + 'prompt'`
+  (step 4, uncommitted): `prompt_collector.py` keeps the literal `'__prompt'` because it may not import
+  `kimeco.database`; change the `dbs` separator and the literal together.
 
 **Pins nothing enforces (check by hand)**
 - `.github/workflows/tests.yml` runs `KIMECO_RUN_INSTALL_TEST=1 pytest

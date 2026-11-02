@@ -35,7 +35,9 @@ verified: 2026-10-26 against working tree
 Copy `kimeco/`, `tests/` and `pyproject.toml` to a scratch directory, replace the fixed files with
 `git show HEAD:kimeco/<path>`, and run pytest from there. pytest puts that rootdir first on
 `sys.path`, so the scratch `kimeco` shadows the editable install (check with a test printing
-`kimeco.__file__`).
+`kimeco.__file__`). This works because setuptools' editable finder is appended to
+`sys.meta_path` (`__editable___kimeco_*_finder.py`), after the path finder: keep the scratch root
+free of an `__init__.py` so `kimeco/` there is found first.
 If the new tests import names HEAD lacks (e.g. `MessTemplate`), every file fails at collection,
 which proves nothing per test: append import-only shims (the names, no behaviour) to the scratch
 HEAD copy to get a per-test verdict (step 1 of multi-pes-mess-parsing: 93/100 new cases failed).
