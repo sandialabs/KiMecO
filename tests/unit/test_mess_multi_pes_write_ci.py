@@ -44,8 +44,8 @@ from kimeco.readers.mess_input import MessInputReader
 from kimeco.writers import automech_kin
 from kimeco.writers.automech_kin import AutomechKinWriter
 from kimeco.writers.mess import MessWriter
-from tests.unit.test_automech_driver_ci import (_MERGING_OUT, _Recorder,
-                                                _load_driver)
+from tests.unit.test_automech_driver_ci import (_MERGING_OUT, _TP_TAIL,
+                                                _Recorder, _load_driver)
 from tests.unit.test_installation_extras_ci import import_or_skip
 from tests.unit.test_installation_imports_ci import FORBIDDEN_SOURCE_PATTERNS
 from tests.unit.test_mess_multi_pes_read_ci import (assert_clean, atom, bimol,
@@ -482,15 +482,23 @@ def test_akw_driver_all_header_keys_absent(tmp_path, monkeypatch) -> None:
 
 
 class _FakeMessRun:
-    """``subprocess.run`` double writing ``<base>.out`` per invocation."""
+    """``subprocess.run`` double writing ``<base>.out`` per invocation;
+    accepts the driver's ``stderr=`` file (records each call's kwargs)."""
 
     def __init__(self, out: Path, outputs: list[str]) -> None:
         self.out = out
         self.outputs = list(outputs)
+        self.kwargs: list[dict] = []
 
     def __call__(self, cmd, check=False, **kwargs):
+        self.kwargs.append(dict(kwargs))
         self.out.write_text(self.outputs.pop(0))
         return types.SimpleNamespace(returncode=0)
+
+
+#: A complete pass-2 output (the driver fails a pass whose output lacks the
+#: ``Temperature-Pressure Rate Tables:`` section).
+_PASS2_COMPLETE = 'PASS2\n' + _TP_TAIL
 
 
 _LUMPED = ('TemperatureList[K] 500 600\nWellExtension 0.5000\n'
@@ -509,19 +517,21 @@ def test_akw_driver_well_extension_survives_pass_two(
     mod, rec = _driver(tmp_path, monkeypatch, sop, pes_id)
     run_dir = _mkdir(tmp_path / 'run')
     base = f'G0001P{pes_id:02d}'
-    monkeypatch.setattr(mod.subprocess, 'run', _FakeMessRun(
-        run_dir / f'{base}.out', [_MERGING_OUT, 'PASS2']))
+    fake = _FakeMessRun(run_dir / f'{base}.out',
+                        [_MERGING_OUT, _PASS2_COMPLETE])
+    monkeypatch.setattr(mod.subprocess, 'run', fake)
     monkeypatch.setattr(mod, 'well_lumped_input_file',
                         lambda *args: _LUMPED)
     monkeypatch.chdir(run_dir)
-    mod.main()
+    assert mod.main() == 0
+    assert [kw['stderr'].name for kw in fake.kwargs] == [f'{base}.stderr'] * 2
     first = rec.kwargs('global_rates_input_v1')[0]
     assert first['well_extension'] == (0.5 if pes_id == 0 else None)
     final = (run_dir / f'{base}.inp').read_text()
     assert ('WellExtension\n' in final) is kept
     ext = [ln for ln in final.splitlines() if ln.startswith('WellExtension')]
     assert ext[-1 if not kept else 0] == 'WellExtension 0.5000'
-    assert (run_dir / f'{base}.out').read_text() == 'PASS2'
+    assert (run_dir / f'{base}.out').read_text() == _PASS2_COMPLETE
 
 
 # ---------------------------------------------------------------------------

@@ -1264,7 +1264,8 @@ def _artifacts(loc: Path, name: str) -> dict[str, Path]:
         'c_py': f'prompt_{name}.py', 'c_slurm': f'prompt_{name}.slurm',
         'c_json': f'prompt_{name}.json', 'arr_err': f'logs/{name}_0.err',
         'c_err': f'logs/prompt_{name}.err',
-        'c_out': f'logs/prompt_{name}.stdout'}
+        'c_out': f'logs/prompt_{name}.stdout',
+        'p_stderr': f'{name}P00.stderr', 'p_failed': f'{name}P00.out.failed'}
     paths = {key: loc / rel for key, rel in names.items()}
     for path in paths.values():
         path.write_text('x')
@@ -1273,8 +1274,9 @@ def _artifacts(loc: Path, name: str) -> dict[str, Path]:
 
 def test_clean_files_prompt_picked_up_and_failed(tmp_path) -> None:
     """Prompt PICKED_UP: also removes the PED / microcanonical outputs and
-    the collector script and .slurm; keeps the rate .out, the prompt JSON
-    and logs/. Prompt FAILED: removes nothing (diagnosis)."""
+    the collector script and .slurm, and the driver's MESS ``.stderr``;
+    keeps the rate .out, the prompt JSON, logs/ and a failed pass's
+    ``.out.failed``. Prompt FAILED: removes nothing (diagnosis)."""
     loc = tmp_path / 'picked'
     loc.mkdir()
     paths = _artifacts(loc, PNAME)
@@ -1282,7 +1284,8 @@ def test_clean_files_prompt_picked_up_and_failed(tmp_path) -> None:
         _kin_job_array(loc, PNAME, JobStatus.PICKED_UP.value),
         clear_err=True)
     kept = {k for k, p in paths.items() if p.exists()}
-    assert kept == {'rate', 'c_json', 'arr_err', 'c_err', 'c_out'}
+    assert kept == {'rate', 'c_json', 'arr_err', 'c_err', 'c_out',
+                    'p_failed'}
 
     loc = tmp_path / 'failed'
     loc.mkdir()
@@ -1297,8 +1300,9 @@ def test_clean_files_prompt_picked_up_and_failed(tmp_path) -> None:
 def test_clean_files_non_prompt_unchanged(tmp_path, prompt,
                                           use_automech) -> None:
     """Outside prompt mode: PICKED_UP keeps the side outputs (never deleted
-    before) and anything named prompt_*; FAILED still removes P*.log and
-    keeps the drivers."""
+    before), anything named prompt_* and ``.out.failed``, and removes the
+    driver's MESS ``.stderr``; FAILED still removes P*.log and keeps the
+    drivers and the ``.stderr``."""
     loc = tmp_path / 'picked'
     loc.mkdir()
     paths = _artifacts(loc, PNAME)
@@ -1307,7 +1311,7 @@ def test_clean_files_non_prompt_unchanged(tmp_path, prompt,
                    clear_err=True)
     kept = {k for k, p in paths.items() if p.exists()}
     assert kept == {'rate', 'ped', 'ke', 'c_py', 'c_slurm', 'c_json',
-                    'arr_err', 'c_err', 'c_out'}
+                    'arr_err', 'c_err', 'c_out', 'p_failed'}
 
     loc = tmp_path / 'failed'
     loc.mkdir()
@@ -1317,3 +1321,97 @@ def test_clean_files_non_prompt_unchanged(tmp_path, prompt,
                    clear_err=False)
     gone = {k for k, p in paths.items() if not p.exists()}
     assert gone == {'slurm', 'log', 'aux', 'p_log', 'p_aux'}
+
+
+# ---------------------------------------------------------------------------
+# Automech driver files: <name>P<slot>.stderr and <name>P<slot>.out.failed
+# ---------------------------------------------------------------------------
+def _stderr_files(loc: Path, name: str = PNAME) -> list[Path]:
+    paths = [loc / f'{name}P00.stderr', loc / f'{name}P01.stderr']
+    for path in paths:
+        path.write_text('MESS warning: reference energy\n')
+    return paths
+
+
+@pytest.mark.parametrize('prompt', [False, True], ids=['non_prompt', 'prompt'])
+def test_clean_files_picked_up_removes_driver_stderr(tmp_path,
+                                                     prompt) -> None:
+    """A picked-up automech kin job (prompt or not) loses its per-PES MESS
+    ``.stderr`` files; its rate outputs and another model's ``.stderr``
+    stay."""
+    stderr = _stderr_files(tmp_path)
+    other = tmp_path / 'G0001E0002P00.stderr'
+    other.write_text('other model')
+    rates = [tmp_path / f'{PNAME}P0{s}.out' for s in (0, 1)]
+    for path in rates:
+        path.write_text('rates')
+    _prompt_qs(tmp_path, prompt=prompt).clean_files(
+        _kin_job_array(tmp_path, PNAME, JobStatus.PICKED_UP.value),
+        clear_err=True)
+    assert not any(p.exists() for p in stderr)
+    assert other.read_text() == 'other model'
+    assert all(p.read_text() == 'rates' for p in rates)
+
+
+@pytest.mark.parametrize('prompt', [False, True], ids=['non_prompt', 'prompt'])
+def test_clean_files_failed_keeps_driver_stderr(tmp_path, prompt) -> None:
+    """A failed kin job keeps its ``.stderr`` and ``.out.failed`` files (the
+    diagnosis of the failed MESS pass)."""
+    stderr = _stderr_files(tmp_path)
+    failed = tmp_path / f'{PNAME}P01.out.failed'
+    failed.write_text('partial')
+    _prompt_qs(tmp_path, prompt=prompt).clean_files(
+        _kin_job_array(tmp_path, PNAME, JobStatus.FAILED.value),
+        clear_err=False)
+    assert all(p.exists() for p in stderr)
+    assert failed.read_text() == 'partial'
+
+
+def test_clean_files_ready_and_sim_jobs_keep_driver_stderr(tmp_path) -> None:
+    """A READY kin job (pending resubmission) and a finished sim job of the
+    same name leave the ``.stderr`` files alone."""
+    stderr = _stderr_files(tmp_path)
+    qs = _am_qs(tmp_path, use_automech=True)
+    qs.clean_files(_kin_job_array(tmp_path, PNAME, JobStatus.READY.value),
+                   clear_err=True)
+    sim = _kin_job_array(tmp_path, PNAME, JobStatus.PICKED_UP.value)
+    sim['type'] = 'sim'
+    qs.clean_files(sim, clear_err=True)
+    assert all(p.exists() for p in stderr)
+
+
+def _running_kin_job(tmp_path: Path) -> tuple[QueueingSystem, Any]:
+    qs = _am_qs(tmp_path, use_automech=True)
+    job = _kin_job(qs, tmp_path, PNAME, n_pes=2)
+    job['status'] = JobStatus.RUNNING.value
+    (tmp_path / 'logs').mkdir()
+    for slot in (0, 1):
+        (tmp_path / 'logs' / f'{PNAME}_{slot}.err').write_text('')
+    return qs, job
+
+
+def test_pickup_kin_ignores_driver_stderr(tmp_path, monkeypatch) -> None:
+    """Every rate output present and a non-empty ``P00.stderr`` (MESS
+    warnings): picked up. The legacy ``P*.err`` check does not match
+    ``.stderr``."""
+    monkeypatch.setattr('kimeco.q_sys.time.sleep', lambda _: None)
+    qs, job = _running_kin_job(tmp_path)
+    _outputs(tmp_path, PNAME, side=False)
+    _stderr_files(tmp_path)
+    assert qs._pickup_kin(job) is True
+    assert JobStatus(job['status']) == JobStatus.PICKED_UP
+
+
+def test_pickup_kin_never_counts_out_failed(tmp_path, monkeypatch) -> None:
+    """Slot 0 has its rate output, slot 1 only ``.out.failed``: not picked
+    up (one rate output for two PESs), status unchanged, nothing deleted."""
+    monkeypatch.setattr('kimeco.q_sys.time.sleep', lambda _: None)
+    qs, job = _running_kin_job(tmp_path)
+    rate = tmp_path / f'{PNAME}P00.out'
+    rate.write_text('rates')
+    failed = tmp_path / f'{PNAME}P01.out.failed'
+    failed.write_text('partial')
+    assert QueueingSystem._rate_outputs(f'{tmp_path}/{PNAME}') == [str(rate)]
+    assert qs._pickup_kin(job) is True
+    assert JobStatus(job['status']) == JobStatus.RUNNING
+    assert rate.exists() and failed.read_text() == 'partial'

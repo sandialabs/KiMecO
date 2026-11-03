@@ -34,8 +34,13 @@ When executed on the compute node the emitted script:
    (pass 2); otherwise the pass-1 output is moved back to
    ``<name>P<slot>.out`` and pass 2 is skipped. In prompt mode every PES thus
    ends with the pass-2 input, output and ``.log`` (plus ``_ped.out`` and
-   ``_ke.out`` when the input asks for them) next to the pass-1 copy; the
-   driver deletes no file.
+   ``_ke.out`` when the input asks for them) next to the pass-1 copy.
+   MESS stderr of both passes goes to ``<name>P<slot>.stderr`` (a stale copy
+   is removed first). A pass that exits non-zero or leaves a missing or
+   incomplete output (no ``Temperature-Pressure Rate Tables:`` section) moves
+   that output to ``<name>P<slot>.out.failed``, writes the reason to stdout
+   and the ``.stderr`` file, and the script exits 1; the driver deletes no
+   other file.
 
 External files referenced by bare relative filename (multirotor PES files,
 barrierless rotd flux files) are read from the run cwd at execution time - they
@@ -89,10 +94,13 @@ def _log_once(key: str, msg: str) -> None:
 # ({payload}/{name}/{slot}/{pres_unit}/{lump_pressure}/{lump_temp}) are
 # substituted via str.format; the body is intentionally free of literal
 # ``{``/``}`` (no f-strings, no dict/set literals other than dict()) so
-# formatting is safe.
+# formatting is safe. MESS stderr goes to <name>P<slot>.stderr
+# (``_run_mess``); a failed MESS pass (``_pass_failure``) is reported by
+# ``_report_failure`` and makes the script exit 1.
 automech_kin_tpl = '''"""Auto-generated automech MESS driver. Do not edit."""
 import os
 import subprocess
+import sys
 
 from phydat import phycon
 from mess_io.writer import molecule, atom
@@ -113,6 +121,10 @@ SLOT = {slot}
 PRES_UNIT = "{pres_unit}"
 LUMP_PRESSURE = {lump_pressure}
 LUMP_TEMP = {lump_temp}
+
+# MESS writes this section of the rate output last and writes no end marker:
+# a rate output without it is incomplete (MESS stopped early).
+RATE_TABLES_SECTION = "Temperature-Pressure Rate Tables:"
 
 
 def _geo_bohr(geo_ang):
@@ -363,8 +375,66 @@ def _keep_well_extension(inp_str):
     return "\\n".join(kept)
 
 
-def _run_mess(inp_name):
-    subprocess.run(["mess", inp_name], check=False)
+def _run_mess(inp_name, err_name):
+    # MESS stderr (warnings and errors of both passes) is appended to
+    # err_name, never to the process stderr: the scheduler's error log of
+    # the task must stay empty unless the driver itself crashes. The exit
+    # code is returned; the caller decides whether the pass failed.
+    handle = open(err_name, "a")
+    try:
+        result = subprocess.run(["mess", inp_name], check=False,
+                                stderr=handle)
+    finally:
+        handle.close()
+    return result.returncode
+
+
+def _complete_output(out_name):
+    # True when the rate output exists and holds its rate tables section.
+    if not os.path.isfile(out_name):
+        return False
+    handle = open(out_name)
+    try:
+        for line in handle:
+            if RATE_TABLES_SECTION in line:
+                return True
+    finally:
+        handle.close()
+    return False
+
+
+def _pass_failure(pass_label, returncode, out_name):
+    # Why a MESS pass failed, or "" when it succeeded: a non-zero exit code,
+    # no rate output, or a rate output without its rate tables section.
+    if returncode != 0:
+        return (pass_label + ": MESS exited with code " + str(returncode)
+                + " (rate output " + out_name + ")")
+    if not os.path.isfile(out_name):
+        return pass_label + ": MESS wrote no rate output " + out_name
+    if not _complete_output(out_name):
+        return (pass_label + ": the rate output " + out_name
+                + " is incomplete (no '" + RATE_TABLES_SECTION
+                + "' section)")
+    return ""
+
+
+def _report_failure(reason, out_name, err_name):
+    # A failed pass's rate output is kept for diagnosis as
+    # <name>P<slot>.out.failed, a name no pickup glob matches, so it is
+    # never read as rates. The message goes to stdout (the task's .stdout
+    # log) and to err_name, never to the process stderr. Returns the exit
+    # code of the script.
+    message = "KiMecO automech driver: " + reason + "."
+    if os.path.isfile(out_name):
+        failed_name = out_name + ".failed"
+        os.replace(out_name, failed_name)
+        message += " Output moved to " + failed_name + "."
+    message += " MESS stderr: " + err_name + "."
+    print(message, flush=True)
+    handle = open(err_name, "a")
+    handle.write(message + "\\n")
+    handle.close()
+    return 1
 
 
 def _lump_pressure_atm():
@@ -385,6 +455,7 @@ def main():
     out_name = base + ".out"
     aux_name = base + ".aux"
     log_name = base + ".log"
+    err_name = base + ".stderr"
     pass1_copy = "_" + base + ".out"
 
     rxn_chan_str = _rxn_chan_str()
@@ -399,12 +470,15 @@ def main():
     handle.write(base_inp)
     handle.close()
 
-    _run_mess(inp_name)
-    if not os.path.isfile(out_name):
-        # MESS pass 1 produced no output: clean exit, no pass 2, no rename.
-        # The final output stays absent so the job is retried, not picked up.
-        print("MESS pass 1 produced no output " + out_name + ", aborting.")
-        return
+    # A resubmitted task starts a fresh MESS stderr file.
+    if os.path.isfile(err_name):
+        os.remove(err_name)
+    failure = _pass_failure("pass 1", _run_mess(inp_name, err_name),
+                            out_name)
+    if failure:
+        # No pass 2, no rename: the final output stays absent, so the job
+        # is not picked up, and the non-zero exit fails the task.
+        return _report_failure(failure, out_name, err_name)
     os.replace(out_name, pass1_copy)
 
     # Prompt mode: every PES runs pass 2, whether or not wells merged, so
@@ -430,15 +504,20 @@ def main():
         handle.close()
 
         # Pass 2: final SOP-consistent output at <name>P<slot>.out.
-        _run_mess(inp_name)
+        failure = _pass_failure("pass 2", _run_mess(inp_name, err_name),
+                                out_name)
+        if failure:
+            # The pass-1 copy is kept next to the failed output.
+            return _report_failure(failure, out_name, err_name)
     else:
-        # Not prompt mode and no merged wells: pass 1 is already the final
-        # result.
+        # Not prompt mode and no merged wells: pass 1 (already checked) is
+        # the final result.
         os.replace(pass1_copy, out_name)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
 '''
 
 

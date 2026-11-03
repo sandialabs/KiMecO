@@ -4,7 +4,8 @@ filtering, and the postprocessing row-id band (``pp_row_ids``) that keeps
 the rows of earlier postprocessing runs and stays unique across threads,
 and the prompt KIN rows of prompt mode (``to_name`` ending with
 ``__prompt``) written through ``Model.save_kin``: optimisation band ids,
-kmopp partial grids, thermal-only arrays for ``load_rates_from_db``.
+kmopp partial grids, the arrays of a non-prompt RateCo from
+``load_rates_from_db``.
 """
 from __future__ import annotations
 

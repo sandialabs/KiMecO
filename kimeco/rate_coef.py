@@ -10,7 +10,8 @@ from kimeco.writers.mess import MessWriter
 from kimeco.writers.automech_kin import AutomechKinWriter
 from kimeco.writers.prompt_collector import (
     PROMPT_TO_NAME_SUFFIX, PromptChannel, PromptCollectorFiles,
-    PromptCollectorWriter, PromptRatesError, PromptRatesFile, is_prompt_run)
+    PromptCollectorWriter, PromptRatesError, PromptRatesFile, is_prompt_run,
+    prompt_to_names_by_pes)
 from kimeco.readers.mess_output import MessOutputReader
 import os
 import numpy as np
@@ -607,30 +608,77 @@ class RateCo:
 
     def load_rates_from_db(self,
                            table: str) -> None:
-        """Rebuild PES-scoped rate arrays from persisted KIN_DB rows."""
+        """Rebuild PES-scoped rate arrays from persisted KIN_DB rows.
+
+        For each PES, ``tbl_map_by_pes[pes]`` maps a name to its index in
+        ``rc_by_pes[pes]``, an array ``(n_p, n_t, n, n)`` holding the k of
+        ``[from, to]`` at each (P, T) cell of the active grid, in KIN units.
+        The names are the species of the PES (``sop.species_names_in_pes``).
+        Rows off the grid, of another PES or with an unknown name are
+        ignored.
+
+        Prompt mode (``use_automech`` and ``prompt_reactions``): the table
+        of each PED PES is an **extended rate table**. After its species it
+        lists the prompt to_names of its channels (``prompt_to_names_by_pes``
+        over the fixed channel set), so its array is ``(n_p, n_t, n + m,
+        n + m)`` and the k of a channel sits at ``[ped_reactant, prompt
+        to_name]``. A prompt row is used only when its ``(pes_id, from_name,
+        to_name)`` is the KIN key of a channel; every channel needs a row at
+        every cell of the grid. Other PESs, and every PES outside prompt
+        mode, keep their species-only tables (prompt rows ignored).
+
+        Args:
+            table (str): generation table holding the rows.
+
+        Raises:
+            PromptRatesError: prompt mode, a channel has no row at some
+                (P, T) cell of the grid.
+        """
         rows = self.db.get_rates_for_kin_id(table=table,
                                             kin_id=self.id)
+        # getattr: a RateCo built without __init__ has no prompt flag and is
+        # never in prompt mode.
+        prompt_mode: bool = bool(getattr(self, 'prompt_reactions', False))
+        channels: list[PromptChannel] = (PromptChannel.fixed_set(self.sop)
+                                         if prompt_mode else [])
+        # {PED PES id: prompt to_names appended to its species names}
+        prompt_names: dict[int, list[str]] = prompt_to_names_by_pes(channels)
+        # KIN keys (pes_id, from_name, to_name) of the channels, each once,
+        # in fixed-set order.
+        channel_keys: list[tuple[int, str, str]] = list(dict.fromkeys(
+            (channel.ped_pes_id, channel.ped_reactant,
+             channel.kin_row_to_name)
+            for channel in channels))
+        known_keys: set[tuple[int, str, str]] = set(channel_keys)
         self.tbl_map_by_pes = {}
         self.rc_by_pes = {}
         for pes_id in self.sop.pes_ids:
-            species_names = self.sop.species_names_in_pes(pes_id)
+            names = (self.sop.species_names_in_pes(pes_id)
+                     + prompt_names.get(pes_id, []))
             tbl_map = {
                 name: idx
-                for idx, name in enumerate(species_names)
+                for idx, name in enumerate(names)
             }
             rc = np.zeros((
                 len(self.pres),
                 len(self.temp),
-                len(species_names),
-                len(species_names),
+                len(names),
+                len(names),
             ))
             self.tbl_map_by_pes[pes_id] = tbl_map
             self.rc_by_pes[pes_id] = rc
 
+        # (channel key, p_idx, t_idx) of every prompt row placed.
+        found: set[tuple[tuple[int, str, str], int, int]] = set()
         for p, t, pes_id, from_name, to_name, k_value in rows:
             if pes_id not in self.rc_by_pes:
                 continue
             if p not in self.pres or t not in self.temp:
+                continue
+            # A prompt row counts only as the row of a channel of the fixed
+            # set (never outside prompt mode, where no key is known).
+            prompt_row: bool = str(to_name).endswith(PROMPT_TO_NAME_SUFFIX)
+            if prompt_row and (pes_id, from_name, to_name) not in known_keys:
                 continue
             tbl_map = self.tbl_map_by_pes[pes_id]
             if from_name not in tbl_map or to_name not in tbl_map:
@@ -640,3 +688,58 @@ class RateCo:
             from_idx = tbl_map[from_name]
             to_idx = tbl_map[to_name]
             self.rc_by_pes[pes_id][p_idx, t_idx, from_idx, to_idx] = k_value
+            if prompt_row:
+                found.add(((pes_id, from_name, to_name), p_idx, t_idx))
+        if prompt_mode:
+            self._check_prompt_rows_complete(table=table,
+                                             channel_keys=channel_keys,
+                                             found=found)
+
+    def _check_prompt_rows_complete(
+            self,
+            table: str,
+            channel_keys: list[tuple[int, str, str]],
+            found: set[tuple[tuple[int, str, str], int, int]]) -> None:
+        """Stop when a prompt channel has no KIN row at some (P, T) cell
+        (prompt mode, ``load_rates_from_db``).
+
+        Without the row, the Cantera mechanism would lose the prompt
+        reaction of that channel (its thermal forward reaction is replaced
+        by the prompt ones), so the run stops instead.
+
+        Args:
+            table (str): generation table the rows were read from.
+            channel_keys (list[tuple[int, str, str]]): KIN keys
+                ``(pes_id, from_name, to_name)`` of the channels, each once,
+                in fixed-set order.
+            found (set[tuple[tuple[int, str, str], int, int]]): (channel
+                key, pressure index, temperature index) of the prompt rows
+                placed in the arrays.
+
+        Raises:
+            PromptRatesError: some rows are missing; the message gives their
+                number and the first ones.
+        """
+        missing: list[tuple[tuple[int, str, str], float, float]] = [
+            (key, p, t)
+            for key in channel_keys
+            for p_idx, p in enumerate(self.pres)
+            for t_idx, t in enumerate(self.temp)
+            if (key, p_idx, t_idx) not in found
+        ]
+        if not missing:
+            return
+        expected: int = len(channel_keys) * len(self.pres) * len(self.temp)
+        n_shown: int = 5
+        shown: str = '; '.join(
+            f"PES {pes_id}, {from_name} -> {to_name} at P = {p} bar, "
+            f"T = {t} K"
+            for (pes_id, from_name, to_name), p, t in missing[:n_shown])
+        if len(missing) > n_shown:
+            shown += '; ...'
+        raise PromptRatesError(
+            f"{self.name} (model {self.id}): {len(missing)} of {expected} "
+            f"prompt KIN rows are missing from table {table} of KMO_DB_KIN "
+            f"({shown}). Without them the Cantera mechanism would lose "
+            "prompt reactions. Check the prompt-rates file of the model and "
+            "the KIN rows saved from it.")

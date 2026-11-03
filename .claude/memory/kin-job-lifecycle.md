@@ -2,7 +2,7 @@
 name: kin-job-lifecycle
 description: "How a kin job moves through QueueingSystem and RateCo (submit, squeue polling, recover before pick-up, the only path to clean_files), how errors stop kmo, the stuck-in-SOP defect, Slurm afterok semantics and the log-name globs. Read before changing q_sys.py, RateCo's status flow, adding a job type, or debugging a run that waits forever."
 type: project
-verified: 2026-11-02 against 4efa377 + steps 3-4 working tree
+verified: 2026-11-03 against 56e465a + step 5 working tree
 ---
 **Flow.** One Slurm array per model (`templates/slurm_arr.py`, `--array=0-{n_pes-1}`);
 `QueueingSystem.submit` stores the array master id in `kin_q['sub_id']` (prompt mode: the collector
@@ -31,10 +31,26 @@ try, so an exception from `submit`/`actualize` gives a bare traceback. Raise fro
 (`set_status`/`recover_rslts`), not from the queue. The NM swarm catches exceptions per NM thread
 (see [[optimizer-tables-and-nm-swarm]]).
 
+**SIM jobs (unfixed defect).** `QueueingSystem._pickup_sim` checks the `.err` size only inside its
+`while not os.path.exists(...)` wait, so a crashing SIM task is still marked PICKED_UP; then
+`CoreRun.recover_simulation_data` logs `Missing file: ...S##.json - resubmitting` and resubmits the
+whole SIM array every ~17 s with no limit (each resubmission truncates `logs/<name>S_%a.err`, so
+catch the traceback by polling). A fix must not read a non-empty SIM `.err` as failure: with
+Cantera 3.2 it always holds the `clone` DeprecationWarning ([[cantera-3-2-pitfalls]]). On success
+`recover_simulation_data` loads each `<table><model>S<NN>.json` and `os.remove`s it, so prove a SIM ran
+from the scores / `score_info.txt`, not from the files.
+
 **Slurm `afterok` on an array id** waits for every task to exit 0; if one exits non-zero the
 dependent job stays PENDING (DependencyNeverSatisfied) forever unless `--kill-on-invalid-dep=yes`
-or `kill_invalid_depend` is set, and the `squeue` poll never sees it end. A per-PES driver exits 0
-even when MESS failed (`_run_mess` `check=False`), so a dependent job must check its inputs.
+or `kill_invalid_depend` is set, and the `squeue` poll never sees it end. The automech per-PES driver
+exits 1 (step 5, uncommitted) when a MESS pass exits non-zero, writes no `.out` or one without the
+`Temperature-Pressure Rate Tables:` section, so `afterok` fails; then the collector is cancelled
+with `--kill-on-invalid-dep=yes` (a throwaway probe on one Slurm 21.08 cluster confirmed it). Without the flag, or in the
+non-automech template (`kin_arr_tpl.py`, no exit check), a dependent job must still check its inputs.
+The driver's MESS stderr goes to `<name>P<NN>.stderr` (not `P*.err`, so `_pickup_kin`'s FAILED rule
+never sees it; `clean_files` removes it on PICKED_UP, `reset_model` globs remove it too), the failed
+output is `<name>P<NN>.out.failed`, kept; the failure message goes to stdout, so the array `.err`
+stays empty and a failed task leaves the non-prompt kin job stuck (no `.out`, no `.err`).
 
 **Log-name globs.** `_pickup_kin` waits for and checks `logs/{name}_*.err` (array logs
 `logs/{filename}_%a.err`); `templates/slurm.py` writes `logs/{filename}.err`, so any extra job named

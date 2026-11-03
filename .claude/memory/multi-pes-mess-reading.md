@@ -101,13 +101,18 @@ verified: 2026-10-27 against working tree (uncommitted steps 1-2 of prompt-react
 - `test_emitted_main_structure` (`test_automech_driver_ci.py`) pins the driver `If`: a `BoolOp(Or)`
   whose first operand is the Name `prompt_mode` (assigned once from `PES_PAYLOAD.get("prompt_reactions")`)
   and whose last is the bare `MessOutputReader.well_merging(...)` Call; plus exactly six placeholders
-  and no other brace in the template.
+  and no other brace in the template. Since step 5 (uncommitted) it also pins: one `_pass_failure`
+  guard before the pass-1 rename, one in the merging arm, no bare `return`, `main` ends with
+  `return 0`, `if __name__` block is `sys.exit(main())`; the fakes in `test_automech_driver_ci.py`
+  and `test_mess_multi_pes_write_ci.py` must write an output holding `Temperature-Pressure Rate
+  Tables:` or the driver reports a failure.
 - `test_installation_mess_ci.py` scans the whole `automech_kin_tpl` source, comments included: every
   `subprocess.run([...])` argv starting with `mess` must have 2 items, and `/mess` and `CONDA_PREFIX`
   must not appear anywhere (a comment containing them fails the test).
 - Known gap: `KiMec.create_reactions` adds reactions PES by PES without dedup, so a pair shared by
   two PES gives two Cantera reactions; Cantera 3.2 `Solution(species=, reactions=)` accepts them
-  and sums the rates (only a YAML file raises "Undeclared duplicate") (`kimeco/kinmec.py`).
+  and sums the rates (only a YAML file raises "Undeclared duplicate") (`kimeco/kinmec.py`). Prompt
+  reactions (step 5, uncommitted) are the exception: same-equation channels are summed by KiMec.
 
 **Why:** the logic spans the reader, SOP, both writers and RateCo; its invariants are implicit.
 **How to apply:** read before changing `MessInputReader`, `SOP` header attributes, LJ parameters,

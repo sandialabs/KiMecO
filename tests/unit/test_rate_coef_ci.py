@@ -11,7 +11,9 @@ fake SOP, KIN_DB, queue and MESS output reader doubles.
 * The automech branch of ``create_input`` (``AutomechKinWriter`` replaced by
   a capture double): one ``{name}P{slot:02d}.py`` per PES slot and no
   ``.inp``; full grid in a normal run, the sub-grid in postprocessing.
-* ``load_rates_from_db`` fills the rate arrays (zeros for empty rows).
+* ``load_rates_from_db`` fills the rate arrays (zeros for empty rows); in
+  prompt mode the PED PES tables are extended with the prompt to_names
+  (``PromptRatesError`` when a channel row is missing), unchanged otherwise.
 * Prompt mode (``use_automech`` + ``prompt_reactions``): the collector script,
   the restart status, the prompt-rates file checked before any ``.out`` is
   read, then the prompt KIN rows (``to_name`` ending with
@@ -1641,27 +1643,201 @@ def test_prompt_missing_out_and_absent_grid_value(tmp_path,
     assert 'model 0' in str(exc.value)
 
 
-def test_prompt_rows_never_reach_rate_arrays(tmp_path, monkeypatch) -> None:
-    """C1: load_rates_from_db (the arrays the Cantera input is built from)
-    gives the same tbl_map_by_pes and rc_by_pes from the rows of a prompt
-    run as from its thermal rows only; an adversarial row A -> B__prompt
-    changes nothing."""
-    monkeypatch.setattr('kimeco.rate_coef.MessOutputReader', _FakeMOR)
-    rc = _prompt_rc(tmp_path, q_sys=_RecoverQueue())
+# ---------------------------------------------------------------------------
+# Prompt mode: extended rate tables in load_rates_from_db
+# ---------------------------------------------------------------------------
+class _NamedPromptSOP(_PromptSOP):
+    """_PromptSOP whose species tables hold the PEDSpecies labels: PES 0 =
+    ['A+B', 'C+D'] (the PED reactant is a species of its PES, as in a real
+    SOP), PES 1 = ['C', 'E+F']; one thermal pair A+B -> C+D on PES 0.
+    Channels (fixed set): ``C+D__prompt``, ``D+E+F__prompt``."""
+
+    def __init__(self) -> None:
+        super().__init__(pairs=((0, 'A+B', 'C+D'),))
+
+    def species_names_in_pes(self, pes_id: int):
+        return ['A+B', 'C+D'] if pes_id == 0 else ['C', 'E+F']
+
+
+class _NamedFakeMOR(_FakeMOR):
+    """_FakeMOR on the species names of _NamedPromptSOP's PES 0."""
+
+    def __init__(self, filename, settings, sop, klog) -> None:
+        super().__init__(filename, settings, sop, klog)
+        self.tbl_map = {'A+B': 0, 'C+D': 1}
+
+
+_NAMED_TO = {'A+B': 0, 'C+D': 1, 'C+D__prompt': 2, 'D+E+F__prompt': 3}
+
+
+def _named_rows(tmp_path: Path, monkeypatch) -> list[tuple]:
+    """KIN rows ``(P, T, pes_id, from, to, k)`` of a prompt run of
+    _NamedPromptSOP (``recover_rslts``, prompt k = ``_kv``): 4 thermal
+    rows A+B -> C+D (k 10-13) + 2 channels x 4 cells."""
+    monkeypatch.setattr('kimeco.rate_coef.MessOutputReader', _NamedFakeMOR)
+    rc = _prompt_rc(tmp_path / 'recover', q_sys=_RecoverQueue(),
+                    sop=_NamedPromptSOP())
     _outputs_present(rc)
     _write_rates(rc, k_of=_kv)
-    # KIN_DB.get_rates_for_kin_id layout: (P, T, pes_id, from, to, k)
     rows = [(r[1], r[2], *r[4:]) for r in rc.recover_rslts()]
-    rows.append((1.0, 300.0, 0, 'A', 'B__prompt', 9.9))
-    thermal = [r for r in rows if not r[4].endswith(PROMPT_TO_NAME_SUFFIX)]
-    assert len(thermal) == 4 and len(rows) == 4 + 8 + 1
-    arrays = []
-    for db_rows in (rows, thermal):
-        rc.db = cast(Any, _FakeKinDB(db_rows))
-        rc.load_rates_from_db(table='G0000')
-        arrays.append((dict(rc.tbl_map_by_pes), dict(rc.rc_by_pes)))
-    (maps, rcs), (maps_ref, rcs_ref) = arrays
-    assert maps == maps_ref
-    assert rcs.keys() == rcs_ref.keys()
-    assert all(np.array_equal(rcs[k], rcs_ref[k]) for k in rcs)
-    assert rcs[0][0, 0, 0, 1] == 10.0
+    assert len(rows) == 4 + 8
+    return rows
+
+
+def _load(tmp_path: Path, rows, **extra: Any) -> RateCo:
+    """A _NamedPromptSOP RateCo (prompt mode unless ``extra`` says
+    otherwise) after ``load_rates_from_db('G0000')`` on ``rows``."""
+    rc = _prompt_rc(tmp_path / f'load{len(list(tmp_path.iterdir()))}',
+                    sop=_NamedPromptSOP(), db=_FakeKinDB(rows), **extra)
+    rc.load_rates_from_db(table='G0000')
+    return rc
+
+
+def _thermal(rows) -> list[tuple]:
+    return [r for r in rows if not str(r[4]).endswith(PROMPT_TO_NAME_SUFFIX)]
+
+
+def test_prompt_rows_reach_extended_arrays(tmp_path, monkeypatch) -> None:
+    """B1 (replaces C1 "prompt rows never reach the arrays"): in prompt mode
+    the table of the PED PES lists its species then the prompt to_names in
+    fixed-set order; its array is (n_p, n_t, 4, 4) with each channel's k at
+    [ped_reactant, to_name] on every cell; the thermal block equals the
+    prompt-off arrays (thermal twin kept); every other cell of the added
+    rows/columns is 0; the hot PES keeps its species-only table.
+    Adversarial rows (unknown suffixed name, a channel name under another
+    PES, a channel name with another from_name) change nothing."""
+    rows = _named_rows(tmp_path, monkeypatch)
+    adversarial = [
+        (1.0, 300.0, 0, 'A+B', 'B__prompt', 9.9),
+        (1.0, 300.0, 1, 'A+B', 'C+D__prompt', 9.9),
+        (1.0, 300.0, 1, 'C', 'C+D__prompt', 9.9),
+        (1.0, 300.0, 0, 'C+D', 'C+D__prompt', 9.9),
+        (2.0, 400.0, 0, 'C+D', 'D+E+F__prompt', 9.9),
+    ]
+    rc = _load(tmp_path, rows + adversarial)
+    assert rc.prompt_reactions is True
+    assert rc.tbl_map_by_pes[0] == _NAMED_TO
+    assert list(rc.tbl_map_by_pes[0]) == list(_NAMED_TO)
+    assert rc.tbl_map_by_pes[1] == {'C': 0, 'E+F': 1}
+    assert sorted(rc.rc_by_pes) == [0, 1]
+    arr = rc.rc_by_pes[0]
+    assert arr.shape == (2, 2, 4, 4)
+    assert rc.rc_by_pes[1].shape == (2, 2, 2, 2)
+    assert not rc.rc_by_pes[1].any()
+    for (ip, p), (it, t) in [((ip, p), (it, t))
+                             for ip, p in enumerate(rc.pres)
+                             for it, t in enumerate(rc.temp)]:
+        assert arr[ip, it, 0, 2] == _kv(0, p, t)
+        assert arr[ip, it, 0, 3] == _kv(1, p, t)
+    # Thermal block = the prompt-off arrays of the same rows.
+    off = _load(tmp_path, rows + adversarial, prompt_reactions=False)
+    assert off.tbl_map_by_pes[0] == {'A+B': 0, 'C+D': 1}
+    assert np.array_equal(arr[:, :, :2, :2], off.rc_by_pes[0])
+    assert arr[0, 0, 0, 1] == 10.0
+    # Rows/columns 2-3: only the two channel cells of row A+B are set.
+    extra = np.zeros(arr.shape, dtype=bool)
+    extra[:, :, 2:, :] = True
+    extra[:, :, :, 2:] = True
+    extra[:, :, 0, 2:] = False
+    assert not arr[extra].any()
+    # Same arrays without the adversarial rows.
+    clean = _load(tmp_path, rows)
+    assert repr(clean.tbl_map_by_pes) == repr(rc.tbl_map_by_pes)
+    assert all(np.array_equal(clean.rc_by_pes[k], rc.rc_by_pes[k])
+               for k in rc.rc_by_pes)
+
+
+def _drop(rows, to_name: str | None = None, cell=None) -> list[tuple]:
+    """Rows without the prompt rows matching ``to_name`` (any if None) at
+    ``cell`` (any if None)."""
+    return [r for r in rows
+            if not (str(r[4]).endswith(PROMPT_TO_NAME_SUFFIX)
+                    and (to_name is None or r[4] == to_name)
+                    and (cell is None or (r[0], r[1]) == cell))]
+
+
+@pytest.mark.parametrize('case', ['no_prompt_row', 'one_cell_missing',
+                                  'off_grid_pressure'])
+def test_missing_prompt_rows_stop(tmp_path, monkeypatch, case) -> None:
+    """B2: prompt mode, a channel without a KIN row at some cell of the grid
+    stops with PromptRatesError naming the table, the model, the number of
+    missing rows and the first ones: (a) no prompt row at all, (b) one
+    channel missing at one cell, (c) the prompt rows of one cell stored at
+    an off-grid P only (exact P/T match)."""
+    rows = _named_rows(tmp_path, monkeypatch)
+    if case == 'no_prompt_row':
+        rows, n_missing = _thermal(rows), 8
+    elif case == 'one_cell_missing':
+        rows, n_missing = _drop(rows, 'D+E+F__prompt', (2.0, 300.0)), 1
+    else:
+        moved = [(1.5, *r[1:]) for r in rows
+                 if str(r[4]).endswith(PROMPT_TO_NAME_SUFFIX)
+                 and (r[0], r[1]) == (1.0, 400.0)]
+        rows, n_missing = _drop(rows, cell=(1.0, 400.0)) + moved, 2
+    with pytest.raises(PromptRatesError) as exc:
+        _load(tmp_path, rows, model_id=7)
+    message = str(exc.value)
+    assert 'G0000E0007' in message and 'model 7' in message
+    assert 'table G0000' in message
+    assert f'{n_missing} of 8 prompt KIN rows are missing' in message
+    if case == 'one_cell_missing':
+        assert ('PES 0, A+B -> D+E+F__prompt at P = 2.0 bar, T = 300.0 K'
+                in message)
+    if case == 'no_prompt_row':
+        assert message.count('PES 0, A+B ->') == 5
+        assert '; ...' in message
+
+
+@pytest.mark.parametrize('extra', [{'prompt_reactions': False},
+                                   {'use_automech': False}],
+                         ids=['prompt_off', 'no_automech'])
+def test_prompt_off_arrays_ignore_prompt_rows(tmp_path, monkeypatch,
+                                              extra) -> None:
+    """B3: outside prompt mode (prompt_reactions off, or no automech) the
+    rows of a prompt run give exactly the thermal-only arrays (same map
+    repr, same dtype and shape, equal values), and missing prompt rows
+    never stop."""
+    rows = _named_rows(tmp_path, monkeypatch)
+    rc = _load(tmp_path, rows, **extra)
+    ref = _load(tmp_path, _thermal(rows), **extra)
+    assert rc.prompt_reactions is False
+    assert repr(rc.tbl_map_by_pes) == repr(ref.tbl_map_by_pes)
+    assert rc.tbl_map_by_pes[0] == {'A+B': 0, 'C+D': 1}
+    for pes_id, arr in rc.rc_by_pes.items():
+        assert arr.dtype == ref.rc_by_pes[pes_id].dtype
+        assert arr.shape == ref.rc_by_pes[pes_id].shape == (2, 2, 2, 2)
+        assert np.array_equal(arr, ref.rc_by_pes[pes_id])
+
+
+def test_zero_prompt_rows_are_not_missing(tmp_path, monkeypatch) -> None:
+    """B5: every prompt row present with k = 0.0: no stop, zeros in place
+    (zero is a value, not a missing row)."""
+    rows = [(*r[:5], 0.0) if str(r[4]).endswith(PROMPT_TO_NAME_SUFFIX)
+            else r for r in _named_rows(tmp_path, monkeypatch)]
+    rc = _load(tmp_path, rows)
+    arr = rc.rc_by_pes[0]
+    assert arr.shape == (2, 2, 4, 4)
+    assert not arr[:, :, :, 2:].any()
+    assert arr[:, :, 0, 1].tolist() == [[10.0, 11.0], [12.0, 13.0]]
+
+
+def test_prompt_arrays_on_the_kmopp_grid(tmp_path, monkeypatch) -> None:
+    """B6: postprocessing (kmopp) uses the pp grid: rows of the full grid
+    give extended arrays on the pp grid only, same layout; prompt rows
+    missing off the pp grid do not stop, missing on it do."""
+    rows = _named_rows(tmp_path, monkeypatch)
+    pp = dict(postprocess=True, pp_pres=[2.0], pp_temp=[400.0])
+    rc = _load(tmp_path, rows, **pp)
+    assert (rc.pres, rc.temp) == ([2.0], [400.0])
+    assert rc.tbl_map_by_pes[0] == _NAMED_TO
+    arr = rc.rc_by_pes[0]
+    assert arr.shape == (1, 1, 4, 4)
+    assert arr[0, 0, 0, 2] == _kv(0, 2.0, 400.0)
+    assert arr[0, 0, 0, 3] == _kv(1, 2.0, 400.0)
+    assert arr[0, 0, 0, 1] == 13.0
+    only_pp = [r for r in rows
+               if not str(r[4]).endswith(PROMPT_TO_NAME_SUFFIX)
+               or (r[0], r[1]) == (2.0, 400.0)]
+    assert np.array_equal(_load(tmp_path, only_pp, **pp).rc_by_pes[0], arr)
+    with pytest.raises(PromptRatesError):
+        _load(tmp_path, _drop(rows, 'C+D__prompt', (2.0, 400.0)), **pp)

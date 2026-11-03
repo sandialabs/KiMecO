@@ -1657,12 +1657,14 @@ class MessInputReader:
         set ``MicroEnerMin``, ``MicroEnerMax`` and ``MicroEnerStep``, else
         MESS writes no microcanonical rate output (``_ke.out``) for it.
 
-        Before the links, three cases that the prompt calculation does not
+        Before the links, four cases that the prompt calculation does not
         support are refused (all reported, then the run stops; see
         ``_refuse_unsupported_ped_pairs``): a file with both ``PEDSpecies``
         and ``HotEnergies``, a ``PEDSpecies`` side that is not exactly the
-        label of a bimolecular of its file, and a ``PEDSpecies`` pair with
-        two product fragments that are ``HotEnergies`` wells of other files.
+        label of a bimolecular of its file, a ``PEDSpecies`` pair with two
+        product fragments that are ``HotEnergies`` wells of other files, and
+        a ``PEDSpecies`` side whose label is not its bimolecular's fragment
+        names joined by ``+``.
         """
         if self._trigger_stop:
             return
@@ -1727,6 +1729,11 @@ class MessInputReader:
         3. A ``PEDSpecies`` pair with two product fragments (``X+X``
            counts twice) that are ``HotEnergies`` wells of other files:
            the hot fragment of the pair would be ambiguous.
+        4. A ``PEDSpecies`` side that passed case 2 but whose label is not
+           the names of its bimolecular's fragments joined by ``+``, in
+           ``Fragment`` order: KiMecO builds the prompt channels and the products
+           of their Cantera reactions from the ``PEDSpecies`` labels, and
+           the thermal reactions from the fragments, so both must agree.
 
         Args:
             hot_species (dict[int, set[str]]): {file index: names of its
@@ -1742,8 +1749,13 @@ class MessInputReader:
                     "and HotEnergies; prompt chains through one PES are not "
                     "supported. Keep PEDSpecies (abstraction PES) and "
                     "HotEnergies (hot PES) in different MESS inputs.")
-            bimol_labels = {bimol.name for bimol in self.SOP.bimols_in(fid)
-                            if not bimol.dummy}
+            # {label of a non-dummy bimolecular of the file: names of its
+            # fragments, in file order}
+            bimol_fragments: dict[str, list[str]] = {
+                bimol.name: [frag.name for frag in bimol.fragments]
+                for bimol in self.SOP.bimols_in(fid)
+                if not bimol.dummy
+            }
             hot_elsewhere: set[str] = set().union(
                 *(names for other, names in hot_species.items()
                   if other != fid))
@@ -1751,13 +1763,30 @@ class MessInputReader:
                 reactant, product = pair.split('=')
                 for side, label in (('reactant', reactant),
                                     ('product', product)):
-                    if label not in bimol_labels:
+                    if label not in bimol_fragments:
                         self._stop(
                             f"Prompt reactions: the {side} '{label}' of the "
                             f"PEDSpecies entry '{pair}' of {file_label} is "
                             "not the label of a Bimolecular of that file "
                             "(exact label expected, fragments in the same "
                             "order).")
+                        continue
+                    # Case 4: the label must be the fragments joined.
+                    fragments = bimol_fragments[label]
+                    expected = '+'.join(fragments)
+                    if label != expected:
+                        self._stop(
+                            f"Prompt reactions: the {side} '{label}' of the "
+                            f"PEDSpecies entry '{pair}' of {file_label} is "
+                            "not the names of its Bimolecular's fragments "
+                            f"(Fragment lines {', '.join(fragments)}, in "
+                            "this order) joined by '+': expected "
+                            f"'{expected}'. KiMecO "
+                            "builds the prompt channels and the products of "
+                            "their Cantera reactions from the PEDSpecies "
+                            "labels, and the thermal reactions from the "
+                            "fragments: rename the Bimolecular (and its "
+                            "PEDSpecies side) so that both agree.")
                 hot_frags = [frag for frag in product.split('+')
                              if frag in hot_elsewhere]
                 if len(hot_frags) > 1:

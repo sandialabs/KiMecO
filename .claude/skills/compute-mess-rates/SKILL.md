@@ -37,7 +37,7 @@ Checking that a MESS input works, understanding the files KiMecO generates per m
    cp <workdir>/G0003/01/<name>P00.inp <scratch>/ && cd <scratch> && mess <name>P00.inp
    ```
    The `!param: value` header shows exactly which perturbed values produced the failure.
-3. For automech drivers, run `python <name>P00.py` in a copy; the driver calls `subprocess.run(["mess", ...], check=False)`, so MESS errors do **not** stop it — inspect `<name>P00.log`/`.out` and `_<name>P00.out` (pass 1).
+3. For automech drivers, run `python <name>P00.py` in a copy; the driver sends MESS stderr of both passes to `<name>P00.stderr` (MESS "reference energy" warnings there are normal) and **fails** (message on stdout and in the `.stderr`, exit code 1) when a pass exits non-zero, writes no `.out`, or writes one without the `Temperature-Pressure Rate Tables:` section; the bad output is then kept as `<name>P00.out.failed` and, after a pass-2 failure, pass 1 stays in `_<name>P00.out`. Inspect `<name>P00.stderr`, `.log` and these files.
 
 ## Key files
 
@@ -51,7 +51,7 @@ Checking that a MESS input works, understanding the files KiMecO generates per m
 
 - `<out> not found after 20s.` → the result is not there yet; recovery returns no rows and is retried.
 - `<out> is empty after 2 minutes.` → `FileNotFoundError`; check the array task `.err` in `logs/` and the MESS `.log`.
-- A non-empty array `.err` marks the kin job `fail` and deletes its `.out` files before resubmission.
+- A non-empty array `.err` marks the kin job `fail` and deletes its `.out` files before resubmission. The automech driver keeps MESS stderr out of the `.err` (it goes to `<name>P<NN>.stderr`, removed when the job is picked up, kept on failure); its own failure exit makes the Slurm task fail without an `.err`, so look at `logs/*.stdout` and the `.stderr` for `KiMecO automech driver: pass N: ...`. Without prompt mode a failed task leaves the kin job stuck (no `.out` to pick up), see `kin-job-lifecycle`.
 - `NaN detected in rate coefficients` → model reset; "The master equation likely didn't converge properly." Inspect the `.log` for that model's parameters (often extreme perturbed energies; consider `max_std`/`std_*`).
 - All-zero rates for a pair usually mean the species name in MESS does not match the mechanism or the pair is absent from the output table map.
 - Do not edit generated `.inp` files in place inside a running workdir; KiMecO may resubmit them.

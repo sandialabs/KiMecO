@@ -2,7 +2,7 @@
 name: kin-db-readers-and-writers
 description: "Who reads and writes KIN_DB rows (the only path to Cantera, the GA report, the kmoui KIN and DB tabs), how ids are allocated per optimisation table and in kmopp, and what happens to extra or colliding rows. Read before adding a new kind of KIN row, changing row ids, or wondering why a row does or does not show up somewhere."
 type: project
-verified: 2026-11-02 against 4efa377 + steps 3-4 working tree
+verified: 2026-11-03 against 56e465a + step 5 working tree
 ---
 **Readers of KIN rows** (grep of `kimeco/`):
 - `KIN_DB.get_rates_for_kin_id`: only `RateCo` (`is_in_db`, `load_rates_from_db`).
@@ -19,9 +19,19 @@ verified: 2026-11-02 against 4efa377 + steps 3-4 working tree
 
 **Only path to Cantera**: `CoreRun.run_simulation` → `RateCo.load_rates_from_db` → `SIM.q_up`, which
 embeds `rates_by_pes` in the SIM script (`templates/sim_arr_tpl.py`) → `KiMec`. SIM tasks never open
-KIN_DB. `load_rates_from_db` silently skips rows whose from/to are not species of the PES's
-`tbl_map` or whose P/T are not exact grid floats; it has no ORDER BY, so two rows with one key give
+KIN_DB. `load_rates_from_db` silently skips rows whose from/to are not names of the PES's
+`tbl_map` or whose P/T are not exact grid floats. In prompt mode (step 5, uncommitted) the `tbl_map`
+of each PED PES is the species plus its `__prompt` to_names (`prompt_to_names_by_pes`), so a prompt
+row is used only when `(pes_id, from_name, to_name)` is a channel key; a channel without a row at
+some (P, T) cell raises `PromptRatesError` (`_check_prompt_rows_complete`), and a `A -> B__prompt`
+row that is no channel is ignored. Other PESs and non-prompt runs keep species-only tables; it has no ORDER BY, so two rows with one key give
 a value that depends on row order. No code splits KIN values or KIN table names on `__` or `+`.
+
+**Rebuilding the mechanism a SIM used** (read-only, e.g. after a run): `KiMecO(input_file,
+init_loc=RUN, name=..., sim_job=True)` without `initialize_workdir()` (writes only `<name>.log` in the
+cwd), then `RateCo.load_rates_from_db` on `object.__new__(RateCo)` with `db` (anything with
+`get_rates_for_kin_id`), `id`, `sop`, `name`, `pres`, `temp`, `prompt_reactions` set, then
+`KiMec.prepare_mech` + `get_updated_mech`; open the DBs with the SQLite URI `mode=ro&immutable=1`.
 
 **Writers.** `Model.save_kin` turns the rows into `np.array(rows)` (every value, ids included,
 becomes a numpy string; SQLite converts back) and calls `prepare_batch_upsert`, which keeps

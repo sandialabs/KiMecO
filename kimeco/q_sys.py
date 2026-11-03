@@ -415,6 +415,11 @@ class QueueingSystem:
         checked) the PED outputs and the collector script and submission
         file are removed too. The prompt-rates file and ``logs/`` are kept.
 
+        The MESS stderr files of the automech driver
+        (``<name>P<slot>.stderr``) are removed when the kin job was picked
+        up and kept otherwise, in every mode. A failed pass's output
+        (``<name>P<slot>.out.failed``) is never removed here.
+
         Args:
             job (NDArray[Any]): Array of the job with custom datatype.
         """
@@ -446,6 +451,10 @@ class QueueingSystem:
                     os.remove(p_py)
                 for p_inp in glob.glob(f"{base}P*.inp"):
                     os.remove(p_inp)
+                # MESS stderr of the automech driver (warnings only, since
+                # the job succeeded).
+                for p_stderr in glob.glob(f"{base}P*.stderr"):
+                    os.remove(p_stderr)
                 underscore_base: str = f"{job['loc']}/_{job['name']}"
                 for p_pass1 in glob.glob(f"{underscore_base}P*.out"):
                     os.remove(p_pass1)

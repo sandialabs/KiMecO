@@ -756,3 +756,56 @@ def test_prompt_unlinked_ped_incomplete_micro_ener_only_warns(
     assert errors == []
     assert len(warnings) == 1, warnings
     assert f'no PEDSpecies product of {root / H2B}' in warnings[0]
+
+
+def _relabel_copy(tmp_path: Path, old: str, new: str) -> Path:
+    """Copy (C4H7, H_C4H71-3) to ``tmp_path`` with every occurrence of the
+    label ``old`` in H_C4H71-3 replaced by ``new`` (bimolecular, fake well,
+    barrier names and PEDSpecies stay consistent); the fixtures stay
+    frozen."""
+    for name in (C4H7, H3):
+        text = (DATA / name).read_text()
+        if name == H3:
+            assert old in text
+            text = text.replace(old, new)
+        (tmp_path / name).write_text(text)
+    return tmp_path
+
+
+def test_prompt_two_file_control_reads_cleanly() -> None:
+    """Control for the relabel cases: the unmodified (C4H7, H_C4H71-3) pair
+    links cleanly in prompt mode."""
+    _, _, reader = _read((C4H7, H3), species=HOT_SPECIES, prompt=True)
+    _assert_clean(reader)
+
+
+@pytest.mark.parametrize('old, new, side, fragments', [
+    ('CH2CHCHCH3+H2', 'H2+CH2CHCHCH3', 'product', ('CH2CHCHCH3', 'H2')),
+    ('CH2CHCH2CH3+H', 'H+CH2CHCH2CH3', 'reactant', ('CH2CHCH2CH3', 'H')),
+], ids=['product', 'reactant'])
+def test_prompt_ped_label_not_its_fragments_joined_is_refused(
+        tmp_path, old, new, side, fragments) -> None:
+    """Case 4 of the PED guard: a PEDSpecies side that is the exact label of
+    a bimolecular of its file, but not its fragment names joined by ``+``
+    in Fragment order (the bimolecular relabelled throughout the file):
+    exactly one error naming the side, the label, the entry, the file, the
+    Fragment lines and the expected join; the same copy read without
+    prompt mode is clean."""
+    root = _relabel_copy(tmp_path, old, new)
+    pair = _H3_PED.replace(old, new)
+    _, _, reader = _read((C4H7, H3), root=root, species=HOT_SPECIES,
+                         prompt=True)
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert warnings == []
+    assert len(errors) == 1, errors
+    expected = '+'.join(fragments)
+    assert expected == old
+    assert errors[0].startswith(
+        f"Prompt reactions: the {side} '{new}' of the PEDSpecies entry "
+        f"'{pair}' of {root / H3} is not the names of its Bimolecular's "
+        f"fragments (Fragment lines {', '.join(fragments)}, in this order) "
+        f"joined by '+': expected '{expected}'.")
+
+    _, _, reader = _read((C4H7, H3), root=root, species=HOT_SPECIES)
+    _assert_clean(reader)

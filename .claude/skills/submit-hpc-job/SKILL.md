@@ -33,8 +33,9 @@ Launching or babysitting `kmo input.json` on a Slurm cluster, sizing resources, 
    ```bash
    sbatch submit_kmo.slurm
    squeue -u $USER
-   sacct -j <jobid> --format=JobID,State,Elapsed,MaxRSS
+   sacct -j <jobid> --format=JobID,State,Elapsed,MaxRSS   # only where Slurm accounting is enabled
    ```
+   Where accounting is disabled `sacct` is unusable: monitor with `squeue` and the logs (see Monitoring).
 4. Size resources in `input.json` (defaults from `kimeco/default_settings.py`):
 
    | Key | Default | Meaning |
@@ -51,7 +52,7 @@ Launching or babysitting `kmo input.json` on a Slurm cluster, sizing resources, 
 ## What KiMecO submits
 
 - Scripts are written to `<workdir>/<TABLE>/<id//50 as 2 digits>/<name>.slurm` (e.g. `KMO_Project/G0003/01/`), built from `kimeco/templates/slurm_arr.py`: `--array`, `--cpus-per-task`, hard-coded `-q medium`, `--exclude`, `-p {q_name}`, `--mem`; no `--time` (partition default applies). Logs go to `logs/<name>_%a.stdout|.err` next to the script.
-- Kin jobs run `mess <name>P${ID}.inp` (`templates/kin_arr_tpl.py`), or `python <name>P${ID}.py` when `use_automech` is true (`templates/kin_arr_py_tpl.py`).
+- Kin jobs run `mess <name>P${ID}.inp` (`templates/kin_arr_tpl.py`), or `python <name>P${ID}.py` when `use_automech` is true (`templates/kin_arr_py_tpl.py`); the task exit code is the driver's, which exits 1 when a MESS pass failed (MESS stderr in `<name>P<NN>.stderr`, failed output as `.out.failed`).
 - With `prompt_reactions=true` each kin job also gets a collector job, `prompt_<name>.slurm` (script `prompt_<name>.py`, logs `logs/prompt_<name>.stdout|.err`), submitted right after the array with `sbatch --dependency=afterok:<array id> --kill-on-invalid-dep=yes` (`QueueingSystem._submit_collector`); it writes `prompt_<name>.json`.
 - Sim jobs run `python <name>_expNN.py $SLURM_ARRAY_TASK_ID` (`templates/pyjobarray.py`), writing JSON under `scratch_base + project_name`, then `mv` it back.
 - Submission uses `sbatch <name>.slurm`; polling uses `squeue -u $USER --format="%.20F"`.
@@ -59,7 +60,8 @@ Launching or babysitting `kmo input.json` on a Slurm cluster, sizing resources, 
 
 ## Monitoring
 
-- `KiMecO.log` in the launch directory (an existing log is renamed with a timestamp when a new run starts).
+- `KiMecO.log` in the launch directory (an existing log is rotated: renamed with a date suffix when a new run starts, so a rerun from the same directory leaves the earlier log as `KiMecO_<date>.log`).
+- Without `sacct`, follow a run with `squeue -u $USER` plus the files: `<name>P*.stderr` / `.out` of the kin jobs, `logs/*.err` (empty on success), the end of `KiMecO.log` (`Generation 0 completed`, `Run Sucessful.`).
 - `<workdir>/<TABLE>/<NN>/logs/*.stdout|*.err` for array tasks; `E####_sims.log` per simulation model (written in the job folder the array runs from).
 - `<workdir>/score_info.txt` (best score / GOAT average per generation) and `<workdir>/goats.txt`.
 
@@ -70,7 +72,8 @@ Launching or babysitting `kmo input.json` on a Slurm cluster, sizing resources, 
 - `Failed to submit <name>: ...` → `sbatch` returned non-zero; the job stays `ready` and is retried on the next cycle. Check `q_name`, QoS, and account limits.
 - `<out> not found after 20s.` → MESS output not there yet; `<out> is empty after 2 minutes.` → raises `FileNotFoundError`. Inspect the matching `.err`/`.log` (see `compute-mess-rates`).
 - `Missing file: ...S##.json - resubmitting` → sim JSON missing after 30 s; check `scratch_base` permissions and sim `.err`.
-- Prompt mode: a collector stuck `PENDING` with reason `DependencyNeverSatisfied` means a PES task of its array failed (`afterok` is not met); `--kill-on-invalid-dep=yes` should make Slurm cancel it, so if it stays, ask the user before `scancel`. KiMecO stops with `No prompt-rates file ...` (`PromptRatesError`) and never cancels jobs itself; read the PES `.err` first, then `logs/prompt_<name>.err` (`PROMPT COLLECTOR FAILED (model <id>, <name>): <reason>`). `Failed to submit the prompt collector of <name>` → the collector sbatch failed (flag unsupported or QoS limit); the array keeps running.
+- Prompt mode: a collector with reason `DependencyNeverSatisfied` means a PES task of its array failed (`afterok` is not met); `--kill-on-invalid-dep=yes` makes Slurm cancel it (a throwaway probe on one cluster confirmed this: the dependent job ended `CANCELLED Reason=DependencyNeverSatisfied` within seconds), but if it stays `PENDING` on your cluster, ask the user before `scancel`. KiMecO stops with `No prompt-rates file ...` (`PromptRatesError`) and never cancels jobs itself; read the PES `.err` first, then `logs/prompt_<name>.err` (`PROMPT COLLECTOR FAILED (model <id>, <name>): <reason>`). `Failed to submit the prompt collector of <name>` → the collector sbatch failed (flag unsupported or QoS limit); the array keeps running.
+- A simulation array `.err` always holds the Cantera 3.2 `clone` DeprecationWarning, so a non-empty SIM `.err` is no failure sign: look for a `Traceback`. A crashed simulation is not detected by KiMecO (`_pickup_sim` marks it picked up and `recover_simulation_data` resubmits it again and again, about every 17 s), so check `squeue` and the SIM `.err` for repeated submissions. Cantera 3.2 needs `phase=gas` in the reactor line of the template (`contents=gas` raises `TypeError`).
 - `scancel` is **not** pre-approved: always ask the user before cancelling jobs.
 
 ## Lane

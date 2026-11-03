@@ -11,6 +11,8 @@ mess_io's `PressureList[atm]` by `PressureList[bar]` (`writers/automech_kin.py::
 The "Torr" in `database/kin_db.py` docstrings (P arguments) and in
 `gui/parameters_metadata.py` (`rc_pres`, `pp_pres` labels) is stale.
 `rc_temp` / `rc_pres` are the experiments' exact values (no rounding of T): 298.15 K is normal.
+`KMOInput.create_experiments` overwrites any `rc_temp`/`rc_pres` given in `input.json` with the sorted
+unique experiment T and P, so an n-temperature rate grid needs experiments at those n temperatures.
 
 **k is stored exactly as MESS prints it**: s⁻¹ (unimolecular), cm³ molecule⁻¹ s⁻¹ (bimolecular;
 MESS header "Bimolecular Rate Units: cm^3/sec"). Nothing is converted on read or store:
@@ -35,8 +37,9 @@ stored. Ids: optimisation runs `PROMPT_KIN_ROWID_BASE (5e11) + id*n_p*n_t*n_ch +
 with `RateCo._check_prompt_row_ids` raising `PromptRatesError` when thermal ids pass 5e11 or prompt ids
 pass `PP_KIN_ROWID_BASE`; kmopp: ids from `pp_row_ids` (>= 1e12) in the one call for thermal + prompt
 rows, only for `missing` cells. `is_in_db` counts thermal rows (>= `n_pairs`) and suffixed rows
-(>= `n_ch`, prompt mode only) apart; suffixed rows never count as thermal. `load_rates_from_db` skips
-suffixed rows (Cantera unchanged). Two channels with one (pes_id, from_name, to_name) key stop the run
+(>= `n_ch`, prompt mode only) apart; suffixed rows never count as thermal. In prompt mode `load_rates_from_db`
+uses the suffixed rows of the channels (step 5, uncommitted; Cantera gets them as irreversible
+reactions, see [[prompt-branching-fractions]] §4), and elsewhere ignores them. Two channels with one (pes_id, from_name, to_name) key stop the run
 (`_check_prompt_row_keys`).
 
 **Why:** a Stage-2 review assumed Torr and mechanalyzer's units were taken as KIN units; both would

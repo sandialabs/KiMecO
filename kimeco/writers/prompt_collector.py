@@ -34,8 +34,8 @@ Vocabulary (one meaning each, used in every name below):
 - **collector**: the per-model script that writes the prompt-rates file;
   **collector id**: its Slurm job id.
 
-This module is imported by ``rate_coef``, ``q_sys`` and ``user_input``: at
-module level it imports only the standard library and numpy. pandas,
+This module is imported by ``rate_coef``, ``q_sys``, ``user_input`` and
+``kinmec``: at module level it imports only the standard library and numpy. pandas,
 mess_io, mechanalyzer and ``kimeco.readers.mess_output`` are imported by
 ``PromptCollector`` at run time, in the ``automech`` environment.
 """
@@ -424,6 +424,33 @@ class PromptChannel:
                             hot_species=name,
                             product_fragments=products))
         return channels
+
+
+def prompt_to_names_by_pes(
+        channels: list[PromptChannel]) -> dict[int, list[str]]:
+    """Prompt to_names of each PED PES, for the extended rate tables.
+
+    In prompt mode the rate table of a PED PES (``RateCo.tbl_map_by_pes``
+    and ``rc_by_pes``, the placeholders of ``KiMec.prepare_mech``) lists its
+    species names, then these names: the KIN ``to_name``
+    (``PromptChannel.kin_row_to_name``) of each of its channels. The k of a
+    channel sits at ``[ped_reactant, to_name]``, so two channels of the same
+    PES with different reactants share one name.
+
+    Args:
+        channels (list[PromptChannel]): the fixed channel set
+            (``PromptChannel.fixed_set``).
+
+    Returns:
+        dict[int, list[str]]: {PED PES id: its prompt to_names, each once,
+        in fixed-set order}; a PES without channels is absent.
+    """
+    names_by_pes: dict[int, list[str]] = {}
+    for channel in channels:
+        names = names_by_pes.setdefault(channel.ped_pes_id, [])
+        if channel.kin_row_to_name not in names:
+            names.append(channel.kin_row_to_name)
+    return names_by_pes
 
 
 #: Body of the emitted collector script. Only ``{payload}`` is substituted

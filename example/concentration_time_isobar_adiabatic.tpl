@@ -46,7 +46,7 @@ pres = Q_(experiment.P, 'Pa')
 temp = Q_(experiment.T, 'K')
 ntot = (pres*Vol/(R*temp)).to('molecule')
 
-reactor = ct.ConstPressureMoleReactor(contents=gas, name='r1', energy='off')
+reactor = ct.ConstPressureMoleReactor(phase=gas, name='r1', energy='off')
 net = ct.ReactorNet([reactor])
 # Higher values make the simulation less accurate but easier to converge
 net.atol = 1e-15

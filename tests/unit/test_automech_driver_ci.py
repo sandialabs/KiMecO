@@ -6,16 +6,21 @@ in ``sys.modules`` first, so the behaviour is identical with or without a real
 automech install), and with ``subprocess.run`` patched: no MESS binary is
 needed. Three families of guarantees:
 
-* Merged-well gate, prompt mode and pass-1 guard (``main``). The driver runs
-  MESS (pass 1); if ``<name>P<slot>.out`` is absent it prints a message and
-  returns cleanly, so ``q_sys._pickup_kin``'s ``len(p_outs) != n_pes`` gate
-  leaves the job unpicked for retry; otherwise it ``os.replace``s the output
-  to the leading-underscore pass-1 copy and runs pass 2
-  (``well_lumped_input_file`` + WellExtension caps) when the payload carries
-  ``prompt_reactions`` (prompt mode: always, keeping every output) or when
-  ``MessOutputReader.well_merging`` reports missing T/P coefficients, else it
-  moves the pass-1 copy back. Both the emitted source structure (AST) and
-  the runtime behaviour are checked.
+* Merged-well gate, prompt mode and pass checks (``main``). The driver runs
+  MESS (pass 1) with its stderr appended to ``<name>P<slot>.stderr``. A pass
+  fails on a non-zero MESS exit, a missing ``<name>P<slot>.out`` or an
+  output without its ``Temperature-Pressure Rate Tables:`` section: the
+  driver moves the output (if any) to ``<name>P<slot>.out.failed``, prints
+  its message to stdout and appends it to the ``.stderr`` file (never to the
+  process stderr), and ``main`` returns 1, so the task fails
+  (``sys.exit(main())``) and no final ``.out`` is left for
+  ``q_sys._pickup_kin``. A complete pass-1 output is ``os.replace``d to the
+  leading-underscore pass-1 copy, then pass 2 (``well_lumped_input_file`` +
+  WellExtension caps) runs when the payload carries ``prompt_reactions``
+  (prompt mode: always, keeping every output) or when
+  ``MessOutputReader.well_merging`` reports missing T/P coefficients, else
+  the pass-1 copy moves back; a failed pass 2 keeps the pass-1 copy. Both
+  the emitted source structure (AST) and the runtime behaviour are checked.
 * ``_globkey_str`` unit relabel. ``mess_io.writer.global_rates_input_v1``
   hardcodes ``PressureList[atm]`` while the grid is in bar (the grid
   ``MessOutputReader`` indexes against), so the driver relabels the block to
@@ -52,11 +57,17 @@ _INP = f'{_BASE}.inp'
 _AUX = f'{_BASE}.aux'
 _LOG = f'{_BASE}.log'
 _PASS1 = f'_{_BASE}.out'
+_STDERR = f'{_BASE}.stderr'
+_FAILED = f'{_OUT}.failed'
 
 #: phydat.phycon conversion factors (the ones mess_io's reader applies).
 _BOHR2ANG = 0.52917721092
 _BAR2ATM = 0.9869232667160128
 _TORR2ATM = 0.0013157894736842105
+
+#: Last section of a complete MESS rate output (the driver's completeness
+#: marker), written after the ``____`` line that ends ``well_merging``'s scan.
+_TP_TAIL = "\nTemperature-Pressure Rate Tables:\n\nW1->W2\nP\\T  550\n1  0.00363\n"
 
 _MERGING_OUT = """Species-Species Rate Tables:
 
@@ -67,9 +78,10 @@ W1                5.42        ***
 W2            3.34e+03   2.01e+05
 
 ______________________________________________________________________
-"""
+""" + _TP_TAIL
 
-_HEALTHY_OUT = """Species-Species Rate Tables:
+#: A pass-1 output MESS stopped writing before its rate tables section.
+_INCOMPLETE_OUT = """Species-Species Rate Tables:
 
 Temperature = 550 K    Pressure = 1 bar
 
@@ -79,6 +91,11 @@ W2            3.34e+03   2.01e+05
 
 ______________________________________________________________________
 """
+
+_HEALTHY_OUT = _INCOMPLETE_OUT + _TP_TAIL
+
+#: A complete pass-2 output.
+_PASS2_OUT = 'PASS2-OUTPUT\n' + _TP_TAIL
 
 #: Shaped like the real ``mess_io.writer.global_rates_input_v1`` output for
 #: the default minimal grid: the driver rewrites the hardcoded ``[atm]``
@@ -236,34 +253,90 @@ def _emit(tmp_path: Path, pres_unit: str | None = None,
 
 
 class _FakeMess:
-    """``subprocess.run`` double writing a canned output per invocation."""
+    """``subprocess.run`` double writing a canned output per invocation.
 
-    def __init__(self, cwd: Path, outputs: list[str | None]) -> None:
+    Records each argv (``calls``) and its keyword arguments (``kwargs``);
+    when a ``stderr=`` file object is passed, writes ``MESS-STDERR-PASS<n>``
+    into it (n = call number); returns the next of ``returncodes`` (0 by
+    default)."""
+
+    def __init__(self, cwd: Path, outputs: list[str | None],
+                 returncodes: list[int] | None = None) -> None:
         self.cwd = cwd
         self.outputs = list(outputs)
+        self.returncodes = list(returncodes or [])
         self.calls: list[list[str]] = []
+        self.kwargs: list[dict[str, Any]] = []
 
     def __call__(self, cmd, check=False, **kwargs):
         self.calls.append(list(cmd))
+        self.kwargs.append({'check': check, **kwargs})
+        handle = kwargs.get('stderr')
+        if hasattr(handle, 'write'):
+            handle.write(f'MESS-STDERR-PASS{len(self.calls)}\n')
         content = self.outputs.pop(0) if self.outputs else None
         if content is not None:
             (self.cwd / _OUT).write_text(content)
-        return types.SimpleNamespace(returncode=0)
+        code = self.returncodes.pop(0) if self.returncodes else 0
+        return types.SimpleNamespace(returncode=code)
+
+
+def _exit_code(fn) -> int:
+    """Exit code of ``fn()``: its int result (None -> 0) or the code of the
+    ``SystemExit`` it raises."""
+    try:
+        result = fn()
+    except SystemExit as exc:
+        result = exc.code
+    return 0 if result is None else int(result)
 
 
 def _run_driver(tmp_path: Path,
                 monkeypatch: pytest.MonkeyPatch,
                 outputs: list[str | None],
                 pres_unit: str | None = None,
-                prompt: bool = False
+                prompt: bool = False,
+                returncodes: list[int] | None = None,
+                exit_code: int = 0
                 ) -> tuple[Any, _Recorder, _FakeMess]:
     script = _emit(tmp_path, pres_unit=pres_unit, prompt=prompt)
     mod, rec = _load_driver(script, monkeypatch)
-    fake = _FakeMess(tmp_path, outputs)
+    fake = _FakeMess(tmp_path, outputs, returncodes)
     monkeypatch.setattr(mod.subprocess, 'run', fake)
     monkeypatch.chdir(tmp_path)
-    assert mod.main() is None
+    assert _exit_code(mod.main) == exit_code
     return mod, rec, fake
+
+
+def _assert_failed(tmp_path: Path, capsys, pass_label: str,
+                   failed_text: str | None) -> str:
+    """Common pins of a failed pass; returns the driver's message.
+
+    Nothing on the process stderr; one ``KiMecO automech driver: <pass>:``
+    line on stdout naming the ``.stderr`` file, also the last line of that
+    file (after the MESS text); no final ``.out`` left; the failed output
+    moved to ``.out.failed`` (content kept) when it existed, else no
+    ``.out.failed`` and no "moved" clause."""
+    captured = capsys.readouterr()
+    assert captured.err == ''
+    lines = [ln for ln in captured.out.splitlines()
+             if ln.startswith('KiMecO automech driver: ')]
+    assert len(lines) == 1, captured.out
+    message = lines[0]
+    assert message.startswith(f'KiMecO automech driver: {pass_label}: ')
+    assert message.endswith(f' MESS stderr: {_STDERR}.')
+    assert _OUT in message
+    err_lines = (tmp_path / _STDERR).read_text().splitlines()
+    assert err_lines[-1] == message
+    assert any(ln.startswith('MESS-STDERR-PASS') for ln in err_lines[:-1])
+    assert not (tmp_path / _OUT).exists()
+    if failed_text is None:
+        assert not (tmp_path / _FAILED).exists()
+        assert 'Output moved' not in message
+    else:
+        assert (tmp_path / _FAILED).read_text() == failed_text
+        assert f' Output moved to {_FAILED}.' in message
+    return message
 
 
 # ===========================================================================
@@ -296,36 +369,66 @@ def _merging_if(main: ast.FunctionDef) -> ast.If:
     raise AssertionError('no well_merging branch in main()')
 
 
-def test_emitted_main_structure(tmp_path) -> None:
-    """AST of ``main``: one ``not os.path.isfile(out_name)`` guard returns
-    (with a message) before the merging branch; the branch test is
-    ``prompt_mode or MessOutputReader.well_merging(...)``, with
-    ``prompt_mode`` read from the payload key ``prompt_reactions`` first so
-    that the merged-well check is skipped in prompt mode, and the branch
-    has both arms; pass 2
-    (``well_lumped_input_file`` + one ``_run_mess``) lives only in the merging
-    arm, the other arm only renames back; MESS runs twice in source, the
-    second call nested deeper; ``os.replace`` both ways, never shutil. The
-    template keeps exactly its six str.format placeholders and no other
-    brace."""
-    script = _emit(tmp_path).read_text()
-    main = _main_def(script)
+def _calls_named(node: ast.AST, name: str) -> list[ast.Call]:
+    return [sub for sub in ast.walk(node)
+            if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
+            and sub.func.id == name]
 
-    guards = [
-        node for node in main.body
+
+def _failure_guards(stmts: list[ast.stmt]) -> list[ast.If]:
+    """``if failure: return _report_failure(...)`` statements."""
+    return [
+        node for node in stmts
         if isinstance(node, ast.If)
-        and isinstance(node.test, ast.UnaryOp)
-        and isinstance(node.test.op, ast.Not)
-        and 'isfile' in _called_names(node.test)
+        and isinstance(node.test, ast.Name) and node.test.id == 'failure'
+        and any(isinstance(s, ast.Return) and s.value is not None
+                and '_report_failure' in _called_names(s.value)
+                for s in node.body)
     ]
+
+
+def test_emitted_main_structure(tmp_path) -> None:
+    """AST of ``main``: pass 1 is checked (``failure = _pass_failure(...)``,
+    ``if failure: return _report_failure(...)``) before the pass-1 rename
+    and before the merging branch; the branch test is ``prompt_mode or
+    MessOutputReader.well_merging(...)``, with ``prompt_mode`` read from the
+    payload key ``prompt_reactions`` first so that the merged-well check is
+    skipped in prompt mode, and the branch has both arms; pass 2
+    (``well_lumped_input_file`` + one ``_run_mess``, then its own failure
+    check) lives only in the merging arm, the other arm only renames back;
+    MESS runs twice in source on ``inp_name``, the second call nested
+    deeper; ``main`` ends with ``return 0``; ``os.replace`` both ways, never
+    shutil; the script exits through ``sys.exit(main())``. The template
+    keeps exactly its six str.format placeholders and no other brace."""
+    script = _emit(tmp_path).read_text()
+    tree = ast.parse(script)
+    main = _main_def(script)
+    branch = _merging_if(main)
+
+    # Pass-1 check: exactly one failure guard at main's top level, after
+    # the pass-1 _pass_failure call and before the rename and the branch.
+    guards = _failure_guards(main.body)
     assert len(guards) == 1
     guard = guards[0]
-    assert any(isinstance(s, ast.Return) and s.value is None
-               for s in guard.body)
-    assert 'print' in _called_names(guard)
-    # The guard runs before the pass-1 rename and before the merging branch.
-    branch = _merging_if(main)
     assert main.body.index(guard) < main.body.index(branch)
+    rename = next(
+        node for node in main.body
+        if isinstance(node, ast.Expr)
+        and ast.unparse(node) == 'os.replace(out_name, pass1_copy)')
+    assert main.body.index(guard) < main.body.index(rename)
+    checks = [node for node in main.body[:main.body.index(guard)]
+              if isinstance(node, ast.Assign)
+              and _calls_named(node.value, '_pass_failure')]
+    assert len(checks) == 1
+    first_check = _calls_named(checks[0].value, '_pass_failure')[0]
+    assert ast.literal_eval(first_check.args[0]) == 'pass 1'
+    assert _calls_named(first_check, '_run_mess')
+    # No bare `return` (None) anywhere in main any more; it ends with 0.
+    returns = [n for n in ast.walk(main) if isinstance(n, ast.Return)]
+    assert all(r.value is not None for r in returns)
+    last = main.body[-1]
+    assert isinstance(last, ast.Return)
+    assert ast.literal_eval(last.value) == 0
 
     # Branch test: `prompt_mode or MessOutputReader.well_merging(...)`, the
     # prompt flag first (short-circuit), the merged-well call last.
@@ -366,24 +469,43 @@ def test_emitted_main_structure(tmp_path) -> None:
     else_calls = [c for stmt in branch.orelse for c in _called_names(stmt)]
     assert 'well_lumped_input_file' in body_calls
     assert body_calls.count('_run_mess') == 1
+    assert body_calls.count('_pass_failure') == 1
+    assert len(_failure_guards(branch.body)) == 1
     # The non-merging arm only renames the pass-1 copy back.
     assert 'well_lumped_input_file' not in else_calls
     assert '_run_mess' not in else_calls
-    assert 'replace' in else_calls
-    assert _called_names(main).count('_run_mess') == 2
+    assert '_report_failure' not in else_calls
+    assert [ast.unparse(s) for s in branch.orelse] == [
+        'os.replace(pass1_copy, out_name)']
+
+    # MESS runs twice in main, both times on inp_name, pass 2 deeper.
+    runs = sorted(_calls_named(main, '_run_mess'), key=lambda c: c.lineno)
+    assert len(runs) == 2
+    for call in runs:
+        assert isinstance(call.args[0], ast.Name)
+        assert call.args[0].id == 'inp_name'
+    assert runs[1].col_offset > runs[0].col_offset
 
     # Text-level two-pass structure: the pass-1 output moves to a
-    # leading-underscore intermediate; pass 2 sits one level deeper.
+    # leading-underscore intermediate.
     assert 'well_lumped_input_file(' in script
     assert 'pass1_copy = "_" + base' in script
     assert 'os.replace(out_name, pass1_copy)' in script
     assert 'os.replace(pass1_copy, out_name)' in script
     assert 'shutil' not in script
-    run_lines = [ln for ln in script.splitlines()
-                 if ln.strip() == '_run_mess(inp_name)']
-    assert len(run_lines) == 2
-    indent = [len(ln) - len(ln.lstrip()) for ln in run_lines]
-    assert indent[1] > indent[0]
+
+    # The task's exit code is main's: `import sys`, and the __main__ block
+    # is exactly `sys.exit(main())`.
+    assert any(isinstance(node, ast.Import)
+               and [a.name for a in node.names] == ['sys']
+               for node in tree.body)
+    main_blocks = [
+        node for node in tree.body
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "__name__ == '__main__'"]
+    assert len(main_blocks) == 1
+    assert [ast.unparse(s) for s in main_blocks[0].body] == [
+        'sys.exit(main())']
 
     # Template integrity: exactly six placeholders, str.format-safe body.
     tpl = automech_kin.automech_kin_tpl
@@ -408,7 +530,7 @@ def test_merging_output_triggers_second_pass(
     (tmp_path / _LOG).write_text('LOG-DATA')
 
     mod, rec, fake = _run_driver(
-        tmp_path, monkeypatch, [_MERGING_OUT, 'PASS2-OUTPUT'])
+        tmp_path, monkeypatch, [_MERGING_OUT, _PASS2_OUT])
 
     assert fake.calls == [['mess', _INP], ['mess', _INP]]
     assert rec.count('well_lumped_input_file') == 1
@@ -424,7 +546,7 @@ def test_merging_output_triggers_second_pass(
     assert (tmp_path / _INP).read_text() == 'EXTENDED_INP\n'
     # Pass-1 result preserved, pass-2 result at the final name.
     assert (tmp_path / _PASS1).read_text() == _MERGING_OUT
-    assert (tmp_path / _OUT).read_text() == 'PASS2-OUTPUT'
+    assert (tmp_path / _OUT).read_text() == _PASS2_OUT
     # .aux/.log untouched and not renamed.
     assert (tmp_path / _AUX).read_text() == 'AUX-DATA'
     assert (tmp_path / _LOG).read_text() == 'LOG-DATA'
@@ -436,7 +558,7 @@ def test_merging_branch_tolerates_absent_aux_and_log(
         tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Missing .aux/.log degrade to empty strings, not an exception."""
     _mod, rec, _fake = _run_driver(
-        tmp_path, monkeypatch, [_MERGING_OUT, 'PASS2-OUTPUT'])
+        tmp_path, monkeypatch, [_MERGING_OUT, _PASS2_OUT])
 
     args, _kwargs = rec.calls['well_lumped_input_file'][0]
     assert args[2] == ''
@@ -453,7 +575,7 @@ def test_lump_pressure_reaches_mess_io_in_atm(
         with monkeypatch.context() as mp:
             mod, rec, _fake = _run_driver(
                 _case_dir(tmp_path, pres_unit), mp,
-                [_MERGING_OUT, 'PASS2-OUTPUT'], pres_unit=pres_unit)
+                [_MERGING_OUT, _PASS2_OUT], pres_unit=pres_unit)
             args, _kwargs = rec.calls['well_lumped_input_file'][0]
             if mod.LUMP_PRESSURE != 10.0:
                 failures.append(f'{pres_unit}: LUMP_PRESSURE {mod.LUMP_PRESSURE}')
@@ -476,7 +598,7 @@ def test_lump_pressure_matches_mess_io_output_pressure(
         with monkeypatch.context() as mp:
             _mod, rec, _fake = _run_driver(
                 _case_dir(tmp_path, pres_unit), mp,
-                [_MERGING_OUT, 'PASS2-OUTPUT'], pres_unit=pres_unit)
+                [_MERGING_OUT, _PASS2_OUT], pres_unit=pres_unit)
             args, _kwargs = rec.calls['well_lumped_input_file'][0]
             if not numpy.isclose(args[4], parsed):
                 failures.append(f'{pres_unit}: {args[4]} vs mess_io {parsed}')
@@ -484,13 +606,17 @@ def test_lump_pressure_matches_mess_io_output_pressure(
 
 
 def test_healthy_output_skips_the_second_pass(
-        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
     """One MESS run; the pass-1 result moves back under the real name; input,
     aux and log untouched. Pass 1 asks for no well extension, its globkey
     block reaches messrates_inp_str relabelled to the payload unit (no
-    ``atm`` left, nothing else changed) and carries the unconverted grid."""
+    ``atm`` left, nothing else changed) and carries the unconverted grid.
+    The task succeeds (exit 0): MESS stderr of pass 1 is in ``.stderr``
+    (the stale file of an earlier attempt removed first), no driver message,
+    nothing on the process stderr, no ``.out.failed``."""
     (tmp_path / _AUX).write_text('AUX-DATA')
     (tmp_path / _LOG).write_text('LOG-DATA')
+    (tmp_path / _STDERR).write_text('STALE-FROM-AN-EARLIER-ATTEMPT\n')
 
     mod, rec, fake = _run_driver(tmp_path, monkeypatch, [_HEALTHY_OUT])
 
@@ -518,44 +644,15 @@ def test_healthy_output_skips_the_second_pass(
     assert globkey == _GLOBKEY_ATM.replace(
         'PressureList[atm]', 'PressureList[' + mod.PRES_UNIT + ']')
 
-
-def test_missing_pass1_output_exits_cleanly(
-        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
-    """No output after pass 1 -> message, return, no rename, no pass 2, the
-    gate is never consulted, aux/log untouched. Neither the final output nor
-    the pass-1 copy exists: the job stays unpicked (q_sys._pickup_kin counts
-    len(p_outs) != n_pes) and is retried."""
-    (tmp_path / _AUX).write_text('AUX-DATA')
-    (tmp_path / _LOG).write_text('LOG-DATA')
-    script = _emit(tmp_path)
-    mod, rec = _load_driver(script, monkeypatch)
-
-    seen: list[str] = []
-
-    def _spy(filename: str) -> bool:
-        seen.append(filename)
-        return False
-
-    monkeypatch.setattr(mod.MessOutputReader, 'well_merging',
-                        staticmethod(_spy))
-    fake = _FakeMess(tmp_path, [None])
-    monkeypatch.setattr(mod.subprocess, 'run', fake)
-    monkeypatch.chdir(tmp_path)
-
-    assert mod.main() is None
-    out = capsys.readouterr().out
-    assert f'MESS pass 1 produced no output {_OUT}, aborting.' in out
-    assert fake.calls == [['mess', _INP]]
-    assert rec.count('well_lumped_input_file') == 0
-    assert seen == []
-    assert not (tmp_path / _OUT).exists()
-    assert not (tmp_path / _PASS1).exists()
-    assert (tmp_path / _AUX).read_text() == 'AUX-DATA'
-    assert (tmp_path / _LOG).read_text() == 'LOG-DATA'
+    assert (tmp_path / _STDERR).read_text() == 'MESS-STDERR-PASS1\n'
+    captured = capsys.readouterr()
+    assert captured.err == ''
+    assert 'KiMecO automech driver' not in captured.out
+    assert not (tmp_path / _FAILED).exists()
 
 
 # ===========================================================================
-# Prompt mode: pass 2 always runs, every output is kept
+# Failed MESS passes: the task fails, the output is kept as .out.failed
 # ===========================================================================
 _PED = f'{_BASE}_ped.out'
 _KE = f'{_BASE}_ke.out'
@@ -577,17 +674,9 @@ class _FakeMessSides(_FakeMess):
         return result
 
 
-def _run_prompt_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-                       outputs: list[str | None],
-                       payload: dict[str, Any] | None = None
-                       ) -> tuple[Any, _Recorder, _FakeMessSides, list[str]]:
-    """Emit the prompt-mode driver, spy ``well_merging`` (always False),
-    run ``main`` with ``_FakeMessSides``; ``payload`` items are set on
-    ``PES_PAYLOAD`` before the run."""
-    script = _emit(tmp_path, prompt=True)
-    mod, rec = _load_driver(script, monkeypatch)
-    for key, value in (payload or {}).items():
-        monkeypatch.setitem(mod.PES_PAYLOAD, key, value)
+def _spy_merging(mod: Any, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Replace ``MessOutputReader.well_merging`` by a spy answering False;
+    returns the list of the file names it was asked about."""
     seen: list[str] = []
 
     def _spy(filename: str) -> bool:
@@ -596,10 +685,231 @@ def _run_prompt_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 
     monkeypatch.setattr(mod.MessOutputReader, 'well_merging',
                         staticmethod(_spy))
+    return seen
+
+
+def _run_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+              outputs: list[str | None],
+              returncodes: list[int] | None = None,
+              prompt: bool = False, spy: bool = True
+              ) -> tuple[int, Any, _Recorder, _FakeMessSides, list[str]]:
+    """Emit and run the driver (``_FakeMessSides``), returning its exit code.
+    ``spy``: ``well_merging`` answers False (else the real reader runs)."""
+    script = _emit(tmp_path, prompt=prompt)
+    mod, rec = _load_driver(script, monkeypatch)
+    seen = _spy_merging(mod, monkeypatch) if spy else []
+    fake = _FakeMessSides(tmp_path, outputs, returncodes)
+    monkeypatch.setattr(mod.subprocess, 'run', fake)
+    monkeypatch.chdir(tmp_path)
+    return _exit_code(mod.main), mod, rec, fake, seen
+
+
+_MODES = pytest.mark.parametrize('prompt', [False, True],
+                                 ids=['non_prompt', 'prompt'])
+
+
+@_MODES
+def test_pass1_nonzero_exit_fails_the_task(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, prompt) -> None:
+    """D3: MESS exits non-zero after writing a complete output: exit 1, no
+    pass 2, the gate never consulted, the output moved to ``.out.failed``
+    (content kept), no pass-1 copy; the message names pass 1, the output and
+    the exit code."""
+    code, _mod, rec, fake, seen = _run_case(
+        tmp_path, monkeypatch, [_HEALTHY_OUT], returncodes=[3],
+        prompt=prompt)
+    assert code == 1
+    assert fake.calls == [['mess', _INP]]
+    assert rec.count('well_lumped_input_file') == 0
+    assert seen == []
+    message = _assert_failed(tmp_path, capsys, 'pass 1', _HEALTHY_OUT)
+    assert 'code 3' in message
+    assert not (tmp_path / _PASS1).exists()
+
+
+@_MODES
+def test_pass1_without_output_fails_the_task(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, prompt) -> None:
+    """D4 (was: exits cleanly with code 0): no output after pass 1 -> exit 1,
+    no rename, no pass 2, the gate is never consulted, aux/log untouched,
+    no ``.out.failed``. Neither the final output nor the pass-1 copy exists,
+    so the job is never picked up."""
+    (tmp_path / _AUX).write_text('AUX-DATA')
+    (tmp_path / _LOG).write_text('LOG-DATA')
+    code, _mod, rec, fake, seen = _run_case(tmp_path, monkeypatch, [None],
+                                            prompt=prompt)
+    assert code == 1
+    assert fake.calls == [['mess', _INP]]
+    assert rec.count('well_lumped_input_file') == 0
+    assert seen == []
+    message = _assert_failed(tmp_path, capsys, 'pass 1', None)
+    assert 'no rate output' in message
+    assert not (tmp_path / _PASS1).exists()
+    assert (tmp_path / _AUX).read_text() == 'AUX-DATA'
+    assert (tmp_path / _LOG).read_text() == 'LOG-DATA'
+
+
+@_MODES
+@pytest.mark.parametrize('content', [_INCOMPLETE_OUT, ''],
+                         ids=['no_rate_tables', 'empty'])
+def test_pass1_incomplete_output_fails_the_task(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, prompt,
+        content) -> None:
+    """D5/D6: pass 1 exits 0 but its output lacks the
+    ``Temperature-Pressure Rate Tables:`` section (or is empty): exit 1, no
+    pass 2, the gate never consulted, the output kept as ``.out.failed``."""
+    code, _mod, rec, fake, seen = _run_case(tmp_path, monkeypatch, [content],
+                                            prompt=prompt)
+    assert code == 1
+    assert fake.calls == [['mess', _INP]]
+    assert rec.count('well_lumped_input_file') == 0
+    assert seen == []
+    message = _assert_failed(tmp_path, capsys, 'pass 1', content)
+    assert 'incomplete' in message
+    assert 'Temperature-Pressure Rate Tables:' in message
+    assert not (tmp_path / _PASS1).exists()
+
+
+# Pass 2 runs in prompt mode (gate spied False) and on merged wells (real
+# well_merging on _MERGING_OUT, non-prompt).
+_PASS2_MODES = pytest.mark.parametrize(
+    'prompt, pass1_out', [(True, _HEALTHY_OUT), (False, _MERGING_OUT)],
+    ids=['prompt', 'non_prompt_merging'])
+
+
+def _assert_pass2_failed(tmp_path: Path, capsys, fake: _FakeMessSides,
+                         rec: _Recorder, pass1_out: str,
+                         failed_text: str | None) -> str:
+    assert fake.calls == [['mess', _INP], ['mess', _INP]]
+    assert rec.count('well_lumped_input_file') == 1
+    message = _assert_failed(tmp_path, capsys, 'pass 2', failed_text)
+    # The pass-1 copy is kept next to the failed output.
+    assert (tmp_path / _PASS1).read_text() == pass1_out
+    err_lines = (tmp_path / _STDERR).read_text().splitlines()
+    assert err_lines == ['MESS-STDERR-PASS1', 'MESS-STDERR-PASS2', message]
+    return message
+
+
+@_PASS2_MODES
+def test_pass2_nonzero_exit_fails_the_task(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, prompt,
+        pass1_out) -> None:
+    """D7: pass 2 exits non-zero with a complete output: exit 1, the output
+    moved to ``.out.failed``, the pass-1 copy kept, the message names pass 2
+    and the exit code."""
+    code, _mod, rec, fake, _seen = _run_case(
+        tmp_path, monkeypatch, [pass1_out, _PASS2_OUT], returncodes=[0, 4],
+        prompt=prompt, spy=prompt)
+    assert code == 1
+    message = _assert_pass2_failed(tmp_path, capsys, fake, rec, pass1_out,
+                                   _PASS2_OUT)
+    assert 'code 4' in message
+
+
+@_PASS2_MODES
+def test_pass2_without_output_fails_the_task(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, prompt,
+        pass1_out) -> None:
+    """D8 (was: returns cleanly with code 0): pass 2 writes no output:
+    exit 1, no ``.out.failed``, the pass-1 copy kept, no final output (the
+    job is not picked up)."""
+    code, _mod, rec, fake, _seen = _run_case(
+        tmp_path, monkeypatch, [pass1_out, None], prompt=prompt, spy=prompt)
+    assert code == 1
+    message = _assert_pass2_failed(tmp_path, capsys, fake, rec, pass1_out,
+                                   None)
+    assert 'no rate output' in message
+
+
+@_PASS2_MODES
+def test_pass2_incomplete_output_fails_the_task(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, prompt,
+        pass1_out) -> None:
+    """D9: pass 2 exits 0 with an output lacking its rate tables section:
+    exit 1, the output kept as ``.out.failed``, the pass-1 copy kept."""
+    code, _mod, rec, fake, _seen = _run_case(
+        tmp_path, monkeypatch, [pass1_out, _INCOMPLETE_OUT], prompt=prompt,
+        spy=prompt)
+    assert code == 1
+    message = _assert_pass2_failed(tmp_path, capsys, fake, rec, pass1_out,
+                                   _INCOMPLETE_OUT)
+    assert 'incomplete' in message
+
+
+@_MODES
+def test_mess_call_gets_argv_and_stderr_file(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, prompt) -> None:
+    """D14: every MESS call is exactly ``['mess', <inp>]`` with
+    ``check=False`` and ``stderr=`` the ``.stderr`` file (append mode,
+    closed after the call)."""
+    outputs = [_HEALTHY_OUT, _PASS2_OUT] if prompt else [_HEALTHY_OUT]
+    code, _mod, _rec, fake, _seen = _run_case(tmp_path, monkeypatch,
+                                              outputs, prompt=prompt)
+    assert code == 0
+    assert fake.calls == [['mess', _INP]] * len(outputs)
+    for kwargs in fake.kwargs:
+        assert kwargs['check'] is False
+        handle = kwargs['stderr']
+        assert handle.name == _STDERR
+        assert 'a' in handle.mode
+        assert handle.closed
+    assert (tmp_path / _STDERR).read_text() == ''.join(
+        f'MESS-STDERR-PASS{n}\n' for n in range(1, len(outputs) + 1))
+
+
+def test_script_exit_code_through_main_block(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """D12: run as ``__main__`` (as the kin array task does), the script
+    exits with main's code: 1 after a failed pass 1, 0 after a healthy run;
+    that is the exit code ``afterok`` sees."""
+    import runpy
+    import subprocess
+
+    for label, returncode, expected in (('failed', 2, 1), ('healthy', 0, 0)):
+        run_dir = _case_dir(tmp_path, label)
+        script = _emit(run_dir)
+        with monkeypatch.context() as mp:
+            _install_stubs(mp)
+            fake = _FakeMess(run_dir, [_HEALTHY_OUT], [returncode])
+            mp.setattr(subprocess, 'run', fake)
+            mp.chdir(run_dir)
+            with pytest.raises(SystemExit) as exc:
+                runpy.run_path(str(script), run_name='__main__')
+        assert exc.value.code == expected, label
+        assert fake.calls == [['mess', _INP]]
+    assert (tmp_path / 'failed' / _FAILED).read_text() == _HEALTHY_OUT
+    assert (tmp_path / 'healthy' / _OUT).read_text() == _HEALTHY_OUT
+    assert capsys.readouterr().err == ''
+
+
+def test_driver_never_writes_to_process_stderr() -> None:
+    """D13: the template never names ``sys.stderr``: the driver's messages
+    go to stdout and the ``.stderr`` file only, so the task's scheduler
+    error log stays empty unless Python itself crashes."""
+    tpl = automech_kin.automech_kin_tpl
+    assert 'sys.stderr' not in tpl
+    assert 'file=sys' not in tpl
+
+
+# ===========================================================================
+# Prompt mode: pass 2 always runs, every output is kept
+# ===========================================================================
+def _run_prompt_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                       outputs: list[str | None],
+                       payload: dict[str, Any] | None = None
+                       ) -> tuple[Any, _Recorder, _FakeMessSides, list[str]]:
+    """Emit the prompt-mode driver, spy ``well_merging`` (always False),
+    run ``main`` with ``_FakeMessSides`` and check it exits 0; ``payload``
+    items are set on ``PES_PAYLOAD`` before the run."""
+    script = _emit(tmp_path, prompt=True)
+    mod, rec = _load_driver(script, monkeypatch)
+    for key, value in (payload or {}).items():
+        monkeypatch.setitem(mod.PES_PAYLOAD, key, value)
+    seen = _spy_merging(mod, monkeypatch)
     fake = _FakeMessSides(tmp_path, outputs)
     monkeypatch.setattr(mod.subprocess, 'run', fake)
     monkeypatch.chdir(tmp_path)
-    assert mod.main() is None
+    assert _exit_code(mod.main) == 0
     return mod, rec, fake, seen
 
 
@@ -609,9 +919,10 @@ def test_prompt_mode_forces_second_pass_on_healthy_output(
     merged well: pass 2 still runs (two MESS calls), fed with the base
     input, the pass-1 output, aux and log of pass 1, the lump pressure in
     atm and the lump temperature; the input becomes the capped one; the
-    pass-1 copy keeps pass 1, the final output is pass 2."""
+    pass-1 copy keeps pass 1, the final output is pass 2; the ``.stderr``
+    file holds the MESS stderr of pass 1 then pass 2."""
     mod, rec, fake, _seen = _run_prompt_driver(
-        tmp_path, monkeypatch, [_HEALTHY_OUT, 'PASS2-OUTPUT'])
+        tmp_path, monkeypatch, [_HEALTHY_OUT, _PASS2_OUT])
 
     assert mod.PES_PAYLOAD['prompt_reactions'] is True
     assert fake.calls == [['mess', _INP], ['mess', _INP]]
@@ -625,22 +936,26 @@ def test_prompt_mode_forces_second_pass_on_healthy_output(
     assert args[5] == mod.LUMP_TEMP
     assert (tmp_path / _INP).read_text() == 'EXTENDED_INP\n'
     assert (tmp_path / _PASS1).read_text() == _HEALTHY_OUT
-    assert (tmp_path / _OUT).read_text() == 'PASS2-OUTPUT'
+    assert (tmp_path / _OUT).read_text() == _PASS2_OUT
+    assert (tmp_path / _STDERR).read_text() == (
+        'MESS-STDERR-PASS1\nMESS-STDERR-PASS2\n')
 
 
 def test_prompt_mode_keeps_every_output(
         tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     """After a prompt-mode run the directory holds exactly the driver, the
-    pass-2 input, output, .log, .aux, _ped.out and _ke.out, and the pass-1
-    copy of the output: the driver deletes nothing."""
+    pass-2 input, output, .log, .aux, _ped.out and _ke.out, the pass-1
+    copy of the output and the MESS stderr file: the driver deletes
+    nothing."""
     _run_prompt_driver(tmp_path, monkeypatch,
-                       [_HEALTHY_OUT, 'PASS2-OUTPUT'])
+                       [_HEALTHY_OUT, _PASS2_OUT])
 
     files = {p.name for p in tmp_path.iterdir() if p.is_file()}
-    assert files == {_FILENAME, _INP, _OUT, _LOG, _AUX, _PED, _KE, _PASS1}
+    assert files == {_FILENAME, _INP, _OUT, _LOG, _AUX, _PED, _KE, _PASS1,
+                     _STDERR}
     for name in (_LOG, _AUX, _PED, _KE):
         assert (tmp_path / name).read_text().startswith('PASS2-'), name
-    assert (tmp_path / _OUT).read_text() == 'PASS2-OUTPUT'
+    assert (tmp_path / _OUT).read_text() == _PASS2_OUT
     assert (tmp_path / _PASS1).read_text() == _HEALTHY_OUT
 
 
@@ -648,39 +963,12 @@ def test_prompt_mode_merging_output_runs_pass2_once(
         tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Prompt mode with merged wells: pass 2 runs once, not twice."""
     _mod, rec, fake = _run_driver(tmp_path, monkeypatch,
-                                  [_MERGING_OUT, 'PASS2-OUTPUT'],
+                                  [_MERGING_OUT, _PASS2_OUT],
                                   prompt=True)
     assert fake.calls == [['mess', _INP], ['mess', _INP]]
     assert rec.count('well_lumped_input_file') == 1
     assert (tmp_path / _PASS1).read_text() == _MERGING_OUT
-    assert (tmp_path / _OUT).read_text() == 'PASS2-OUTPUT'
-
-
-def test_prompt_mode_missing_pass1_output_exits_cleanly(
-        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
-    """Prompt mode keeps the pass-1 guard: no output after pass 1 ->
-    message, return, no pass 2, neither the final output nor the pass-1
-    copy exists."""
-    _mod, rec, fake, _seen = _run_prompt_driver(tmp_path, monkeypatch,
-                                                [None])
-    assert f'MESS pass 1 produced no output {_OUT}, aborting.' in \
-        capsys.readouterr().out
-    assert fake.calls == [['mess', _INP]]
-    assert rec.count('well_lumped_input_file') == 0
-    assert not (tmp_path / _OUT).exists()
-    assert not (tmp_path / _PASS1).exists()
-
-
-def test_prompt_mode_pass2_failure_returns_cleanly(
-        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pass 2 writes no output: main returns without an exception, the
-    pass-1 copy is kept and the final output stays absent (the job is not
-    picked up)."""
-    _mod, _rec, fake, _seen = _run_prompt_driver(tmp_path, monkeypatch,
-                                                 [_HEALTHY_OUT, None])
-    assert len(fake.calls) == 2
-    assert (tmp_path / _PASS1).read_text() == _HEALTHY_OUT
-    assert not (tmp_path / _OUT).exists()
+    assert (tmp_path / _OUT).read_text() == _PASS2_OUT
 
 
 def test_prompt_mode_forced_pass_keeps_input_well_extension(
@@ -694,12 +982,12 @@ def test_prompt_mode_forced_pass_keeps_input_well_extension(
         mod, 'well_lumped_input_file',
         lambda *args: 'WellExtension 0.5\nWellExtension\nModel\nEnd\n')
     monkeypatch.setattr(mod.subprocess, 'run',
-                        _FakeMessSides(tmp_path, [_HEALTHY_OUT, 'PASS2']))
+                        _FakeMessSides(tmp_path, [_HEALTHY_OUT, _PASS2_OUT]))
     monkeypatch.chdir(tmp_path)
-    mod.main()
+    assert _exit_code(mod.main) == 0
     final = (tmp_path / _INP).read_text()
     assert final == 'WellExtension 0.5\nModel\nEnd\n'
-    assert (tmp_path / _OUT).read_text() == 'PASS2'
+    assert (tmp_path / _OUT).read_text() == _PASS2_OUT
 
 
 def test_prompt_flag_reaches_driver_only_through_payload(tmp_path) -> None:

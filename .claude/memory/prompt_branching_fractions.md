@@ -127,7 +127,7 @@ BF_{R→Pi+I2}(T,P) = ∫ f(E')·BF_{I1*→Pi}(E') dE'  /  Σ_j ∫ f(E')·BF_{I
 - Main product from C4H71-3* is C4H6 + H. C4H71-4* both dissociates and isomerises to C4H71-3 (up to 10% at 1000 K).
 - The thermal model gives much smaller effects.
 
-## 4. KiMecO side (steps 1-4 of the prompt-reactions work; steps 3-4 uncommitted)
+## 4. KiMecO side (steps 1-5 of the prompt-reactions work; steps 3-5 uncommitted)
 
 - Settings (`kimeco/default_settings.py`): `prompt_reactions` (False), `prompt_ped_model`
   (`rovib_dos`, one of the 8 mechanalyzer models `equip_simple`, `equip_phi`, `rovib_dos`, `beta_phi1a`,
@@ -135,8 +135,18 @@ BF_{R→Pi+I2}(T,P) = ∫ f(E')·BF_{I1*→Pi}(E') dE'  /  Σ_j ∫ f(E')·BF_{I
   must lie in [0, 1)). `prompt_ped_model` and `prompt_bf_threshold` reach the collector through its
   payload (`PromptCollectorWriter.payload`); in prompt mode `RateCo.recover_rslts` stores them as KIN rows (step 4, uncommitted): `to_name` =
   `PromptChannel.kin_row_to_name` (products joined with `+`, then `__prompt`), `pes_id` = PED PES,
-  `from_name` = `ped_reactant`, ids and `is_in_db` rules in [[kin-units-and-row-ids]]. The simulation
-  does not use them yet (`load_rates_from_db` skips them).
+  `from_name` = `ped_reactant`, ids and `is_in_db` rules in [[kin-units-and-row-ids]]. In prompt mode the
+  simulation uses them (step 5, uncommitted): `RateCo.load_rates_from_db` extends the table of each PED
+  PES with the `__prompt` names; `KiMec` (`kinmec.py`) builds one irreversible reaction per distinct
+  equation (`MergedPromptReaction`, same reactant and product multisets summed after the KIN to
+  Cantera unit conversion; 44 channels give 32 equations on the full C4H8 + C4H7 system, 3-product
+  ones and all-zero channels kept) and skips only the forward thermal `ped_reactant => ped_product` of
+  each linked pair. The MESS reverse `P => R` stays, never BF-scaled: detailed balance does not hold
+  (user decision). `find_redundant_idx` matches prompt reactions on species including a named
+  three-body collider (`_participant_species`), thermal ones on Cantera's dicts, collider left out
+  (HEAD rule): Cantera reads `X + H => Y + Z + H` as three-body and omits the H from its dicts. A
+  Cantera YAML fixture holding `R <=> P + H2` and its reverse needs `duplicate: true` on both. A real
+  Slurm run of the full system passed (1253 reactions prompt on, 1232 off).
 - Code map: `KMOInput._check_prompt` (`user_input.py`, called from `full_run_settings` only when
   `prompt_reactions` is true; refuses without `use_automech`, without importable
   `mechanalyzer.builder.multipes_prompt_dissociation_ktp_dct`, with an unknown model or a threshold

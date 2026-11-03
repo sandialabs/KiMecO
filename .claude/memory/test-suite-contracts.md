@@ -26,6 +26,12 @@ verified: 2026-10-27 against working tree
   `autofile@0.2025.0` from GitHub; `test_installation_extras_ci.py` has a real-guard test: its AST part (the
   probed `mechanalyzer.builder` symbol) runs everywhere, its import part skips when mechanalyzer is
   absent and fails under `KIMECO_REQUIRE_EXTRAS=automech`.
+- Cantera template pins (step 5, uncommitted): `test_cantera_templates_ci.py` renders the reactor and
+  `ReactorNet` lines of `ctjobtpl`, `example/concentration_time_isobar_adiabatic.tpl` and
+  `tests/parse_pes/dme/ct.tpl` and builds them with the installed Cantera; they must use `phase=gas`
+  (`contents=` raises `TypeError` on Cantera 3.2) while the packaging still pins `cantera>=3.0.0`.
+  `test_kinmec_prompt_ci.py` builds a real `ct.Solution` from `tests/unit/data/kinmec_prompt/`
+  (base reactions that are reverses of each other need `duplicate: true`).
 - Prompt collector pins (step 3, uncommitted): `test_installation_imports_ci.py::PUBLIC_MODULES` lists
   `kimeco.writers.prompt_collector`, which must stay importable with only stdlib/numpy at module level
   (`rate_coef`, `q_sys`, `user_input` import it; mess_io, pandas, mechanalyzer load when the collector runs).
