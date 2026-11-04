@@ -2,19 +2,23 @@
 
 Fixture ``tests/unit/data/c4h8_h_group/``: the "H group" of the C4H8 prompt
 system, three AutoMech MESS inputs with structure-based labels (one PES
-each). ``H_C4H71-3`` is the hub: it shares ``CH2CHCH2CH3+H``, its fake well
-and its PST barrier with ``H_C4H71-4`` (same energy zero), and
-``CH2CHCHCH3+H2``, its fake well and its PST barrier with ``2-H_C4H71-3``
-(whose energies are 1.61 kcal/mol higher). Each file holds AutoMech fake
-wells (``FakeW-<bimol>``), ``Atom`` H, ``density`` fragments,
-``PotentialSpline`` rotors, ``TSTLevel EJ``, ``PEDSpecies``,
-``MicroEner*`` and the target-first ``Epsilons`` / ``Sigmas`` / ``Masses``
-lines (173.667 / 4.364 twice, 56.063 39.962).
+each). ``H_C4H71-3`` is the hub: it shares the bimolecular
+``CH2CHCH2CH3+H`` with ``H_C4H71-4`` (same energy zero), and
+``CH2CHCHCH3+H2`` with ``2-H_C4H71-3`` (whose energies are 1.61 kcal/mol
+higher). A well belongs to one PES, so the fake wells of these two
+bimoleculars take as a suffix the position of their file in the order
+``H_C4H71-3``, ``H_C4H71-4``, ``2-H_C4H71-3`` (``FakeW-CH2CHCH2CH3+H_0``,
+``_1``, ``FakeW-CH2CHCHCH3+H2_0``, ``_2``), and the PST and saddle barriers on
+them follow. Each file holds AutoMech fake wells (``FakeW-<bimol>``), ``Atom``
+H, ``density`` fragments, ``PotentialSpline`` rotors, ``TSTLevel EJ``,
+``PEDSpecies``, ``MicroEner*`` and the target-first ``Epsilons`` / ``Sigmas``
+/ ``Masses`` lines (173.667 / 4.364 twice, 56.063 39.962).
 
 Trim applied to the AutoMech files (same rule for every file, so the blocks
 shared between files stay byte-identical): full-line ``!`` comments removed,
 ``TemperatureList`` / ``PressureList`` cut to their first two values.
-Everything else, rotor geometries included, is as AutoMech wrote it.
+Everything else, rotor geometries included, is as AutoMech wrote it, apart
+from the suffixes above (``Well`` and ``Barrier`` lines, comments unsuffixed).
 
 ``C4H7_hot.inp``: the hot C4H7 PES (wells ``CH2CHCHCH3`` -45.63 and
 ``CH2CH2CHCH2`` -28.82, bimoleculars ``CH2CHCHCH2+H`` 0.0 and
@@ -69,17 +73,23 @@ H3, H4, H2B = 'H_C4H71-3.inp', 'H_C4H71-4.inp', '2-H_C4H71-3.inp'
 SPECIES = ['CH2CHCH2CH3', 'CH3CHCHCH3', 'CH2CHCHCH3', 'CH2CH2CHCH2', 'H',
            'H2']
 SHARED = {  # item -> files (names) holding it
-    'FakeW-CH2CHCH2CH3+H': (H3, H4),
     'CH2CHCH2CH3+H': (H3, H4),
-    'CH2CHCH2CH3+H=FakeW-CH2CHCH2CH3+H': (H3, H4),
-    'FakeW-CH2CHCHCH3+H2': (H3, H2B),
     'CH2CHCHCH3+H2': (H3, H2B),
-    'CH2CHCHCH3+H2=FakeW-CH2CHCHCH3+H2': (H3, H2B),
+}
+SUFFIXED = {  # fake wells of the shared bimoleculars and their PST barriers
+    'FakeW-CH2CHCH2CH3+H_0': H3,
+    'FakeW-CH2CHCH2CH3+H_1': H4,
+    'CH2CHCH2CH3+H=FakeW-CH2CHCH2CH3+H_0': H3,
+    'CH2CHCH2CH3+H=FakeW-CH2CHCH2CH3+H_1': H4,
+    'FakeW-CH2CHCHCH3+H2_0': H3,
+    'FakeW-CH2CHCHCH3+H2_2': H2B,
+    'CH2CHCHCH3+H2=FakeW-CH2CHCHCH3+H2_0': H3,
+    'CH2CHCHCH3+H2=FakeW-CH2CHCHCH3+H2_2': H2B,
 }
 SADDLES = {
-    'FakeW-CH2CHCH2CH3+H=FakeW-CH2CHCHCH3+H2': H3,
-    'FakeW-CH2CHCH2CH3+H=FakeW-CH2CH2CHCH2+H2': H4,
-    'FakeW-CH3CHCHCH3+H=FakeW-CH2CHCHCH3+H2': H2B,
+    'FakeW-CH2CHCH2CH3+H_0=FakeW-CH2CHCHCH3+H2_0': H3,
+    'FakeW-CH2CHCH2CH3+H_1=FakeW-CH2CH2CHCH2+H2': H4,
+    'FakeW-CH3CHCHCH3+H=FakeW-CH2CHCHCH3+H2_2': H2B,
 }
 PED = {H3: ['CH2CHCH2CH3+H=CH2CHCHCH3+H2'],
        H4: ['CH2CHCH2CH3+H=CH2CH2CHCH2+H2'],
@@ -91,6 +101,8 @@ HOT_WELLS = ('CH2CHCHCH3', 'CH2CH2CHCH2')
 HOT = {'CH2CHCHCH3': (-45.0, 1.0, 250.0),
        'CH2CH2CHCH2': (-28.0, 1.0, 230.0)}
 ORDERS4 = [(C4H7, H3, H4, H2B), (H3, H4, H2B, C4H7)]
+PROMPT_OUTPUTS = DATA.parent / 'prompt_collector'
+MECHANISM = DATA.parent / 'kinmec_prompt' / 'c4h8_h_group_mech.yaml'
 
 
 def _read(files: list[str] | tuple[str, ...], root: Path = DATA,
@@ -128,9 +140,10 @@ def _energies(sop: Any) -> dict[str, float]:
 # F1: the three files load into one SOP
 # ---------------------------------------------------------------------------
 def test_h_group_loads_into_one_sop() -> None:
-    """No stop; 3 templates and PES ids; shared items carry the ids of
-    their files; saddles one id; rotors as in each file alone; density
-    flags; one LJ second value per file; per-PES masses and keys."""
+    """No stop; 3 templates and PES ids; shared bimoleculars carry the ids
+    of their files; suffixed fake wells, PST barriers and saddles one id;
+    rotors as in each file alone; density flags; one LJ second value per
+    file; per-PES masses and keys."""
     files = (H3, H4, H2B)
     sop, tpls, reader = _read(files)
     _assert_clean(reader)
@@ -139,10 +152,10 @@ def test_h_group_loads_into_one_sop() -> None:
     for name, holders in SHARED.items():
         assert sop.items[name].pes_ids == sorted(
             files.index(f) for f in holders), name
-    for name, holder in SADDLES.items():
+    for name, holder in {**SUFFIXED, **SADDLES}.items():
         assert sop.items[name].pes_ids == [files.index(holder)], name
     fake = [w.name for w in sop.wells if w.name.startswith('FakeW-')]
-    assert len(fake) == 4
+    assert len(fake) == 6
 
     for name in files:
         alone, _, alone_reader = _read([name])
@@ -236,10 +249,10 @@ def test_h_group_writers_reproduce_each_file(tmp_path, order) -> None:
     fid = order.index(H2B)
     payload = AutomechKinWriter(sop=sop, pes_id=fid)._build_payload()
     zero = {w['label']: w['zero_ene'] for w in payload['wells']}
-    assert zero['FakeW-CH2CHCHCH3+H2'] == pytest.approx(-19.34)
+    assert zero['FakeW-CH2CHCHCH3+H2_2'] == pytest.approx(-19.34)
     assert zero['FakeW-CH3CHCHCH3+H'] == pytest.approx(-1.0)
     bars = {b['label']: b['zero_ene'] for b in payload['barriers']}
-    assert bars['FakeW-CH3CHCHCH3+H=FakeW-CH2CHCHCH3+H2'] == \
+    assert bars['FakeW-CH3CHCHCH3+H=FakeW-CH2CHCHCH3+H2_2'] == \
         pytest.approx(7.25)
     assert payload['ped_species'] == PED[H2B]
     assert payload['epsilons'] == [173.667, 173.667]
@@ -630,8 +643,8 @@ def test_prompt_file_with_ped_and_hot_is_refused(tmp_path) -> None:
     ('H+CH2CHCH2CH3=CH2CHCHCH3+H2', 'reactant', 'H+CH2CHCH2CH3'),
     ('CH2CHCH2CH3+H=H2+CH2CHCHCH3', 'product', 'H2+CH2CHCHCH3'),
     ('CH2CHCH2CH3+H=CH2CHCHCH3', 'product', 'CH2CHCHCH3'),
-    ('FakeW-CH2CHCH2CH3+H=CH2CHCHCH3+H2', 'reactant',
-     'FakeW-CH2CHCH2CH3+H'),
+    ('FakeW-CH2CHCH2CH3+H_0=CH2CHCHCH3+H2', 'reactant',
+     'FakeW-CH2CHCH2CH3+H_0'),
 ], ids=['reactants_reordered', 'products_reordered', 'fragment_product',
         'well_reactant'])
 def test_prompt_ped_side_not_a_bimolecular_label_is_refused(
@@ -809,3 +822,112 @@ def test_prompt_ped_label_not_its_fragments_joined_is_refused(
 
     _, _, reader = _read((C4H7, H3), root=root, species=HOT_SPECIES)
     _assert_clean(reader)
+
+
+# ---------------------------------------------------------------------------
+# S1-S5: one well per PES, what links the files, labels of the other fixtures
+# ---------------------------------------------------------------------------
+_FAKE_SUFFIX = re.compile(r'(FakeW-[^\s=]+)_\d+(?=[\s=])')
+
+
+@pytest.mark.parametrize('order', ORDERS)
+def test_h_group_unsuffixed_copy_stops(tmp_path, order) -> None:
+    """The three files with the labels AutoMech wrote (suffixes removed):
+    one stop per fake well declared in two files, naming these two files
+    and not the third, nothing else; the read goes on to the end."""
+    for name in order:
+        text = (DATA / name).read_text()
+        assert _FAKE_SUFFIX.search(text), name
+        (tmp_path / name).write_text(_FAKE_SUFFIX.sub(r'\1', text))
+    _, tpls, reader = _read(order, root=tmp_path)
+    warnings, errors = _messages(reader)
+    assert reader._trigger_stop is True
+    assert warnings == []
+    assert len(errors) == 2, errors
+    assert len(tpls) == 3
+    for well, holders in (('FakeW-CH2CHCH2CH3+H', (H3, H4)),
+                          ('FakeW-CH2CHCHCH3+H2', (H3, H2B))):
+        (hit,) = [e for e in errors if well in e]
+        for name in order:
+            assert (str(tmp_path / name) in hit) is (name in holders), name
+
+
+@pytest.mark.parametrize('order', ORDERS4, ids=['hot_first', 'hot_last'])
+def test_four_files_log_lines(order) -> None:
+    """Only the two bimoleculars are logged as shared by several inputs. A
+    hot well that was read as a fragment first gets one line with the hot
+    PES id, without the words of a shared item; a well read first gets
+    none."""
+    _, _, reader = _read4(order)
+    _assert_clean(reader)
+    infos: list[str] = reader.klog.infos  # type: ignore[attr-defined]
+    shared = [m for m in infos if 'shared by several MESS inputs' in m]
+    assert sorted(m.split()[1] for m in shared) == sorted(SHARED)
+    assert all(m.startswith('Bimolecular ') for m in shared), shared
+    hot = order.index(C4H7)
+    lines = [m for m in infos if m.startswith('Well ') and 'fragment' in m]
+    assert sorted(m.split()[1] for m in lines) == (
+        [] if hot == 0 else sorted(HOT_WELLS))
+    assert all(f'PES {hot}' in m for m in lines), lines
+
+
+def test_h_group_links_through_bimolecular() -> None:
+    """No well and no barrier is in two files, so the 1.61 kcal/mol offset of
+    2-H_C4H71-3 comes through the bimolecular it shares with the hub."""
+    sop, _, reader = _read(ORDERS[0])
+    _assert_clean(reader)
+    for item in [*sop.wells, *sop.barriers]:
+        assert len(item.pes_ids) == 1, item.name
+    infos: list[str] = reader.klog.infos  # type: ignore[attr-defined]
+    (line,) = [m for m in infos if 'above the reference file' in m]
+    assert str(DATA / H2B) in line
+    assert '+1.6100 kcal/mol' in line
+    assert '(through CH2CHCHCH3+H2)' in line
+
+
+def _table_labels(path: Path) -> tuple[list[set[str]], list[set[str]]]:
+    """Column labels and row labels of every ``From\\To`` table."""
+    lines = path.read_text().splitlines()
+    columns: list[set[str]] = []
+    rows: list[set[str]] = []
+    for idx, line in enumerate(lines):
+        if line.startswith('From\\To'):
+            columns.append(set(line.split()[1:]))
+            table = []
+            for row in lines[idx + 1:]:
+                if not row.strip():
+                    break
+                table.append(row.split()[0])
+            rows.append(set(table))
+    return columns, rows
+
+
+@pytest.mark.parametrize('name, output', [
+    (H3, 'ped_h3_bar.out'), (H4, 'ped_h4_bar.out'), (C4H7, 'hot_bar.out'),
+], ids=['H3', 'H4', 'C4H7_control'])
+def test_prompt_outputs_hold_input_labels(name, output) -> None:
+    """The synthetic MESS outputs of ``test_prompt_collector_ci.py`` hold the
+    species of their input, no other: a stale label fails nothing else
+    (``RateCo.recover_rslts`` stores k = 0 for a label it does not find)."""
+    sop, _, reader = _read((name,), species=HOT_SPECIES)
+    _assert_clean(reader)
+    expected = set(sop.species_names_in_pes(0))
+    columns, rows = _table_labels(PROMPT_OUTPUTS / output)
+    assert columns
+    for labels in [*columns, *rows]:
+        assert labels == expected
+
+
+def test_mech_lists_fixture_fake_wells() -> None:
+    """The base mechanism of ``test_kinmec_prompt_ci.py`` lists and declares
+    exactly the six fake wells of the H group: a stale fake species fails
+    nothing else (``KiMec.add_species`` adds what is missing)."""
+    sop, _, reader = _read(ORDERS[0])
+    _assert_clean(reader)
+    fake = sorted(w.name for w in sop.wells if w.name.startswith('FakeW-'))
+    assert len(fake) == 6
+    text = MECHANISM.read_text()
+    phase, _, species = text.partition('\nspecies:')
+    assert sorted(re.findall(r'FakeW-[^\s,\]]+', phase.split('phases:')[1])
+                  ) == fake
+    assert sorted(re.findall(r'^- name: (FakeW-\S+)$', species, re.M)) == fake

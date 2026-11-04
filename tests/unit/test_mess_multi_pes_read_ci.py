@@ -3,8 +3,10 @@
 Black-box tests of ``MessInputReader.read`` on small synthetic MESS inputs
 written to ``tmp_path`` (one file per PES, file index = PES id):
 
-* items with the same label in several files are one object carrying the PES
-  id of every file; their data must be identical, else the read stops;
+* a well, real or fake, belongs to one PES: a label declared as a ``Well`` in
+  two files stops the read (one message per extra declaration); other items
+  with the same label in several files are one object carrying the PES id of
+  every file; their data must be identical, else the read stops;
 * energies of files sharing items are aligned (offset of each file =
   shared energy difference, reference = first file of each group of linked
   files), every shared energy is checked after alignment (0.01 kcal/mol);
@@ -32,6 +34,7 @@ is needed.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -298,23 +301,36 @@ def assert_one_stop(reader: MessInputReader, *needles: str) -> str:
     return hits[0]
 
 
+_TWO_ROTORS = [rotor(), rotor(scan='0.0 0.3 0.9 0.3', group='1', axis='2 1')]
+
+
 def two_pes_shared(file2_overrides: dict[str, list[str]] | None = None
                    ) -> tuple[list[str], list[str]]:
-    """Two files sharing a fake well (2 rotors), a bimolecular A+B, its PST
-    barrier, a plain well W and the saddle W=FakeW-A+B; each file also owns
-    a well of its own (U0, U1)."""
+    """Two files sharing the bimoleculars A+B (fragment A has 2 rotors) and
+    C+D, the saddle A+B=C+D and the PST barrier C+D=A+B; each file k also
+    owns the fake well FakeW-A+B_k (2 rotors), the plain well W_k and the
+    barriers on them. MESS needs a well on one side of a barrier, so the two
+    shared barriers are not valid MESS input: with one well per PES, a
+    barrier between two bimoleculars is the only way to reach the code of a
+    barrier repeated in two files."""
     blocks = {
-        'fake': well('FakeW-A+B', -1.0,
-                     rotors=[rotor(), rotor(scan='0.0 0.3 0.9 0.3',
-                                            group='1', axis='2 1')]),
-        'w': well('W', -5.0),
-        'bimol': bimol('A+B', [fragment('A'), fragment('B', '1600.0')], 0.0),
-        'pst': pst('A+B=FakeW-A+B', 'A+B', 'FakeW-A+B', 0.0),
-        'saddle': saddle('W=FakeW-A+B', 'W', 'FakeW-A+B', 10.0),
+        'bimol': bimol('A+B', [fragment('A', rotors=_TWO_ROTORS),
+                               fragment('B', '1600.0')], 0.0),
+        'bimol2': bimol('C+D', [fragment('C', '1100.0'),
+                                fragment('D', '1200.0')], 2.0),
+        'saddle': saddle('A+B=C+D', 'A+B', 'C+D', 10.0),
+        'pst': pst('C+D=A+B', 'C+D', 'A+B', 0.0),
     }
-    first = mess_file(*blocks.values(), well('U0', -2.0))
+
+    def own(k: int) -> list[list[str]]:
+        fake = f'FakeW-A+B_{k}'
+        return [well(fake, -1.0, rotors=_TWO_ROTORS), well(f'W_{k}', -5.0),
+                pst(f'A+B={fake}', 'A+B', fake, 0.0),
+                saddle(f'W_{k}={fake}', f'W_{k}', fake, 10.0)]
+
+    first = mess_file(*blocks.values(), *own(0))
     blocks.update(file2_overrides or {})
-    second = mess_file(*blocks.values(), well('U1', -3.0))
+    second = mess_file(*blocks.values(), *own(1))
     return first, second
 
 
@@ -322,50 +338,62 @@ def two_pes_shared(file2_overrides: dict[str, list[str]] | None = None
 # R1: shared items are single multi-PES objects
 # ---------------------------------------------------------------------------
 def test_shared_items_are_single_multi_pes_objects(tmp_path) -> None:
-    """Shared fake well, plain well, bimolecular, PST barrier and saddle:
-    one object each, PES ids [0, 1], rotors not doubled, no stop; each file
-    keeps its own template."""
+    """Shared bimoleculars, saddle and PST barrier: one object each, PES ids
+    [0, 1], the rotors of the shared fragment not doubled, no stop. The wells
+    and the barriers on them stay in their own PES; each file keeps its own
+    template."""
     sop, tpls, reader = read(tmp_path, *two_pes_shared())
     assert_clean(reader)
-    for name in ('FakeW-A+B', 'W', 'A+B', 'A+B=FakeW-A+B', 'W=FakeW-A+B'):
+    for name in ('A+B', 'C+D', 'A+B=C+D', 'C+D=A+B'):
         item = sop.items[name]
         assert item.pes_ids == [0, 1], name
         assert item.in_multiple_pes is True, name
         assert sop.item_pes_ids[name] == (0, 1), name
-    for name in ('U0', 'U1'):
-        assert sop.items[name].in_multiple_pes is False
-    assert sop.item_pes_ids['U1'] == (1,)
-    assert [w.name for w in sop.wells] == ['FakeW-A+B', 'W', 'U0', 'U1']
-    assert [b.name for b in sop.barriers] == ['A+B=FakeW-A+B',
-                                               'W=FakeW-A+B']
-    assert [b.name for b in sop.bimolecular] == ['A+B']
+    for k in (0, 1):
+        for name in (f'FakeW-A+B_{k}', f'W_{k}', f'A+B=FakeW-A+B_{k}',
+                     f'W_{k}=FakeW-A+B_{k}'):
+            assert sop.items[name].in_multiple_pes is False, name
+            assert sop.item_pes_ids[name] == (k,), name
+    assert [w.name for w in sop.wells] == ['FakeW-A+B_0', 'W_0',
+                                           'FakeW-A+B_1', 'W_1']
+    assert [b.name for b in sop.barriers] == [
+        'A+B=C+D', 'C+D=A+B', 'A+B=FakeW-A+B_0', 'W_0=FakeW-A+B_0',
+        'A+B=FakeW-A+B_1', 'W_1=FakeW-A+B_1']
+    assert [b.name for b in sop.bimolecular] == ['A+B', 'C+D']
     bim = sop.items['A+B']
     assert bim.frag_names == ['A', 'B']
     assert bim.fragments[0] is sop.items['A']
     # Rotors declared again in the second file are not appended again.
-    assert len(sop.items['FakeW-A+B'].h_rotors) == 2
+    assert len(sop.items['A'].h_rotors) == 2
     names = list(sop.parameters_names)
-    assert 'FakeW-A+B__hrs1' in names and 'FakeW-A+B__hrs2' not in names
+    assert 'A__hrs1' in names and 'A__hrs2' not in names
+    assert 'FakeW-A+B_1__hrs1' in names and 'FakeW-A+B_1__hrs2' not in names
     assert sop.pes_ids == [0, 1]
     assert [tpl.pes_id for tpl in tpls] == [0, 1]
     assert all(isinstance(tpl, MessTemplate) for tpl in tpls)
-    for tpl in tpls:
-        assert 'Well {FakeW-A+B.name}\n' in tpl
-        assert ' {FakeW-A+B.r_scan(1)}\n' in tpl
-    # The shared items are noted at info level only.
-    assert any('shared by several MESS inputs' in m
-               for m in log_of(reader).infos)
+    for k, tpl in enumerate(tpls):
+        assert f'Well {{FakeW-A+B_{k}.name}}\n' in tpl
+        assert f' {{FakeW-A+B_{k}.r_scan(1)}}\n' in tpl
+        assert ' {A.r_scan(1)}\n' in tpl
+    # The shared items are noted at info level only, wells never.
+    shared = [m for m in log_of(reader).infos
+              if 'shared by several MESS inputs' in m]
+    assert sorted(m.split()[0] for m in shared) == [
+        'Barrier', 'Barrier', 'Bimolecular', 'Bimolecular']
 
 
 def test_shared_barrier_with_sides_in_both_files(tmp_path) -> None:
     """A barrier repeated in a file that declares both of its sides is one
     shared barrier (positive counterpart of
-    ``test_read_duplicate_barrier_name_across_inputs_triggers_stop``)."""
-    first = mess_file(well('L', 0.0), well('R', -1.0),
-                      saddle('L=R', 'L', 'R', 5.0))
-    second = mess_file(well('L', 0.0), well('R', -1.0),
-                       saddle('L=R', 'L', 'R', 5.0))
-    sop, _, reader = read(tmp_path, first, second)
+    ``test_read_duplicate_barrier_name_across_inputs_triggers_stop``). The
+    sides are bimoleculars: a well is in one file only, and this is not
+    valid MESS input (MESS needs a well on one side of a barrier)."""
+    def one_file() -> list[str]:
+        return mess_file(bimol('L', [fragment('A'), fragment('B')], 0.0),
+                         bimol('R', [fragment('C'), fragment('D')], -1.0),
+                         saddle('L=R', 'L', 'R', 5.0))
+
+    sop, _, reader = read(tmp_path, one_file(), one_file())
     assert_clean(reader)
     assert sop.items['L=R'].pes_ids == [0, 1]
     assert len(sop.barriers) == 1
@@ -374,54 +402,49 @@ def test_shared_barrier_with_sides_in_both_files(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 # R2: shared item whose data differ -> stop
 # ---------------------------------------------------------------------------
+_FRAGMENT_B = fragment('B', '1600.0')
 _MISMATCHES: dict[str, tuple[dict[str, list[str]], tuple[str, ...]]] = {
     'barrier_sides': (
-        {'saddle': saddle('W=FakeW-A+B', 'FakeW-A+B', 'W', 10.0)},
-        ('Barrier W=FakeW-A+B connects W and FakeW-A+B',)),
+        {'saddle': saddle('A+B=C+D', 'C+D', 'A+B', 10.0)},
+        ('Barrier A+B=C+D connects A+B and C+D',)),
     'barrier_frequencies': (
-        {'saddle': saddle('W=FakeW-A+B', 'W', 'FakeW-A+B', 10.0,
-                          freqs='801.0')},
-        ('Barrier W=FakeW-A+B differs between', 'in: frequencies.')),
+        {'saddle': saddle('A+B=C+D', 'A+B', 'C+D', 10.0, freqs='801.0')},
+        ('Barrier A+B=C+D differs between', 'in: frequencies.')),
     'barrier_imaginary_frequency': (
-        {'saddle': saddle('W=FakeW-A+B', 'W', 'FakeW-A+B', 10.0,
-                          ifreq='1400.0')},
-        ('Barrier W=FakeW-A+B differs between', 'imaginary frequency')),
-    'fake_well_geometry': (
-        {'fake': well('FakeW-A+B', -1.0,
-                      rotors=[rotor(), rotor(scan='0.0 0.3 0.9 0.3',
-                                             group='1', axis='2 1')],
-                      geo=['        C 0.0 0.0 0.0\n',
-                           '        O 0.0 0.0 1.3\n'])},
-        ('Well FakeW-A+B differs between', 'in: geometry.')),
-    'rotor_scan': (
-        {'fake': well('FakeW-A+B', -1.0,
-                      rotors=[rotor(scan='0.00 0.60 1.00 0.50'),
-                              rotor(scan='0.0 0.3 0.9 0.3', group='1',
-                                    axis='2 1')])},
-        ('Well FakeW-A+B differs between', 'in: hindered rotors.')),
-    'rotor_count': (
-        {'fake': well('FakeW-A+B', -1.0, rotors=[rotor()])},
-        ('Well FakeW-A+B differs between', 'in: hindered rotors.')),
+        {'saddle': saddle('A+B=C+D', 'A+B', 'C+D', 10.0, ifreq='1400.0')},
+        ('Barrier A+B=C+D differs between', 'imaginary frequency')),
+    'fragment_geometry': (
+        {'bimol': bimol('A+B', [
+            [line.replace('0.97', '0.98')
+             for line in fragment('A', rotors=_TWO_ROTORS)], _FRAGMENT_B])},
+        ('Well A differs between', 'in: geometry.')),
+    'fragment_rotor_scan': (
+        {'bimol': bimol('A+B', [
+            fragment('A', rotors=[rotor(scan='0.00 0.60 1.00 0.50'),
+                                  _TWO_ROTORS[1]]), _FRAGMENT_B])},
+        ('Well A differs between', 'in: hindered rotors.')),
+    'fragment_rotor_count': (
+        {'bimol': bimol('A+B', [fragment('A', rotors=[rotor()]),
+                                _FRAGMENT_B])},
+        ('Well A differs between', 'in: hindered rotors.')),
     'bimol_fragment_set': (
-        {'bimol': bimol('A+B', [fragment('A'), fragment('C', '1600.0')]),
-         'pst': pst('A+B=FakeW-A+B', 'A+B', 'FakeW-A+B', 0.0)},
+        {'bimol': bimol('A+B', [fragment('A', rotors=_TWO_ROTORS),
+                                fragment('E', '1600.0')])},
         ('Bimolecular A+B differs between', 'in: fragments.')),
     'bimol_density': (
-        {'bimol': bimol('A+B', [fragment('A', density=True),
-                                fragment('B', '1600.0')])},
+        {'bimol': bimol('A+B', [fragment('A', density=True,
+                                         rotors=_TWO_ROTORS), _FRAGMENT_B])},
         ('Bimolecular A+B differs between', 'in: fragment density.')),
     'fragment_frequency': (
-        {'bimol': bimol('A+B', [fragment('A', '3701.0'),
-                                fragment('B', '1600.0')])},
+        {'bimol': bimol('A+B', [fragment('A', '3701.0', rotors=_TWO_ROTORS),
+                                _FRAGMENT_B])},
         ('Well A differs between', 'in: frequencies.')),
     'pst_prefactor': (
-        {'pst': pst('A+B=FakeW-A+B', 'A+B', 'FakeW-A+B', 0.0,
-                    prefactor='12.0')},
-        ('Barrier A+B=FakeW-A+B differs between', 'PotentialPrefactor')),
+        {'pst': pst('C+D=A+B', 'C+D', 'A+B', 0.0, prefactor='12.0')},
+        ('Barrier C+D=A+B differs between', 'PotentialPrefactor')),
     'pst_tst_level': (
-        {'pst': pst('A+B=FakeW-A+B', 'A+B', 'FakeW-A+B', 0.0,
-                    tst_level='E')},
-        ('Barrier A+B=FakeW-A+B differs between', 'TSTLevel')),
+        {'pst': pst('C+D=A+B', 'C+D', 'A+B', 0.0, tst_level='E')},
+        ('Barrier C+D=A+B differs between', 'TSTLevel')),
 }
 
 
@@ -436,7 +459,7 @@ def test_shared_item_data_mismatch_stops(tmp_path, case) -> None:
     if 'differs between' in msg:
         assert reader.filenames[0] in msg
     # The stored item keeps the first file's data.
-    assert sop.items['FakeW-A+B'].h_rotors[0].scan[1] == pytest.approx(0.5)
+    assert sop.items['A'].h_rotors[0].scan[1] == pytest.approx(0.5)
 
 
 def test_fragment_shared_by_two_bimoleculars(tmp_path) -> None:
@@ -479,7 +502,7 @@ _LABEL_CONFLICTS: dict[str, tuple[list[list[str]], tuple[str, ...]]] = {
         ('Label Q names a Bimolecular in', 'and a Well in')),
     'well_then_barrier': (
         [mess_file(well('Q'), well('R')),
-         mess_file(well('Q'), well('R'), saddle('R', 'Q', 'R'))],
+         mess_file(well('S'), well('T'), saddle('R', 'S', 'T'))],
         ('names a Well in', 'and a Barrier in')),
     'well_twice_in_file': (
         [mess_file(well('Q'), well('Q'))],
@@ -535,18 +558,19 @@ def test_file_without_well_or_bimolecular_stops(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 def _alignment_pair(shift: float = 1.61, unique: float = 5.0
                     ) -> tuple[list[str], list[str]]:
-    """A: bimol P 0.0, FakeW-P -1.0; B: same items +shift, unique U."""
+    """A: bimol P 0.0, FakeW-P_0 -1.0; B: bimol P +shift, FakeW-P_1 -1.0
+    +shift, unique U."""
     a = mess_file(bimol('P', [fragment('A'), fragment('B', '1600.0')], 0.0),
-                  well('FakeW-P', -1.0))
+                  well('FakeW-P_0', -1.0))
     b = mess_file(bimol('P', [fragment('A'), fragment('B', '1600.0')],
                         round(0.0 + shift, 6)),
-                  well('FakeW-P', round(-1.0 + shift, 6)),
+                  well('FakeW-P_1', round(-1.0 + shift, 6)),
                   well('U', unique))
     return a, b
 
 
 def test_energy_alignment_offset_sign_and_reference(tmp_path) -> None:
-    """Offset of file B = its shared energies minus file A's (sign fixed);
+    """Offset of file B = its shared energy minus file A's (sign fixed);
     the first file is the reference; differences between items are the
     same whatever the file order."""
     a, b = _alignment_pair()
@@ -557,8 +581,10 @@ def test_energy_alignment_offset_sign_and_reference(tmp_path) -> None:
     # Old sign bug would give 6.61.
     assert sop.items['U'].energy == pytest.approx(3.39)
     assert sop.items['P'].energy == pytest.approx(0.0)
-    assert sop.items['FakeW-P'].energy == pytest.approx(-1.0)
-    first_order = {n: sop.items[n].energy for n in ('U', 'P', 'FakeW-P')}
+    assert sop.items['FakeW-P_0'].energy == pytest.approx(-1.0)
+    assert sop.items['FakeW-P_1'].energy == pytest.approx(-1.0)
+    labels = ('U', 'P', 'FakeW-P_0', 'FakeW-P_1')
+    first_order = {n: sop.items[n].energy for n in labels}
     assert any('above the reference file' in m
                for m in log_of(reader).infos)
 
@@ -570,7 +596,7 @@ def test_energy_alignment_offset_sign_and_reference(tmp_path) -> None:
     assert sop.pes_file_data[1].energy_offset == pytest.approx(-1.61)
     assert sop.items['U'].energy == pytest.approx(5.0)
     assert sop.items['P'].energy == pytest.approx(1.61)
-    swapped = {n: sop.items[n].energy for n in ('U', 'P', 'FakeW-P')}
+    swapped = {n: sop.items[n].energy for n in labels}
     for x in first_order:
         for y in first_order:
             assert (first_order[x] - first_order[y]) == pytest.approx(
@@ -617,8 +643,10 @@ def test_components_without_shared_items(tmp_path) -> None:
     assert offsets == pytest.approx({0: 0.0, 1: 0.0, 2: 1.61})
     assert sop.items['UC'].energy == 7.0
 
-    c = mess_file(well('UC', 7.0), well('S', 2.0))
-    d = mess_file(well('S', 2.5), well('UD', 9.0))
+    c = mess_file(well('UC', 7.0),
+                  bimol('S', [fragment('C'), fragment('D')], 2.0))
+    d = mess_file(bimol('S', [fragment('C'), fragment('D')], 2.5),
+                  well('UD', 9.0))
     sub = tmp_path / 'two_groups'
     sub.mkdir()
     sop, _, reader = read(sub, a, c, d, b)
@@ -633,13 +661,13 @@ def test_components_without_shared_items(tmp_path) -> None:
 def test_alignment_mismatch_tolerance(tmp_path, delta, stops) -> None:
     """A shared energy off by more than 0.01 kcal/mol after alignment stops
     (one error naming the item and both files); 0.005 does not."""
-    a = mess_file(bimol('P', [fragment('A'), fragment('B')], 0.0),
-                  well('FakeW-P', -1.0))
-    b = mess_file(bimol('P', [fragment('A'), fragment('B')], 1.0),
-                  well('FakeW-P', round(-1.0 + 1.0 + delta, 6)))
+    ab, cd = [fragment('A'), fragment('B')], [fragment('C'), fragment('D')]
+    a = mess_file(bimol('P', ab, 0.0), bimol('Q', cd, -1.0))
+    b = mess_file(bimol('P', ab, 1.0),
+                  bimol('Q', cd, round(-1.0 + 1.0 + delta, 6)))
     _, _, reader = read(tmp_path, a, b)
     if stops:
-        msg = assert_one_stop(reader, 'Energy of FakeW-P is not consistent')
+        msg = assert_one_stop(reader, 'Energy of Q is not consistent')
         assert reader.filenames[0] in msg and reader.filenames[1] in msg
     else:
         assert_clean(reader)
@@ -648,9 +676,10 @@ def test_alignment_mismatch_tolerance(tmp_path, delta, stops) -> None:
 def test_alignment_inconsistent_cycle_stops(tmp_path) -> None:
     """A-B +1 through P1, B-C +1 through P2, A-C 0 through P3: no offsets
     satisfy all three, the read stops naming the item and both files."""
-    a = mess_file(well('P1', 0.0), well('P3', 0.0))
-    b = mess_file(well('P1', 1.0), well('P2', 0.0))
-    c = mess_file(well('P2', 1.0), well('P3', 0.0))
+    frags = [fragment('A'), fragment('B')]
+    a = mess_file(bimol('P1', frags, 0.0), bimol('P3', frags, 0.0))
+    b = mess_file(bimol('P1', frags, 1.0), bimol('P2', frags, 0.0))
+    c = mess_file(bimol('P2', frags, 1.0), bimol('P3', frags, 0.0))
     _, _, reader = read(tmp_path, a, b, c)
     msg = assert_one_stop(reader, 'is not consistent between')
     assert sum(name in msg for name in reader.filenames) == 2
@@ -1061,17 +1090,18 @@ def test_lj_second_values_per_pes_layout(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 def test_fake_well_labels_exempt_from_mechanism(tmp_path) -> None:
     """force_new_molecules False, mechanism = fragment names only:
-    FakeW- and FW- wells shared by two files read cleanly; a regular well
-    missing from the mechanism still stops."""
+    FakeW- and FW- wells, each with a suffix of its file, read cleanly; a
+    regular well missing from the mechanism still stops."""
     frags = [fragment('A'), fragment('B')]
-    first = mess_file(bimol('A+B', frags), well('FakeW-A+B', -1.0),
-                      well('FW-A+B', -1.5))
-    second = mess_file(bimol('A+B', frags), well('FakeW-A+B', -1.0),
-                       well('FW-A+B', -1.5))
+    first = mess_file(bimol('A+B', frags), well('FakeW-A+B_0', -1.0),
+                      well('FW-A+B_0', -1.5))
+    second = mess_file(bimol('A+B', frags), well('FakeW-A+B_1', -1.0),
+                       well('FW-A+B_1', -1.5))
     sop, _, reader = read(tmp_path, first, second, species=['A', 'B'])
     assert_clean(reader)
-    assert sop.items['FW-A+B'].pes_ids == [0, 1]
+    assert sop.items['FW-A+B_1'].pes_ids == [1]
     assert is_fake_well_label('FakeW-A+B') and is_fake_well_label('FW-X')
+    assert is_fake_well_label('FakeW-A+B_0')
     assert not is_fake_well_label('W-FakeW')
 
     sub = tmp_path / 'regular'
@@ -1184,19 +1214,19 @@ def test_fragment_density_per_slot(tmp_path) -> None:
 # R10: a file holding only shared items keeps its slot
 # ---------------------------------------------------------------------------
 def test_all_shared_file_keeps_its_slot(tmp_path) -> None:
-    """File 1 holds only items of file 0 plus a saddle of its own: it keeps
-    PES id 1, its template, and LJ index 2."""
-    first = mess_file(well('L', 0.0), well('R', -1.0),
-                      bimol('A+B', [fragment('A'), fragment('B')], 3.0))
-    second = mess_file(well('L', 0.0), well('R', -1.0),
-                       bimol('A+B', [fragment('A'), fragment('B')], 3.0),
-                       saddle('L=R', 'L', 'R', 5.0))
+    """File 1 holds only items of file 0 (bimoleculars: a well is in one
+    file only) plus a saddle of its own: it keeps PES id 1, its template,
+    and LJ index 2."""
+    blocks = [bimol('A+B', [fragment('A'), fragment('B')], 3.0),
+              bimol('C+D', [fragment('C'), fragment('D')], 0.0)]
+    first = mess_file(*blocks)
+    second = mess_file(*blocks, saddle('A+B=C+D', 'A+B', 'C+D', 5.0))
     sop, tpls, reader = read(tmp_path, first, second)
     assert_clean(reader)
     assert sop.pes_ids == [0, 1]
     assert len(tpls) == len(sop.pes_ids)
-    assert [w.name for w in sop.wells_in(1)] == ['L', 'R']
-    assert [b.name for b in sop.bimols_in(1)] == ['A+B']
+    assert sop.wells_in(1) == []
+    assert [b.name for b in sop.bimols_in(1)] == ['A+B', 'C+D']
     assert len(sop.epsilons) == len(sop.pes_ids) + 1
 
 
@@ -1204,8 +1234,9 @@ def test_all_shared_file_keeps_its_slot(tmp_path) -> None:
 # R11: SOP DB keeps multi-PES ids and symbol-bearing item names
 # ---------------------------------------------------------------------------
 def test_sop_db_multi_pes_ids_and_symbol_columns(tmp_path) -> None:
-    """The item/PES table round-trips the shared items' [0, 1]; columns
-    named after labels with '+', '=' and '-' round-trip their values."""
+    """The item/PES table round-trips the shared items' [0, 1] and the
+    single id of the others; columns named after labels with '+', '=', '-'
+    and '_' round-trip their values."""
     from kimeco.database.sop_db import SOP_DB
     from kimeco.logger_config import KMOLogger
 
@@ -1215,24 +1246,24 @@ def test_sop_db_multi_pes_ids_and_symbol_columns(tmp_path) -> None:
     db_dir.mkdir()
     klog = KMOLogger(filename=str(db_dir / 'sop_db.log'))
     db = SOP_DB(sop=sop, name='MULTI_PES', path=str(db_dir), klog=klog)
-    assert db.get_item_pes_ids()['FakeW-A+B'] == (0, 1)
-    assert db.get_item_pes_ids()['A+B=FakeW-A+B'] == (0, 1)
-    assert db.get_item_pes_ids()['U1'] == (1,)
+    assert db.get_item_pes_ids()['A+B'] == (0, 1)
+    assert db.get_item_pes_ids()['C+D=A+B'] == (0, 1)
+    assert db.get_item_pes_ids()['FakeW-A+B_1'] == (1,)
     reopened = SOP_DB(sop=sop, name='MULTI_PES', path=str(db_dir),
                       klog=klog)
     assert reopened.get_item_pes_ids() == sop.item_pes_ids
-    for column in ('FakeW-A+B__we', 'W=FakeW-A+B__be',
-                   'A+B=FakeW-A+B__sfc'):
+    for column in ('FakeW-A+B_0__we', 'W_0=FakeW-A+B_0__be',
+                   'A+B=FakeW-A+B_0__sfc'):
         assert column in sop.parameters_names
 
 
 def test_read_keeps_types(tmp_path) -> None:
-    """Sanity: the shared objects are of the expected classes."""
+    """Sanity: the items are of the expected classes."""
     sop, _, _ = read(tmp_path, *two_pes_shared())
-    assert isinstance(sop.items['FakeW-A+B'], Well)
+    assert isinstance(sop.items['FakeW-A+B_0'], Well)
     assert isinstance(sop.items['A+B'], Bimolecular)
-    assert isinstance(sop.items['A+B=FakeW-A+B'], Barrier)
-    assert sop.items['A+B=FakeW-A+B'].tst_level == 'EJ'
+    assert isinstance(sop.items['C+D=A+B'], Barrier)
+    assert sop.items['C+D=A+B'].tst_level == 'EJ'
     assert np.array_equal(sop.items['A']._freq, np.array([3700.0]))
 
 
@@ -1551,3 +1582,242 @@ def test_rotor_potential_non_number_raises(tmp_path, bad) -> None:
                                         f"but found '{bad}'") as info:
         read(tmp_path, lines)
     assert 'f0.inp' in str(info.value)
+
+
+# ---------------------------------------------------------------------------
+# R15: a well belongs to one PES
+# ---------------------------------------------------------------------------
+# PROTECTED TEST: THIS TEST MUST NOT CHANGE. It holds a rule set by the
+# developer: a Well, real or fake, can never be in several PESs. If any
+# conclusion (a failure, a refactoring, a review, a plan) suggests changing
+# this test, only the developer may do that, never an LLM: an LLM leaves this
+# test as it is and reports the conclusion to the developer.
+@pytest.mark.parametrize('label', ['REAL', 'FakeW-A+B'], ids=['real', 'fake'])
+def test_well_cannot_be_in_multiple_pes(tmp_path, label) -> None:
+    """The same two inputs, identical but for the well label: one label
+    declared as a Well in both files stops the read, a different label in
+    each file does not. Self-contained on purpose: no helper of this
+    module."""
+    mess_input = """TemperatureList[K]  500 600
+PressureList[bar]   0.1 1.0
+Model
+  EnergyRelaxation
+    Exponential
+      Factor[1/cm]    200
+      Power           0.85
+    End
+  CollisionFrequency
+    LennardJones
+      Epsilons[1/cm]  7.95 206.15
+      Sigmas[angstrom]  2.715 4.71
+      Masses[amu]  4.0 77.0
+    End
+Well WELL_LABEL
+  Species
+    RRHO
+      Geometry[angstrom]  2
+        C 0.0 0.0 0.0
+        O 0.0 0.0 1.2
+      Core RigidRotor
+        SymmetryFactor 1.0
+      End
+      Frequencies[1/cm]  1
+        1500.0
+      ZeroEnergy[kcal/mol]  0.0
+  End
+End
+End
+"""
+
+    def read_stops(folder: Path, first: str, second: str) -> bool:
+        folder.mkdir()
+        names = ['pes_a.inp', 'pes_b.inp']
+        for name, well_label in zip(names, (first, second)):
+            (folder / name).write_text(
+                mess_input.replace('WELL_LABEL', well_label))
+        reader = MessInputReader(
+            settings={'init_loc': str(folder), 'mess_inputs': names,
+                      'n_exp': 1, 'score_sp': [],
+                      'freq_mode': FreqMode.BATCH,
+                      'rc_temp': [500.0, 600.0], 'rc_pres': [0.1, 1.0],
+                      'pres_unit': 'bar', 'force_new_molecules': False},
+            mechanism_species=[label, f'{label}_0', f'{label}_1'],
+            klog=logging.getLogger(  # type: ignore[arg-type]
+                'test_well_cannot_be_in_multiple_pes'),
+            postprocess=False)
+        reader.read()
+        return reader._trigger_stop
+
+    assert read_stops(tmp_path / 'same', label, label) is True
+    assert read_stops(tmp_path / 'different',
+                      f'{label}_0', f'{label}_1') is False
+
+
+def only_stop(reader: MessInputReader, *needles: str) -> str:
+    """The read stopped with exactly one message of any kind, and it holds
+    every needle (``assert_one_stop`` counts only the matching messages)."""
+    assert reader._trigger_stop is True
+    messages = stop_messages(reader)
+    assert len(messages) == 1, messages
+    assert all(needle in messages[0] for needle in needles), messages
+    return messages[0]
+
+
+@pytest.mark.parametrize('force', [False, True], ids=['force_off', 'force_on'])
+@pytest.mark.parametrize('label', ['W', 'FakeW-A+B', 'FW-A+B'])
+def test_well_in_two_files_stops(tmp_path, label, force) -> None:
+    """Identical data, real or fake, whatever force_new_molecules says: one
+    message naming the well and both files; the read goes on to the end,
+    with one object carrying both PES ids."""
+    first = mess_file(well(label, -1.0), well('U0'))
+    second = mess_file(well(label, -1.0), well('U1'))
+    sop, tpls, reader = read(tmp_path, first, second,
+                             force_new_molecules=force)
+    only_stop(reader, label, reader.filenames[0], reader.filenames[1])
+    assert len(tpls) == 2
+    assert sop.items[label].pes_ids == [0, 1]
+    assert sum(w.name == label for w in sop.wells) == 1
+
+
+def test_well_in_two_files_stops_unknown_species_force_on(tmp_path) -> None:
+    """force_new_molecules on, label missing from the mechanism: the read
+    stops all the same, with one error; the only other message is the
+    warning about the unknown species, written when the label is first
+    read."""
+    _, _, reader = read(tmp_path, mess_file(well('W')), mess_file(well('W')),
+                        species=[], force_new_molecules=True)
+    assert reader._trigger_stop is True
+    log = log_of(reader)
+    assert len(log.errors) == 1 and 'W' in log.errors[0], log.errors
+    assert reader.filenames[0] in log.errors[0]
+    assert reader.filenames[1] in log.errors[0]
+    assert len(log.warnings) == 1 and 'not present' in log.warnings[0]
+
+
+@pytest.mark.parametrize('second_well', [
+    well('W', 4.0), well('W', -1.0, freqs='1501.0')],
+    ids=['energy', 'frequency'])
+def test_repeated_well_different_data_one_message(tmp_path,
+                                                  second_well) -> None:
+    """The second declaration differs in energy or frequency: only the
+    one-well-per-PES stop, no data or energy mismatch on top; the first
+    declaration is kept and the bimolecular still aligns the files."""
+    frags = [fragment('A'), fragment('B')]
+    first = mess_file(well('W', -1.0), bimol('P', frags, 0.0))
+    second = mess_file(second_well, bimol('P', frags, 1.61))
+    sop, _, reader = read(tmp_path, first, second)
+    msg = only_stop(reader, 'W', reader.filenames[0], reader.filenames[1])
+    assert 'differs' not in msg and 'not consistent' not in msg
+    assert sop.items['W'].energy == pytest.approx(-1.0)
+    assert sop.pes_file_data[1].energy_offset == pytest.approx(1.61)
+
+
+def test_repeated_well_energy_stays_out_of_alignment(tmp_path) -> None:
+    """The energy of the refused declaration links nothing: file 1 keeps
+    offset 0 and its other items their raw energies."""
+    first = mess_file(well('W', 0.0))
+    second = mess_file(well('W', 5.0), well('U', 1.0))
+    sop, _, reader = read(tmp_path, first, second)
+    only_stop(reader, 'W')
+    assert sop.pes_file_data[1].energy_offset == 0.0
+    assert sop.items['U'].energy == 1.0
+
+
+def test_repeated_well_with_barriers_and_hot_energies_one_message(
+        tmp_path) -> None:
+    """Barriers on the refused well and a HotEnergies block naming it find it
+    declared in their file: one message for the well, none for them."""
+    first = mess_file(well('W', -1.0), well('U0'),
+                      saddle('W=U0', 'W', 'U0'))
+    second = mess_file(well('W', -1.0), well('U1'),
+                       bimol('P', [fragment('A'), fragment('B')], 0.0),
+                       saddle('W=U1', 'W', 'U1'), pst('P=W', 'P', 'W', 0.0),
+                       header=['HotEnergies[kcal/mol] 1\n', 'W -7:1:20\n'])
+    _, _, reader = read(tmp_path, first, second)
+    only_stop(reader, 'W')
+
+
+@pytest.mark.parametrize('layout, first_well, second_well', [
+    ('FWW', 1, 2), ('WFW', 0, 2), ('WWF', 0, 1)])
+def test_fragment_then_two_wells_stops(tmp_path, layout, first_well,
+                                       second_well) -> None:
+    """X is a fragment in one file and a Well in the two others, in any
+    order: one message naming the two Well files, not the fragment's."""
+    wells = [mess_file(well('X', -7.0, freqs='3700.0', geo=_GEO_OH),
+                       well(f'V{k}', -3.0)) for k in range(2)]
+    files = [_frag_file() if kind == 'F' else wells.pop(0) for kind in layout]
+    _, _, reader = read(tmp_path, *files)
+    msg = only_stop(reader, 'X', reader.filenames[first_well],
+                    reader.filenames[second_well])
+    assert reader.filenames[layout.index('F')] not in msg
+
+
+def test_well_in_three_files_one_message_per_extra_file(tmp_path) -> None:
+    """Three declarations: one message per extra one, the last naming the
+    three files."""
+    files = [mess_file(well('W'), well(f'U{k}')) for k in range(3)]
+    sop, _, reader = read(tmp_path, *files)
+    messages = stop_messages(reader)
+    assert reader._trigger_stop is True
+    assert len(messages) == 2, messages
+    assert all(name in messages[1] for name in reader.filenames)
+    assert reader.filenames[2] not in messages[0]
+    assert sop.items['W'].pes_ids == [0, 1, 2]
+
+
+def test_two_repeated_wells_one_message_each(tmp_path) -> None:
+    """Two labels repeated between the same files: one message for each."""
+    files = [mess_file(well('W'), well('FakeW-A+B')) for _ in range(2)]
+    _, _, reader = read(tmp_path, *files)
+    messages = stop_messages(reader)
+    assert reader._trigger_stop is True
+    assert len(messages) == 2, messages
+    assert sum('FakeW-A+B' in m for m in messages) == 1
+
+
+def test_well_repeated_and_twice_in_file(tmp_path) -> None:
+    """A well of file 0 declared twice in file 1: the cross-file stop and
+    the 'declared twice' stop, one message each."""
+    _, _, reader = read(tmp_path, mess_file(well('W')),
+                        mess_file(well('W'), well('W')))
+    messages = stop_messages(reader)
+    assert reader._trigger_stop is True
+    assert len(messages) == 2, messages
+    assert sum('declared twice' in m for m in messages) == 1
+
+
+def test_repeated_well_stops_in_postprocess_read(tmp_path) -> None:
+    """The postprocessing read has no grace mode: same stop."""
+    names = ['f0.inp', 'f1.inp']
+    for name in names:
+        (tmp_path / name).write_text(''.join(mess_file(well('W'))))
+    settings = {
+        'init_loc': str(tmp_path), 'mess_inputs': names, 'n_exp': 1,
+        'score_sp': [], 'freq_mode': FreqMode.BATCH,
+        'pp_temp': [500.0, 600.0], 'pp_pres': [0.1, 1.0],
+        'pres_unit': 'bar', 'force_new_molecules': False}
+    reader = MessInputReader(settings=settings, mechanism_species=['W'],
+                             klog=SpyLog(),  # type: ignore[arg-type]
+                             postprocess=True)
+    reader.read()
+    only_stop(reader, 'W', reader.filenames[0], reader.filenames[1])
+
+
+@pytest.mark.parametrize('well_first', [False, True])
+def test_well_after_fragment_log_line(tmp_path, well_first) -> None:
+    """A well read after its fragment gets one info line with its PES id,
+    not worded as an item shared by several inputs; a well read first gets
+    no line."""
+    files = [_well_file(), _frag_file()]
+    if not well_first:
+        files.reverse()
+    _, _, reader = read(tmp_path, *files)
+    assert_clean(reader)
+    infos = log_of(reader).infos
+    assert not any('shared by several MESS inputs' in m for m in infos)
+    lines = [m for m in infos if ' X ' in m]
+    if well_first:
+        assert lines == []
+    else:
+        assert len(lines) == 1, infos
+        assert 'PES 1' in lines[0] and 'fragment' in lines[0]

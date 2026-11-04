@@ -66,15 +66,17 @@ def _spline_rotor() -> list[str]:
                  angles='0.00 30.00 60.00 90.00', symmetry=3)
 
 
-def _shared_blocks(shift: float = 0.0) -> list[list[str]]:
-    """A+H (Atom H with density), the fake well (spline + plain rotor) and
-    the PST barrier (one rotor, TSTLevel EJ), energies + ``shift``."""
+def _shared_blocks(shift: float = 0.0, fid: int = 0) -> list[list[str]]:
+    """The shared A+H (Atom H with density), the fake well of file ``fid``
+    (spline + plain rotor) and its PST barrier (one rotor, TSTLevel EJ),
+    energies + ``shift``."""
+    fake = f'FakeW-A+H_{fid}'
     return [
         bimol('A+H', [fragment('A'), atom('H', density=True)],
               round(0.0 + shift, 6)),
-        well('FakeW-A+H', round(-1.0 + shift, 6),
+        well(fake, round(-1.0 + shift, 6),
              rotors=[_spline_rotor(), rotor(group='1', axis='2 1')]),
-        pst('A+H=FakeW-A+H', 'A+H', 'FakeW-A+H', round(0.0 + shift, 6),
+        pst(f'A+H={fake}', 'A+H', fake, round(0.0 + shift, 6),
             rotors=[rotor()]),
     ]
 
@@ -86,7 +88,7 @@ _WRT_B = ['WellReductionThreshold 14\n']
 _RELAX = ['      ExponentCutoff 20\n']
 _HEADER_A = ['ModelEnergyLimit[kcal/mol] 400\n', 'WellExtension 0.5\n',
              'AtomDistanceMin[angstrom] 0.68793\n',
-             'PEDSpecies A+H=FakeW-A+H\n',
+             'PEDSpecies A+H=FakeW-A+H_0\n',
              'MicroEnerMin[kcal/mol] 0.\n', 'MicroEnerMax[kcal/mol] 200.\n',
              'MicroEnerStep[kcal/mol] 1.\n',
              'RateOutput rate.out\n', 'PEDOutput ped.out\n',
@@ -101,7 +103,7 @@ def _rich_pair() -> tuple[list[str], list[str]]:
     a = mess_file(*_shared_blocks(), well('UA', -3.0),
                   header=_SHARED_HEADER + _WRT_A + _HEADER_A, relax=_RELAX,
                   eps='7.95 206.15', sig='2.715 4.71', masses='4.0 77.0')
-    b = mess_file(*_shared_blocks(1.61), well('UB', 2.0),
+    b = mess_file(*_shared_blocks(1.61, fid=1), well('UB', 2.0),
                   header=_SHARED_HEADER + _WRT_B + _HEADER_B, relax=_RELAX,
                   eps='7.95 300.0', sig='2.715 5.0', masses='4.0 109.0')
     return a, b
@@ -169,7 +171,7 @@ def _driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sop: Any,
 def test_messwriter_each_file_in_own_frame(tmp_path) -> None:
     """Every ZeroEnergy / GroundEnergy of slot k (PST included) is file k's
     raw value: each output re-read alone equals the original file read
-    alone; perturbing a shared well moves it in both outputs."""
+    alone; perturbing the shared bimolecular moves it in both outputs."""
     a, b = _rich_pair()
     sop, tpls, reader = read(tmp_path, a, b)
     assert_clean(reader)
@@ -182,12 +184,12 @@ def test_messwriter_each_file_in_own_frame(tmp_path) -> None:
     assert 'ZeroEnergy[kcal/mol] 0.61\n' in paths[1].read_text()
     assert 'ZeroEnergy[kcal/mol] -1.0\n' in paths[0].read_text()
 
-    sop.update('FakeW-A+H__we', 0.0)
+    sop.update('A+H__be', 0.5)
     paths = _write_slots(sop, tpls, tmp_path / 'moved')
     first = _reread(paths[0], tmp_path / 'moved0')
     second = _reread(paths[1], tmp_path / 'moved1')
-    assert first.items['FakeW-A+H'].energy == pytest.approx(0.0)
-    assert second.items['FakeW-A+H'].energy == pytest.approx(1.61)
+    assert first.items['A+H'].energy == pytest.approx(0.5)
+    assert second.items['A+H'].energy == pytest.approx(2.11)
     assert second.items['UB'].energy == pytest.approx(2.0)
 
 
@@ -284,14 +286,14 @@ def test_messwriter_spline_atom_density_tstlevel(tmp_path) -> None:
     assert 'Fragment A\n' in text
     assert 'TSTLevel EJ\n' in text
     again = _reread(path, tmp_path / 'again')
-    assert again.items['FakeW-A+H'].h_rotors[0].spline_angles == \
+    assert again.items['FakeW-A+H_1'].h_rotors[0].spline_angles == \
         [0.0, 30.0, 60.0, 90.0]
-    assert again.items['FakeW-A+H'].h_rotors[1].spline_angles is None
+    assert again.items['FakeW-A+H_1'].h_rotors[1].spline_angles is None
     assert again.items['H'].is_atom is True
     assert again.items['H'].atom_mass == 1.00782503223
     assert again.items['A+H'].fragment_density == [False, True]
-    assert again.items['A+H=FakeW-A+H'].tst_level == 'EJ'
-    assert len(again.items['A+H=FakeW-A+H'].h_rotors) == 1
+    assert again.items['A+H=FakeW-A+H_1'].tst_level == 'EJ'
+    assert len(again.items['A+H=FakeW-A+H_1'].h_rotors) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -319,15 +321,16 @@ def test_akw_payload_per_pes(tmp_path) -> None:
         assert pay['ene_stepover_temp'] == 0.2
     assert p0['well_red_thresh'] == 12.0 and p1['well_red_thresh'] == 14.0
     assert p0['well_extension'] == 0.5 and 'well_extension' not in p1
-    assert p0['ped_species'] == ['A+H=FakeW-A+H'] and 'ped_species' not in p1
+    assert p0['ped_species'] == ['A+H=FakeW-A+H_0']
+    assert 'ped_species' not in p1
     assert p0['micro_ener'] == [0.0, 200.0, 1.0] and 'micro_ener' not in p1
 
     zero = {w['label']: w['zero_ene'] for w in p1['wells']}
-    assert zero == {'FakeW-A+H': pytest.approx(0.61), 'UB': 2.0}
+    assert zero == {'FakeW-A+H_1': pytest.approx(0.61), 'UB': 2.0}
     assert p1['bimols'][0]['ground_ene'] == pytest.approx(1.61)
     assert p1['barriers'][0]['zero_ene'] == pytest.approx(1.61)
     assert {w['label']: w['zero_ene'] for w in p0['wells']} == {
-        'FakeW-A+H': -1.0, 'UA': -3.0}
+        'FakeW-A+H_0': -1.0, 'UA': -3.0}
 
     bim = p0['bimols'][0]
     assert bim['frag2_density'] is True and 'frag1_density' not in bim
@@ -337,7 +340,7 @@ def test_akw_payload_per_pes(tmp_path) -> None:
     assert bar['kind'] == 'phasespace' and bar['tst_level'] == 'ej'
     assert len(bar['hind_rotors']) == 1
     spline, plain = next(w for w in p0['wells']
-                         if w['label'] == 'FakeW-A+H')['hind_rotors']
+                         if w['label'] == 'FakeW-A+H_0')['hind_rotors']
     assert spline['potential_form'] == 'spline'
     assert [a for a, _ in spline['potential']] == [0.0, 30.0, 60.0, 90.0]
     assert [e for _, e in spline['potential']] == pytest.approx(
@@ -463,7 +466,7 @@ def test_akw_driver_hands_per_pes_values_to_mess_io(tmp_path,
     assert kwargs['ene_stepover_temp'] == 0.2
     assert kwargs['well_reduction_thresh'] == 12.0
     assert kwargs['model_ene_limit'] == 400.0
-    assert kwargs['ped_spc_lst'] == ['A+H=FakeW-A+H']
+    assert kwargs['ped_spc_lst'] == ['A+H=FakeW-A+H_0']
     assert kwargs['micro_out_params'] == (0.0, 200.0, 1.0)
 
 
@@ -604,11 +607,14 @@ def test_akw_warns_on_mess_io_hard_coded_keys(tmp_path, monkeypatch,
 # W5c: HotEnergies move with their well, in the file's own frame
 # ---------------------------------------------------------------------------
 def _hot_pair() -> tuple[list[str], list[str]]:
-    """A: S 0.0, UA -3; B (+1.61): S 1.61, HW -10 and the block
-    ``HW -10:0.5:40`` / ``S 5.0``."""
-    a = mess_file(well('S', 0.0), well('UA', -3.0))
-    b = mess_file(well('S', 1.61), well('HW', -10.0), header=[
-        'HotEnergies[kcal/mol] 2\n', 'HW -10:0.5:40\n', 'S 5.0\n'])
+    """A: bimolecular P 0.0, UA -3; B (+1.61): P 1.61, S 1.61, HW -10 and
+    the block ``HW -10:0.5:40`` / ``S 5.0``."""
+    frags = [fragment('A'), fragment('B', '1600.0')]
+    a = mess_file(bimol('P', frags, 0.0), well('UA', -3.0))
+    b = mess_file(bimol('P', frags, 1.61), well('S', 1.61),
+                  well('HW', -10.0), header=[
+                      'HotEnergies[kcal/mol] 2\n', 'HW -10:0.5:40\n',
+                      'S 5.0\n'])
     return a, b
 
 
@@ -708,7 +714,7 @@ def test_akw_real_mess_io_strings(tmp_path, monkeypatch) -> None:
     assert re.search(r'Fragment\s+H\s+density', chan), chan
     assert 'TSTLevel EJ' in chan
     assert re.search(r'^\s*Atom\s*$', chan, re.M)
-    assert re.search(r'PEDSpecies\s+A\+H=FakeW-A\+H', glob)
+    assert re.search(r'PEDSpecies\s+A\+H=FakeW-A\+H_0\s', glob)
     assert re.search(r'PEDOutput\s+G0001P00_ped\.out', glob)
     assert re.search(r'MicroRateOutput\s+G0001P00_ke\.out', glob)
     assert re.search(r'WellExtension\s+0\.5', glob)

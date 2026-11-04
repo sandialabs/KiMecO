@@ -21,8 +21,10 @@ from ase.data import atomic_masses, chemical_symbols
 
 
 #: Labels of AutoMech fake wells (``FW-<bimol>`` in older inputs,
-#: ``FakeW-<bimol>`` in newer ones). A fake well is not a mechanism species,
-#: and the same fake well may appear in several input files.
+#: ``FakeW-<bimol>`` in newer ones). A fake well is not a mechanism species.
+#: Like any well it belongs to one PES, so input files that hold the same
+#: bimolecular need a different fake-well label each (for instance
+#: ``FakeW-<bimol>_<pes id>``).
 FAKE_WELL_PREFIXES: tuple[str, ...] = ('FW-', 'FakeW-')
 
 #: kcal/mol conversion factors of the energy units accepted in MESS headers
@@ -245,15 +247,18 @@ class PesEnergyAlignment:
     ``offset[g] = offset[f] + E_g - E_f``. Files are visited in
     ``mess_inputs`` order; the first file of each group of linked files is
     the reference of the group (offset 0); a file sharing nothing keeps
-    offset 0. After alignment every shared energy must agree within
-    ``TOLERANCE``.
+    offset 0, with no warning. After alignment every shared energy must
+    agree within ``TOLERANCE``.
+
+    A well belongs to one PES and a MESS barrier needs a well on at least
+    one side, so in a valid input only bimoleculars link files.
 
     Attributes:
         n_files: number of input files.
         energies: raw energy of each item in each file that declares it,
             ``{label: {file index: kcal/mol}}``.
-        anchors: labels used to link files (wells, bimoleculars, saddle
-            points); the other labels are only checked.
+        anchors: labels allowed to link files; the other labels are only
+            checked.
         offsets: offset of each file (kcal/mol), filled by ``solve``.
         links: item that linked each non-reference file to its group.
     """
@@ -356,6 +361,9 @@ class MessInputReader:
     with the same label in several files are one object carrying the PES
     id of every file (their data must be identical), energies are aligned
     between files sharing items, global keys are checked or kept per file.
+    The exception is a well, real or fake: it belongs to one PES, so a label
+    declared as a ``Well`` in two files stops the read. A well that is a
+    bimolecular fragment in other files stays one item.
     """
     def __init__(self,
                  settings: dict,
@@ -1053,7 +1061,13 @@ class MessInputReader:
     # Item blocks
     # ------------------------------------------------------------------
     def _open_well(self, name: str, fid: int) -> None:
-        """Handle a ``Well <name>`` line."""
+        """Handle a ``Well <name>`` line.
+
+        A well, real or fake, belongs to one PES: a label already declared
+        as a Well in another file stops the read. A label known only as a
+        bimolecular fragment stays allowed: it is one item with identical
+        data, and it becomes a well of this PES.
+        """
         existing = self.SOP.items.get(name)
         if existing is None:
             self.validate_species(species=name, species_type='Well')
@@ -1068,13 +1082,28 @@ class MessInputReader:
                 f"a Well in {self._file_label(fid)}.")
             self._open_reread(name, None, copy)
             return
+        # PES ids of the files that already declare this label as a Well
+        # (none for a label known only as a fragment). Read now, because
+        # check_well adds fid to the item.
+        declaring_pes_ids = list(existing.pes_ids)
         if self.SOP.check_well(name=name, pes_id=fid):
             self._stop(
                 f"Well {name} is declared twice in {self._file_label(fid)}.")
             self._open_reread(name, None, copy)
             return
-        self.klog.info(f"Well {name} is shared by several MESS inputs "
-                       f"(PES ids {existing.pes_ids}).")
+        if declaring_pes_ids:
+            # check_well has run, so the barriers and hot energies of this
+            # file still find the well declared here: one message per well.
+            declared_in = ', '.join(self._file_label(pes_id)
+                                    for pes_id in declaring_pes_ids)
+            self._stop(
+                f"Well {name} is declared in {declared_in} and in "
+                f"{self._file_label(fid)}: a well, real or fake, belongs to "
+                "one PES. Give it a different label in each file.")
+            self._open_reread(name, None, copy)
+            return
+        self.klog.info(f"Well {name} of PES {fid} is also a bimolecular "
+                       "fragment: one item, identical data required.")
         self._open_reread(name, existing, copy)
 
     def _open_bimolecular(self, name: str, fid: int) -> None:

@@ -100,7 +100,7 @@ Well FakeW-CH3CHCHCH3+H   ! Fake Well for CH3CHCHCH3+H
       ZeroEnergy[kcal/mol]      -1.00
   End  ! Species
 End  ! Well
-Well FakeW-CH2CHCHCH3+H2   ! Fake Well for CH2CHCHCH3+H2
+Well FakeW-CH2CHCHCH3+H2_2   ! Fake Well for CH2CHCHCH3+H2
   Species
     RRHO
       Geometry[angstrom]        13
@@ -370,7 +370,7 @@ Barrier CH3CHCHCH3+H=FakeW-CH3CHCHCH3+H CH3CHCHCH3+H FakeW-CH3CHCHCH3+H
     End  ! HindRot
     ZeroEnergy[kcal/mol]      0.00
 End  ! Barrier
-Barrier CH2CHCHCH3+H2=FakeW-CH2CHCHCH3+H2 CH2CHCHCH3+H2 FakeW-CH2CHCHCH3+H2
+Barrier CH2CHCHCH3+H2=FakeW-CH2CHCHCH3+H2_2 CH2CHCHCH3+H2 FakeW-CH2CHCHCH3+H2_2
   RRHO
     Stoichiometry  C4H9
     Core PhaseSpaceTheory
@@ -424,7 +424,7 @@ Barrier CH2CHCHCH3+H2=FakeW-CH2CHCHCH3+H2 CH2CHCHCH3+H2 FakeW-CH2CHCHCH3+H2
     End  ! HindRot
     ZeroEnergy[kcal/mol]      -18.34
 End  ! Barrier
-Barrier FakeW-CH3CHCHCH3+H=FakeW-CH2CHCHCH3+H2 FakeW-CH3CHCHCH3+H FakeW-CH2CHCHCH3+H2
+Barrier FakeW-CH3CHCHCH3+H=FakeW-CH2CHCHCH3+H2_2 FakeW-CH3CHCHCH3+H FakeW-CH2CHCHCH3+H2_2
   RRHO
     Geometry[angstrom]        13
       C         -1.60290      -0.58316      -0.02049

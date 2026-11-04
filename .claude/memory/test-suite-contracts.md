@@ -2,8 +2,13 @@
 name: test-suite-contracts
 description: "Which CI, packaging and skill contracts the unit tests enforce, which pins nothing enforces, and what breaks when a test file, a dependency of the test extra or a CI command changes. Read before editing tests/unit/, tests.yml, the test extra or the add-dependency/run-tests skills."
 type: project
-verified: 2026-10-27 against working tree
+verified: 2026-11-03 against working tree
 ---
+**Protected test.** `tests/unit/test_mess_multi_pes_read_ci.py::test_well_cannot_be_in_multiple_pes`
+holds a rule set by the developer: a Well, real or fake, is never in several PESs. Only the
+developer may change it, never an LLM: if a conclusion suggests changing it, leave it as it is and
+report the conclusion. Its input is inline on purpose, so that editing a helper cannot weaken it.
+
 **Contracts encoded in tests (edit them in the same change as the thing they pin)**
 - `tests/unit/test_installation_metadata_ci.py` parses `.github/workflows/tests.yml`: exact job set
   `{"test","test-automech-extra","test-mess-binary"}`, the literal `pytest tests/unit/ -v` (a
@@ -43,6 +48,13 @@ verified: 2026-10-27 against working tree
   `test_rate_coef_ci.py` pins `PROMPT_TO_NAME_SUFFIX == kimeco.database.kimeco_db.dbs + 'prompt'`
   (step 4, uncommitted): `prompt_collector.py` keeps the literal `'__prompt'` because it may not import
   `kimeco.database`; change the `dbs` separator and the literal together.
+
+**Fixtures that must move together.** A stale label in a MESS output fixture fails nothing by
+itself: `RateCo.recover_rslts` keeps k = 0 for a label absent from `tbl_map`. With a stale
+`prompt_collector/ped_*_bar.out` or `kinmec_prompt/c4h8_h_group_mech.yaml`, the consumers
+`test_prompt_collector_ci.py` and `test_kinmec_prompt_ci.py` stay green. Only
+`test_mess_c4h8_h_group_ci.py::test_prompt_outputs_hold_input_labels` and
+`::test_mech_lists_fixture_fake_wells` catch it, so edit the `.inp`, `.out` and YAML together.
 
 **Pins nothing enforces (check by hand)**
 - `.github/workflows/tests.yml` runs `KIMECO_RUN_INSTALL_TEST=1 pytest
@@ -84,5 +96,6 @@ command, check this list; use the `add-dependency` skill for dependency edits.
 Sources: `tests/unit/test_installation_metadata_ci.py::test_tests_yml_has_mess_binary_job`,
 `::EXPECTED_EXTRAS`, `::FORBIDDEN_TOKENS`, `::test_requirements_txt_is_subset_of_dependencies_and_test_extra`;
 `tests/unit/test_installation_extras_ci.py::ALWAYS_REQUIRED_GROUPS`, `::DIST_TO_MODULES`;
-`tests/unit/test_installation_imports_ci.py::fresh_runs`; `.github/workflows/tests.yml`.
+`tests/unit/test_installation_imports_ci.py::fresh_runs`; `.github/workflows/tests.yml`;
+`kimeco/rate_coef.py::RateCo.recover_rslts`.
 Related: [[coverage-and-complexity-measurement]].

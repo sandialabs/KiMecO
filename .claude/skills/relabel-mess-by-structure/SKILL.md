@@ -33,7 +33,7 @@ description: "Names a molecule from its 3D geometry as a connectivity-only conde
 - Bond when `d_ij <= BOND_SCALE * (r_i + r_j)`, `BOND_SCALE = 1.2`, radii `ase.data.covalent_radii`.
 - Each heavy atom = symbol + H count (`C`, `CH`, `CH2`, `CH3`); no bond orders, radical or cis/trans markers; heavy skeleton must be a tree; main chain = a longest path, branches in `()`, smallest ASCII string wins (`CH2CHCH2CH3`, `CH3CH(CH3)CH3`).
 - ≤ 1 heavy atom: usual formula (`H`, `H2`, `O`, `OH`, `H2O`, `CH3`, `CH4`); `Atom` fragments: element from `Mass[amu]` (±0.1 amu).
-- Composites: bimolecular `<A>+<B>` (Fragment block order); fake well `FakeW-<bimolecular label>` (old `FW-`/`FakeW-` both accepted); barrier `<lside>=<rside>` (Barrier line order, saddle points included).
+- Composites: bimolecular `<A>+<B>` (Fragment block order); fake well `FakeW-<bimolecular label>` (old `FW-`/`FakeW-` both accepted); barrier `<lside>=<rside>` (Barrier line order, saddle points included). The same fake well gets the same label in every file, but KiMecO stops on a `Well` label declared in two files: for a multi-file KiMecO system, suffix the shared fake wells by hand after this tool (`FakeW-<bimolecular label>_<position in mess_inputs>`, their barriers following).
 
 ## Key files
 
@@ -47,7 +47,7 @@ description: "Names a molecule from its 3D geometry as a connectivity-only conde
 - STOP kinds: `smiles`, `missing-smiles`, `unsupported`, `atom`, `fake-well`, `real-well`, `pst`, `ts-formula`, `units`, `format`, `label-rule`, `collision`, `reversed-barrier`, `resolution`, `coverage`, `flat-map`, `round-trip`. WARNING kinds (non-blocking, also in the report): `bond-margin`, `rmsd`, `kin-db`, `no-geometry`.
 - Never loosen `BOND_SCALE` to silence a stop: H2 in AutoMech inputs sits about 0.004 Å inside the 1.2 limit (reported as `bond-margin`); a split H2 is caught by the SMILES check.
 - Species labels never contain `=`: mess_io splits `PEDSpecies` on `=`. Barrier labels contain exactly one `=` (MESS accepts it).
-- Fake wells must stay `FakeW-<exact bimolecular label>` and bimoleculars `<frag>+<frag>`: mess_io identifies fake wells and bimolecular products from these forms.
+- Fake wells must stay `FakeW-<exact bimolecular label>` and bimoleculars `<frag>+<frag>` in what this tool reads and writes: mess_io identifies fake wells and bimolecular products from these forms. A suffixed input (`FakeW-<label>_8`) stops with `fake-well`, so relabel unsuffixed files and suffix last; mess_io then strips only the prefix and reads `<label>_8`, which is no bimolecular.
 - Any label containing an uppercase `F` (all `FakeW-…=…` barrier names) is treated as fake by mess_io `_pes.pes(read_fake=False)`; stated in the report.
 - Never add `UseShortNames` to inputs KiMecO reads: MESS then prints `W1`/`P1` labels and KiMecO stores k = 0 silently.
 - MESS limits no label length (unbounded `std::string`; 43-character labels run with identical rates). Long labels only run together in some fixed-width headers (log partition-function tables, `ke.out` per-well headers); `rate.out`, `ped.out` and the `ke.out` bimolecular density-of-states header that mess_io's prompt workflow parses widen to fit.

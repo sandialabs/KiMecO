@@ -27,7 +27,7 @@ Model
        Sigmas[angstrom]                 4.364      4.364
        Masses[amu]                      56.063     39.962
   End  ! CollidFreq
-Well FakeW-CH2CHCH2CH3+H   ! Fake Well for CH2CHCH2CH3+H
+Well FakeW-CH2CHCH2CH3+H_1   ! Fake Well for CH2CHCH2CH3+H
   Species
     RRHO
       Geometry[angstrom]        13
@@ -346,7 +346,7 @@ Bimolecular CH2CH2CHCH2+H2   ! [[CH2]CC=C + [HH]]
   End  ! Frag2
   GroundEnergy[kcal/mol]    -3.22
 End  ! Bimol
-Barrier CH2CHCH2CH3+H=FakeW-CH2CHCH2CH3+H CH2CHCH2CH3+H FakeW-CH2CHCH2CH3+H
+Barrier CH2CHCH2CH3+H=FakeW-CH2CHCH2CH3+H_1 CH2CHCH2CH3+H FakeW-CH2CHCH2CH3+H_1
   RRHO
     Stoichiometry  C4H9
     Core PhaseSpaceTheory
@@ -502,7 +502,7 @@ Barrier CH2CH2CHCH2+H2=FakeW-CH2CH2CHCH2+H2 CH2CH2CHCH2+H2 FakeW-CH2CH2CHCH2+H2
     End  ! HindRot
     ZeroEnergy[kcal/mol]      -3.22
 End  ! Barrier
-Barrier FakeW-CH2CHCH2CH3+H=FakeW-CH2CH2CHCH2+H2 FakeW-CH2CHCH2CH3+H FakeW-CH2CH2CHCH2+H2
+Barrier FakeW-CH2CHCH2CH3+H_1=FakeW-CH2CH2CHCH2+H2 FakeW-CH2CHCH2CH3+H_1 FakeW-CH2CH2CHCH2+H2
   RRHO
     Geometry[angstrom]        13
       C         -1.92507      -0.02138      -0.23756

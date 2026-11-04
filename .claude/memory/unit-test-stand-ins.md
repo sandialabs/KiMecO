@@ -2,7 +2,7 @@
 name: unit-test-stand-ins
 description: "How to test heavy KiMecO pieces (GA/NM runs, CoreRun, Dash callbacks, plotting, DBs) fast and in-process, the global state that leaks between tests, and how to prove a fix test fails on the old code. Read before writing tests for optimizers, CoreRun subclasses or GUI callbacks."
 type: project
-verified: 2026-10-26 against working tree
+verified: 2026-11-03 against working tree
 ---
 **Global state that leaks between tests**
 - `Generation.total()` is a class-level counter (name-mangled `__id`) of every `Generation` built
@@ -45,6 +45,20 @@ Copy `example/` too: `test_mess_multi_pes_write_ci.py` reads `REPO / 'example'` 
 test, which otherwise fails with FileNotFoundError (not a verdict).
 Hindered-rotor scans are `np.float32` (`kimeco/rotors/hrotor.py::HinRotor.scan`): compare parsed
 potentials with `pytest.approx`, never with `==`.
+To switch off one rule of the current code instead, with no copy of `kimeco/`: a scratch plugin
+(`-p <plugin>`, on `PYTHONPATH`) takes `inspect.getsource` of the method, replaces the one line,
+`exec`s it with the module's `__dict__` as globals and patches the class. Add
+`-p no:cacheprovider` and `PYTHONDONTWRITEBYTECODE=1`. It follows the real source, unlike a copied
+body: with the one-well-per-PES rule off, exactly the 24 stop cases failed.
+
+**MESS reader stop messages** (`tests/unit/test_mess_multi_pes_read_ci.py`): `assert_one_stop`
+counts only the messages holding every needle, so it misses extra stops: use `only_stop` to prove
+one message in all. `stop_messages` is warnings plus errors, and `validate_species` warns on an
+unknown species even with `force_new_molecules` on, when the read does not stop.
+
+**Long `--basetemp`** breaks `tests/unit/test_q_sys_ci.py`: 9 failed at 93 characters, all 47
+errored at 136 and 227, the default passes 47 (2026-11-03). Likely cause: `QueueingSystem.jobdata`
+keeps `loc` in 150 characters, so longer job paths are cut. Keep the default.
 
 **Reusable helpers in other test modules** (`tests/unit/__init__.py` makes them importable as
 `from tests.unit.test_<x> import …`; import only non-`test_*` names, or pytest collects those tests
@@ -61,6 +75,7 @@ Generation counter, or need a cluster, MESS or a display.
 Sources: `kimeco/generation.py::Generation.total`; `kimeco/core.py::CoreRun.__init__`;
 `kimeco/gui/input_sections/experiments_section.py` (`_EXP_BROWSER`), `sop_section.py`
 (`_SOP_BROWSER`); `kimeco/experiments/t_profile.py::TimeProfile.plot`;
-`kimeco/database/sop_db.py::SOP_DB.__init__`; scratch run printing `kimeco.__file__` (2026-10-22).
+`kimeco/database/sop_db.py::SOP_DB.__init__`; scratch run printing `kimeco.__file__` (2026-10-22);
+`kimeco/q_sys.py::QueueingSystem.__init__` (`jobdata`).
 Related: [[coverage-and-complexity-measurement]], [[test-suite-contracts]],
 [[optimizer-tables-and-nm-swarm]].

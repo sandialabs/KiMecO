@@ -414,11 +414,13 @@ class SOP:
     def check_well(self,
                    name: str,
                    pes_id: int) -> bool:
-        """Procedure when a well might be in different PESs
+        """Add the PES id of a file declaring an already known well
 
-        A well read from several input files is one object carrying the id
-        of every file it appears in. A well first read as a bimolecular
-        fragment (no PES id) becomes a PES well of the file declaring it.
+        A well first read as a bimolecular fragment (no PES id) becomes a
+        PES well of the file declaring it. A well belongs to one PES: the
+        reader stops when the well already has another PES id (see
+        ``MessInputReader._open_well``). It stops after this call, so that
+        the barriers of that file still find the well declared there.
 
         Args:
             name (str): Well's name

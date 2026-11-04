@@ -2,16 +2,29 @@
 name: multi-pes-mess-reading
 description: "How MessInputReader reads several MESS inputs into one SOP (shared items, energy alignment, header-key classes, per-PES Lennard-Jones layout) and how both writers give each file back in its own frame; the invariants and test pins to respect when changing the reader, the SOP or the MESS writers."
 type: project
-verified: 2026-10-27 against working tree (uncommitted steps 1-2 of prompt-reactions)
+verified: 2026-11-03 against working tree (uncommitted strict-wells-per-pes step 1)
 ---
 **Reading (`kimeco/readers/mess_input.py`)**
 - One input file = one PES; `pes_id` = index in `mess_inputs`. Slot index == `pes_id` only because
   `SOP.pes_ids` is the sorted set of well/bimolecular ids and `RateCo.__init__` raises when the
   template count differs: every file must own ≥ 1 well or bimolecular (the reader stops otherwise).
-- Same label = same item. A label met again (another file, or another bimolecular block) is parsed
-  into a throwaway copy in a scratch SOP (`_rereads`, `_target_sop`, `_target_item`) and compared
-  with `differing_fields` (`Well`, `Bimolecular`, `Barrier`) when the block or file ends
-  (`_flush_rereads`): any difference stops the read. So rotors are never appended twice.
+- Same label = same item, except a `Well`. A bimolecular or barrier label met again (another file,
+  or another bimolecular block) is parsed into a throwaway copy in a scratch SOP (`_rereads`,
+  `_target_sop`, `_target_item`) and compared with `differing_fields` (`Bimolecular`, `Barrier`,
+  and `Well` for the fragment case) when the block or file ends (`_flush_rereads`): any difference
+  stops the read. So rotors are never appended twice.
+- A `Well` belongs to one PES: `_open_well` reads `existing.pes_ids` before `SOP.check_well` (which
+  appends the id) and stops when a different file already declared it as a `Well`, real or fake,
+  independent of `force_new_molecules`. The stop adds the id first and re-reads the block with
+  `_open_reread(name, None, copy)` (energy kept out of the alignment), so each extra declaration
+  gives one message naming the files from `existing.pes_ids` (not `_first_file`, which points to the
+  fragment's file for fragment, Well, Well); 3 files give 2 messages. Protected test:
+  `test_well_cannot_be_in_multiple_pes` (only the developer edits it). A fake well needed in
+  several files takes a label per file (`FakeW-<bimol>_<pes id>`), barriers renamed with it; saddles
+  `lside=rside` follow their sides. With shared wells refused no valid barrier can be shared (MESS
+  needs a Well on a side, KiMecO both sides in the file), so `SOP.check_barrier` and the re-read
+  branch of `_open_barrier` are reached only by barriers between two shared bimoleculars (not valid
+  MESS, kept for coverage).
 - A well of one PES may be a fragment of a bimolecular of another PES (same label): one object in
   `SOP.items`, attached to the fragment with `attach_fragment(existing)`; identical data required
   (stop otherwise). Its `Well.db_dict` keys (`{label}__*`) are merged into the bimolecular's, and
@@ -29,7 +42,8 @@ verified: 2026-10-27 against working tree (uncommitted steps 1-2 of prompt-react
   puts them in the payload as `hot_energies` (lists, key absent when the file has no block) and the
   emitted driver passes `hot_enes_dct` to `global_rates_input_v1`.
 - Energies: raw values per file go to `_file_energies`; after all files, `PesEnergyAlignment`
-  solves one offset per file through shared items (first file of each linked group = reference,
+  solves one offset per file through shared items, in practice only bimoleculars (first file of each
+  linked group = reference; a file sharing no bimolecular keeps offset 0, no warning;
   `TOLERANCE` 0.01 kcal/mol, inconsistent cycles stop). Stored `_energy` is in the aligned frame;
   the offset sits in `SOP.pes_file_data[k].energy_offset` (`PesFileData`, `kimeco/parameters.py`).
   `__we`/`__be` DB values are absolute aligned energies: changing the file order changes DB values,
@@ -93,7 +107,7 @@ verified: 2026-10-27 against working tree (uncommitted steps 1-2 of prompt-react
   no `PEDSpecies` product (`rhs.split('+')`) equals a `HotEnergies` key of another PES, on a
   malformed pair, or when a linked PED PES has incomplete `MicroEner*`; an unlinked PED PES warns.
   The check is off in non-prompt reads, so the three-file H-group still reads there.
-  Step 3 (uncommitted): `_refuse_unsupported_ped_pairs` runs first and stops, all reported, on a file
+  Step 3: `_refuse_unsupported_ped_pairs` runs first and stops, all reported, on a file
   with both `PEDSpecies` and `HotEnergies`, a `PEDSpecies` side that is not the exact label of a
   non-dummy bimolecular of its file (a well reactant is refused too), and a pair with two product
   fragments that are hot wells of other files; `_check_prompt_links` returns right after a refusal.
@@ -101,7 +115,7 @@ verified: 2026-10-27 against working tree (uncommitted steps 1-2 of prompt-react
 - `test_emitted_main_structure` (`test_automech_driver_ci.py`) pins the driver `If`: a `BoolOp(Or)`
   whose first operand is the Name `prompt_mode` (assigned once from `PES_PAYLOAD.get("prompt_reactions")`)
   and whose last is the bare `MessOutputReader.well_merging(...)` Call; plus exactly six placeholders
-  and no other brace in the template. Since step 5 (uncommitted) it also pins: one `_pass_failure`
+  and no other brace in the template. Since step 5 it also pins: one `_pass_failure`
   guard before the pass-1 rename, one in the merging arm, no bare `return`, `main` ends with
   `return 0`, `if __name__` block is `sys.exit(main())`; the fakes in `test_automech_driver_ci.py`
   and `test_mess_multi_pes_write_ci.py` must write an output holding `Temperature-Pressure Rate
@@ -110,9 +124,9 @@ verified: 2026-10-27 against working tree (uncommitted steps 1-2 of prompt-react
   `subprocess.run([...])` argv starting with `mess` must have 2 items, and `/mess` and `CONDA_PREFIX`
   must not appear anywhere (a comment containing them fails the test).
 - Known gap: `KiMec.create_reactions` adds reactions PES by PES without dedup, so a pair shared by
-  two PES gives two Cantera reactions; Cantera 3.2 `Solution(species=, reactions=)` accepts them
+  two PES (bimolecular pairs; wells can no longer be shared) gives two Cantera reactions; Cantera 3.2 `Solution(species=, reactions=)` accepts them
   and sums the rates (only a YAML file raises "Undeclared duplicate") (`kimeco/kinmec.py`). Prompt
-  reactions (step 5, uncommitted) are the exception: same-equation channels are summed by KiMec.
+  reactions (step 5) are the exception: same-equation channels are summed by KiMec.
 
 **Why:** the logic spans the reader, SOP, both writers and RateCo; its invariants are implicit.
 **How to apply:** read before changing `MessInputReader`, `SOP` header attributes, LJ parameters,

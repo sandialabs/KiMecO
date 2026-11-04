@@ -67,11 +67,12 @@ def _find_line(lines: list[str], blockname: str, after: int = 0) -> int:
 
 
 def test_read_duplicate_well_or_bimolecular_across_inputs(tmp_path) -> None:
-    """A well repeated in another PES input is one shared object (multi-PES,
-    ids [0, 1]) without stopping; a repeated bimolecular is shared across PES
-    (multi-PES, ids [0, 1]) without stopping."""
-    # -- test_read_duplicate_well_name_across_inputs_marks_multiple_pes: Check
-    #    the pathway of well creation across multiple PES
+    """A well repeated in another PES input stops the read (a well belongs to
+    one PES; the read still goes on to the end, one object with ids [0, 1]);
+    a repeated bimolecular is shared across PES (multi-PES, ids [0, 1])
+    without stopping."""
+    # -- test_read_duplicate_well_name_across_inputs_triggers_stop: Check the
+    #    pathway of well creation across multiple PES
     parse_reader = _build_reader(tmp_path=tmp_path)
     # 2 fake files with the same well
     parse_reader.pes_files = [
@@ -93,7 +94,7 @@ def test_read_duplicate_well_or_bimolecular_across_inputs(tmp_path) -> None:
     assert item.in_multiple_pes is True
     assert sorted(item.pes_ids) == [0, 1]
     assert [well.name for well in sop.wells] == ["DUP"]
-    assert parse_reader._trigger_stop is False
+    assert parse_reader._trigger_stop is True
 
     # -- test_read_duplicate_bimolecular_name_across_inputs_marks_multiple_pes:
     #    Check the pathway of Bimolecular creation across multiple PES

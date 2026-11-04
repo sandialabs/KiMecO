@@ -23,8 +23,9 @@ phases:
   thermo: ideal-gas
   elements: [C, H, Ar]
   species: [AR, H, H2, CH2CHCH2CH3, CH3CHCHCH3, CH2CHCHCH3, CH2CH2CHCH2,
-    CH2CHCHCH2, CH2CH2, CH2CH, FakeW-CH2CHCH2CH3+H, FakeW-CH3CHCHCH3+H,
-    FakeW-CH2CHCHCH3+H2, FakeW-CH2CH2CHCH2+H2]
+    CH2CHCHCH2, CH2CH2, CH2CH, FakeW-CH2CHCH2CH3+H_0, FakeW-CH2CHCH2CH3+H_1,
+    FakeW-CH3CHCHCH3+H, FakeW-CH2CHCHCH3+H2_0, FakeW-CH2CHCHCH3+H2_2,
+    FakeW-CH2CH2CHCH2+H2]
   kinetics: gas
   state: {T: 300.0, P: 1 atm}
 
@@ -64,13 +65,19 @@ species:
 - name: CH2CH
   composition: {C: 2, H: 3}
   thermo: *thermo
-- name: FakeW-CH2CHCH2CH3+H
+- name: FakeW-CH2CHCH2CH3+H_0
+  composition: {C: 4, H: 9}
+  thermo: *thermo
+- name: FakeW-CH2CHCH2CH3+H_1
   composition: {C: 4, H: 9}
   thermo: *thermo
 - name: FakeW-CH3CHCHCH3+H
   composition: {C: 4, H: 9}
   thermo: *thermo
-- name: FakeW-CH2CHCHCH3+H2
+- name: FakeW-CH2CHCHCH3+H2_0
+  composition: {C: 4, H: 9}
+  thermo: *thermo
+- name: FakeW-CH2CHCHCH3+H2_2
   composition: {C: 4, H: 9}
   thermo: *thermo
 - name: FakeW-CH2CH2CHCH2+H2
