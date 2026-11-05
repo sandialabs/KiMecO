@@ -508,11 +508,13 @@ def test_tests_yml_has_mess_binary_job() -> None:
     # Same autoio/autochem refs as the automech job (checked globally too).
     pins = _git_pins(body)
     assert pins["autoio"] and pins["autochem"]
-    # This job installs MESS but must never run a real MESS input.
+    # This job installs MESS, but its steps must never run a MESS input
+    # themselves: a real input runs only under pytest.
     assert not re.search(r"^\s+run:.*\bmess\s+\S+\.inp", body, flags=re.M)
     header = tests_yml[:tests_yml.index("jobs:")]
     assert "test-mess-binary" in header and "never" in header, (
-        "header comment must explain the MESS job never runs a MESS input")
+        "header comment must explain the steps of the MESS job never run a "
+        "MESS input")
 
     yaml = pytest.importorskip("yaml")
     parsed = yaml.safe_load(tests_yml)

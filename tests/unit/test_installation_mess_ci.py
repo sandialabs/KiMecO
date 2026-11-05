@@ -33,7 +33,8 @@ value is a configuration error (``ValueError``). When ``mess`` resolves
 ``test-mess-binary`` job in ``.github/workflows/tests.yml`` installs
 ``mess-static`` with micromamba and sets ``KIMECO_REQUIRE_MESS=1`` so CI
 proves the documented route works; a developer environment without MESS
-only skips. No test ever runs a real MESS input.
+only skips. No test of this file runs a real MESS input; only
+``test_automech_two_pass_ci.py`` does, under the same skip-vs-fail policy.
 
 The policy itself is exercised end-to-end against fake environments built
 under ``tmp_path`` (fake ``bin/mess`` shell script, symlinks, several PATH

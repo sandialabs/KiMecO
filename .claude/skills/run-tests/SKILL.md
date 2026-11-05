@@ -16,7 +16,7 @@ Running the existing suite before commit/push, reproducing a CI failure, install
   ```
   `test` = `pytest>=9.0.2`, `pytest-cov>=7.1.0`, `radon>=6.0.1`. The only extras are `test` and `automech` (see `pyproject.toml`). Coverage is off in the hooks, in CI and in the pytest configuration: it runs only when you pass `--cov` yourself (step 6).
 - Never validate in Python 3.10 (e.g. the `game` env). `tests/unit/test_installation_metadata_ci.py` skips at module level without `tomllib`, so a broken dependency mirror still looks green.
-- No MESS binary or Slurm needed: unit tests that touch the queue or partition checks patch those calls (e.g. `QueueingSystem.get_all_running`, `sinfo`) instead of running them (the CI workflow comment states MESS-dependent tests are excluded from `tests/unit/`).
+- No Slurm needed, and a MESS binary is optional: `tests/unit/test_automech_two_pass_ci.py` runs a real two-pass MESS job when `mess` is on `PATH` (about 18 s more in the git hook; skipped without it, a failure with `KIMECO_REQUIRE_MESS=1`). Unit tests that touch the queue or partition checks patch those calls (e.g. `QueueingSystem.get_all_running`, `sinfo`) instead of running them.
 
 ## Steps
 

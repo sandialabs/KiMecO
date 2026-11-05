@@ -102,6 +102,9 @@ Rules for every agent:
 - `.claude/memory/mess-global-keys-and-mess-io.md` (`mess-global-keys-and-mess-io`): what each
   global MESS key does to the rates and its default when absent; how MESS combines the LJ pair;
   mess_io writer defaults, hard-codes and pass-2 `WellExtension` quirk.
+- `.claude/memory/mess-well-extension-caps.md` (`mess-well-extension-caps`): what WellExtension, its caps and
+  ExtensionCorrection do in MESS, how mess_io derives caps from pass 1, what the automech driver does, and
+  the traps that give empty or wrong caps.
 - `.claude/memory/cantera-3-2-pitfalls.md` (`cantera-3-2-pitfalls`): Cantera 3.2 behaviours that bite
   KiMecO: Reactor `contents=` removed, coming `clone` default, repeated species read as a three-body
   collider, YAML vs object duplicates, how KiMec builds Solutions and adds species.

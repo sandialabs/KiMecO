@@ -44,8 +44,9 @@ from kimeco.readers.mess_input import MessInputReader
 from kimeco.writers import automech_kin
 from kimeco.writers.automech_kin import AutomechKinWriter
 from kimeco.writers.mess import MessWriter
-from tests.unit.test_automech_driver_ci import (_MERGING_OUT, _TP_TAIL,
-                                                _Recorder, _load_driver)
+from tests.unit.test_automech_driver_ci import (_GLOBKEY_ATM, _MERGING_OUT,
+                                                _TP_TAIL, _Recorder,
+                                                _globkey_we, _load_driver)
 from tests.unit.test_installation_extras_ci import import_or_skip
 from tests.unit.test_installation_imports_ci import FORBIDDEN_SOURCE_PATTERNS
 from tests.unit.test_mess_multi_pes_read_ci import (assert_clean, atom, bimol,
@@ -504,36 +505,39 @@ class _FakeMessRun:
 _PASS2_COMPLETE = 'PASS2\n' + _TP_TAIL
 
 
-_LUMPED = ('TemperatureList[K] 500 600\nWellExtension 0.5000\n'
-           'WellExtension\nModel\nEnd\n')
+#: What mess_io returns for pass 2: the uncommented line of a PES with the
+#: key, the bare line it adds to a PES without it.
+_LUMPED = {0: 'TemperatureList[K] 500 600\nWellExtension 0.5000\nModel\nEnd\n',
+           1: 'TemperatureList[K] 500 600\nWellExtension\nModel\nEnd\n'}
 
 
-@pytest.mark.parametrize('pes_id, kept', [(0, False), (1, True)])
+@pytest.mark.parametrize('pes_id, has_key', [(0, True), (1, False)])
 def test_akw_driver_well_extension_survives_pass_two(
-        tmp_path, monkeypatch, pes_id, kept) -> None:
-    """Pass 1 forwards the PES's WellExtension value; in pass 2 the bare
-    WellExtension line mess_io inserts is dropped only when the PES has a
-    value (PES 0), so its value stays the last one; PES 1 keeps mess_io's
-    input unchanged."""
+        tmp_path, monkeypatch, pes_id, has_key) -> None:
+    """Pass 1 forwards the PES's WellExtension value and comments its line:
+    each PES holds only its own key (PES 0 has it, PES 1 has none, so nothing
+    is commented there). Pass 2 is mess_io's text, written verbatim: the value
+    of PES 0 is back, PES 1 keeps the bare line."""
     sop, _, reader = read(tmp_path, *_rich_pair())
     assert_clean(reader)
-    mod, rec = _driver(tmp_path, monkeypatch, sop, pes_id)
+    globkey = _globkey_we('0.5000') if has_key else _GLOBKEY_ATM
+    mod, rec = _driver(tmp_path, monkeypatch, sop, pes_id, globkey=globkey)
     run_dir = _mkdir(tmp_path / 'run')
     base = f'G0001P{pes_id:02d}'
     fake = _FakeMessRun(run_dir / f'{base}.out',
                         [_MERGING_OUT, _PASS2_COMPLETE])
     monkeypatch.setattr(mod.subprocess, 'run', fake)
     monkeypatch.setattr(mod, 'well_lumped_input_file',
-                        lambda *args: _LUMPED)
+                        lambda *args: _LUMPED[pes_id])
     monkeypatch.chdir(run_dir)
     assert mod.main() == 0
     assert [kw['stderr'].name for kw in fake.kwargs] == [f'{base}.stderr'] * 2
     first = rec.kwargs('global_rates_input_v1')[0]
     assert first['well_extension'] == (0.5 if pes_id == 0 else None)
-    final = (run_dir / f'{base}.inp').read_text()
-    assert ('WellExtension\n' in final) is kept
-    ext = [ln for ln in final.splitlines() if ln.startswith('WellExtension')]
-    assert ext[-1 if not kept else 0] == 'WellExtension 0.5000'
+    pass1 = rec.calls['messrates_inp_str'][0][0][0]
+    assert not re.search(r'^WellExtension', pass1, re.M)
+    assert bool(re.search(r'^!WellExtension\s+0\.5000$', pass1, re.M)) is has_key
+    assert (run_dir / f'{base}.inp').read_text() == _LUMPED[pes_id]
     assert (run_dir / f'{base}.out').read_text() == _PASS2_COMPLETE
 
 

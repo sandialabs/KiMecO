@@ -16,11 +16,17 @@ needed. Three families of guarantees:
   (``sys.exit(main())``) and no final ``.out`` is left for
   ``q_sys._pickup_kin``. A complete pass-1 output is ``os.replace``d to the
   leading-underscore pass-1 copy, then pass 2 (``well_lumped_input_file`` +
-  WellExtension caps) runs when the payload carries ``prompt_reactions``
-  (prompt mode: always, keeping every output) or when
-  ``MessOutputReader.well_merging`` reports missing T/P coefficients, else
-  the pass-1 copy moves back; a failed pass 2 keeps the pass-1 copy. Both
-  the emitted source structure (AST) and the runtime behaviour are checked.
+  WellExtension caps at the lowest pressure of the grid) runs when the
+  payload carries ``prompt_reactions`` (prompt mode: always, keeping every
+  output) or when ``MessOutputReader.well_merging`` reports missing T/P
+  coefficients, else the pass-1 copy moves back; a failed pass 2 keeps the
+  pass-1 copy. Both the emitted source structure (AST) and the runtime
+  behaviour are checked.
+* WellExtension of the input. Pass 1 runs with the line commented
+  (``!WellExtension``), mess_io uncomments it for pass 2, and the driver
+  writes the pass-2 text verbatim. When pass 2 is skipped on a PES with the
+  key, the driver prints one warning on stdout. ``test_automech_two_pass_ci``
+  covers the same behaviour with the real mess_io and the real MESS.
 * ``_globkey_str`` unit relabel. ``mess_io.writer.global_rates_input_v1``
   hardcodes ``PressureList[atm]`` while the grid is in bar (the grid
   ``MessOutputReader`` indexes against), so the driver relabels the block to
@@ -110,6 +116,15 @@ _GLOBKEY_ATM = (
     '!\n'
     'RateOutput                             ' + _OUT + '\n'
 )
+
+
+def _globkey_we(value: str = '0.0010') -> str:
+    """The block of a PES whose input has WellExtension: the real mess_io
+    writes the valued line among the header keys, padded like the others."""
+    return _GLOBKEY_ATM.replace(
+        '!\nRateOutput',
+        f'WellExtension                          {value}\n!\nRateOutput')
+
 
 #: Same layout on the four-point grid used by the unit-relabel tests.
 _PRES4 = [0.01, 0.1, 1.0, 10.0]
@@ -297,9 +312,10 @@ def _run_driver(tmp_path: Path,
                 pres_unit: str | None = None,
                 prompt: bool = False,
                 returncodes: list[int] | None = None,
-                exit_code: int = 0
+                exit_code: int = 0,
+                pres: list[float] | None = None
                 ) -> tuple[Any, _Recorder, _FakeMess]:
-    script = _emit(tmp_path, pres_unit=pres_unit, prompt=prompt)
+    script = _emit(tmp_path, pres_unit=pres_unit, pres=pres, prompt=prompt)
     mod, rec = _load_driver(script, monkeypatch)
     fake = _FakeMess(tmp_path, outputs, returncodes)
     monkeypatch.setattr(mod.subprocess, 'run', fake)
@@ -395,8 +411,8 @@ def test_emitted_main_structure(tmp_path) -> None:
     payload key ``prompt_reactions`` first so that the merged-well check is
     skipped in prompt mode, and the branch has both arms; pass 2
     (``well_lumped_input_file`` + one ``_run_mess``, then its own failure
-    check) lives only in the merging arm, the other arm only renames back;
-    MESS runs twice in source on ``inp_name``, the second call nested
+    check) lives only in the merging arm, the other arm renames back, then
+    only warns on a PES whose input has WellExtension; MESS runs twice in source on ``inp_name``, the second call nested
     deeper; ``main`` ends with ``return 0``; ``os.replace`` both ways, never
     shutil; the script exits through ``sys.exit(main())``. The template
     keeps exactly its six str.format placeholders and no other brace."""
@@ -471,12 +487,17 @@ def test_emitted_main_structure(tmp_path) -> None:
     assert body_calls.count('_run_mess') == 1
     assert body_calls.count('_pass_failure') == 1
     assert len(_failure_guards(branch.body)) == 1
-    # The non-merging arm only renames the pass-1 copy back.
+    # The non-merging arm renames the pass-1 copy back, then only prints the
+    # warning of a PES whose input has WellExtension.
     assert 'well_lumped_input_file' not in else_calls
     assert '_run_mess' not in else_calls
     assert '_report_failure' not in else_calls
-    assert [ast.unparse(s) for s in branch.orelse] == [
-        'os.replace(pass1_copy, out_name)']
+    rename_back, warning = branch.orelse
+    assert ast.unparse(rename_back) == 'os.replace(pass1_copy, out_name)'
+    assert isinstance(warning, ast.If) and not warning.orelse
+    assert ast.unparse(warning.test) == (
+        "PES_PAYLOAD.get('well_extension') is not None")
+    assert [c for s in warning.body for c in _called_names(s)] == ['print']
 
     # MESS runs twice in main, both times on inp_name, pass 2 deeper.
     runs = sorted(_calls_named(main, '_run_mess'), key=lambda c: c.lineno)
@@ -577,24 +598,24 @@ def test_lump_pressure_reaches_mess_io_in_atm(
                 _case_dir(tmp_path, pres_unit), mp,
                 [_MERGING_OUT, _PASS2_OUT], pres_unit=pres_unit)
             args, _kwargs = rec.calls['well_lumped_input_file'][0]
-            if mod.LUMP_PRESSURE != 10.0:
+            if mod.LUMP_PRESSURE != 1.0:
                 failures.append(f'{pres_unit}: LUMP_PRESSURE {mod.LUMP_PRESSURE}')
-            if args[4] != pytest.approx(10.0 * to_atm):
+            if args[4] != pytest.approx(1.0 * to_atm):
                 failures.append(f'{pres_unit}: lump pressure {args[4]} '
-                                f'!= {10.0 * to_atm} atm')
+                                f'!= {1.0 * to_atm} atm')
     assert not failures, '\n'.join(failures)
 
 
 def test_lump_pressure_matches_mess_io_output_pressure(
         tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The lump pressure must equal (numpy.isclose) the key mess_io gives
-    the max grid pressure when it parses the MESS output; a mismatch makes
+    the min grid pressure when it parses the MESS output; a mismatch makes
     well_energies fall back to the lowest temperature of the run."""
     rates = pytest.importorskip('mess_io.reader.rates')
     numpy = pytest.importorskip('numpy')
     failures: list[str] = []
     for pres_unit in ('bar', 'torr', 'atm'):
-        parsed = rates._convert_pressure(10.0, pres_unit)
+        parsed = rates._convert_pressure(1.0, pres_unit)
         with monkeypatch.context() as mp:
             _mod, rec, _fake = _run_driver(
                 _case_dir(tmp_path, pres_unit), mp,
@@ -635,7 +656,7 @@ def test_healthy_output_skips_the_second_pass(
     assert kwargs['ktp_outname'] == _OUT
     assert kwargs['pressures'] == mod.PES_PAYLOAD['grid_pres']
     assert kwargs['pressures'] == [1.0, 10.0]
-    assert mod.LUMP_PRESSURE == 10.0
+    assert mod.LUMP_PRESSURE == 1.0
 
     globkey = rec.calls['messrates_inp_str'][0][0][0]
     assert 'PressureList[' + mod.PRES_UNIT + ']' in globkey
@@ -973,14 +994,14 @@ def test_prompt_mode_merging_output_runs_pass2_once(
 
 def test_prompt_mode_forced_pass_keeps_input_well_extension(
         tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A PES with its own WellExtension value: the forced pass 2 drops the
-    bare WellExtension line mess_io inserts, so the value stays."""
+    """A PES with its own WellExtension value: pass 1 comments the line, and
+    the forced pass 2 writes what mess_io returns, the value uncommented."""
     script = _emit(tmp_path, prompt=True)
-    mod, _rec = _load_driver(script, monkeypatch)
+    mod, rec = _load_driver(script, monkeypatch, _globkey_we('0.5000'))
     monkeypatch.setitem(mod.PES_PAYLOAD, 'well_extension', 0.5)
     monkeypatch.setattr(
         mod, 'well_lumped_input_file',
-        lambda *args: 'WellExtension 0.5\nWellExtension\nModel\nEnd\n')
+        lambda *args: 'WellExtension 0.5\nModel\nEnd\n')
     monkeypatch.setattr(mod.subprocess, 'run',
                         _FakeMessSides(tmp_path, [_HEALTHY_OUT, _PASS2_OUT]))
     monkeypatch.chdir(tmp_path)
@@ -988,6 +1009,9 @@ def test_prompt_mode_forced_pass_keeps_input_well_extension(
     final = (tmp_path / _INP).read_text()
     assert final == 'WellExtension 0.5\nModel\nEnd\n'
     assert (tmp_path / _OUT).read_text() == _PASS2_OUT
+    globkey = rec.calls['messrates_inp_str'][0][0][0]
+    assert re.search(r'^!WellExtension\s+0\.5000$', globkey, re.M)
+    assert not re.search(r'^WellExtension', globkey, re.M)
 
 
 def test_prompt_flag_reaches_driver_only_through_payload(tmp_path) -> None:
@@ -1443,3 +1467,242 @@ def test_globkey_forwards_hot_energies_as_tuples(
     body = body[:body.index('\ndef ', 1)]
     assert 'hot_enes_dct' in body
     assert '{' not in body and '}' not in body
+
+
+# ---------------------------------------------------------------------------
+# WellExtension of the input: commented for pass 1, back through mess_io
+# ---------------------------------------------------------------------------
+_WARNING = (f'KiMecO automech driver: warning: WellExtension of the input was '
+            f'not applied to {_BASE}: no well vanished in pass 1, so pass 2 '
+            f'did not run and the pass 1 rates, without WellExtension, are '
+            f'final.')
+
+#: Payload value of the key and the text mess_io writes for it; 0.0 is what a
+#: bare input reads as, and it must follow the same path as a real value.
+_KEY_VALUES = pytest.mark.parametrize(
+    'value, text', [(0.001, '0.0010'), (0.0, '0.0000')], ids=['0.001', '0.0'])
+
+
+class _FakeMessInputs(_FakeMessSides):
+    """``_FakeMessSides`` that also keeps the input text MESS gets at each
+    run: pass 2 overwrites the same file."""
+
+    def __init__(self, cwd: Path, outputs: list[str | None]) -> None:
+        super().__init__(cwd, outputs)
+        self.inputs: list[str] = []
+
+    def __call__(self, cmd, check=False, **kwargs):
+        self.inputs.append((self.cwd / cmd[1]).read_text())
+        return super().__call__(cmd, check=check, **kwargs)
+
+
+def _run_with_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                  value: float | None, outputs: list[str | None],
+                  globkey: str, prompt: bool = False
+                  ) -> tuple[int, Any, _Recorder, _FakeMessInputs]:
+    """Run the driver on a PES holding ``value`` (no key when None). The
+    pass-1 input holds the global keywords, so the file MESS reads shows
+    what the driver did to them."""
+    mod, rec = _load_driver(_emit(tmp_path, prompt=prompt), monkeypatch,
+                            globkey)
+    if value is not None:
+        monkeypatch.setitem(mod.PES_PAYLOAD, 'well_extension', value)
+    record = mod.messrates_inp_str
+
+    def _with_globkey(globkey_str, *args, **kwargs):
+        record(globkey_str, *args, **kwargs)
+        return globkey_str + 'Model\nEnd\n'
+
+    monkeypatch.setattr(mod, 'messrates_inp_str', _with_globkey)
+    fake = _FakeMessInputs(tmp_path, outputs)
+    monkeypatch.setattr(mod.subprocess, 'run', fake)
+    monkeypatch.chdir(tmp_path)
+    return _exit_code(mod.main), mod, rec, fake
+
+
+def _assert_line_commented(text: str, value: str) -> None:
+    """One commented line, its value and padding kept, none active."""
+    commented = re.findall(r'^!WellExtension.*$', text, re.M)
+    assert commented == [f'!WellExtension                          {value}']
+    assert not re.search(r'^\s*WellExtension', text, re.M)
+
+
+@_KEY_VALUES
+def test_pass1_comments_input_well_extension(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, value, text) -> None:
+    """Pass 1 gets the input's value from mess_io, unmodified, then comments
+    the line, in the global keywords and in the file MESS reads; nothing else
+    of the block changes."""
+    code, mod, rec, fake = _run_with_key(
+        tmp_path, monkeypatch, value, [_MERGING_OUT, _PASS2_OUT],
+        _globkey_we(text))
+    assert code == 0
+    assert rec.count('global_rates_input_v1') == 1
+    assert rec.last('global_rates_input_v1')['well_extension'] == value
+    globkey = rec.calls['messrates_inp_str'][0][0][0]
+    _assert_line_commented(globkey, text)
+    _assert_line_commented(fake.inputs[0], text)
+    assert globkey == _globkey_we(text).replace(
+        'PressureList[atm]', 'PressureList[' + mod.PRES_UNIT + ']').replace(
+        '\nWellExtension', '\n!WellExtension')
+
+
+def test_pass1_without_key_is_unchanged(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A PES without the key: no value for mess_io, no line, active or
+    commented, in the pass-1 input."""
+    code, mod, rec, fake = _run_with_key(
+        tmp_path, monkeypatch, None, [_MERGING_OUT, _PASS2_OUT], _GLOBKEY_ATM)
+    assert code == 0
+    assert rec.last('global_rates_input_v1')['well_extension'] is None
+    assert 'WellExtension' not in fake.inputs[0]
+    assert fake.inputs[0] == _GLOBKEY_ATM.replace(
+        'PressureList[atm]',
+        'PressureList[' + mod.PRES_UNIT + ']') + 'Model\nEnd\n'
+
+
+@pytest.mark.parametrize('value', [0.001, None], ids=['key', 'no_key'])
+def test_pass2_input_is_mess_io_text_verbatim(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, value) -> None:
+    """The driver keeps no filter on the pass-2 text: mess_io gets the input
+    as pass 1 wrote it (six positional arguments, no ``lump=``) and MESS
+    reads what mess_io returned, a bare line included."""
+    lumped = ('WellExtension 0.0010\nWellExtension\n'
+              'Well W1\n  WellExtensionCap[kcal/mol]    14.20\nModel\nEnd\n')
+    globkey = _GLOBKEY_ATM if value is None else _globkey_we()
+    mod, rec = _load_driver(_emit(tmp_path), monkeypatch, globkey)
+    if value is not None:
+        monkeypatch.setitem(mod.PES_PAYLOAD, 'well_extension', value)
+    seen: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    def _lumped(*args, **kwargs):
+        seen.append((args, kwargs))
+        return lumped
+
+    monkeypatch.setattr(mod, 'well_lumped_input_file', _lumped)
+    fake = _FakeMessInputs(tmp_path, [_MERGING_OUT, _PASS2_OUT])
+    monkeypatch.setattr(mod.subprocess, 'run', fake)
+    monkeypatch.chdir(tmp_path)
+    assert _exit_code(mod.main) == 0
+    assert fake.inputs[1] == lumped
+    assert (tmp_path / _INP).read_text() == lumped
+    (args, kwargs), = seen
+    assert len(args) == 6 and kwargs == {}
+    assert args[0] == fake.inputs[0]
+
+
+@_KEY_VALUES
+def test_no_vanishing_key_warns_and_keeps_pass1(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, value, text
+        ) -> None:
+    """Non-prompt PES with the key, no well vanished: pass 1 stays final, one
+    warning on stdout, exit 0. Nothing on the process stderr and nothing but
+    MESS's own text in ``.stderr``, because a non-empty ``.err`` log fails the
+    job. A value of 0.0 still counts as a key."""
+    code, _mod, rec, fake = _run_with_key(
+        tmp_path, monkeypatch, value, [_HEALTHY_OUT], _globkey_we(text))
+    assert code == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [_WARNING]
+    assert captured.err == ''
+    assert fake.calls == [['mess', _INP]]
+    assert rec.count('well_lumped_input_file') == 0
+    assert (tmp_path / _OUT).read_text() == _HEALTHY_OUT
+    assert not (tmp_path / _PASS1).exists()
+    assert not (tmp_path / _FAILED).exists()
+    assert (tmp_path / _STDERR).read_text() == 'MESS-STDERR-PASS1\n'
+    _assert_line_commented((tmp_path / _INP).read_text(), text)
+
+
+def test_merging_with_key_no_warning(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """Merged wells: pass 2 runs and gives the value back, so no warning."""
+    code, _mod, rec, fake = _run_with_key(
+        tmp_path, monkeypatch, 0.001, [_MERGING_OUT, _PASS2_OUT],
+        _globkey_we())
+    assert code == 0
+    assert rec.count('well_lumped_input_file') == 1
+    assert len(fake.calls) == 2
+    _assert_line_commented(fake.inputs[0], '0.0010')
+    captured = capsys.readouterr()
+    assert 'KiMecO automech driver' not in captured.out
+    assert captured.err == ''
+
+
+def test_prompt_with_key_no_warning(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """Prompt mode forces pass 2 even on a healthy pass 1: no warning."""
+    code, _mod, rec, fake = _run_with_key(
+        tmp_path, monkeypatch, 0.001, [_HEALTHY_OUT, _PASS2_OUT],
+        _globkey_we(), prompt=True)
+    assert code == 0
+    assert rec.count('well_lumped_input_file') == 1
+    assert len(fake.calls) == 2
+    _assert_line_commented(fake.inputs[0], '0.0010')
+    captured = capsys.readouterr()
+    assert 'KiMecO automech driver' not in captured.out
+    assert captured.err == ''
+
+
+def test_key_without_line_raises(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Key in the payload but no line from mess_io (a format change): the
+    driver stops before writing an input or running MESS, instead of running
+    pass 1 with WellExtension possibly active."""
+    mod, _rec = _load_driver(_emit(tmp_path), monkeypatch, _GLOBKEY_ATM)
+    monkeypatch.setitem(mod.PES_PAYLOAD, 'well_extension', 0.001)
+    fake = _FakeMess(tmp_path, [_HEALTHY_OUT])
+    monkeypatch.setattr(mod.subprocess, 'run', fake)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(RuntimeError, match='WellExtension'):
+        mod.main()
+    assert fake.calls == []
+    assert not (tmp_path / _INP).exists()
+
+
+@pytest.mark.parametrize('pres_unit, to_atm', [
+    ('bar', _BAR2ATM), ('torr', _TORR2ATM), ('atm', 1.0)],
+    ids=['bar', 'torr', 'atm'])
+def test_lump_pressure_is_lowest_of_the_grid(
+        tmp_path, monkeypatch: pytest.MonkeyPatch, pres_unit, to_atm) -> None:
+    """The caps are read at the lowest pressure of the grid, the literal in
+    the grid unit, the mess_io argument in atm."""
+    mod, rec, _fake = _run_driver(
+        tmp_path, monkeypatch, [_MERGING_OUT, _PASS2_OUT],
+        pres_unit=pres_unit, pres=[0.01, 1.0, 100.0])
+    assert mod.LUMP_PRESSURE == 0.01
+    args, _kwargs = rec.calls['well_lumped_input_file'][0]
+    assert args[4] == pytest.approx(0.01 * to_atm)
+
+
+def test_lump_pressure_unsorted_grid(tmp_path) -> None:
+    """The lowest pressure, wherever it sits in the grid, on a grid whose
+    order is kept in the payload."""
+    script = _emit(tmp_path, pres=[10.0, 0.01, 1.0]).read_text()
+    assert 'LUMP_PRESSURE = 0.01\n' in script
+    assert "'grid_pres': [10.0, 0.01, 1.0]" in script
+
+
+def test_lump_pressure_postprocessing_sub_grid(tmp_path) -> None:
+    """In postprocessing the reference is the job's sub-grid, even when the
+    SOP grid goes lower."""
+    sop = _MinimalSOP([0.001, 1.0, 10.0], None)
+    AutomechKinWriter(sop=cast(Any, sop), pes_id=0,
+                      sub_p=[5.0, 0.5], sub_t=[700.0]).write(
+        loc=str(tmp_path), filename=_FILENAME)
+    assert 'LUMP_PRESSURE = 0.5\n' in (tmp_path / _FILENAME).read_text()
+
+
+def test_empty_pressure_grid_keeps_default(tmp_path) -> None:
+    """An empty grid keeps the 1.0 fallback, without an error from min()."""
+    assert 'LUMP_PRESSURE = 1.0\n' in _emit(tmp_path, pres=[]).read_text()
+
+
+def test_lump_temperature_stays_grid_max(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the reference pressure moved: the temperature handed to mess_io
+    is still the highest of the grid."""
+    mod, rec, _fake = _run_driver(tmp_path, monkeypatch,
+                                  [_MERGING_OUT, _PASS2_OUT])
+    assert mod.LUMP_TEMP == 1000.0
+    assert rec.calls['well_lumped_input_file'][0][0][5] == 1000.0

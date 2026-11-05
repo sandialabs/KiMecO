@@ -1,0 +1,132 @@
+TemperatureList[K]  1000 1250 1500 1750
+PressureList[bar]   0.01 1.0 100.0
+ModelEnergyLimit[kcal/mol] 400
+EnergyStepOverTemperature .2
+ExcessEnergyOverTemperature 40
+CalculationMethod direct
+WellCutoff 10
+ChemicalEigenvalueMax 0.2
+WellExtension 0.001
+RateOutput rate.out
+Model
+  EnergyRelaxation
+    Exponential
+      Factor[1/cm]    200
+      Power           0.85
+      ExponentCutoff  15
+    End
+  CollisionFrequency
+    LennardJones
+      Epsilons[1/cm]  7.95 206.15
+      Sigmas[angstrom]  2.715 4.71
+      Masses[amu]  4.0 29.0
+    End
+Well WDEEP
+  Species
+    RRHO
+      Geometry[angstrom]  5
+        C 0.0 0.0 0.0
+        C 0.0 0.0 1.5
+        H 0.0 1.0 2.0
+        H 0.0 -1.0 2.0
+        H 1.0 0.0 -0.4
+      Core RigidRotor
+        SymmetryFactor 1.0
+      End
+      Frequencies[1/cm]  12
+        400.0 800.0 1000.0 1100.0 1400.0 1450.0 3000.0 3050.0 3100.0 3150.0 3200.0 1200.0
+      ZeroEnergy[kcal/mol]  -60
+      ElectronicLevels[1/cm]  1
+        0.0  2
+  End
+End
+Well WSHAL
+  Species
+    RRHO
+      Geometry[angstrom]  5
+        C 0.0 0.0 0.0
+        C 0.0 0.0 1.5
+        H 0.0 1.0 2.0
+        H 0.0 -1.0 2.0
+        H 1.0 0.0 -0.4
+      Core RigidRotor
+        SymmetryFactor 1.0
+      End
+      Frequencies[1/cm]  12
+        400.0 800.0 1000.0 1100.0 1400.0 1450.0 3000.0 3050.0 3100.0 3150.0 3200.0 1200.0
+      ZeroEnergy[kcal/mol]  -35
+      ElectronicLevels[1/cm]  1
+        0.0  2
+  End
+End
+Bimolecular PROD+H
+  Fragment PROD
+    RRHO
+      Geometry[angstrom]  5
+        C 0.0 0.0 0.0
+        C 0.0 0.0 1.5
+        H 0.0 1.0 2.0
+        H 0.0 -1.0 2.0
+        H 1.0 0.0 -0.4
+      Core RigidRotor
+        SymmetryFactor 1.0
+      End
+      Frequencies[1/cm]  9
+        400.0 800.0 1000.0 1100.0 1400.0 1450.0 3000.0 3050.0 3100.0
+      ZeroEnergy[kcal/mol]  0.0
+      ElectronicLevels[1/cm]  1
+        0.0  1
+    End
+  Fragment H
+    Atom
+      Mass[amu]  1.00782503223
+      ElectronicLevels[1/cm]  1
+        0.0  2
+    End
+  GroundEnergy[kcal/mol]  0.0
+End
+Barrier B1 WDEEP WSHAL
+  RRHO
+    Geometry[angstrom]  5
+        C 0.0 0.0 0.0
+        C 0.0 0.0 1.5
+        H 0.0 1.0 2.0
+        H 0.0 -1.0 2.0
+        H 1.0 0.0 -0.4
+    Core RigidRotor
+      SymmetryFactor 1.0
+    End
+    Frequencies[1/cm]  11
+      400.0 800.0 1000.0 1100.0 1400.0 1450.0 3000.0 3050.0 3100.0 3150.0 1200.0
+    ZeroEnergy[kcal/mol]  -8
+    ElectronicLevels[1/cm]  1
+      0.0  2
+    Tunneling  Eckart
+      ImaginaryFrequency[1/cm]  1000.0
+      WellDepth[kcal/mol]  10.0
+      WellDepth[kcal/mol]  12.0
+    End
+End
+Barrier B2 WSHAL PROD+H
+  RRHO
+    Geometry[angstrom]  5
+        C 0.0 0.0 0.0
+        C 0.0 0.0 1.5
+        H 0.0 1.0 2.0
+        H 0.0 -1.0 2.0
+        H 1.0 0.0 -0.4
+    Core RigidRotor
+      SymmetryFactor 1.0
+    End
+    Frequencies[1/cm]  11
+      400.0 800.0 1000.0 1100.0 1400.0 1450.0 3000.0 3050.0 3100.0 3150.0 1200.0
+    ZeroEnergy[kcal/mol]  3
+    ElectronicLevels[1/cm]  1
+      0.0  2
+    Tunneling  Eckart
+      ImaginaryFrequency[1/cm]  1000.0
+      WellDepth[kcal/mol]  10.0
+      WellDepth[kcal/mol]  12.0
+    End
+End
+End

@@ -23,16 +23,21 @@ When executed on the compute node the emitted script:
    EnergyStepOverTemperature, WellReductionThreshold, WellExtension,
    PEDSpecies, MicroEnerMin/Max/Step, HotEnergies) when they are present in
    the payload, with side-output names of its own (``<name>P<slot>_ped.out``,
-   ``<name>P<slot>_ke.out``);
+   ``<name>P<slot>_ke.out``); the WellExtension line of the input is then
+   commented (``!WellExtension``), so that pass 1 runs without it and wells
+   can vanish;
 5. writes the base input, runs MESS (pass 1), moves the pass-1 output to a
    leading-underscore intermediate (``_<name>P<slot>.out``), and, in prompt
    mode (payload key ``prompt_reactions``, present only when the
    ``prompt_reactions`` setting is true) or when rate coefficients are
    missing (merged wells), derives WellExtension caps via
-   ``mess_io.well_lumped_input_file`` (at the lump pressure converted to atm,
-   the unit mess_io parses the output in), overwrites the input and runs MESS
-   (pass 2); otherwise the pass-1 output is moved back to
-   ``<name>P<slot>.out`` and pass 2 is skipped. In prompt mode every PES thus
+   ``mess_io.well_lumped_input_file`` (at the lump pressure, the lowest
+   pressure of the grid, converted to atm, the unit mess_io parses the
+   output in), which also uncomments the WellExtension line (a PES without
+   the key gets a bare line), overwrites the input and runs MESS (pass 2);
+   otherwise the pass-1 output is moved back to ``<name>P<slot>.out``, pass 2
+   is skipped and a PES whose input has WellExtension prints a warning on
+   stdout: its final rates are without it. In prompt mode every PES thus
    ends with the pass-2 input, output and ``.log`` (plus ``_ped.out`` and
    ``_ke.out`` when the input asks for them) next to the pass-1 copy.
    MESS stderr of both passes goes to ``<name>P<slot>.stderr`` (a stale copy
@@ -366,13 +371,35 @@ def _globkey_str(out_name, well_extension):
     return globkey_str.replace(old, new)
 
 
-def _keep_well_extension(inp_str):
-    # Pass 2: mess_io inserts a bare WellExtension line before Model. This
-    # PES already carries its own WellExtension value (written in pass 1),
-    # so the bare line is dropped and the value is kept.
-    lines = inp_str.split("\\n")
-    kept = [line for line in lines if line.strip() != "WellExtension"]
-    return "\\n".join(kept)
+def _comment_well_extension(globkey_str):
+    """Comment the WellExtension line of the global keywords, for pass 1.
+
+    Pass 1 must run without WellExtension: a well then vanishes from the
+    rate tables above some temperature, and that temperature gives its
+    WellExtensionCap in pass 2. The "!" makes the line inert for MESS and
+    must touch the keyword: for pass 2, mess_io gives the value back only by
+    uncommenting the exact text "!WellExtension"; on "! WellExtension" it
+    would add a bare line instead, of value 0.
+
+    Args:
+        globkey_str (str): global keyword section holding the line.
+
+    Returns:
+        str: the same section with the line commented, its padding kept.
+
+    Raises:
+        RuntimeError: no line starts with WellExtension (mess_io changed
+            its format), so the line could not be commented.
+    """
+    old = "\\nWellExtension"
+    new = "\\n!WellExtension"
+    if old not in globkey_str:
+        raise RuntimeError(
+            "mess_io did not emit the expected WellExtension line; the "
+            "automech driver refuses to run pass 1 with WellExtension "
+            "possibly active: wells would not vanish and pass 2 would get "
+            "no WellExtensionCap.")
+    return globkey_str.replace(old, new)
 
 
 def _run_mess(inp_name, err_name):
@@ -461,9 +488,13 @@ def main():
     rxn_chan_str = _rxn_chan_str()
     etrans_str = _energy_transfer_str()
 
-    # Pass 1: the input's own WellExtension value, if any (none otherwise);
-    # well_lumped_input_file will add caps.
+    # Pass 1 runs without WellExtension, so that wells vanish and pass 2 can
+    # derive their caps. The line of a PES whose input has the key stays as
+    # a comment, which well_lumped_input_file uncomments for pass 2 (it adds
+    # a bare line on a PES without the key).
     globkey_str = _globkey_str(out_name, PES_PAYLOAD.get("well_extension"))
+    if PES_PAYLOAD.get("well_extension") is not None:
+        globkey_str = _comment_well_extension(globkey_str)
     base_inp = messrates_inp_str(
         globkey_str, rxn_chan_str, energy_trans_str=etrans_str)
     handle = open(inp_name, "w")
@@ -497,8 +528,6 @@ def main():
         extended_inp = well_lumped_input_file(
             base_inp, out_str, aux_str, log_str, _lump_pressure_atm(),
             LUMP_TEMP)
-        if PES_PAYLOAD.get("well_extension") is not None:
-            extended_inp = _keep_well_extension(extended_inp)
         handle = open(inp_name, "w")
         handle.write(extended_inp)
         handle.close()
@@ -513,6 +542,12 @@ def main():
         # Not prompt mode and no merged wells: pass 1 (already checked) is
         # the final result.
         os.replace(pass1_copy, out_name)
+        if PES_PAYLOAD.get("well_extension") is not None:
+            # On stdout: a non-empty .err log of the task fails the job.
+            print("KiMecO automech driver: warning: WellExtension of the "
+                  "input was not applied to " + base + ": no well vanished "
+                  "in pass 1, so pass 2 did not run and the pass 1 rates, "
+                  "without WellExtension, are final.", flush=True)
     return 0
 
 
@@ -965,7 +1000,9 @@ class AutomechKinWriter:
         grid_temp = payload['grid_temp']
         grid_pres = payload['grid_pres']
         lump_temp = max(grid_temp) if grid_temp else 1000.0
-        lump_pressure = max(grid_pres) if grid_pres else 1.0
+        # Reference pressure of the WellExtension caps: the lowest pressure
+        # of this job's grid (in postprocessing, its sub-grid).
+        lump_pressure = min(grid_pres) if grid_pres else 1.0
         # Slot index is encoded in the filename by the caller; parse it back so
         # the emitted script self-labels its output identically.
         slot = 0

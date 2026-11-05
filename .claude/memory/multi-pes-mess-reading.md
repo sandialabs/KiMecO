@@ -98,7 +98,7 @@ verified: 2026-11-03 against working tree (uncommitted strict-wells-per-pes step
   multi-file projects, and ones whose fragment rotors were duplicated, cannot restart or kmopp).
 - `tests/unit/test_mess_input_header_keys_ci.py`: warnings only for real mismatches ("Different
   <Label> in <file>", one "bath mass" warning for Masses index 0); consistent inputs log info only.
-- `tests/unit/test_automech_driver_ci.py:884-885`: with no header keys the `global_rates_input_v1`
+- `tests/unit/test_automech_driver_ci.py:1411-1412`: with no header keys the `global_rates_input_v1`
   kwargs are exactly temperatures, pressures, well_extension, ktp_outname.
 - Prompt mode (setting `prompt_reactions`, step 2): `AutomechKinWriter._build_payload` adds the
   payload key `prompt_reactions` (`True`) only then, so non-prompt payloads stay byte-identical to the
@@ -116,7 +116,9 @@ verified: 2026-11-03 against working tree (uncommitted strict-wells-per-pes step
   whose first operand is the Name `prompt_mode` (assigned once from `PES_PAYLOAD.get("prompt_reactions")`)
   and whose last is the bare `MessOutputReader.well_merging(...)` Call; plus exactly six placeholders
   and no other brace in the template. Since step 5 it also pins: one `_pass_failure`
-  guard before the pass-1 rename, one in the merging arm, no bare `return`, `main` ends with
+  guard before the pass-1 rename, one in the merging arm, no bare `return`; the non-merging arm is
+  the rename back followed by one `If` on `PES_PAYLOAD.get('well_extension') is not None` whose only
+  call is `print` (the stdout warning); `main` ends with
   `return 0`, `if __name__` block is `sys.exit(main())`; the fakes in `test_automech_driver_ci.py`
   and `test_mess_multi_pes_write_ci.py` must write an output holding `Temperature-Pressure Rate
   Tables:` or the driver reports a failure.

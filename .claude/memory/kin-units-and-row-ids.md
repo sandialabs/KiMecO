@@ -22,6 +22,11 @@ relative tolerance by `MessOutputReader._safe_index`). Only Cantera converts:
 `kinmec.py` multiplies bimolecular k by `scipy.constants.Avogadro / 1000` (m³ kmol⁻¹ s⁻¹).
 mess_io / mechanalyzer instead return atm and cm³ mol⁻¹ s⁻¹ (see [[mechanalyzer-prompt-pitfalls]]).
 
+**Grid pressures must fit 3 significant digits in bar.** MESS prints pressures in its `.out` with 3
+digits and `MessOutputReader._safe_index` accepts a relative error of 1e-4 only, so 101.325 bar
+(100 atm, printed `101`, 0.32 % off), and most other atm values, stop the read with `ValueError: 101.0 is not in list` (verified 2026-11-04,
+in the prompt collector; a 1 bar grid never shows it). Use 3-digit bar values.
+
 **KIN queries use exact float equality** on P and T (`kin_db.py`, `c.P == pres`): any writer of
 KIN rows must store the exact `rc_*` / `sub_*` grid floats.
 

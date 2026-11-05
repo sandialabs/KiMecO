@@ -5,7 +5,8 @@ name: Tests
 # that depend on the external MESS binary cannot run in vanilla CI. The
 # test-mess-binary job installs MESS (mess-static from the auto-mech conda
 # channel, the documented route) and checks that `which mess` resolves inside
-# the environment, but it never runs a real MESS input.
+# the environment. Its steps never run a MESS input themselves: the only real
+# input runs under pytest, in tests/unit/test_automech_two_pass_ci.py.
 
 on:
   push:
@@ -95,7 +96,8 @@ jobs:
   # `.[automech,test]` install as test-automech-extra. `which mess` must be the
   # environment's own binary, and KIMECO_REQUIRE_MESS=1 turns every "mess not
   # installed" skip in tests/unit/ into a failure. Bare `mess` (usage only) is
-  # the sole MESS invocation; no MESS input is ever run.
+  # the sole MESS invocation of the job's steps; the only real MESS input runs
+  # under pytest, in tests/unit/test_automech_two_pass_ci.py.
   test-mess-binary:
     runs-on: ubuntu-latest
     strategy:

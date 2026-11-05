@@ -511,7 +511,7 @@ def test_payload_grid_is_the_sop_grid_unconverted(tmp_path) -> None:
     writer.write(loc=str(tmp_path), filename='G0000E0001P03.py')
     script = (tmp_path / 'G0000E0001P03.py').read_text()
     assert _literal(script, 'PES_PAYLOAD')['grid_pres'] == []
-    # max() of an empty grid falls back to the documented 1.0 default.
+    # min() of an empty grid falls back to the documented 1.0 default.
     assert _literal(script, 'LUMP_PRESSURE') == 1.0
 
     # -- test_zero_pressure_stays_zero
@@ -556,7 +556,7 @@ def test_writer_pres_unit_follows_sop_and_defaults_to_bar() -> None:
 def test_emitted_driver_is_a_plain_literal_script(tmp_path) -> None:
     """PES_PAYLOAD round-trips through literal_eval; PRES_UNIT is a plain string
     following the SOP unit (bar, torr); LUMP_PRESSURE is a plain float, the grid
-    max in the grid unit; neither the script nor the writer module needs
+    min in the grid unit; neither the script nor the writer module needs
     pint/cantera; the script compiles."""
     _tmp_root = tmp_path
     # -- test_emitted_payload_round_trips_through_literal_eval
@@ -590,8 +590,8 @@ def test_emitted_driver_is_a_plain_literal_script(tmp_path) -> None:
     assert isinstance(node, ast.Constant)
     value = _literal(script, 'LUMP_PRESSURE')
     assert type(value) is float
-    # The max of the grid, in the same (bar) unit as the grid itself.
-    assert value == 10.0
+    # The min of the grid, in the same (bar) unit as the grid itself.
+    assert value == 0.01
 
     # -- test_emitted_script_has_no_quantity_or_registry_tokens: The driver
     #    must not need pint/cantera to import.
